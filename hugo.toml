@@ -1,0 +1,29 @@
+baseURL = 'https://ismaelmartinez.me.uk/'
+title = 'IMR'
+theme = 'ananke'
+languageDirection = 'ltr'
+defaultContentLanguage = 'en'
+defaultContentLanguageInSubdir = true
+
+[languages]
+    [languages.en]
+        contentDir = 'content/en'
+        languageCode = 'en-gb'
+        languageName = 'English'
+        weight = 1    
+        [languages.en.params]
+            subtitle = 'Blogs and Me'
+    [languages.es]
+        contentDir = 'content/es'
+        languageCode = 'es'
+        languageName = 'Castellano'
+        weight = 2
+        [languages.es.params]
+            subtitle = 'Blogs and Me'
+    [languages.cat]
+        contentDir = 'content/cat'
+        languageCode = 'ca'
+        languageName = 'Catala'
+        weight = 3
+        [languages.cat.params]
+            subtitle = 'Blogs and Me'

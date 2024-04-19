@@ -19,7 +19,7 @@
   "auto-changelog": "^1.16.1",
   "cssnano": "^3.10.0",
   "postcss-cli": "^7.1.0",
-  "postcss-cssnext": "^2.10.0",
+  "postcss-cssnext": "^3.0.0",
   "tachyons": "^4.9.1"
  },
  "homepage": "https://github.com/theNewDynamic/gohugo-theme-ananke#readme",

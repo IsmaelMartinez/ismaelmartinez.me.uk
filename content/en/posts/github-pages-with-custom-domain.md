@@ -40,6 +40,8 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
+              with:
+                submodules: true
             - name: Set up Hugo
               uses: peaceiris/actions-hugo@v3
               with:
@@ -54,7 +56,8 @@ jobs:
                   github_token: ${{ secrets.GITHUB_TOKEN }}
                   publish_dir: ./public
 ```
-1. **Commit and push the changes**: Commit the changes to your repository and push them to the `main` branch. This will trigger the GitHub Actions workflow, which will build your Hugo site and deploy it to GitHub Pages. In my case, this creates a page in `https://ismaelmartinez.github.io/ismaelmartinez.me.uk`.
+1. **Commit and push the changes**: Commit the changes to your repository and push them to the `main` branch. This will trigger the GitHub Actions workflow, which will build your Hugo site and deploy it to GitHub Pages. In my case, this creates a page in [https://ismaelmartinez.github.io/ismaelmartinez.me.uk].
+1. **Assign the gh-pages branch**: Go to `Settings > Pages` and select the `gh-pages` branch as the source for your GitHub Pages site.
 
 References: [https://github.com/peaceiris/actions-gh-pages], [https://github.com/peaceiris/actions-hugo] and [https://docs.github.com/en/actions]
 

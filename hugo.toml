@@ -15,18 +15,21 @@ defaultContentLanguageInSubdir = true
         languageName = 'English'
         weight = 1    
         [languages.en.params]
-            subtitle = 'Blogs and Me'
+            subtitle = 'Blog and Me'
     [languages.es]
         contentDir = 'content/es'
         languageCode = 'es'
         languageName = 'Castellano'
         weight = 2
         [languages.es.params]
-            subtitle = 'Blogs and Me'
+            subtitle = 'Blog y Yo'
     [languages.cat]
         contentDir = 'content/cat'
         languageCode = 'ca'
         languageName = 'Catala'
         weight = 3
         [languages.cat.params]
-            subtitle = 'Blogs and Me'
+            subtitle = 'Blog i Jo'
+
+[output]
+    home = ['HTML', 'RSS', 'JSON']

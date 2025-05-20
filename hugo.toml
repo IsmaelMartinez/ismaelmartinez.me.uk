@@ -30,6 +30,3 @@ defaultContentLanguageInSubdir = true
         weight = 3
         [languages.cat.params]
             subtitle = 'Blog i Jo'
-
-[output]
-    home = ['HTML', 'RSS', 'JSON']

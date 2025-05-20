@@ -1,15 +1,15 @@
 +++ 
 draft = true
 date = 2024-03-21T18:48:04Z
-title = ""
-description = ""
+title = "Quick setup"
+description = "Quick setup for a multi-language blog using Hugo"
 slug = ""
 isCJKLanguage = true
-authors = []
-tags = []
-categories = []
+authors = ["Ismael Martinez Ramos"]
+tags = ["Hugo", "Blog", "Multi-language"]
+categories = ["Hugo", "Blog", "Setup"]
 externalLink = ""
-series = []
+series = ["Blog Setup"]
 +++
 
 I wanted to create a blog to document a few things I have learned over the years. I decided to use Hugo as my static site generator, as it is fast, easy to use, and has a lot of themes available. I thought about using Medium, but I wanted to create a multi-language blog and, while Medium allows you to write in multiple languages, it doesn't provide a way to separate the content by language.
@@ -34,7 +34,7 @@ Go into the folder generated and run `git init` to initialise the empty git repo
 
 ## Add a Theme
 
-Now, it's time to choose your theme. There are a ton of themes available at [https://themes.gohugo.io/themes/](https://themes.gohugo.io/themes/). I chose the [Ananke theme](https://themes.gohugo.io/themes/gohugo-theme-ananke/).
+Now, it's time to choose your theme. There are a ton of themes available at [https://themes.gohugo.io/themes/](https://themes.gohugo.io/themes/). I choose the [Ananke theme](https://themes.gohugo.io/themes/gohugo-theme-ananke/).
 
 Most themes follow the same pattern to add a git submodule. You can add the Ananke theme as a submodule by running the following command:
 
@@ -110,11 +110,12 @@ tags = []
 categories = []
 externalLink = ""
 series = []
++++
 ```
 
 I am not going to go into detail about this section, as you can find more information about it [here](https://gohugo.io/content-management/front-matter/).
 
-To add content, edit the file and add it below the front matter section. 
+To add content, edit the file and add it below the front matter section.
 
 Once you are ready, run `hugo server --buildDrafts` to see the draft document.
 

@@ -5,6 +5,9 @@ languageDirection = 'ltr'
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true
 
+[fontmatter]
+    default = 'toml'
+
 [languages]
     [languages.en]
         contentDir = 'content/en'

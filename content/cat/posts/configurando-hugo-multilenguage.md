@@ -1,15 +1,15 @@
 +++ 
 draft = true
 date = 2024-03-21T18:48:04Z
-title = ""
-description = ""
+title = "Configuració ràpida"
+description = "Configuració ràpida de Hugo per a un blog personal multilingüe"
 slug = ""
 isCJKLanguage = true
-authors = []
-tags = []
-categories = []
+authors = ["Ismael Martinez Ramos"]
+tags = ["Hugo", "Blog", "Multilingüe"]
+categories = ["Hugo", "Blog", "Configuració"]
 externalLink = ""
-series = []
+series = ["Configuració del blog"]
 +++
 
 Volia crear un blog per documentar algunes coses que he après al llarg dels anys. Vaig decidir utilitzar Hugo com a generador de llocs estàtics, ja que és ràpid, fàcil d'utilitzar i té molts temes disponibles. Vaig pensar a fer servir Medium, però volia crear un blog multilingüe i, tot i que Medium permet escriure en diversos idiomes, no proporciona una manera de separar el contingut per idioma.
@@ -112,6 +112,7 @@ tags = []
 categories = []
 externalLink = ""
 series = []
++++
 ```
 
 No entraré en detalls sobre aquesta secció, ja que pots trobar més informació al respecte [aquí](https://gohugo.io/content-management/front-matter/).

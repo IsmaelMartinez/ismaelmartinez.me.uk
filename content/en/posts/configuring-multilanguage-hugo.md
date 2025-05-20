@@ -23,11 +23,15 @@ Feel free to skip to the next post if you're already familiar with Hugo.
 
 To install Hugo on macOS, you can use Homebrew by running the following command:
 
-`brew install hugo`
+```sh
+brew install hugo
+```
 
 Once installed, you can create the site by running the following command:
 
-`hugo new site ismaelmartinez.me.uk`
+```sh
+hugo new site ismaelmartinez.me.uk
+```
 
 Go into the folder generated and run `git init` to initialise the empty git repository.
 
@@ -37,17 +41,25 @@ Now, it's time to choose your theme. There are a ton of themes available at [htt
 
 Most themes follow the same pattern to add a git submodule. You can add the Ananke theme as a submodule by running the following command:
 
-`git submodule add https://github.com/theNewDynamic/gohugo-theme-ananke.git themes/ananke`
+```sh
+git submodule add https://github.com/theNewDynamic/gohugo-theme-ananke.git themes/ananke
+```
 
 Then add the theme into the hugo.toml file, by adding the next lines:
 
-```
+```toml
 theme = 'ananke'
 ```
 
 ## Start the server
 
-And now you should be able to start your Hugo server by running the command `hugo server`. However, at this point, there is no content available.
+And now you should be able to start your Hugo server by running the command:
+
+```sh
+hugo server
+```
+
+However, at this point, there is no content available.
 
 ## Multi-language support
 
@@ -55,7 +67,7 @@ Hugo provides excellent support for multi-language websites, and their documenta
 
 In my case, I have configured my post to support three languages: English, Spanish, and Catalan. This means that I have created separate content directories for each language and specified the language codes accordingly. Here is an example of how my configuration looks like:
 
-```
+```toml
 languageDirection = 'ltr'
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true
@@ -97,7 +109,7 @@ Repeat this process for the other languages.
 
 Each content file should have a section at the top, called front matter, that looks like this:
 
-```
+```toml
 +++ 
 draft = true
 date = 2024-03-21T18:48:04Z
@@ -116,9 +128,13 @@ I am not going to go into detail about this section, as you can find more inform
 
 To add content, edit the file and add it below the front matter section.
 
-Once you are ready, run `hugo server --buildDrafts` to see the draft document.
+Once you are ready, run the following command to see the draft document:
 
-You can access your content at `http://localhost:1313/en/posts/configuring-multilanguage-hugo/`.
+```sh
+hugo server --buildDrafts
+```
+
+You can access your content at [http://localhost:1313/en/posts/configuring-multilanguage-hugo/](http://localhost:1313/en/posts/configuring-multilanguage-hugo/).
 
 # Push to GitHub
 
@@ -128,7 +144,8 @@ Before we finish, let's push the content to GitHub.
 1. Add all the files to the Git repository using the command `git add .`.
 1. Commit the changes using the command `git commit -m "Initial commit"`.
 1. Add the remote repository URL using the command `git remote add origin <remote repository URL>`.
-1. Push the content to the remote repository using the command `git push -u origin main`.
+1. Push the content to the remote repository using the command 
+`git push -u origin main`.
 
 And that's it. You should be able to see your content in GitHub.
 

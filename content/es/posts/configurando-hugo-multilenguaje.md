@@ -23,13 +23,21 @@ Si ya estás familiarizado con Hugo, siéntete libre de saltar al siguiente post
 
 Para instalar Hugo en macOS, puedes utilizar Homebrew ejecutando el siguiente comando:
 
-`brew install hugo`
+```sh
+brew install hugo
+```
 
 Una vez instalado, puedes crear el sitio ejecutando el siguiente comando:
 
-`hugo new site ismaelmartinez.me.uk`
+```sh
+hugo new site ismaelmartinez.me.uk
+```
 
-Ingresa a la carpeta generada y ejecuta `git init` para inicializar el repositorio git vacío.
+Ingresa a la carpeta generada y ejecuta el siguiente commando para inicializar el repositorio git vacío.
+
+```sh
+`git init
+```
 
 ## Agregar un tema
 
@@ -37,9 +45,25 @@ Ahora es el momento de elegir tu tema. Hay una gran cantidad de temas disponible
 
 La mayoría de los temas siguen el mismo patrón para agregar un submódulo de git. Puedes agregar el tema Ananke como un submódulo ejecutando el siguiente comando:
 
-`git submodule add https://github.com/theNewDynamic/gohugo-theme-ananke.git themes/ananke`
+```sh
+git submodule add https://github.com/theNewDynamic/gohugo-theme-ananke.git themes/ananke
+```
 
 Luego, agrega el tema al archivo hugo.toml, añadiendo las siguientes líneas:
+
+```toml
+theme = 'ananke'
+```
+
+## Iniciar el servidor
+
+Ahora deberías poder iniciar tu servidor Hugo ejecutando el siguiente comando:
+
+```sh
+hugo server
+```
+
+Sin embargo, en este punto, poco vas a ver ya que no as creado contenido.
 
 ## Soporte multiidioma
 
@@ -47,7 +71,7 @@ Hugo ofrece un excelente soporte para sitios web multilingües, y su documentaci
 
 En mi caso, he configurado mi publicación para admitir tres idiomas: inglés, español y catalán. Esto significa que he creado directorios de contenido separados para cada idioma y he especificado los códigos de idioma correspondientes. Aquí tienes un ejemplo de cómo se ve mi configuración:
 
-```
+```toml
 languageDirection = 'ltr'
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true
@@ -81,7 +105,10 @@ defaultContentLanguageInSubdir = true
 
 Para crear contenido para tu sitio web de Hugo, sigue estos pasos:
 
-1. Ejecuta el comando `hugo new content es/posts/configurando-hugo-multilenguaje.md` para crear un nuevo archivo de contenido.
+1. Ejecuta el siguiente comando para crear un nuevo archivo de contenido.
+```sh
+hugo new content es/posts/configurando-hugo-multilenguaje.md
+```
 2. Hugo generará un archivo llamado `configurando-hugo-multilenguaje.md` en el directorio `content/es/posts/`.
 3. Abre el archivo y agrega tu contenido deseado. En mi caso, lo que estás leyendo es el contenido del archivo.
 
@@ -89,7 +116,7 @@ Repite este proceso para los otros idiomas.
 
 Cada archivo de contenido debe tener una sección en la parte superior, llamada 'front matter', que se ve así:
 
-```
+```toml
 +++ 
 draft = true
 date = 2024-03-21T18:48:04Z
@@ -108,19 +135,35 @@ No voy a entrar en detalles sobre esta sección, ya que puedes encontrar más in
 
 Para agregar contenido, edita el archivo y añádelo debajo de la sección de 'front matter'.
 
-Una vez que estés listo, ejecuta `hugo server --buildDrafts` para ver el documento en borrador.
+Una vez que estés listo, para ver el documento en borrador, ejecuta:
 
-Puedes acceder a tu contenido en `http://localhost:1313/es/posts/configurando-hugo-multilenguaje/`.
+```sh 
+hugo server --buildDrafts
+```
+
+Puedes acceder a tu contenido en [http://localhost:1313/es/posts/configurando-hugo-multilenguaje/](http://localhost:1313/es/posts/configurando-hugo-multilenguaje/)
 
 # Subir a GitHub
 
 Antes de terminar, vamos a subir el contenido a GitHub.
 
-1. Crea un nuevo repositorio en [GitHub](https://github.com/new).
-2. Añade todos los archivos al repositorio Git usando el comando `git add .`.
-3. Haz un commit de los cambios usando el comando `git commit -m "Commit inicial"`.
-4. Añade la URL del repositorio remoto usando el comando `git remote add origin <URL del repositorio remoto>`.
-5. Sube el contenido al repositorio remoto usando el comando `git push -u origin main`.
+1. Crea un nuevo repositorio en [GitHub](https://github.com/new)
+2. Añade todos los archivos al repositorio Git usando el comando: 
+```sh
+git add .
+```
+3. Haz un commit de los cambios usando el comando 
+```sh 
+git commit -m "Commit inicial"
+```
+4. Añade la URL del repositorio remoto usando el comando 
+```sh
+git remote add origin <URL del repositorio remoto>
+```
+5. Sube el contenido al repositorio remoto usando el comando 
+```sh
+git push -u origin main
+```
 
 Y eso es todo. Deberías poder ver tu contenido en GitHub.
 

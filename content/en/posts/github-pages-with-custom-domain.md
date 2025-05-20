@@ -45,7 +45,8 @@ jobs:
             - name: Set up Hugo
               uses: peaceiris/actions-hugo@v3
               with:
-                  hugo-version: 'latest'
+                hugo-version: 'latest'
+                extended: true
 
             - name: Build the site
               run: hugo --minify
@@ -53,8 +54,8 @@ jobs:
             - name: Deploy to GitHub Pages
               uses: peaceiris/actions-gh-pages@v4
               with:
-                  github_token: ${{ secrets.GITHUB_TOKEN }}
-                  publish_dir: ./public
+                github_token: ${{ secrets.GITHUB_TOKEN }}
+                publish_dir: ./public
 ```
 1. **Commit and push the changes**: Commit the changes to your repository and push them to the `main` branch. This will trigger the GitHub Actions workflow, which will build your Hugo site and deploy it to GitHub Pages. In my case, this creates a page in [https://ismaelmartinez.github.io/ismaelmartinez.me.uk].
 1. **Assign the gh-pages branch**: Go to `Settings > Pages` and select the `gh-pages` branch as the source for your GitHub Pages site.

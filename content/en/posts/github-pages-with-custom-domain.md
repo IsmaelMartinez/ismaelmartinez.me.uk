@@ -24,8 +24,8 @@ Similar to the previous post, this is a quick overview of the steps to configure
 
 You can get a detailed guide on how to configure GitHub Pages [here](https://docs.github.com/en/pages/getting-started-with-github-pages), but I am just going to cover the steps I followed to configure my GitHub Pages site.
 
-1. **Main Branch**: Make sure your main branch is set to `main`. Just run `git config --global init.defaultBranch main`
-
+1. **Add Read and write permissions to the workflows**: To allow the workflow to dpeloy the site, you need to change the **Workflow permissions** under `Settings > Actions > General > Workflow permissions` to `Read and write permissions`.
+1. **Setup the baseUrl**: In the `hugo.toml` file, set the `baseURL` to your github domain. In my case this is `baseURL = '<https://ismaelmartinez.github.io/ismaelmartinez.me.uk/>'`
 1. **Create a workflow file**: Create a new file in the `.github/workflows` directory of your repository. You can name it `gh-pages.yml` (that seems to be the standard name). This file will contain the configuration for GitHub Actions to build and deploy your Hugo site to GitHub Pages.
 1. **Configure the workflow file**: Add the following content to the `gh-pages.yml` file:
 ```yaml
@@ -57,8 +57,6 @@ jobs:
 1. **Commit and push the changes**: Commit the changes to your repository and push them to the `main` branch. This will trigger the GitHub Actions workflow, which will build your Hugo site and deploy it to GitHub Pages. In my case, this creates a page in `https://ismaelmartinez.github.io/ismaelmartinez.me.uk`.
 
 References: [https://github.com/peaceiris/actions-gh-pages], [https://github.com/peaceiris/actions-hugo] and [https://docs.github.com/en/actions]
-
-IMPORTANT: You will need to change the **Workflow permissions** under `Settings > Actions > General > Workflow permissions` to `Read and write permissions` to allow the workflow to deploy the site.
 
 // Assign a custom domain
 

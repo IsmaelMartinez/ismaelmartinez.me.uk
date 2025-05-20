@@ -1,5 +1,4 @@
 +++ 
-draft = true
 date = 2024-03-21T18:48:04Z
 title = "Configuració ràpida"
 description = "Configuració ràpida de Hugo per a un blog personal multilingüe"

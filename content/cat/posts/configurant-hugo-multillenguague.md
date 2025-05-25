@@ -152,4 +152,4 @@ El codi i el contingut del teu lloc ara estan allotjats a GitHub.
 
 # Conclusions
 
-Aquesta ha estat una configuració ràpida d'un blog Hugo multillenguatge. El següent pas: configurar GitHub Pages, utilitzar un domini personalitzat i afegir analítiques amb Umami (<https://umami.is/>).
+Aquesta ha estat una configuració ràpida d'un blog Hugo multillenguatge. El següent pas: configurar GitHub Pages, utilitzar un domini personalitzat i afegir analítiques amb [Umami](https://umami.is/).

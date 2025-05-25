@@ -152,4 +152,4 @@ El código y el contenido de tu sitio ahora están alojados en GitHub.
 
 # Conclusiones
 
-Esta ha sido una configuración rápida de un blog Hugo multilingüe. El siguiente paso: configurar GitHub Pages, usar un dominio personalizado y añadir analíticas con Umami (<https://umami.is/>).
+Esta ha sido una configuración rápida de un blog Hugo multilingüe. El siguiente paso: configurar GitHub Pages, usar un dominio personalizado y añadir analíticas con [Umami](https://umami.is/).

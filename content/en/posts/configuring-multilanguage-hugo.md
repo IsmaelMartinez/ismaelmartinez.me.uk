@@ -152,4 +152,4 @@ Your site’s code and content are now hosted on GitHub.
 
 # Conclusion
 
-This was a quick Hugo setup for a multi-language blog. Next up: configuring GitHub Pages, using a custom domain, and adding analytics with Umami (<https://umami.is/>).
+This was a quick Hugo setup for a multi-language blog. Next up: configuring GitHub Pages, using a custom domain, and adding analytics with [Umami](https://umami.is/).

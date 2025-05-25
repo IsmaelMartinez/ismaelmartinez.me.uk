@@ -47,6 +47,9 @@ jobs:
                 hugo-version: 'latest'
                 extended: true
 
+            - name: Download Hugo Modules
+              run: hugo mod get
+
             - name: Build the site
               run: hugo --minify
 
@@ -64,8 +67,15 @@ With these steps, you should have a GitHub Pages site up and running. Now lets m
 
 ## Assign a custom domain
 
-Using a github pages site is great, but if you are paying for a domain, you probably want to use it. 
+Using a github pages site is great, but if you are paying for a domain, you probably want to use it. In my case, I got `ismaelmartinez.me.uk` that I bought a few years ago but never used it for much.
 
+To assign a custom domain to your GitHub Pages site, follow these steps:
+1. **Go to your domain registrar**: Log in to the website where you purchased your domain. In my case this is AWS.
+2. **Add a CNAME record**: In the DNS settings of your domain, add a CNAME record that points to your GitHub Pages site. For example, if your GitHub Pages site is `ismaelmartinez.github.io/ismaelmartinez.me.uk`, you would add a CNAME record with the name `ismaelmartinez.me.uk` and the value `ismaelmartinez.github.io`.
+3. **Create a CNAME file in your repository**: In the root of your GitHub Pages repository, create a file named `CNAME` (no file extension) and add your custom domain to it. For example, the content of the `CNAME` file should be:
+```
+ismaelmartinez.me.uk
+```
 
 
 // Assign a custom domain

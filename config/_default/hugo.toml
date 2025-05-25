@@ -1,6 +1,5 @@
 baseURL = 'https://ismaelmartinez.github.io/ismaelmartinez.me.uk/'
 title = 'IMR'
-theme = 'ananke'
 languageDirection = 'ltr'
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true

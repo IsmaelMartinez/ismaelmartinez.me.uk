@@ -16,10 +16,10 @@ jobs:
         with:
           hugo-version: "latest"
           extended: true
-
+      - name: Download Hugo Modules
+        run: hugo mod get
       - name: Build the site
         run: hugo --minify
-
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:

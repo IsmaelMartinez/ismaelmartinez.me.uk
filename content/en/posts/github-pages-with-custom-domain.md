@@ -1,15 +1,13 @@
 +++
-title = "Github Pages With Custom Domain"
-date = 2025-05-20T15:09:09+01:00
-draft = true
-description = "Configuring Github Pages and assigning a custom domain"
-slug = ""
+title         = "Github Pages With Custom Domain"
+date          = 2025-05-20T15:09:09+01:00
+draft         = true
+description   = "Configuring Github Pages and assigning a custom domain"
 isCJKLanguage = true
-authors = ["Ismael Martinez Ramos"]
-tags = ["Hugo", "Blog", "Multilingüe", "GitHub Pages", "Custom Domain"]
-categories = ["Hugo", "Blog", "Setup"]
-externalLink = ""
-series = ["Blog Setup"]
+authors       = ["Ismael Martinez Ramos"]
+tags          = ["Hugo", "Blog", "Multilingüe", "GitHub Pages", "Custom Domain"]
+categories    = ["Hugo", "Blog", "Setup"]
+series        = ["Blog Setup"]
 +++
 
 # Configuring Github Pages with a custom domain
@@ -25,9 +23,10 @@ Similar to the previous post, this is a quick overview of the steps to configure
 You can get a detailed guide on how to configure GitHub Pages [here](https://docs.github.com/en/pages/getting-started-with-github-pages), but I am just going to cover the steps I followed to configure my GitHub Pages site.
 
 1. **Add Read and write permissions to the workflows**: To allow the workflow to dpeloy the site, you need to change the **Workflow permissions** under `Settings > Actions > General > Workflow permissions` to `Read and write permissions`.
-1. **Setup the baseUrl**: In the `hugo.toml` file, set the `baseURL` to your github domain. In my case this is `baseURL = '<https://ismaelmartinez.github.io/ismaelmartinez.me.uk/>'`
-1. **Create a workflow file**: Create a new file in the `.github/workflows` directory of your repository. You can name it `gh-pages.yml` (that seems to be the standard name). This file will contain the configuration for GitHub Actions to build and deploy your Hugo site to GitHub Pages.
-1. **Configure the workflow file**: Add the following content to the `gh-pages.yml` file:
+2. **Setup the baseUrl**: In the `hugo.toml` file, set the `baseURL` to your github domain. In my case this is `baseURL = '<https://ismaelmartinez.github.io/ismaelmartinez.me.uk/>'`
+3. **Create a workflow file**: Create a new file in the `.github/workflows` directory of your repository. You can name it `gh-pages.yml` (that seems to be the standard name). This file will contain the configuration for GitHub Actions to build and deploy your Hugo site to GitHub Pages.
+4. **Configure the workflow file**: Add the following content to the `gh-pages.yml` file:
+
 ```yaml
 name: Deploy Hugo site to GitHub Pages
 on:
@@ -57,8 +56,9 @@ jobs:
                 github_token: ${{ secrets.GITHUB_TOKEN }}
                 publish_dir: ./public
 ```
-1. **Commit and push the changes**: Commit the changes to your repository and push them to the `main` branch. This will trigger the GitHub Actions workflow, which will build your Hugo site and deploy it to GitHub Pages. In my case, this creates a page in [https://ismaelmartinez.github.io/ismaelmartinez.me.uk].
-1. **Assign the gh-pages branch**: Go to `Settings > Pages` and select the `gh-pages` branch as the source for your GitHub Pages site.
+
+5. **Commit and push the changes**: Commit the changes to your repository and push them to the `main` branch. This will trigger the GitHub Actions workflow, which will build your Hugo site and deploy it to GitHub Pages. In my case, this creates a page in [https://ismaelmartinez.github.io/ismaelmartinez.me.uk].
+6. **Assign the gh-pages branch**: Go to `Settings > Pages` and select the `gh-pages` branch as the source for your GitHub Pages site.
 
 With these steps, you should have a GitHub Pages site up and running. Now lets move to the next step, which is assigning a custom domain.
 

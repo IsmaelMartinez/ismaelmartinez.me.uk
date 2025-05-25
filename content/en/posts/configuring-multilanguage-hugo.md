@@ -1,134 +1,130 @@
-+++ 
-date = 2024-03-21T18:48:04Z
-title = "Quick setup"
-description = "Quick setup for a multi-language blog using Hugo"
-slug = ""
-isCJKLanguage = true
-authors = ["Ismael Martinez Ramos"]
-tags = ["Hugo", "Blog", "Multi-language"]
-categories = ["Hugo", "Blog", "Setup"]
-externalLink = ""
-series = ["Blog Setup"]
++++
+title       = "Configuring a multi-language Hugo blog"
+date        = 2024-03-21T18:48:04Z
+description = "How to get a Hugo multi-language blog up and running in minutes"
+authors     = ["Ismael Martinez Ramos"]
+tags        = ["Hugo", "Blog", "Multi-language", "Setup"]
+categories  = ["Hugo", "Blog"]
+series      = ["Blog Setup"]
+draft       = false
 +++
 
-I wanted to create a blog to document a few things I have learned over the years. I decided to use Hugo as my static site generator, as it is fast, easy to use, and has a lot of themes available. I thought about using Medium, but I wanted to create a multi-language blog and, while Medium allows you to write in multiple languages, it doesn't provide a way to separate the content by language.
+Over the years, I’ve learned a lot, so I decided to document my discoveries and opinions in a Hugo‑powered blog.
 
-This article is a quick go-throw of the excellent Hugo documentation. If you're new to Hugo, I recommend starting with the [quick start guide](https://gohugo.io/getting-started/quick-start/).
+I considered using Medium, but it does not separate content by language. Hugo, on the other hand, is a fast, easy‑to‑use static site generator that supports multilingual sites out of the box—and it gave me a chance to play with Go again.
 
-Feel free to skip to the next post if you're already familiar with Hugo.
+This post is a concise run‑through of Hugo’s excellent documentation. If you’re new to Hugo, consult the [quick start guide](https://gohugo.io/getting-started/quick-start/).
+
+Feel free to skip ahead if you’re already familiar with Hugo.
 
 # Quick setup
 
-## Install Hugo
+## Installing Hugo
 
-To install Hugo on macOS, you can use Homebrew by running the following command:
+First, install Hugo on your machine.
+
+On macOS:
 
 ```sh
 brew install hugo
 ```
 
-Once installed, you can create the site by running the following command:
+On other platforms, follow the instructions in the [Hugo install docs](https://gohugo.io/getting-started/installing/).
+
+## Creating your site
+
+After installing Hugo, create your site and initialise version control:
 
 ```sh
 hugo new site ismaelmartinez.me.uk
+cd ismaelmartinez.me.uk
+git init
 ```
 
-Go into the folder generated and run `git init` to initialise the empty git repository.
-
-## Add a Theme
-
-Now, it's time to choose your theme. There are a ton of themes available at [https://themes.gohugo.io/themes/](https://themes.gohugo.io/themes/). I choose the [Ananke theme](https://themes.gohugo.io/themes/gohugo-theme-ananke/).
-
-Most themes follow the same pattern to add a git submodule. You can add the Ananke theme as a submodule by running the following command:
+Then initialise your repository as a Hugo Module:
 
 ```sh
-git submodule add https://github.com/theNewDynamic/gohugo-theme-ananke.git themes/ananke
+hugo mod init github.com/ismaelmartinez/ismaelmartinez.me.uk
 ```
 
-Then add the theme into the hugo.toml file, by adding the next lines:
+This sets up Hugo Modules for theme and dependency management.
 
-```toml
-theme = 'ananke'
-```
+## Adding a theme
 
-## Start the server
+Choosing a theme defines your site’s look and feel. There are hundreds of themes at [themes.gohugo.io](themes.gohugo.io). I chose the [Ananke theme](https://themes.gohugo.io/themes/gohugo-theme-ananke/).
 
-And now you should be able to start your Hugo server by running the command:
+I followed the instructions at [https://github.com/davidsneighbour/gohugo-theme-ananke-template-mod](https://github.com/davidsneighbour/gohugo-theme-ananke-template-mod)
+
+## Starting the server
+
+Running the server provides a live preview of your site. Start it with:
 
 ```sh
 hugo server
 ```
 
-However, at this point, there is no content available.
+Visit <http://localhost:1313/> to see your site in action (it will be empty at this stage).
 
 ## Multi-language support
 
-Hugo provides excellent support for multi-language websites, and their documentation is a valuable resource for this feature. You can find more information about it [here](https://gohugo.io/content-management/multilingual/).
+Multi‑language support broadens your audience reach. Hugo’s documentation on multilingual sites is excellent [here](https://gohugo.io/content-management/multilingual/).
 
-In my case, I have configured my post to support three languages: English, Spanish, and Catalan. This means that I have created separate content directories for each language and specified the language codes accordingly. Here is an example of how my configuration looks like:
+In my setup, I configured English, Spanish and Catalan. Edit your `hugo.toml` as follows:
 
 ```toml
 languageDirection = 'ltr'
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true
 
-[languages]
-    [languages.en]
-        contentDir = 'content/en'
-        languageCode = 'en-gb'
-        languageName = 'English'
-        weight = 1    
-        [languages.en.params]
-            subtitle = 'Blogs and Me'
-    [languages.es]
-        contentDir = 'content/es'
-        languageCode = 'es'
-        languageName = 'Castellano'
-        weight = 2
-        [languages.es.params]
-            subtitle = 'Blogs and Me'
-    [languages.cat]
-        contentDir = 'content/cat'
-        languageCode = 'ca'
-        languageName = 'Catala'
-        weight = 3
-        [languages.cat.params]
-            subtitle = 'Blogs and Me'
+[languages.en]
+    contentDir = 'content/en'
+    languageCode = 'en-gb'
+    languageName = 'English'
+    weight = 1    
+    [languages.en.params]
+        subtitle = 'Blog and Me'
+[languages.es]
+    contentDir = 'content/es'
+    languageCode = 'es'
+    languageName = 'Castellano'
+    weight = 2
+    [languages.es.params]
+        subtitle = 'Blog y Yo'
+[languages.cat]
+    contentDir = 'content/cat'
+    languageCode = 'ca'
+    languageName = 'Catala'
+    weight = 3
+    [languages.cat.params]
+        subtitle = 'Blog i Jo'
 ```
 
+# Creating content
 
-# Create content
+Let’s create your first post. Run:
 
-To create content for your Hugo website, follow these steps:
+```sh
+hugo new content/en/posts/configuring-multilanguage-hugo.md
+```
 
-1. Run the command `hugo new content en/posts/configuring-multilanguage-hugo.md` to create a new content file. 
-1. Hugo will generate a file named `configuring-multilanguage-hugo.md` under the `content/en/posts/` directory.
-1. Open the file and add your desired content. In my case, what you are reading is the content of the file.
-
-Repeat this process for the other languages.
-
-Each content file should have a section at the top, called front matter, that looks like this:
+Open `content/en/posts/configuring-multilanguage-hugo.md` and add your front matter and content:
 
 ```toml
-+++ 
-draft = true
-date = 2024-03-21T18:48:04Z
-title = ""
-description = ""
-slug = ""
-authors = []
-tags = []
-categories = []
-externalLink = ""
-series = []
++++
+title       = "Configuring a multi-language Hugo blog"
+date        = 2024-03-21T18:48:04Z
+description = "How to get a Hugo multi-language blog up and running in minutes"
+authors     = ["Ismael Martinez Ramos"]
+tags        = ["Hugo", "Blog", "Multi-language", "Setup"]
+categories  = ["Hugo", "Blog"]
+series      = ["Blog Setup"]
+draft       = true
 +++
 ```
 
-I am not going to go into detail about this section, as you can find more information about it [here](https://gohugo.io/content-management/front-matter/).
+Below the [front matter](https://gohugo.io/content-management/front-matter/), write your post in Markdown.
 
-To add content, edit the file and add it below the front matter section.
-
-Once you are ready, run the following command to see the draft document:
+Once you’ve added your content, preview drafts with:
 
 ```sh
 hugo server --buildDrafts
@@ -136,19 +132,24 @@ hugo server --buildDrafts
 
 You can access your content at [http://localhost:1313/en/posts/configuring-multilanguage-hugo/](http://localhost:1313/en/posts/configuring-multilanguage-hugo/).
 
-# Push to GitHub
+After reviewing your draft, change the `draft` field to `false` and run the server again.
 
-Before we finish, let's push the content to GitHub.
+# Pushing to GitHub
 
-1. Create a new repository in [GitHub](https://github.com/new).
-1. Add all the files to the Git repository using the command `git add .`.
-1. Commit the changes using the command `git commit -m "Initial commit"`.
-1. Add the remote repository URL using the command `git remote add origin <remote repository URL>`.
-1. Push the content to the remote repository using the command 
-`git push -u origin main`.
+Before we finish, let us push the content to GitHub.
 
-And that's it. You should be able to see your content in GitHub.
+1. Create a new repository on [GitHub](https://github.com/new).
+2. In your local directory, run:
+
+```sh
+git add .
+git commit -m "Initial commit"
+git remote add origin <remote repository URL>
+git push -u origin main
+```
+
+Your site’s code and content are now hosted on GitHub.
 
 # Conclusion
 
-This was a quick Hugo setup for a multi language blog. I did find it extremely easy to set up and I'm looking forward to document the process of creating this blog, and adding content to it. 
+This was a quick Hugo setup for a multi-language blog. Next up: configuring GitHub Pages, using a custom domain, and adding analytics with Umami (<https://umami.is/>).

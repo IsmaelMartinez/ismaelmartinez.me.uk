@@ -1,172 +1,155 @@
-+++ 
-date = 2024-03-21T18:48:04Z
-title = "Configuració rápida"
-description = "Configuración rápida de Hugo para un blog multilingüe"
-slug = ""
-isCJKLanguage = true
-authors = ["Ismael Martínez Ramos"]
-tags = ["Hugo", "Blog", "Multilingüe"]
-categories = ["Hugo", "Blog", "Configuración"]
-externalLink = ""
-series = ["Configuración del blog"]
++++
+title       = "Configurando un blog Hugo multilingüe"
+date        = 2024-03-21T18:48:04Z
+description = "Cómo poner en marcha un blog Hugo multilingüe en pocos minutos"
+authors     = ["Ismael Martinez Ramos"]
+tags        = ["Hugo", "Blog", "Multilingüe", "Configuración"]
+categories  = ["Hugo", "Blog"]
+series      = ["Configuración del Blog"]
+draft       = false
 +++
 
-Quería crear un blog para documentar algunas cosas que he aprendido a lo largo de los años. Decidí utilizar Hugo como mi generador de sitios estáticos, ya que es rápido, fácil de usar y tiene una gran cantidad de temas disponibles. Pensé en usar Medium, pero quería crear un blog multilingüe y, aunque Medium te permite escribir en varios idiomas, no proporciona una forma de separar el contenido por idioma.
+A lo largo de los años, he aprendido mucho, así que decidí documentar mis descubrimientos y opiniones en un blog hecho amb Hugo.
 
-Este artículo es una rápida introducción a la excelente documentación de Hugo. Si eres nuevo en Hugo, te recomiendo comenzar con la [guía de inicio rápido](https://gohugo.io/getting-started/quick-start/).
+Consideré usar Medium, pero no separa el contenido por idioma. Hugo, en cambio, es un generador de sitios estáticos rápido y fácil de usar que admite sitios multilingües de forma nativa, y me dio la oportunidad de volver a jugar con Go.
 
-Si ya estás familiarizado con Hugo, siéntete libre de saltar al siguiente post.
+Esta entrada es un resumen conciso de la excelente documentación de Hugo. Si eres nuevo con Hugo, consulta la [guía rápida](https://gohugo.io/getting-started/quick-start/).
+
+Puedes saltar directamente a la siguiente sección si ya conoces Hugo.
 
 # Configuración rápida
 
-## Instalar Hugo
+## Instalando Hugo
 
-Para instalar Hugo en macOS, puedes utilizar Homebrew ejecutando el siguiente comando:
+Primero, instala Hugo en tu ordenador.
+
+En macOS:
 
 ```sh
 brew install hugo
 ```
 
-Una vez instalado, puedes crear el sitio ejecutando el siguiente comando:
+En otras plataformas, sigue las instrucciones en la [documentación de instalación de Hugo](https://gohugo.io/getting-started/installing/).
+
+## Creando tu sitio
+
+Después de instalar Hugo, crea tu sitio e inicializa el control de versiones:
 
 ```sh
 hugo new site ismaelmartinez.me.uk
+cd ismaelmartinez.me.uk
+git init
 ```
 
-Ingresa a la carpeta generada y ejecuta el siguiente commando para inicializar el repositorio git vacío.
+Luego, inicializa tu repositorio como un Módulo Hugo:
 
 ```sh
-`git init
+hugo mod init github.com/ismaelmartinez/ismaelmartinez.me.uk
 ```
 
-## Agregar un tema
+Esto configura los Módulos Hugo para la gestión de temas y dependencias.
 
-Ahora es el momento de elegir tu tema. Hay una gran cantidad de temas disponibles en [https://themes.gohugo.io/themes/](https://themes.gohugo.io/themes/). Yo elegí el tema [Ananke](https://themes.gohugo.io/themes/gohugo-theme-ananke/).
+## Añadiendo un tema
 
-La mayoría de los temas siguen el mismo patrón para agregar un submódulo de git. Puedes agregar el tema Ananke como un submódulo ejecutando el siguiente comando:
+Elegir un tema define el aspecto y la sensación de tu sitio. Hay cientos de temas en [themes.gohugo.io](https://themes.gohugo.io). Yo elegí el tema [Ananke](https://themes.gohugo.io/themes/gohugo-theme-ananke/).
 
-```sh
-git submodule add https://github.com/theNewDynamic/gohugo-theme-ananke.git themes/ananke
-```
+Seguí las instrucciones de [https://github.com/davidsneighbour/gohugo-theme-ananke-template-mod](https://github.com/davidsneighbour/gohugo-theme-ananke-template-mod)
 
-Luego, agrega el tema al archivo hugo.toml, añadiendo las siguientes líneas:
+## Iniciando el servidor
 
-```toml
-theme = 'ananke'
-```
-
-## Iniciar el servidor
-
-Ahora deberías poder iniciar tu servidor Hugo ejecutando el siguiente comando:
+Ejecutar el servidor te proporciona una vista previa en vivo de tu sitio. Inícialo con:
 
 ```sh
 hugo server
 ```
 
-Sin embargo, en este punto, poco vas a ver ya que no as creado contenido.
+Visita <http://localhost:1313/> para ver tu sitio en acción (en este punto estará vacío).
 
-## Soporte multiidioma
+## Soporte multilingüe
 
-Hugo ofrece un excelente soporte para sitios web multilingües, y su documentación es un recurso valioso para esta característica. Puedes encontrar más información al respecto [aquí](https://gohugo.io/content-management/multilingual/).
+El soporte multilingüe amplía el alcance de tu audiencia. La documentación de Hugo sobre sitios multilingües es excelente [aquí](https://gohugo.io/content-management/multilingual/).
 
-En mi caso, he configurado mi publicación para admitir tres idiomas: inglés, español y catalán. Esto significa que he creado directorios de contenido separados para cada idioma y he especificado los códigos de idioma correspondientes. Aquí tienes un ejemplo de cómo se ve mi configuración:
+En mi configuración, configuré inglés, castellano y catalán. Edita tu `hugo.toml` así:
 
 ```toml
 languageDirection = 'ltr'
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true
 
-[languages]
-    [languages.en]
-        contentDir = 'content/en'
-        languageCode = 'en-gb'
-        languageName = 'English'
-        weight = 1    
-        [languages.en.params]
-            subtitle = 'Blogs and Me'
-    [languages.es]
-        contentDir = 'content/es'
-        languageCode = 'es'
-        languageName = 'Castellano'
-        weight = 2
-        [languages.es.params]
-            subtitle = 'Blogs and Me'
-    [languages.cat]
-        contentDir = 'content/cat'
-        languageCode = 'ca'
-        languageName = 'Catala'
-        weight = 3
-        [languages.cat.params]
-            subtitle = 'Blogs and Me'
+[languages.en]
+    contentDir = 'content/en'
+    languageCode = 'en-gb'
+    languageName = 'English'
+    weight = 1    
+    [languages.en.params]
+        subtitle = 'Blog and Me'
+[languages.es]
+    contentDir = 'content/es'
+    languageCode = 'es'
+    languageName = 'Castellano'
+    weight = 2
+    [languages.es.params]
+        subtitle = 'Blog y Yo'
+[languages.cat]
+    contentDir = 'content/cat'
+    languageCode = 'ca'
+    languageName = 'Catala'
+    weight = 3
+    [languages.cat.params]
+        subtitle = 'Blog i Jo'
 ```
 
+# Creando contenido
 
-# Crear contenido
+Crea tu primera entrada. Ejecuta:
 
-Para crear contenido para tu sitio web de Hugo, sigue estos pasos:
-
-1. Ejecuta el siguiente comando para crear un nuevo archivo de contenido.
 ```sh
-hugo new content es/posts/configurando-hugo-multilenguaje.md
+hugo new content/en/posts/configuring-multilanguage-hugo.md
 ```
-2. Hugo generará un archivo llamado `configurando-hugo-multilenguaje.md` en el directorio `content/es/posts/`.
-3. Abre el archivo y agrega tu contenido deseado. En mi caso, lo que estás leyendo es el contenido del archivo.
 
-Repite este proceso para los otros idiomas.
-
-Cada archivo de contenido debe tener una sección en la parte superior, llamada 'front matter', que se ve así:
+Abre `content/en/posts/configuring-multilanguage-hugo.md` y añade el front matter y el contenido:
 
 ```toml
-+++ 
-draft = true
-date = 2024-03-21T18:48:04Z
-title = ""
-description = ""
-slug = ""
-authors = []
-tags = []
-categories = []
-externalLink = ""
-series = []
++++
+title       = "Configurando un blog Hugo multilingüe"
+date        = 2024-03-21T18:48:04Z
+description = "Cómo poner en marcha un blog Hugo multilingüe en pocos minutos"
+authors     = ["Ismael Martinez Ramos"]
+tags        = ["Hugo", "Blog", "Multilingüe", "Configuración"]
+categories  = ["Hugo", "Blog"]
+series      = ["Configuración del Blog"]
+draft       = true
 +++
 ```
 
-No voy a entrar en detalles sobre esta sección, ya que puedes encontrar más información al respecto [aquí](https://gohugo.io/content-management/front-matter/).
+Debajo del [front matter](https://gohugo.io/content-management/front-matter/), escribe tu entrada en Markdown.
 
-Para agregar contenido, edita el archivo y añádelo debajo de la sección de 'front matter'.
+Una vez hayas añadido el contenido, previsualiza los borradores con:
 
-Una vez que estés listo, para ver el documento en borrador, ejecuta:
-
-```sh 
+```sh
 hugo server --buildDrafts
 ```
 
-Puedes acceder a tu contenido en [http://localhost:1313/es/posts/configurando-hugo-multilenguaje/](http://localhost:1313/es/posts/configurando-hugo-multilenguaje/)
+Puedes acceder a tu contenido en [http://localhost:1313/es/posts/configurando-hugo-multilenguaje/](http://localhost:1313/es/posts/configurando-hugo-multilenguaje/).
 
-# Subir a GitHub
+Después de revisar el borrador, cambia el campo `draft` a `false` y vuelve a ejecutar el servidor.
 
-Antes de terminar, vamos a subir el contenido a GitHub.
+# Subiendo a GitHub
 
-1. Crea un nuevo repositorio en [GitHub](https://github.com/new)
-2. Añade todos los archivos al repositorio Git usando el comando: 
+Antes de terminar, subimos el contenido a GitHub.
+
+1. Crea un nuevo repositorio en [GitHub](https://github.com/new).
+2. En tu directorio local, ejecuta:
+
 ```sh
 git add .
-```
-3. Haz un commit de los cambios usando el comando 
-```sh 
-git commit -m "Commit inicial"
-```
-4. Añade la URL del repositorio remoto usando el comando 
-```sh
+git commit -m "Primer commit"
 git remote add origin <URL del repositorio remoto>
-```
-5. Sube el contenido al repositorio remoto usando el comando 
-```sh
 git push -u origin main
 ```
 
-Y eso es todo. Deberías poder ver tu contenido en GitHub.
+El código y el contenido de tu sitio ahora están alojados en GitHub.
 
-# Conclusión
+# Conclusiones
 
-Esta fue una configuración rápida de Hugo para un blog multilingüe. Encontré que fue extremadamente fácil de configurar y estoy deseando documentar el proceso de creación de este blog y añadir contenido a él.
+Esta ha sido una configuración rápida de un blog Hugo multilingüe. El siguiente paso: configurar GitHub Pages, usar un dominio personalizado y añadir analíticas con Umami (<https://umami.is/>).

@@ -1,0 +1,62 @@
+baseURL = 'https://ismaelmartinez.github.io/ismaelmartinez.me.uk/'
+title = 'IMR'
+theme = 'ananke'
+languageDirection = 'ltr'
+defaultContentLanguage = 'en'
+defaultContentLanguageInSubdir = true
+
+[fontmatter]
+    default = 'toml'
+
+[languages.en]
+    contentDir = 'content/en'
+    languageCode = 'en-gb'
+    languageName = 'English'
+    weight = 1    
+    [languages.en.params]
+        subtitle = 'Blog and Me'
+[languages.es]
+    contentDir = 'content/es'
+    languageCode = 'es'
+    languageName = 'Castellano'
+    weight = 2
+    [languages.es.params]
+        subtitle = 'Blog y Yo'
+[languages.cat]
+    contentDir = 'content/cat'
+    languageCode = 'ca'
+    languageName = 'Catala'
+    weight = 3
+    [languages.cat.params]
+        subtitle = 'Blog i Jo'
+
+[module]
+[[module.imports]]
+path = 'github.com/theNewDynamic/gohugo-theme-ananke/v2'
+
+[params.ananke.social.share]
+networks = [
+  "email",
+  "facebook",
+  "bluesky",
+  "linkedin"
+]
+
+[params.ananke.social.follow]
+networks = [
+  "linkedin",
+  "github"
+]
+
+[params.ananke.social.github]
+username = "ismaelmartinez"
+
+[params.ananke.social.linkedin]
+username = "ismaelmartinezramos"
+
+[params.ananke.social.email]
+link = "mailto:ismaelmartinez@gmail.com"
+icon = "envelope"
+
+[ananke]
+  custom_css = ["css/fullwidth.css"]

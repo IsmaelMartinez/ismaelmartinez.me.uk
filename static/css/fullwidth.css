@@ -1,0 +1,6 @@
+.container,
+.max-w-prose,
+.mx-auto,
+.measure-wide {
+    max-width: 100% !important;
+    width: 100% !important; }

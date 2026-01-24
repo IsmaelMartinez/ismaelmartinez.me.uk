@@ -1,0 +1,115 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import WritingCard from '../../components/WritingCard.astro';
+import { useTranslations } from '../../i18n/translations';
+
+const lang = 'cat';
+const t = useTranslations(lang);
+---
+
+<Layout title="Escrits" lang={lang}>
+  <section class="section">
+    <div class="container">
+      <header class="page-header">
+        <h1 class="page-title">{t('section.writing')}</h1>
+        <p class="page-description">{t('section.writing.description')}</p>
+      </header>
+
+      <div class="writing-platforms">
+        <div class="platform-section">
+          <h2 class="platform-title">
+            <span class="platform-icon">✍️</span>
+            Medium
+          </h2>
+          <p class="platform-description">
+            Articles en profunditat sobre desenvolupament de software, arquitectura i tecnologia.
+          </p>
+          <a href="https://medium.com/@ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+            {t('common.viewOnMedium')} →
+          </a>
+        </div>
+
+        <div class="platform-section">
+          <h2 class="platform-title">
+            <span class="platform-icon">👩‍💻</span>
+            Dev.to
+          </h2>
+          <p class="platform-description">
+            Tutorials tècnics, consells i discussions de la comunitat.
+          </p>
+          <a href="https://dev.to/ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+            {t('common.viewOnDevto')} →
+          </a>
+        </div>
+      </div>
+
+      <div class="writing-note">
+        <p>
+          Escric sobre enginyeria de software, codi obert i la indústria tecnològica.
+          Visita els meus perfils a Medium i Dev.to per llegir els meus últims articles.
+        </p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-header {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .page-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: var(--space-md);
+  }
+
+  .page-description {
+    font-size: 1.125rem;
+    color: var(--color-text-muted);
+    max-width: 600px;
+  }
+
+  .writing-platforms {
+    display: grid;
+    gap: var(--space-xl);
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    margin-bottom: var(--space-2xl);
+  }
+
+  .platform-section {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    padding: var(--space-xl);
+  }
+
+  .platform-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 1.5rem;
+    margin-bottom: var(--space-md);
+  }
+
+  .platform-icon {
+    font-size: 1.25rem;
+  }
+
+  .platform-description {
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-lg);
+  }
+
+  .writing-note {
+    background: var(--color-bg-secondary);
+    border-left: 4px solid var(--color-accent);
+    padding: var(--space-lg);
+    border-radius: 0 0.5rem 0.5rem 0;
+  }
+
+  .writing-note p {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+</style>

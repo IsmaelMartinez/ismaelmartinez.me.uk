@@ -1,0 +1,161 @@
+---
+import { languages, useTranslations, getLocalizedPath } from '../i18n/translations';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  lang?: 'en' | 'es' | 'cat';
+}
+
+const { title, description = "Ismael Martinez - Software Engineer & Open Source Enthusiast", lang = 'en' } = Astro.props;
+const t = useTranslations(lang);
+const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
+---
+
+<!doctype html>
+<html lang={lang === 'cat' ? 'ca' : lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} | Ismael Martinez</title>
+
+    <!-- Umami Analytics -->
+    <script defer src="https://cloud.umami.is/script.js" data-website-id="d3ef0011-73bb-46a5-a248-f5220efa13eb"></script>
+  </head>
+  <body>
+    <nav class="nav">
+      <div class="container nav-container">
+        <a href={getLocalizedPath('/', lang)} class="nav-logo">IMR</a>
+
+        <ul class="nav-links">
+          <li><a href={getLocalizedPath('/', lang)}>{t('nav.home')}</a></li>
+          <li><a href={getLocalizedPath('/projects', lang)}>{t('nav.projects')}</a></li>
+          <li><a href={getLocalizedPath('/writing', lang)}>{t('nav.writing')}</a></li>
+          <li><a href={getLocalizedPath('/connect', lang)}>{t('nav.connect')}</a></li>
+        </ul>
+
+        <div class="lang-switcher">
+          {Object.entries(languages).map(([code, name]) => (
+            <a
+              href={getLocalizedPath(currentPath, code)}
+              class:list={['lang-link', { active: lang === code }]}
+            >
+              {code.toUpperCase()}
+            </a>
+          ))}
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <p>
+          {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> {t('footer.and')} ☕
+        </p>
+        <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez</p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    height: var(--nav-height);
+  }
+
+  .nav-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+  }
+
+  .nav-logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .nav-links {
+    display: flex;
+    list-style: none;
+    gap: var(--space-xl);
+  }
+
+  .nav-links a {
+    color: var(--color-text-muted);
+    font-weight: 500;
+    transition: color 0.2s ease;
+  }
+
+  .nav-links a:hover {
+    color: var(--color-text);
+  }
+
+  .lang-switcher {
+    display: flex;
+    gap: var(--space-sm);
+  }
+
+  .lang-link {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+  }
+
+  .lang-link:hover,
+  .lang-link.active {
+    color: var(--color-accent);
+    background: var(--color-bg-secondary);
+  }
+
+  .footer {
+    border-top: 1px solid var(--color-border);
+    padding: var(--space-xl) 0;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+  }
+
+  .footer-copy {
+    margin-top: var(--space-sm);
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .nav-links {
+      gap: var(--space-md);
+      font-size: 0.875rem;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .nav-container {
+      flex-wrap: wrap;
+      padding: var(--space-sm) var(--space-lg);
+      height: auto;
+    }
+
+    .nav-links {
+      order: 3;
+      width: 100%;
+      justify-content: center;
+      padding: var(--space-sm) 0;
+    }
+  }
+</style>

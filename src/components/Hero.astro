@@ -1,0 +1,69 @@
+---
+import { useTranslations } from '../i18n/translations';
+
+interface Props {
+  lang: 'en' | 'es' | 'cat';
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<section class="hero">
+  <div class="container">
+    <p class="hero-greeting">{t('hero.greeting')}</p>
+    <h1 class="hero-name">{t('hero.name')}</h1>
+    <p class="hero-tagline">{t('hero.tagline')}</p>
+    <p class="hero-description">{t('hero.description')}</p>
+    <div class="hero-actions">
+      <a href={`/${lang}/projects`} class="btn btn-primary">
+        {t('nav.projects')} →
+      </a>
+      <a href={`/${lang}/connect`} class="btn btn-outline">
+        {t('nav.connect')}
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding: var(--space-3xl) 0;
+    min-height: calc(60vh - var(--nav-height));
+    display: flex;
+    align-items: center;
+  }
+
+  .hero-greeting {
+    font-size: 1.125rem;
+    color: var(--color-accent);
+    font-weight: 500;
+    margin-bottom: var(--space-sm);
+  }
+
+  .hero-name {
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: var(--space-md);
+  }
+
+  .hero-tagline {
+    font-size: 1.25rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-md);
+  }
+
+  .hero-description {
+    max-width: 600px;
+    font-size: 1.125rem;
+    line-height: 1.7;
+    margin-bottom: var(--space-xl);
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+  }
+</style>

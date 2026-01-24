@@ -1,0 +1,73 @@
+---
+import type { SocialLink } from '../data/links';
+
+interface Props {
+  link: SocialLink;
+  lang: 'en' | 'es' | 'cat';
+}
+
+const { link, lang } = Astro.props;
+---
+
+<a href={link.url} class="link-card" target="_blank" rel="noopener noreferrer">
+  <span class="link-card-icon">{link.icon}</span>
+  <div class="link-card-content">
+    <h3>{link.name}</h3>
+    <p>{link.description[lang]}</p>
+  </div>
+  <span class="link-arrow">→</span>
+</a>
+
+<style>
+  .link-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+    color: var(--color-text);
+  }
+
+  .link-card:hover {
+    border-color: var(--color-accent);
+    transform: translateX(4px);
+  }
+
+  .link-card-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .link-card-content {
+    flex-grow: 1;
+  }
+
+  .link-card-content h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.125rem;
+  }
+
+  .link-card-content p {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+  }
+
+  .link-arrow {
+    color: var(--color-text-muted);
+    transition: transform 0.2s ease;
+  }
+
+  .link-card:hover .link-arrow {
+    transform: translateX(4px);
+    color: var(--color-accent);
+  }
+</style>

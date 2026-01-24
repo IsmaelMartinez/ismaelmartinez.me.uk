@@ -1,14 +1,33 @@
 # ismaelmartinez.me.uk
 
-This is the source code for my personal blog, built with [Hugo](https://gohugo.io/) and using the Ananke theme. The blog is configured for multiple languages: English, Spanish, and Catalan.
+Personal portfolio website showcasing my open source projects, writing, and professional links.
 
-You can find more details about the setup and configuration in the blog post [`configuring-multilanguage-hugo.md`](./content/en/posts/configuring-multilanguage-hugo.md).
+Built with [Astro](https://astro.build/) for fast, modern static site generation.
 
 ## Features
 
 - Multi-language support (English, Spanish, Catalan)
-- Fast static site generation with Hugo
-- Easily customizable with themes
+- Showcase of open source projects
+- Links to Medium and Dev.to articles
+- Professional and social links
+- Dark/light mode support (via system preference)
+- Responsive design
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start dev server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
 
 ## Live Site
 

@@ -1,0 +1,69 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Hero from '../../components/Hero.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import LinkCard from '../../components/LinkCard.astro';
+import { useTranslations } from '../../i18n/translations';
+import { getFeaturedProjects } from '../../data/projects';
+import { socialLinks } from '../../data/links';
+
+const lang = 'es';
+const t = useTranslations(lang);
+const featuredProjects = getFeaturedProjects().slice(0, 3);
+const topLinks = socialLinks.slice(0, 4);
+---
+
+<Layout title="Inicio" lang={lang}>
+  <Hero lang={lang} />
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">{t('section.projects')}</h2>
+      <p class="section-description">{t('section.projects.description')}</p>
+      <div class="grid grid-3">
+        {featuredProjects.map(project => (
+          <ProjectCard project={project} lang={lang} />
+        ))}
+      </div>
+      <div class="section-footer">
+        <a href={`/${lang}/projects`} class="btn btn-outline">
+          {t('common.viewAll')} →
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">{t('section.connect')}</h2>
+      <p class="section-description">{t('section.connect.description')}</p>
+      <div class="links-grid">
+        {topLinks.map(link => (
+          <LinkCard link={link} lang={lang} />
+        ))}
+      </div>
+      <div class="section-footer">
+        <a href={`/${lang}/connect`} class="btn btn-outline">
+          {t('common.viewAll')} →
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .section-alt {
+    background: var(--color-bg-secondary);
+  }
+
+  .section-footer {
+    margin-top: var(--space-xl);
+    text-align: center;
+  }
+
+  .links-grid {
+    display: grid;
+    gap: var(--space-md);
+    max-width: 600px;
+  }
+</style>

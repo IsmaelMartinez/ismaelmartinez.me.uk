@@ -1,0 +1,79 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import LinkCard from '../../components/LinkCard.astro';
+import { useTranslations } from '../../i18n/translations';
+import { socialLinks } from '../../data/links';
+
+const lang = 'es';
+const t = useTranslations(lang);
+---
+
+<Layout title="Conectar" lang={lang}>
+  <section class="section">
+    <div class="container">
+      <header class="page-header">
+        <h1 class="page-title">{t('section.connect')}</h1>
+        <p class="page-description">{t('section.connect.description')}</p>
+      </header>
+
+      <div class="links-list">
+        {socialLinks.map(link => (
+          <LinkCard link={link} lang={lang} />
+        ))}
+      </div>
+
+      <div class="connect-note">
+        <h2>Ponte en Contacto</h2>
+        <p>
+          No dudes en contactarme a través de cualquiera de estas plataformas.
+          Siempre estoy encantado de charlar sobre desarrollo de software, código abierto,
+          o simplemente para saludar.
+        </p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-header {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .page-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: var(--space-md);
+  }
+
+  .page-description {
+    font-size: 1.125rem;
+    color: var(--color-text-muted);
+    max-width: 600px;
+  }
+
+  .links-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-width: 600px;
+    margin-bottom: var(--space-2xl);
+  }
+
+  .connect-note {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    padding: var(--space-xl);
+    max-width: 600px;
+  }
+
+  .connect-note h2 {
+    font-size: 1.25rem;
+    margin-bottom: var(--space-md);
+  }
+
+  .connect-note p {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+</style>

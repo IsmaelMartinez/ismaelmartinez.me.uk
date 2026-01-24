@@ -1,0 +1,68 @@
+---
+import type { Project } from '../data/projects';
+
+interface Props {
+  project: Project;
+  lang: 'en' | 'es' | 'cat';
+}
+
+const { project, lang } = Astro.props;
+---
+
+<article class="project-card card">
+  <h3 class="project-name">
+    <a href={project.url} target="_blank" rel="noopener noreferrer">
+      {project.name}
+    </a>
+  </h3>
+  <p class="project-description">{project.description[lang]}</p>
+  <div class="project-tags">
+    {project.tags.map(tag => (
+      <span class="tag">{tag}</span>
+    ))}
+  </div>
+  {project.github && (
+    <a href={project.github} class="project-link" target="_blank" rel="noopener noreferrer">
+      View on GitHub →
+    </a>
+  )}
+</article>
+
+<style>
+  .project-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .project-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .project-name a {
+    color: var(--color-text);
+    transition: color 0.2s ease;
+  }
+
+  .project-name a:hover {
+    color: var(--color-accent);
+  }
+
+  .project-description {
+    color: var(--color-text-muted);
+    flex-grow: 1;
+  }
+
+  .project-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+  }
+
+  .project-link {
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-top: auto;
+  }
+</style>

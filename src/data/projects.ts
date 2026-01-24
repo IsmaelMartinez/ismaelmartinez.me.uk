@@ -19,8 +19,8 @@ export const projects: Project[] = [
       es: 'Cliente no oficial de Microsoft Teams para Linux. Un proyecto impulsado por la comunidad que lleva Teams a los usuarios de Linux.',
       cat: 'Client no oficial de Microsoft Teams per a Linux. Un projecte impulsat per la comunitat que porta Teams als usuaris de Linux.'
     },
-    url: 'https://github.com/nicepkg/teams-for-linux',
-    github: 'https://github.com/nicepkg/teams-for-linux',
+    url: 'https://github.com/ismaelmartinez/teams-for-linux',
+    github: 'https://github.com/ismaelmartinez/teams-for-linux',
     tags: ['Electron', 'TypeScript', 'Linux'],
     featured: true
   },

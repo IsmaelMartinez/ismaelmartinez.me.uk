@@ -22,7 +22,7 @@ export const socialLinks: SocialLink[] = [
   },
   {
     name: 'LinkedIn',
-    url: 'https://linkedin.com/in/ismael-martinez-ramos',
+    url: 'https://www.linkedin.com/in/ismaelmartinezramos',
     icon: '💼',
     description: {
       en: 'Connect with me professionally',
@@ -48,16 +48,6 @@ export const socialLinks: SocialLink[] = [
       en: 'Technical articles and community discussions',
       es: 'Artículos técnicos y discusiones de la comunidad',
       cat: 'Articles tècnics i discussions de la comunitat'
-    }
-  },
-  {
-    name: 'Twitter/X',
-    url: 'https://twitter.com/isaborni',
-    icon: '🐦',
-    description: {
-      en: 'Follow me for tech updates and thoughts',
-      es: 'Sígueme para actualizaciones y pensamientos sobre tecnología',
-      cat: 'Segueix-me per actualitzacions i pensaments sobre tecnologia'
     }
   }
 ];

@@ -37,7 +37,17 @@ export const translations = {
     'common.readMore': 'Read More',
     'common.viewOnGithub': 'View on GitHub',
     'common.viewOnMedium': 'View on Medium',
-    'common.viewOnDevto': 'View on Dev.to'
+    'common.viewOnDevto': 'View on Dev.to',
+
+    // Articles
+    'article.updated': 'Updated',
+    'article.availableIn': 'Available in',
+    'article.originallyOn': 'Originally published on',
+    'article.originallyPublished': 'This site',
+    'article.backToWriting': 'Back to Writing',
+    'article.noArticles': 'No articles yet. Check back soon!',
+    'article.localArticles': 'Articles',
+    'article.externalPlatforms': 'External Platforms'
   },
   es: {
     // Navigation
@@ -69,7 +79,17 @@ export const translations = {
     'common.readMore': 'Leer Más',
     'common.viewOnGithub': 'Ver en GitHub',
     'common.viewOnMedium': 'Ver en Medium',
-    'common.viewOnDevto': 'Ver en Dev.to'
+    'common.viewOnDevto': 'Ver en Dev.to',
+
+    // Articles
+    'article.updated': 'Actualizado',
+    'article.availableIn': 'Disponible en',
+    'article.originallyOn': 'Publicado originalmente en',
+    'article.originallyPublished': 'Este sitio',
+    'article.backToWriting': 'Volver a Escritos',
+    'article.noArticles': 'Aún no hay artículos. ¡Vuelve pronto!',
+    'article.localArticles': 'Artículos',
+    'article.externalPlatforms': 'Plataformas Externas'
   },
   cat: {
     // Navigation
@@ -101,7 +121,17 @@ export const translations = {
     'common.readMore': 'Llegir Més',
     'common.viewOnGithub': 'Veure a GitHub',
     'common.viewOnMedium': 'Veure a Medium',
-    'common.viewOnDevto': 'Veure a Dev.to'
+    'common.viewOnDevto': 'Veure a Dev.to',
+
+    // Articles
+    'article.updated': 'Actualitzat',
+    'article.availableIn': 'Disponible en',
+    'article.originallyOn': 'Publicat originalment a',
+    'article.originallyPublished': 'Aquest lloc',
+    'article.backToWriting': 'Tornar a Escrits',
+    'article.noArticles': 'Encara no hi ha articles. Torna aviat!',
+    'article.localArticles': 'Articles',
+    'article.externalPlatforms': 'Plataformes Externes'
   }
 } as const;
 

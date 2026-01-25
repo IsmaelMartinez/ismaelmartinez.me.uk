@@ -1,9 +1,21 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import ArticleCard from '../../components/ArticleCard.astro';
 import { useTranslations } from '../../i18n/translations';
+import { getCollection } from 'astro:content';
 
 const lang = 'cat';
 const t = useTranslations(lang);
+
+// Get articles for this locale, excluding drafts in production
+const articles = await getCollection('articles', ({ slug, data }) => {
+  return slug.startsWith('cat/') && (import.meta.env.DEV || !data.draft);
+});
+
+// Sort by date, newest first
+const sortedArticles = articles.sort((a, b) =>
+  b.data.publishedDate.valueOf() - a.data.publishedDate.valueOf()
+);
 ---
 
 <Layout title="Escrits" lang={lang}>
@@ -14,31 +26,53 @@ const t = useTranslations(lang);
         <p class="page-description">{t('section.writing.description')}</p>
       </header>
 
-      <div class="writing-platforms">
-        <div class="platform-section">
-          <h2 class="platform-title">
-            <span class="platform-icon">✍️</span>
-            Medium
-          </h2>
-          <p class="platform-description">
-            Articles en profunditat sobre desenvolupament de software, arquitectura i tecnologia.
-          </p>
-          <a href="https://medium.com/@ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
-            {t('common.viewOnMedium')} →
-          </a>
+      {sortedArticles.length > 0 && (
+        <div class="articles-section">
+          <h2 class="section-title">{t('article.localArticles')}</h2>
+          <div class="articles-grid">
+            {sortedArticles.map(article => (
+              <ArticleCard
+                title={article.data.title}
+                description={article.data.description}
+                publishedDate={article.data.publishedDate}
+                slug={article.slug.replace('cat/', '')}
+                tags={article.data.tags}
+                lang={lang}
+                originalPlatform={article.data.originalPlatform}
+              />
+            ))}
+          </div>
         </div>
+      )}
 
-        <div class="platform-section">
-          <h2 class="platform-title">
-            <span class="platform-icon">👩‍💻</span>
-            Dev.to
-          </h2>
-          <p class="platform-description">
-            Tutorials tècnics, consells i discussions de la comunitat.
-          </p>
-          <a href="https://dev.to/ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
-            {t('common.viewOnDevto')} →
-          </a>
+      <div class="platforms-section">
+        <h2 class="section-title">{t('article.externalPlatforms')}</h2>
+        <div class="writing-platforms">
+          <div class="platform-section">
+            <h3 class="platform-title">
+              <span class="platform-icon">✍️</span>
+              Medium
+            </h3>
+            <p class="platform-description">
+              Articles en profunditat sobre desenvolupament de software, arquitectura i tecnologia.
+            </p>
+            <a href="https://medium.com/@ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+              {t('common.viewOnMedium')} →
+            </a>
+          </div>
+
+          <div class="platform-section">
+            <h3 class="platform-title">
+              <span class="platform-icon">👩‍💻</span>
+              Dev.to
+            </h3>
+            <p class="platform-description">
+              Tutorials tècnics, consells i discussions de la comunitat.
+            </p>
+            <a href="https://dev.to/ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+              {t('common.viewOnDevto')} →
+            </a>
+          </div>
         </div>
       </div>
 
@@ -69,11 +103,31 @@ const t = useTranslations(lang);
     max-width: 600px;
   }
 
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: var(--space-lg);
+  }
+
+  .articles-section {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .articles-grid {
+    display: grid;
+    gap: var(--space-lg);
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    margin-bottom: var(--space-xl);
+  }
+
+  .platforms-section {
+    margin-bottom: var(--space-2xl);
+  }
+
   .writing-platforms {
     display: grid;
     gap: var(--space-xl);
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    margin-bottom: var(--space-2xl);
   }
 
   .platform-section {
@@ -87,7 +141,7 @@ const t = useTranslations(lang);
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     margin-bottom: var(--space-md);
   }
 

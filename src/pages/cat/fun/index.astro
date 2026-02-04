@@ -1,0 +1,125 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { funActivities } from '../../../data/fun';
+
+const lang = 'cat';
+const t = useTranslations(lang);
+---
+
+<Layout title="Diversió" lang={lang}>
+  <section class="fun-hero">
+    <div class="container">
+      <h1 class="fun-title">{t('fun.title')} <span class="fun-emoji">🎮</span></h1>
+      <p class="fun-subtitle">{t('fun.subtitle')}</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="fun-grid">
+        {funActivities.map(activity => (
+          <a href={getLocalizedPath(activity.path, lang)} class="fun-card" style={`--card-color: ${activity.color}`}>
+            <span class="fun-card-icon">{activity.icon}</span>
+            <h2 class="fun-card-title">{t(`fun.${activity.id}.title` as any)}</h2>
+            <p class="fun-card-description">{t(`fun.${activity.id}.description` as any)}</p>
+            <span class="fun-card-cta">
+              {activity.id === 'snake' ? t('fun.snake.play') :
+               activity.id === 'excuse' ? t('fun.excuse.generate') :
+               t('fun.quiz.start')} →
+            </span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .fun-hero {
+    padding: var(--space-3xl) 0;
+    text-align: center;
+    background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg) 100%);
+  }
+
+  .fun-title {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: var(--space-md);
+  }
+
+  .fun-emoji {
+    display: inline-block;
+    animation: bounce 1s ease infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .fun-subtitle {
+    font-size: 1.25rem;
+    color: var(--color-text-muted);
+    max-width: 500px;
+    margin: 0 auto;
+  }
+
+  .fun-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-xl);
+  }
+
+  .fun-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--space-2xl) var(--space-xl);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    color: var(--color-text);
+  }
+
+  .fun-card:hover {
+    transform: translateY(-8px);
+    border-color: var(--card-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  }
+
+  .fun-card:hover .fun-card-icon {
+    transform: scale(1.2) rotate(10deg);
+  }
+
+  .fun-card-icon {
+    font-size: 4rem;
+    margin-bottom: var(--space-lg);
+    transition: transform 0.3s ease;
+  }
+
+  .fun-card-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: var(--space-sm);
+  }
+
+  .fun-card-description {
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-lg);
+    flex-grow: 1;
+  }
+
+  .fun-card-cta {
+    color: var(--card-color);
+    font-weight: 600;
+    transition: transform 0.2s ease;
+  }
+
+  .fun-card:hover .fun-card-cta {
+    transform: translateX(4px);
+  }
+</style>

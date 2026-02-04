@@ -34,6 +34,7 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
           <li><a href={getLocalizedPath('/', lang)}>{t('nav.home')}</a></li>
           <li><a href={getLocalizedPath('/projects', lang)}>{t('nav.projects')}</a></li>
           <li><a href={getLocalizedPath('/writing', lang)}>{t('nav.writing')}</a></li>
+          <li><a href={getLocalizedPath('/fun', lang)}>{t('nav.fun')}</a></li>
           <li><a href={getLocalizedPath('/connect', lang)}>{t('nav.connect')}</a></li>
         </ul>
 
@@ -62,6 +63,80 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
         <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez</p>
       </div>
     </footer>
+
+    <!-- Easter Egg: Konami Code -->
+    <div id="konami-overlay" class="konami-overlay">
+      <div class="konami-content">
+        <div class="konami-emoji">🎉</div>
+        <h2>You found the secret!</h2>
+        <p>You're clearly a person of culture. Here's a virtual high five! ✋</p>
+        <div class="konami-confetti"></div>
+        <button id="konami-close" class="btn btn-primary">Nice!</button>
+      </div>
+    </div>
+
+    <script>
+      // Konami Code: ↑ ↑ ↓ ↓ ← → ← → B A
+      const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+      let konamiIndex = 0;
+
+      document.addEventListener('keydown', (e) => {
+        if (e.code === konamiCode[konamiIndex]) {
+          konamiIndex++;
+          if (konamiIndex === konamiCode.length) {
+            activateKonami();
+            konamiIndex = 0;
+          }
+        } else {
+          konamiIndex = 0;
+        }
+      });
+
+      function activateKonami() {
+        const overlay = document.getElementById('konami-overlay');
+        overlay?.classList.add('active');
+        createConfetti();
+      }
+
+      document.getElementById('konami-close')?.addEventListener('click', () => {
+        document.getElementById('konami-overlay')?.classList.remove('active');
+      });
+
+      function createConfetti() {
+        const confettiContainer = document.querySelector('.konami-confetti');
+        if (!confettiContainer) return;
+
+        confettiContainer.innerHTML = '';
+        const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#fd79a8', '#a29bfe'];
+
+        for (let i = 0; i < 100; i++) {
+          const confetti = document.createElement('div');
+          confetti.className = 'confetti-piece';
+          confetti.style.cssText = `
+            left: ${Math.random() * 100}%;
+            background: ${colors[Math.floor(Math.random() * colors.length)]};
+            animation-delay: ${Math.random() * 2}s;
+            animation-duration: ${2 + Math.random() * 2}s;
+          `;
+          confettiContainer.appendChild(confetti);
+        }
+      }
+
+      // Easter egg: Click the logo 5 times
+      let logoClicks = 0;
+      document.querySelector('.nav-logo')?.addEventListener('click', (e) => {
+        logoClicks++;
+        if (logoClicks >= 5) {
+          e.preventDefault();
+          const logo = e.target as HTMLElement;
+          logo.style.animation = 'spin 0.5s ease';
+          setTimeout(() => {
+            logo.style.animation = '';
+          }, 500);
+          logoClicks = 0;
+        }
+      });
+    </script>
   </body>
 </html>
 
@@ -157,5 +232,92 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
       justify-content: center;
       padding: var(--space-sm) 0;
     }
+  }
+
+  /* Konami Code Easter Egg */
+  .konami-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .konami-overlay.active {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .konami-content {
+    text-align: center;
+    z-index: 1;
+  }
+
+  .konami-emoji {
+    font-size: 8rem;
+    animation: bounce 1s ease infinite;
+  }
+
+  .konami-content h2 {
+    font-size: 2.5rem;
+    margin: var(--space-lg) 0 var(--space-md);
+    background: linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .konami-content p {
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-xl);
+    font-size: 1.25rem;
+  }
+
+  .konami-confetti {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  :global(.confetti-piece) {
+    position: absolute;
+    top: -20px;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    animation: confetti-fall linear forwards;
+  }
+
+  @keyframes confetti-fall {
+    0% {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(100vh) rotate(720deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 </style>

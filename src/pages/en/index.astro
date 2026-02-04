@@ -33,6 +33,40 @@ const topLinks = socialLinks.slice(0, 4);
     </div>
   </section>
 
+  <section class="section section-fun">
+    <div class="container">
+      <h2 class="section-title">Take a Break!</h2>
+      <p class="section-description">Because all work and no play makes Jack a dull developer</p>
+      <div class="fun-preview">
+        <a href={`/${lang}/fun/quiz`} class="fun-preview-card" style="--card-color: #8b5cf6;">
+          <span class="fun-preview-icon">🧠</span>
+          <h3>Developer Quiz</h3>
+          <p>What type of dev are you?</p>
+        </a>
+        <a href={`/${lang}/fun/snake`} class="fun-preview-card" style="--card-color: #22c55e;">
+          <span class="fun-preview-icon">🐍</span>
+          <h3>Snake Game</h3>
+          <p>Classic retro fun!</p>
+        </a>
+        <a href={`/${lang}/fun/excuse`} class="fun-preview-card" style="--card-color: #f59e0b;">
+          <span class="fun-preview-icon">🤷</span>
+          <h3>Excuse Generator</h3>
+          <p>It works on my machine!</p>
+        </a>
+        <a href={`/${lang}/fun/trivia`} class="fun-preview-card" style="--card-color: #3b82f6;">
+          <span class="fun-preview-icon">❓</span>
+          <h3>Tech Trivia</h3>
+          <p>Test your knowledge!</p>
+        </a>
+      </div>
+      <div class="section-footer">
+        <a href={`/${lang}/fun`} class="btn btn-primary">
+          Explore All Fun Stuff →
+        </a>
+      </div>
+    </div>
+  </section>
+
   <section class="section section-alt">
     <div class="container">
       <h2 class="section-title">{t('section.connect')}</h2>
@@ -56,6 +90,10 @@ const topLinks = socialLinks.slice(0, 4);
     background: var(--color-bg-secondary);
   }
 
+  .section-fun {
+    background: linear-gradient(135deg, var(--color-bg) 0%, var(--color-bg-secondary) 100%);
+  }
+
   .section-footer {
     margin-top: var(--space-xl);
     text-align: center;
@@ -65,5 +103,52 @@ const topLinks = socialLinks.slice(0, 4);
     display: grid;
     gap: var(--space-md);
     max-width: 600px;
+  }
+
+  .fun-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-lg);
+  }
+
+  .fun-preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--space-xl);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    color: var(--color-text);
+  }
+
+  .fun-preview-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--card-color);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+
+  .fun-preview-card:hover .fun-preview-icon {
+    transform: scale(1.2);
+  }
+
+  .fun-preview-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-md);
+    transition: transform 0.3s ease;
+  }
+
+  .fun-preview-card h3 {
+    font-size: 1.1rem;
+    margin-bottom: var(--space-xs);
+    color: var(--card-color);
+  }
+
+  .fun-preview-card p {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
   }
 </style>

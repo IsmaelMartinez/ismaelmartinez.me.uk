@@ -1,0 +1,307 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { quizQuestions, quizResults } from '../../../data/fun';
+
+const lang = 'en';
+const t = useTranslations(lang);
+const questions = quizQuestions[lang];
+const results = quizResults[lang];
+---
+
+<Layout title="Developer Quiz" lang={lang}>
+  <section class="quiz-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div class="quiz-container">
+        <div id="quiz-intro" class="quiz-intro">
+          <span class="quiz-icon">🧠</span>
+          <h1>{t('fun.quiz.title')}</h1>
+          <p>{t('fun.quiz.description')}</p>
+          <button id="start-quiz" class="btn btn-primary btn-large">{t('fun.quiz.start')}</button>
+        </div>
+
+        <div id="quiz-questions" class="quiz-questions" style="display: none;">
+          <div class="progress-bar">
+            <div id="progress" class="progress"></div>
+          </div>
+          <div id="question-container"></div>
+        </div>
+
+        <div id="quiz-result" class="quiz-result" style="display: none;">
+          <span id="result-emoji" class="result-emoji"></span>
+          <h2 id="result-title"></h2>
+          <p id="result-description"></p>
+          <ul id="result-traits" class="result-traits"></ul>
+          <div class="result-actions">
+            <button id="restart-quiz" class="btn btn-outline">{t('fun.quiz.restart')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script define:vars={{ questions, results, t_next: t('fun.quiz.next'), t_seeResults: t('fun.quiz.seeResults') }}>
+  let currentQuestion = 0;
+  let scores = { perfectionist: 0, yolo: 0, architect: 0, pragmatist: 0 };
+
+  const introEl = document.getElementById('quiz-intro');
+  const questionsEl = document.getElementById('quiz-questions');
+  const resultEl = document.getElementById('quiz-result');
+  const questionContainer = document.getElementById('question-container');
+  const progressEl = document.getElementById('progress');
+  const startBtn = document.getElementById('start-quiz');
+  const restartBtn = document.getElementById('restart-quiz');
+
+  function showQuestion() {
+    const q = questions[currentQuestion];
+    const isLast = currentQuestion === questions.length - 1;
+
+    progressEl.style.width = `${((currentQuestion + 1) / questions.length) * 100}%`;
+
+    questionContainer.innerHTML = `
+      <div class="question">
+        <h2 class="question-text">${q.question}</h2>
+        <div class="answers">
+          ${q.answers.map((a, i) => `
+            <button class="answer-btn" data-type="${a.type}" data-index="${i}">
+              ${a.text}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.querySelectorAll('.answer-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const type = e.target.dataset.type;
+        scores[type]++;
+
+        document.querySelectorAll('.answer-btn').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+
+        setTimeout(() => {
+          if (currentQuestion < questions.length - 1) {
+            currentQuestion++;
+            showQuestion();
+          } else {
+            showResult();
+          }
+        }, 300);
+      });
+    });
+  }
+
+  function showResult() {
+    questionsEl.style.display = 'none';
+    resultEl.style.display = 'block';
+
+    const maxType = Object.entries(scores).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+    const result = results[maxType];
+
+    document.getElementById('result-emoji').textContent = result.emoji;
+    document.getElementById('result-title').textContent = result.title;
+    document.getElementById('result-description').textContent = result.description;
+
+    const traitsEl = document.getElementById('result-traits');
+    traitsEl.innerHTML = result.traits.map(trait => `<li>${trait}</li>`).join('');
+
+    resultEl.classList.add('show');
+  }
+
+  startBtn.addEventListener('click', () => {
+    introEl.style.display = 'none';
+    questionsEl.style.display = 'block';
+    showQuestion();
+  });
+
+  restartBtn.addEventListener('click', () => {
+    currentQuestion = 0;
+    scores = { perfectionist: 0, yolo: 0, architect: 0, pragmatist: 0 };
+    resultEl.style.display = 'none';
+    resultEl.classList.remove('show');
+    introEl.style.display = 'flex';
+  });
+</script>
+
+<style>
+  .quiz-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
+  }
+
+  .quiz-container {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .quiz-intro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--space-3xl);
+    background: var(--color-bg-secondary);
+    border-radius: 1rem;
+    border: 1px solid var(--color-border);
+  }
+
+  .quiz-icon {
+    font-size: 5rem;
+    margin-bottom: var(--space-lg);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+
+  .quiz-intro h1 {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+  }
+
+  .quiz-intro p {
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-xl);
+  }
+
+  .btn-large {
+    padding: var(--space-md) var(--space-2xl);
+    font-size: 1.1rem;
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--color-border);
+    border-radius: 3px;
+    margin-bottom: var(--space-2xl);
+    overflow: hidden;
+  }
+
+  .progress {
+    height: 100%;
+    background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+    transition: width 0.3s ease;
+    border-radius: 3px;
+  }
+
+  .question {
+    background: var(--color-bg-secondary);
+    padding: var(--space-2xl);
+    border-radius: 1rem;
+    border: 1px solid var(--color-border);
+  }
+
+  .question-text {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-xl);
+    text-align: center;
+  }
+
+  .answers {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .answer-btn {
+    padding: var(--space-lg);
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+    border-radius: 0.75rem;
+    color: var(--color-text);
+    font-size: 1rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .answer-btn:hover {
+    border-color: #8b5cf6;
+    transform: translateX(4px);
+  }
+
+  .answer-btn.selected {
+    border-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.1);
+  }
+
+  .quiz-result {
+    text-align: center;
+    padding: var(--space-3xl);
+    background: var(--color-bg-secondary);
+    border-radius: 1rem;
+    border: 1px solid var(--color-border);
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.5s ease;
+  }
+
+  .quiz-result.show {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .result-emoji {
+    font-size: 6rem;
+    display: block;
+    margin-bottom: var(--space-lg);
+    animation: bounce 1s ease infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+  }
+
+  .quiz-result h2 {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: #8b5cf6;
+  }
+
+  .quiz-result p {
+    color: var(--color-text-muted);
+    font-size: 1.1rem;
+    line-height: 1.7;
+    margin-bottom: var(--space-xl);
+  }
+
+  .result-traits {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xl);
+  }
+
+  .result-traits li {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 2rem;
+    font-size: 0.9rem;
+  }
+
+  .result-actions {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+  }
+</style>

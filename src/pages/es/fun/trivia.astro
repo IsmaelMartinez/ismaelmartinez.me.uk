@@ -1,0 +1,242 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { triviaQuestions } from '../../../data/fun';
+
+const lang = 'es';
+const t = useTranslations(lang);
+const questions = triviaQuestions[lang];
+---
+
+<Layout title="Trivia Tech" lang={lang}>
+  <section class="trivia-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div class="trivia-container">
+        <div id="trivia-intro" class="trivia-intro">
+          <span class="trivia-icon">❓</span>
+          <h1>{t('fun.trivia.title')}</h1>
+          <p>{t('fun.trivia.description')}</p>
+          <div class="trivia-stats">
+            <div class="stat">
+              <span class="stat-value">{questions.length}</span>
+              <span class="stat-label">Preguntas</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value" id="best-score">0</span>
+              <span class="stat-label">Mejor Puntuación</span>
+            </div>
+          </div>
+          <button id="start-trivia" class="btn btn-primary btn-large">{t('fun.trivia.start')}</button>
+        </div>
+
+        <div id="trivia-game" class="trivia-game" style="display: none;">
+          <div class="trivia-header">
+            <div class="question-counter">
+              <span>{t('fun.trivia.question')}</span>
+              <span id="current-question">1</span>
+              <span>{t('fun.trivia.of')}</span>
+              <span>{questions.length}</span>
+            </div>
+            <div class="trivia-score">
+              {t('fun.trivia.score')}: <span id="game-score">0</span>
+            </div>
+          </div>
+
+          <div class="progress-bar">
+            <div id="progress" class="progress"></div>
+          </div>
+
+          <div id="question-container" class="question-container"></div>
+        </div>
+
+        <div id="trivia-result" class="trivia-result" style="display: none;">
+          <div id="result-emoji" class="result-emoji"></div>
+          <h2>{t('fun.trivia.score')}</h2>
+          <div class="final-score">
+            <span id="final-score">0</span> / <span>{questions.length}</span>
+          </div>
+          <div id="result-message" class="result-message"></div>
+          <button id="restart-trivia" class="btn btn-primary btn-large">{t('fun.trivia.playAgain')}</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script define:vars={{ questions }}>
+  const introEl = document.getElementById('trivia-intro')!;
+  const gameEl = document.getElementById('trivia-game')!;
+  const resultEl = document.getElementById('trivia-result')!;
+  const questionContainer = document.getElementById('question-container')!;
+  const progressEl = document.getElementById('progress')!;
+  const currentQuestionEl = document.getElementById('current-question')!;
+  const gameScoreEl = document.getElementById('game-score')!;
+  const finalScoreEl = document.getElementById('final-score')!;
+  const resultEmojiEl = document.getElementById('result-emoji')!;
+  const resultMessageEl = document.getElementById('result-message')!;
+  const bestScoreEl = document.getElementById('best-score')!;
+  const startBtn = document.getElementById('start-trivia')!;
+  const restartBtn = document.getElementById('restart-trivia')!;
+
+  let currentQuestion = 0;
+  let score = 0;
+  let shuffledQuestions: typeof questions = [];
+  let bestScore = parseInt(localStorage.getItem('trivia-best-score') || '0');
+
+  bestScoreEl.textContent = bestScore.toString();
+
+  function shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  function startGame() {
+    currentQuestion = 0;
+    score = 0;
+    shuffledQuestions = shuffleArray(questions);
+    gameScoreEl.textContent = '0';
+    introEl.style.display = 'none';
+    resultEl.style.display = 'none';
+    gameEl.style.display = 'block';
+    showQuestion();
+  }
+
+  function showQuestion() {
+    const q = shuffledQuestions[currentQuestion];
+    currentQuestionEl.textContent = (currentQuestion + 1).toString();
+    progressEl.style.width = `${((currentQuestion + 1) / shuffledQuestions.length) * 100}%`;
+
+    const shuffledAnswers = q.answers.map((answer, index) => ({ answer, originalIndex: index }));
+    for (let i = shuffledAnswers.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledAnswers[i], shuffledAnswers[j]] = [shuffledAnswers[j], shuffledAnswers[i]];
+    }
+
+    questionContainer.innerHTML = `
+      <div class="question">
+        <h2 class="question-text">${q.question}</h2>
+        <div class="answers">
+          ${shuffledAnswers.map((item, i) => `
+            <button class="answer-btn" data-index="${item.originalIndex}">
+              <span class="answer-letter">${String.fromCharCode(65 + i)}</span>
+              ${item.answer}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.querySelectorAll('.answer-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const selectedIndex = parseInt(target.dataset.index || '0');
+        const isCorrect = selectedIndex === q.correct;
+
+        document.querySelectorAll('.answer-btn').forEach(b => {
+          b.classList.add('disabled');
+          const idx = parseInt((b as HTMLElement).dataset.index || '0');
+          if (idx === q.correct) b.classList.add('correct');
+          else if (b === target && !isCorrect) b.classList.add('wrong');
+        });
+
+        if (isCorrect) {
+          score++;
+          gameScoreEl.textContent = score.toString();
+        }
+
+        setTimeout(() => {
+          if (currentQuestion < shuffledQuestions.length - 1) {
+            currentQuestion++;
+            showQuestion();
+          } else {
+            showResult();
+          }
+        }, 1500);
+      });
+    });
+  }
+
+  function showResult() {
+    gameEl.style.display = 'none';
+    resultEl.style.display = 'block';
+    finalScoreEl.textContent = score.toString();
+
+    const percentage = (score / shuffledQuestions.length) * 100;
+
+    if (percentage === 100) {
+      resultEmojiEl.textContent = '🏆';
+      resultMessageEl.textContent = '¡Puntuación perfecta! ¿Eres secretamente un ordenador?';
+    } else if (percentage >= 80) {
+      resultEmojiEl.textContent = '🌟';
+      resultMessageEl.textContent = '¡Excelente! ¡Realmente conoces la tecnología!';
+    } else if (percentage >= 60) {
+      resultEmojiEl.textContent = '👍';
+      resultMessageEl.textContent = '¡Buen trabajo! ¡Sigue aprendiendo!';
+    } else if (percentage >= 40) {
+      resultEmojiEl.textContent = '🤔';
+      resultMessageEl.textContent = 'No está mal, ¡pero hay espacio para mejorar!';
+    } else {
+      resultEmojiEl.textContent = '📚';
+      resultMessageEl.textContent = '¡Hora de estudiar! O de ir a Stack Overflow.';
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      localStorage.setItem('trivia-best-score', bestScore.toString());
+      bestScoreEl.textContent = bestScore.toString();
+      resultMessageEl.textContent += ' 🎉 ¡Nueva mejor puntuación!';
+    }
+
+    resultEl.classList.add('show');
+  }
+
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', () => { resultEl.classList.remove('show'); startGame(); });
+</script>
+
+<style>
+  .trivia-section { min-height: calc(100vh - var(--nav-height) - 200px); padding: var(--space-2xl) 0; }
+  .back-link { display: inline-block; margin-bottom: var(--space-xl); color: var(--color-text-muted); transition: color 0.2s ease; }
+  .back-link:hover { color: var(--color-accent); }
+  .trivia-container { max-width: 700px; margin: 0 auto; }
+  .trivia-intro { text-align: center; padding: var(--space-3xl); background: var(--color-bg-secondary); border-radius: 1rem; border: 1px solid var(--color-border); }
+  .trivia-icon { font-size: 5rem; display: block; margin-bottom: var(--space-lg); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+  .trivia-intro h1 { font-size: 2.5rem; margin-bottom: var(--space-md); }
+  .trivia-intro > p { color: var(--color-text-muted); margin-bottom: var(--space-xl); }
+  .trivia-stats { display: flex; justify-content: center; gap: var(--space-2xl); margin-bottom: var(--space-xl); }
+  .stat { text-align: center; }
+  .stat-value { display: block; font-size: 2rem; font-weight: 700; color: #3b82f6; }
+  .stat-label { font-size: 0.875rem; color: var(--color-text-muted); }
+  .btn-large { padding: var(--space-md) var(--space-2xl); font-size: 1.1rem; }
+  .trivia-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg); }
+  .question-counter { color: var(--color-text-muted); }
+  .question-counter span:nth-child(2) { color: #3b82f6; font-weight: 700; }
+  .trivia-score { font-weight: 600; }
+  .trivia-score span { color: #3b82f6; }
+  .progress-bar { height: 6px; background: var(--color-border); border-radius: 3px; margin-bottom: var(--space-xl); overflow: hidden; }
+  .progress { height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); transition: width 0.3s ease; border-radius: 3px; }
+  .question { background: var(--color-bg-secondary); padding: var(--space-2xl); border-radius: 1rem; border: 1px solid var(--color-border); }
+  .question-text { font-size: 1.5rem; margin-bottom: var(--space-xl); text-align: center; }
+  .answers { display: flex; flex-direction: column; gap: var(--space-md); }
+  .answer-btn { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-lg); background: var(--color-bg); border: 2px solid var(--color-border); border-radius: 0.75rem; color: var(--color-text); font-size: 1rem; text-align: left; cursor: pointer; transition: all 0.2s ease; }
+  .answer-btn:hover:not(.disabled) { border-color: #3b82f6; transform: translateX(4px); }
+  .answer-btn.disabled { cursor: not-allowed; opacity: 0.7; }
+  .answer-btn.correct { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+  .answer-btn.wrong { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+  .answer-letter { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; background: var(--color-bg-secondary); border-radius: 50%; font-weight: 700; font-size: 0.875rem; flex-shrink: 0; }
+  .trivia-result { text-align: center; padding: var(--space-3xl); background: var(--color-bg-secondary); border-radius: 1rem; border: 1px solid var(--color-border); opacity: 0; transform: scale(0.9); transition: all 0.5s ease; }
+  .trivia-result.show { opacity: 1; transform: scale(1); }
+  .result-emoji { font-size: 6rem; display: block; margin-bottom: var(--space-lg); animation: bounce 1s ease infinite; }
+  @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+  .trivia-result h2 { font-size: 1.5rem; margin-bottom: var(--space-md); color: var(--color-text-muted); }
+  .final-score { font-size: 3rem; font-weight: 700; margin-bottom: var(--space-lg); }
+  .final-score span:first-child { color: #3b82f6; }
+  .result-message { color: var(--color-text-muted); margin-bottom: var(--space-xl); font-size: 1.1rem; }
+</style>

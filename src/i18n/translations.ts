@@ -13,7 +13,7 @@ export const translations = {
     'nav.projects': 'Projects',
     'nav.writing': 'Writing',
     'nav.connect': 'Connect',
-    'nav.fun': 'Fun Stuff',
+    'nav.fun': 'Arcade',
 
     // Hero
     'hero.greeting': "Hi, I'm",
@@ -90,7 +90,7 @@ export const translations = {
     'nav.projects': 'Proyectos',
     'nav.writing': 'Escritos',
     'nav.connect': 'Conectar',
-    'nav.fun': 'Diversión',
+    'nav.fun': 'Arcade',
 
     // Hero
     'hero.greeting': 'Hola, soy',
@@ -167,7 +167,7 @@ export const translations = {
     'nav.projects': 'Projectes',
     'nav.writing': 'Escrits',
     'nav.connect': 'Connectar',
-    'nav.fun': 'Diversió',
+    'nav.fun': 'Arcade',
 
     // Hero
     'hero.greeting': 'Hola, sóc',

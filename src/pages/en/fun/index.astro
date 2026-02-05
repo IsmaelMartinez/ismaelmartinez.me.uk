@@ -1,125 +1,242 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import ArcadeCabinet from '../../../components/ArcadeCabinet.astro';
 import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
-import { funActivities } from '../../../data/fun';
 
 const lang = 'en';
 const t = useTranslations(lang);
+
+const arcadeGames = [
+  {
+    id: 'quiz',
+    title: 'DEV QUIZ',
+    description: 'What type of dev are you?',
+    icon: '🧠',
+    color: '#8b5cf6',
+    path: '/fun/quiz'
+  },
+  {
+    id: 'snake',
+    title: 'SNAKE',
+    description: 'Classic retro action!',
+    icon: '🐍',
+    color: '#22c55e',
+    path: '/fun/snake'
+  },
+  {
+    id: 'excuse',
+    title: 'EXCUSE-O-MATIC',
+    description: 'It works on my machine!',
+    icon: '🤷',
+    color: '#f59e0b',
+    path: '/fun/excuse'
+  },
+  {
+    id: 'trivia',
+    title: 'TECH TRIVIA',
+    description: 'Test your knowledge!',
+    icon: '❓',
+    color: '#3b82f6',
+    path: '/fun/trivia'
+  }
+];
 ---
 
-<Layout title="Fun Stuff" lang={lang}>
-  <section class="fun-hero">
-    <div class="container">
-      <h1 class="fun-title">{t('fun.title')} <span class="fun-emoji">🎮</span></h1>
-      <p class="fun-subtitle">{t('fun.subtitle')}</p>
-    </div>
-  </section>
+<Layout title="The Arcade" lang={lang}>
+  <div class="arcade-room">
+    <div class="neon-grid"></div>
 
-  <section class="section">
-    <div class="container">
-      <div class="fun-grid">
-        {funActivities.map(activity => (
-          <a href={getLocalizedPath(activity.path, lang)} class="fun-card" style={`--card-color: ${activity.color}`}>
-            <span class="fun-card-icon">{activity.icon}</span>
-            <h2 class="fun-card-title">{t(`fun.${activity.id}.title` as any)}</h2>
-            <p class="fun-card-description">{t(`fun.${activity.id}.description` as any)}</p>
-            <span class="fun-card-cta">
-              {activity.id === 'snake' ? t('fun.snake.play') :
-               activity.id === 'excuse' ? t('fun.excuse.generate') :
-               t('fun.quiz.start')} →
-            </span>
-          </a>
+    <div class="arcade-header">
+      <div class="neon-sign">
+        <span class="neon-text">ISMAEL'S</span>
+        <span class="neon-text accent">ARCADE</span>
+      </div>
+      <p class="arcade-subtitle">Insert coin to play</p>
+    </div>
+
+    <div class="arcade-floor">
+      <div class="cabinets-row">
+        {arcadeGames.map(game => (
+          <ArcadeCabinet
+            id={game.id}
+            title={game.title}
+            description={game.description}
+            icon={game.icon}
+            color={game.color}
+            href={getLocalizedPath(game.path, lang)}
+          />
         ))}
       </div>
     </div>
-  </section>
+
+    <div class="arcade-decorations">
+      <div class="floor-reflection"></div>
+    </div>
+
+    <div class="arcade-tip">
+      <p>Tip: Try the Konami Code anywhere on the site...</p>
+    </div>
+  </div>
 </Layout>
 
 <style>
-  .fun-hero {
-    padding: var(--space-3xl) 0;
+  .arcade-room {
+    min-height: calc(100vh - var(--nav-height));
+    background: linear-gradient(180deg, #0a0a12 0%, #1a1a2e 50%, #16213e 100%);
+    position: relative;
+    overflow: hidden;
+    padding: var(--space-2xl) var(--space-lg);
+  }
+
+  .neon-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+      linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+    perspective: 500px;
+    transform-style: preserve-3d;
+    animation: gridMove 20s linear infinite;
+  }
+
+  @keyframes gridMove {
+    0% { background-position: 0 0; }
+    100% { background-position: 50px 50px; }
+  }
+
+  .arcade-header {
     text-align: center;
-    background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg) 100%);
+    margin-bottom: var(--space-3xl);
+    position: relative;
+    z-index: 10;
   }
 
-  .fun-title {
-    font-size: 3rem;
-    font-weight: 800;
-    margin-bottom: var(--space-md);
-  }
-
-  .fun-emoji {
-    display: inline-block;
-    animation: bounce 1s ease infinite;
-  }
-
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  .fun-subtitle {
-    font-size: 1.25rem;
-    color: var(--color-text-muted);
-    max-width: 500px;
-    margin: 0 auto;
-  }
-
-  .fun-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-xl);
-  }
-
-  .fun-card {
+  .neon-sign {
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+  }
+
+  .neon-text {
+    font-family: var(--font-mono);
+    font-size: clamp(2rem, 8vw, 4rem);
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #fff;
+    text-shadow:
+      0 0 5px #fff,
+      0 0 10px #fff,
+      0 0 20px #ff00de,
+      0 0 40px #ff00de,
+      0 0 80px #ff00de;
+    animation: neonFlicker 3s ease-in-out infinite;
+  }
+
+  .neon-text.accent {
+    color: #0ff;
+    text-shadow:
+      0 0 5px #0ff,
+      0 0 10px #0ff,
+      0 0 20px #0ff,
+      0 0 40px #00b7ff,
+      0 0 80px #00b7ff;
+    animation: neonFlicker 2.5s ease-in-out infinite reverse;
+  }
+
+  @keyframes neonFlicker {
+    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+      opacity: 1;
+    }
+    20%, 24%, 55% {
+      opacity: 0.8;
+    }
+  }
+
+  .arcade-subtitle {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    animation: blink 1.5s step-end infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0.5; }
+  }
+
+  .arcade-floor {
+    position: relative;
+    z-index: 10;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .cabinets-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--space-2xl);
+    padding: var(--space-xl) 0;
+  }
+
+  .arcade-decorations {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 150px;
+    pointer-events: none;
+  }
+
+  .floor-reflection {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background: linear-gradient(180deg, transparent 0%, rgba(139, 92, 246, 0.05) 100%);
+  }
+
+  .arcade-tip {
     text-align: center;
-    padding: var(--space-2xl) var(--space-xl);
-    background: var(--color-bg-secondary);
-    border: 2px solid var(--color-border);
-    border-radius: 1rem;
-    transition: all 0.3s ease;
-    text-decoration: none;
-    color: var(--color-text);
+    margin-top: var(--space-3xl);
+    position: relative;
+    z-index: 10;
   }
 
-  .fun-card:hover {
-    transform: translateY(-8px);
-    border-color: var(--card-color);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  .arcade-tip p {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
 
-  .fun-card:hover .fun-card-icon {
-    transform: scale(1.2) rotate(10deg);
+  @media (max-width: 768px) {
+    .arcade-room {
+      padding: var(--space-xl) var(--space-md);
+    }
+
+    .cabinets-row {
+      gap: var(--space-xl);
+    }
   }
 
-  .fun-card-icon {
-    font-size: 4rem;
-    margin-bottom: var(--space-lg);
-    transition: transform 0.3s ease;
-  }
+  @media (max-width: 480px) {
+    .neon-text {
+      letter-spacing: 0.1em;
+    }
 
-  .fun-card-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-bottom: var(--space-sm);
-  }
-
-  .fun-card-description {
-    color: var(--color-text-muted);
-    margin-bottom: var(--space-lg);
-    flex-grow: 1;
-  }
-
-  .fun-card-cta {
-    color: var(--card-color);
-    font-weight: 600;
-    transition: transform 0.2s ease;
-  }
-
-  .fun-card:hover .fun-card-cta {
-    transform: translateX(4px);
+    .cabinets-row {
+      gap: var(--space-lg);
+    }
   }
 </style>

@@ -1,0 +1,93 @@
+---
+title: "System Thinking, Governance, and GreenOps in the Age of AI"
+description: "Reflections from APIdays London on systems thinking, governance as an enabler, managing complexity, and sustainability in AI systems."
+publishedDate: 2025-10-27
+originalUrl: "https://medium.com/@ismaelmartinez/system-thinking-governance-and-greenops-in-the-age-of-ai-67d5d4fdb87a"
+originalPlatform: "medium"
+tags: ["API", "AI", "GreenOps", "Governance", "APIdays"]
+draft: false
+---
+
+In this blog, I'm sharing my learnings and reflections on the state of APIs after attending the API Days conference in London. I was lucky enough to be there and it truly had a bit of everything: from the inevitable sales pitches (most of the first day felt like one giant demo reel) to deeply technical explorations and even philosophical debates. And well, let's be honest, it was also AI, AI, and more AI.
+
+I've grouped my takeaways into three themes that came up again and again across the sessions I attended, as well as from insights at Green IO and Generation AI. These are, of course, my personal views, and I invite you to join the conversation. Let's get started.
+
+## From System Thinking to Governance as an Enabler
+
+The keynote was about applying [Systems Thinking](https://en.wikipedia.org/wiki/Systems_thinking) and [Wardley Mapping](https://www.wardleymaps.com/guides/wardley-mapping-101) to API ecosystems. The emphasis was on the complexity of our systems and the relationships between them, which forces us to step up a level and look at the whole ecosystem. This perspective helps teams identify risks and opportunities, predict change, surface intentions and control mechanisms, and decide where to focus. That means mapping dependencies, clusters, and flows across, including internal and external actors/dependencies.
+
+From there, many talks tied this systems perspective to governance. Far from being a brake, governance was consistently described as the accelerator that enables APIs and AI systems to scale safely and deliver business impact.
+
+Our systems now need to support many ways of communication, from APIs and event-driven systems to the new kid on the block: AI. Governance is not a SHOULD but a MUST have. Luckily for us, it seems to be a largely solved problem in the API space, as the maturity of the solutions presented during the different days was commendable.
+
+MCP (Model Context Protocol) and A2A (Agent2Agent) are emerging as standards that help AI agents discover, access, and use solutions consistently. More standards will come, and we should push as an industry for standardisation, just as OpenAPI did for HTTP APIs. I suspect there will be a few [Betamax vs VHS](https://en.wikipedia.org/wiki/Videotape_format_war) situations, like what is happening with the payments protocols ([AP2](https://cloud.google.com/blog/products/ai-machine-learning/announcing-agents-to-payments-ap2-protocol), [ACP](https://openai.com/index/buy-it-in-chatgpt/), [x402](https://www.x402.org/) among others). Hopefully we can compromise early as an industry and not waste a lot of time. That's why clarity and collaboration across the community will be key.
+
+*"Put an MCP in front of your API and you got safe AI"* was the oversimplified phrase I took from the second day. Still, I can see the appetite to reuse what we have been building over the years. There were some excellent suggestions on how to approach your documentation, OpenAPI specs and responses. The consumers of APIs are no longer just programmers. Giving more context in the metadata, errors and responses will considerably improve how LLMs interact with your systems.
+
+I don't personally believe that simply *"putting an MCP in front of an API"* will work in the long run. It feels similar to how we once tried to put GraphQL in front of existing APIs — yes, it works, but it doesn't unlock the full potential of the protocol. It's worth investing a little effort to adapt our APIs properly so we can take full advantage of these emerging standards. That adaptation phase will help us better understand how these protocols behave and, in turn, give them some time to mature.
+
+As an industry, we know what good governance looks like and how to implement it, so get on with it or you will suffer an ever expanding API sprawl powered by AI. Once governance becomes an enabler, the next challenge is managing the growing complexity it exposes.
+
+## Complexity Is Real
+
+The word *sprawl* came up again and again. The [Boomi/IDC report](https://boomi.com/content/report/conquer-api-sprawl-idc-report/) quantified it: 42% of organisations use multiple API management systems, and around 30% of APIs are unmanaged. Another session discussed gateway sprawl, while others reframed it as integration sprawl, with every new AI initiative creating yet more API traffic and complexity.
+
+The message was clear: complexity is here to stay. The solution isn't consolidation, it's cooperation and governance. Strong standards, consistent policies, and federated views across systems are what make complexity manageable.
+
+And while AI adds to the sprawl, it is also an enabler. AI helps us document APIs, detect duplication, and even improve lifecycle processes. At the same time, it introduces new security threats.
+
+Prompt injection, insecure outputs, training data poisoning, excessive agency, model theft… most of those can be mitigated by good practices. OAuth2, least-privilege, quotas, input validation, monitoring, and efficient testing, to name a few. You can find more details in the [OWASP Top 10 for LLMs report](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf).
+
+The antidote to lock in and reducing risks, repeated across multiple talks, is community innovation and open standards. Sounds repetitive but use standards, contribute and push towards them. Don't make your own if not genuinely needed.
+
+Another common theme was the need to shift towards smaller, bespoke models trained on enterprise data, more efficient, targeted, and controllable.
+
+LLMs have their place, but we can optimise and be gentler with the environment, while getting a more targeted response. It is our responsibility if we want to have a world worth living in.
+
+## Sustainability and GreenOps
+
+The environmental sessions reminded us that APIs and AI aren't just technical challenges, they're also environmental ones. One case study showed that aligning FinOps with sustainability (GreenOps) delivers both cost savings and emission reductions. Another highlighted the challenge of measuring impact across consolidated operations, while others quantified the energy efficiency of smaller AI models (up to 37x more efficient than larger ones).
+
+The NGO panel shifted the conversation: networks themselves are not the bottleneck. Even during pandemic peaks, utilisation stayed well below capacity. The issue is not capacity but the culture of unlimited consumption. We need to move to per-use, value-based models that align digital consumption with environmental reality.
+
+And just as APIs matured through governance, ML is now going through the same process. MLOps and LLMOps are bringing the structure, observability, and governance practices we saw with APIs and more recently with Event Driven Architectures. The parallels are striking.
+
+To close, one of the final presentations brought us back to Systems Thinking. Climate change is a complex system challenge, and resilience requires mapping dependencies across digital services, infrastructure, supply chains, and support systems. The same thinking applies to AI and APIs, only by seeing the whole ecosystem, we can anticipate ripple effects and act strategically.
+
+Sustainability is not separate from digital strategy. GreenOps, smaller models, per-use incentives, and system thinking are how we keep pace with the demands of AI while keeping an eye on the planet.
+
+## Closing Reflection
+
+What stood out most was the quality of the presentations and the depth of the discussions. Open standards, governance, and sustainability were not presented as optional extras, but as must haves. And that, for me, was the real lesson, if we want to thrive in the age of AI, we must treat them not as side conversations, but as part of our core strategy.
+
+While initially AI might simplify some problems, systems are going to get more and more complex. Now is the time to get ready to manage it. The longer we leave it, the more [AI slop](https://en.wikipedia.org/wiki/AI_slop) we will need to clean.
+
+If you attended APIDays or have thoughts on governance, sustainability, or AI complexity, I'd love to hear your take.
+
+## Talks and Sessions That Inspired This Article
+
+This post was inspired by the ideas shared at APIDays London, Green IO, and Generation AI 2025. Below is the list of sessions I attended and drew insights from:
+
+- [Strategically Planning Your API Ecosystem Model](https://www.youtube.com/watch?v=VQhd6QAExOk&list=PLmEaqnTJ40Oqg-SvB1R5LntBiwI864TCg)
+- Unleash Your Inner API Architect
+- APIs as Platforms: From Hydra to Intelligence
+- The State of the API Industry Market 2025
+- API Intelligence: Transforming Governance and Design with AI
+- [From APIs to AI: How to Build an AI Ready API Ecosystem](https://pronovix.com/event/ai-the-docs-2025/stefan-mesquita-timothy-goodwill)
+- Unlocking Agentic AI: Why Enterprise APIs Are the Missing Link to Real Innovation
+- APIs with a Purpose: An EA Story for Composable Organisations
+- Powering Intelligent API Ecosystems with AI Agents and Enterprise Data
+- MasterCard and GreenPixie: GreenOps in Practice
+- NGO Panel: Can Networks Keep Up with the AI Boom?
+- [RAG Without the Hassle: Building AI Powered Applications](https://www.youtube.com/watch?v=dJ5qRK6jG54&list=PLmEaqnTJ40Oqg-SvB1R5LntBiwI864TCg)
+- Documenting Your Event Driven Architectures with OpenAPI and AsyncAPI
+- LLMOps: Monitoring, Debugging, and Managing LLM Agents at Scale
+- Deploying GenAI like any other API: Simplicity, Control, and Enterprise Readiness
+- Shaping Intelligent APIs: Scaling LLMs, Open Ecosystems, Enterprise AI
+- Climate Change is Here: Using a Systems Thinking Approach to Keep NHS Resilient
+
+[APIDays London 2025 Agenda](https://www.apidays.global/archive/2025/london#agenda)
+
+## Disclaimer
+
+These reflections are my personal interpretations of the sessions and do not represent the views of the speakers or of my employer, People's Postcode Lottery.

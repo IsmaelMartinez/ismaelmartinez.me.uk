@@ -1,0 +1,93 @@
+---
+title: "Pensament sistèmic, governança i GreenOps a l'era de la IA"
+description: "Reflexions des de l'APIdays London sobre pensament sistèmic, la governança com a facilitador, la gestió de la complexitat i la sostenibilitat en els sistemes d'IA."
+publishedDate: 2025-10-27
+originalUrl: "https://medium.com/@ismaelmartinez/system-thinking-governance-and-greenops-in-the-age-of-ai-67d5d4fdb87a"
+originalPlatform: "medium"
+tags: ["API", "IA", "GreenOps", "Governança", "APIdays"]
+draft: false
+---
+
+En aquest blog, comparteixo els meus aprenentatges i reflexions sobre l'estat de les API després d'assistir a la conferència API Days a Londres. Vaig tenir la sort de ser-hi i realment tenia una mica de tot: des de les inevitables presentacions comercials (la major part del primer dia semblava un gran reel de demos) fins a exploracions profundament tècniques i fins i tot debats filosòfics. I bé, siguem sincers, també va ser IA, IA i més IA.
+
+He agrupat les meves conclusions en tres temes que van sorgir una vegada i una altra a les sessions a les quals vaig assistir, així com a partir d'idees de Green IO i Generation AI. Aquestes són, evidentment, les meves opinions personals, i us convido a unir-vos a la conversa. Comencem.
+
+## Del pensament sistèmic a la governança com a facilitador
+
+La presentació principal va tractar sobre l'aplicació del [pensament sistèmic](https://en.wikipedia.org/wiki/Systems_thinking) i el [Wardley Mapping](https://www.wardleymaps.com/guides/wardley-mapping-101) als ecosistemes d'API. L'èmfasi era en la complexitat dels nostres sistemes i les relacions entre ells, cosa que ens obliga a pujar un nivell i mirar tot l'ecosistema. Aquesta perspectiva ajuda els equips a identificar riscos i oportunitats, predir canvis, treure a la llum intencions i mecanismes de control, i decidir on centrar-se. Això significa mapejar dependències, clústers i fluxos, incloent-hi actors i dependències internes i externes.
+
+A partir d'aquí, moltes xerrades van vincular aquesta perspectiva sistèmica amb la governança. Lluny de ser un fre, la governança va ser descrita de manera consistent com l'accelerador que permet a les API i als sistemes d'IA escalar de forma segura i generar impacte de negoci.
+
+Els nostres sistemes ara necessiten donar suport a moltes formes de comunicació, des d'API i sistemes dirigits per esdeveniments fins al nou integrant: la IA. La governança no és un HAURIA sinó un HA DE ser. Per sort, sembla que és un problema àmpliament resolt a l'espai de les API, ja que la maduresa de les solucions presentades durant els diferents dies va ser lloable.
+
+MCP (Model Context Protocol) i A2A (Agent2Agent) estan emergint com a estàndards que ajuden els agents d'IA a descobrir, accedir i utilitzar solucions de manera consistent. Vindran més estàndards, i hauríem d'impulsar com a indústria l'estandardització, tal com OpenAPI va fer per a les API HTTP. Sospito que hi haurà algunes situacions de [Betamax contra VHS](https://en.wikipedia.org/wiki/Videotape_format_war), com el que està passant amb els protocols de pagament ([AP2](https://cloud.google.com/blog/products/ai-machine-learning/announcing-agents-to-payments-ap2-protocol), [ACP](https://openai.com/index/buy-it-in-chatgpt/), [x402](https://www.x402.org/) entre d'altres). Esperem que puguem arribar a un compromís aviat com a indústria i no perdre gaire temps. Per això la claredat i la col·laboració a través de la comunitat seran clau.
+
+*"Posa un MCP davant de la teva API i tindràs IA segura"* va ser la frase sobresimplificada que em vaig endur del segon dia. Tot i així, puc veure l'apetit per reutilitzar el que hem estat construint durant anys. Hi va haver algunes excel·lents suggerències sobre com abordar la documentació, les especificacions OpenAPI i les respostes. Els consumidors d'API ja no són només programadors. Donar més context a les metadades, errors i respostes millorarà considerablement com els LLM interactuen amb els teus sistemes.
+
+Personalment no crec que simplement *"posar un MCP davant d'una API"* funcioni a llarg termini. Se sent similar a com un cop vam intentar posar GraphQL davant d'API existents — sí, funciona, però no desbloqueja tot el potencial del protocol. Val la pena invertir una mica d'esforç per adaptar les nostres API adequadament per tal de treure el màxim profit d'aquests estàndards emergents. Aquesta fase d'adaptació ens ajudarà a entendre millor com es comporten aquests protocols i, al seu torn, donar-los temps per madurar.
+
+Com a indústria, sabem com és una bona governança i com implementar-la, així que poseu-vos-hi o patireu una expansió descontrolada d'API impulsada per la IA. Un cop la governança es converteix en un facilitador, el proper repte és gestionar la creixent complexitat que exposa.
+
+## La complexitat és real
+
+La paraula *sprawl* (expansió descontrolada) va aparèixer una vegada i una altra. L'[informe de Boomi/IDC](https://boomi.com/content/report/conquer-api-sprawl-idc-report/) ho va quantificar: el 42% de les organitzacions utilitzen múltiples sistemes de gestió d'API, i al voltant del 30% de les API no estan gestionades. Una altra sessió va parlar de l'expansió descontrolada de gateways, mentre que d'altres ho van reformular com a expansió d'integracions, on cada nova iniciativa d'IA crea encara més trànsit d'API i complexitat.
+
+El missatge era clar: la complexitat ha vingut per quedar-se. La solució no és la consolidació, sinó la cooperació i la governança. Estàndards sòlids, polítiques consistents i vistes federades a través dels sistemes són el que fa la complexitat gestionable.
+
+I mentre la IA afegeix a l'expansió, també és un facilitador. La IA ens ajuda a documentar API, detectar duplicats i fins i tot millorar els processos del cicle de vida. Al mateix temps, introdueix noves amenaces de seguretat.
+
+Injecció de prompts, sortides insegures, enverinament de dades d'entrenament, agència excessiva, robatori de models... la majoria es poden mitigar amb bones pràctiques. OAuth2, mínim privilegi, quotes, validació d'entrades, monitoratge i proves eficients, per esmentar-ne algunes. Podeu trobar més detalls a l'[informe OWASP Top 10 per a LLM](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf).
+
+L'antídot al bloqueig de proveïdor i la reducció de riscos, repetit a múltiples xerrades, és la innovació comunitària i els estàndards oberts. Sona repetitiu, però utilitzeu estàndards, contribuïu i impulseu-los. No en creeu de propis si no és genuïnament necessari.
+
+Un altre tema comú va ser la necessitat de desplaçar-se cap a models més petits i a mida, entrenats amb dades empresarials, més eficients, orientats i controlables.
+
+Els LLM tenen el seu lloc, però podem optimitzar i ser més respectuosos amb el medi ambient, alhora que obtenim una resposta més orientada. És la nostra responsabilitat si volem tenir un món on valgui la pena viure.
+
+## Sostenibilitat i GreenOps
+
+Les sessions sobre medi ambient ens van recordar que les API i la IA no són només reptes tècnics, sinó també mediambientals. Un cas pràctic va mostrar que alinear FinOps amb la sostenibilitat (GreenOps) aporta tant estalvi de costos com reduccions d'emissions. Un altre va destacar el repte de mesurar l'impacte en operacions consolidades, mentre que d'altres van quantificar l'eficiència energètica dels models d'IA més petits (fins a 37 vegades més eficients que els més grans).
+
+El panell d'ONG va canviar la conversa: les xarxes en si no són el coll d'ampolla. Fins i tot durant els pics de la pandèmia, la utilització es va mantenir molt per sota de la capacitat. El problema no és la capacitat sinó la cultura del consum il·limitat. Hem de passar a models per ús i basats en valor que alineïn el consum digital amb la realitat mediambiental.
+
+I de la mateixa manera que les API van madurar a través de la governança, el ML ara està passant pel mateix procés. MLOps i LLMOps estan aportant l'estructura, l'observabilitat i les pràctiques de governança que vam veure amb les API i més recentment amb les arquitectures dirigides per esdeveniments. Els paral·lelismes són sorprenents.
+
+Per tancar, una de les presentacions finals ens va portar de tornada al pensament sistèmic. El canvi climàtic és un repte de sistemes complexos, i la resiliència requereix mapejar dependències a través de serveis digitals, infraestructura, cadenes de subministrament i sistemes de suport. El mateix pensament s'aplica a la IA i les API; només veient tot l'ecosistema podem anticipar efectes en cadena i actuar estratègicament.
+
+La sostenibilitat no està separada de l'estratègia digital. GreenOps, models més petits, incentius per ús i pensament sistèmic són la manera de mantenir el ritme amb les demandes de la IA sense perdre de vista el planeta.
+
+## Reflexió final
+
+El que més em va cridar l'atenció va ser la qualitat de les presentacions i la profunditat de les discussions. Els estàndards oberts, la governança i la sostenibilitat no es van presentar com a extres opcionals, sinó com a imprescindibles. I això, per a mi, va ser la lliçó real: si volem prosperar a l'era de la IA, hem de tractar-los no com a converses paral·leles, sinó com a part de la nostra estratègia central.
+
+Tot i que inicialment la IA pot simplificar alguns problemes, els sistemes es tornaran cada cop més complexos. Ara és el moment de preparar-se per gestionar-ho. Com més temps ho deixem, més [brossa d'IA](https://en.wikipedia.org/wiki/AI_slop) haurem de netejar.
+
+Si vau assistir a l'APIDays o teniu reflexions sobre governança, sostenibilitat o complexitat de la IA, m'encantaria sentir la vostra opinió.
+
+## Xerrades i sessions que van inspirar aquest article
+
+Aquesta publicació va ser inspirada per les idees compartides a l'APIDays London, Green IO i Generation AI 2025. A continuació, la llista de sessions a les quals vaig assistir i de les quals vaig extreure idees:
+
+- [Strategically Planning Your API Ecosystem Model](https://www.youtube.com/watch?v=VQhd6QAExOk&list=PLmEaqnTJ40Oqg-SvB1R5LntBiwI864TCg)
+- Unleash Your Inner API Architect
+- APIs as Platforms: From Hydra to Intelligence
+- The State of the API Industry Market 2025
+- API Intelligence: Transforming Governance and Design with AI
+- [From APIs to AI: How to Build an AI Ready API Ecosystem](https://pronovix.com/event/ai-the-docs-2025/stefan-mesquita-timothy-goodwill)
+- Unlocking Agentic AI: Why Enterprise APIs Are the Missing Link to Real Innovation
+- APIs with a Purpose: An EA Story for Composable Organisations
+- Powering Intelligent API Ecosystems with AI Agents and Enterprise Data
+- MasterCard and GreenPixie: GreenOps in Practice
+- NGO Panel: Can Networks Keep Up with the AI Boom?
+- [RAG Without the Hassle: Building AI Powered Applications](https://www.youtube.com/watch?v=dJ5qRK6jG54&list=PLmEaqnTJ40Oqg-SvB1R5LntBiwI864TCg)
+- Documenting Your Event Driven Architectures with OpenAPI and AsyncAPI
+- LLMOps: Monitoring, Debugging, and Managing LLM Agents at Scale
+- Deploying GenAI like any other API: Simplicity, Control, and Enterprise Readiness
+- Shaping Intelligent APIs: Scaling LLMs, Open Ecosystems, Enterprise AI
+- Climate Change is Here: Using a Systems Thinking Approach to Keep NHS Resilient
+
+[APIDays London 2025 Agenda](https://www.apidays.global/archive/2025/london#agenda)
+
+## Avís legal
+
+Aquestes reflexions són les meves interpretacions personals de les sessions i no representen les opinions dels ponents ni del meu ocupador, People's Postcode Lottery.

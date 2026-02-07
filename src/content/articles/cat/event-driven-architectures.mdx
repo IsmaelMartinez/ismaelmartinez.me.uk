@@ -1,0 +1,212 @@
+---
+title: "Arquitectures Orientades a Esdeveniments"
+description: "Una exploració exhaustiva de les Arquitectures Orientades a Esdeveniments: esdeveniments, sistemes mediadors, tipus d'esdeveniments i els reptes de construir sistemes distribuïts."
+publishedDate: 2024-05-16
+originalUrl: "https://medium.com/@ismaelmartinez/event-driven-architectures-1e17cf305eef"
+originalPlatform: "medium"
+tags: ["Arquitectura Orientada a Esdeveniments", "Arquitectura de Programari", "Sistemes Distribuïts"]
+draft: false
+---
+
+En el panorama dinàmic del desenvolupament Agile i LEAN, els patrons arquitectònics evolucionen contínuament per oferir solucions adaptables. Rarament construïm sistemes complets; en canvi, utilitzem frameworks, biblioteques i serveis de tercers per ser més eficients.
+
+Busquem patrons d'arquitectura que fomentin la flexibilitat, l'adaptabilitat, l'experimentació, l'escalabilitat i la seguretat en el nostre domini específic.
+
+En aquest article, aprofundiré en les Arquitectures Orientades a Esdeveniments (EDAs), explorant els sistemes mediadors, els tipus d'esdeveniments i els reptes que he trobat al llarg de la meva carrera.
+
+Tot i que els seus orígens es poden rastrejar d'alguna manera fins als [anys 50](https://en.wikipedia.org/wiki/Whirlwind_I), les EDAs han crescut per ajudar els equips Agile i LEAN a fer la seva feina.
+
+## Què és un Esdeveniment?
+
+Comencem amb el protagonista de l'espectacle: l'Esdeveniment.
+
+> Un Esdeveniment és un fet immutable. Quelcom que ha passat, no es pot desfer ni canviar.
+
+Els esdeveniments es produeixen contínuament a les nostres vides, des del moment en què ens despertem, ens preparem per al dia, mengem, paguem l'autobús, i així successivament. Els esdeveniments omplen les nostres vides.
+
+Tenim l'opció d'escoltar, registrar i decidir què fer amb la informació que obtenim d'aquests esdeveniments. Alternativament, podem optar per no compartir o no preocupar-nos per certs esdeveniments.
+
+Per a mi, aquesta és l'essència de les Arquitectures Orientades a Esdeveniments i la raó per la qual poden ser un patró extremadament útil per a molts casos d'ús. Endinsem-nos-hi!
+
+## Què són les Arquitectures Orientades a Esdeveniments?
+
+Les EDAs són patrons arquitectònics que es basen en esdeveniments com a contracte. Estan dissenyades per reaccionar als canvis aprofitant la naturalesa immutable dels esdeveniments.
+
+Les EDAs segueixen típicament un patró de publicació/subscripció, on els serveis publiquen esdeveniments a un servei mediador i els subscriptors consumeixen aquests esdeveniments. El servei publicador no necessita saber qui consumeix els esdeveniments ni si algú hi reacciona. Aquest enfocament millora el desacoblament de serveis, ja que l'acoblament es basa en el contingut de l'esdeveniment.
+
+Un dels beneficis clau de les EDAs és la seva capacitat per facilitar l'escalabilitat i l'adaptabilitat. A mesura que el trànsit del sistema augmenta, podem afegir més consumidors per gestionar els esdeveniments addicionals, i els podem eliminar quan tots els esdeveniments hagin estat consumits. Aquesta flexibilitat permet l'experimentació i la capacitat d'intercanviar serveis contínuament. Afegint elements com feature flags i desplegaments exponencials, els equips poden executar aquest procés múltiples vegades al dia i experimentar, reduint el risc i augmentant la seva velocitat.
+
+Tanmateix, és important destacar que les EDAs poden introduir complexitat a causa de la seva naturalesa distribuïda. També poden resultar en missatges duplicats i consistència eventual. Els subscriptors han de considerar l'ordenació dels esdeveniments i assegurar-se que són idempotents, és a dir, que poden processar el mateix esdeveniment múltiples vegades sense generar resultats diferents.
+
+Les EDAs són majoritàriament rellevants per a processos asíncrons com l'auditoria, el processament de dades i les operacions de backend. Són útils per a sistemes amb pics sobtats de trànsit. No obstant això, és important considerar la latència addicional introduïda per aquesta arquitectura.
+
+En general, les EDAs ofereixen avantatges en termes de desacoblament, escalabilitat, adaptabilitat i experimentació. Tanmateix, requereixen una consideració acurada de la complexitat, els missatges duplicats i la consistència eventual...
+
+## Sistemes Mediadors
+
+En les EDAs, els publicadors i els subscriptors necessiten un sistema escalable que actuï com a mediador per assegurar que els esdeveniments es lliuren als serveis interessats. Aquesta secció explora els diversos sistemes mediadors que es troben habitualment en aquestes arquitectures.
+
+## Brokers de Missatges i Busos d'Esdeveniments
+
+Sens dubte, els components intermediaris més coneguts en les EDAs són els brokers de missatges i els busos d'esdeveniments. Tots els principals proveïdors de núvol ofereixen serveis que gestionen eficientment el procés de mediació. He tingut l'oportunitat d'aprendre i explorar AWS, que ha fet una feina excel·lent amb el seu servei AWS EventBridge i la seva integració amb altres serveis i proveïdors de tercers.
+
+Quan decidiu quin servei utilitzar, en última instància depèn del vostre cas d'ús específic. Si ja dependeu d'AWS, EventBridge podria ser tot el que busqueu. Tanmateix, si utilitzeu un altre proveïdor de núvol, val la pena explorar les seves ofertes, ja que també podrien satisfer els vostres requisits.
+
+Ara, endinsem-nos més en el tema. Què fan exactament aquests sistemes intermediaris?
+
+En el model Pub/Mediador/Sub, els publicadors envien els seus esdeveniments al mediador i els subscriptors es subscriuen als esdeveniments que els interessen. Aquests sistemes mediadors proporcionen funcionalitats com l'encaminament, la transformació, la validació, la gestió d'esquemes/catàlegs d'esdeveniments, l'arxivament i més, depenent de la solució escollida.
+
+En el passat, els brokers de missatges es veien sovint com a sistemes persistents similars a bases de dades, mentre que els busos d'esdeveniments eren més sistemes basats en memòria que descartaven els esdeveniments després d'un cert període. Tanmateix, la línia entre brokers i busos s'ha tornat cada vegada més difusa. Per exemple, AWS EventBridge, que és un bus d'esdeveniments, ofereix funcionalitats per arxivar i reproduir missatges, mentre que els brokers de missatges poden proporcionar cues efímeres.
+
+## Cues i Streams
+
+Tot i que no es consideren mediadors per si sols, les cues i els streams són components que funcionen molt bé en les EDAs. Poden ajudar-vos a millorar, enriquir i/o simplificar solucions.
+
+Fem una ullada ràpida a les Cues i els Streams.
+
+### Cues
+
+Les cues són excel·lents companyes per als Busos d'Esdeveniments i els Brokers de Missatges. Proporcionen una manera senzilla d'emmagatzemar i transmetre esdeveniments entre components, assegurant que no es perden dades i donant al consumidor el control sobre la velocitat de processament dels esdeveniments.
+
+De manera similar a les cues de la vida real, hi ha diferents tipus, com ara cues ordenades (FIFO, LIFO), cues de prioritat, DLQs, etc.; i haureu de configurar el seu període de retenció, reintents i altres paràmetres, però són sistemes bastant senzills que simplement funcionen i fan el que prometen.
+
+Són una manera excel·lent i simple de desacoblar sistemes i fer la vida més fàcil als consumidors.
+
+### Streams
+
+Els streams estan dissenyats per al processament i l'anàlisi de dades en temps real en sistemes que requereixen transferència i anàlisi de dades amb baixa latència a través de múltiples finestres temporals.
+
+Aquí haureu de configurar escriptors, lectors i retenció. Útil si teniu un cas d'ús definit on necessiteu fer una anàlisi sobre una gran quantitat de dades que canvien contínuament.
+
+## Tipus d'Esdeveniments
+
+Ara que hem examinat el nucli de les EDAs, aprofundirem en els diferents tipus d'esdeveniments que podeu trobar.
+
+Hi ha 4 tipus: Notificació, Transferència d'Estat Transportada per Esdeveniments, Esdeveniments Delta i Esdeveniments de Negoci.
+
+Fem una ullada més detallada a cadascun d'aquests tipus d'esdeveniments.
+
+## Esdeveniments de Notificació
+
+Els esdeveniments de notificació s'utilitzen per informar les parts interessades sobre ocurrències o actualitzacions específiques. Aquests esdeveniments estan dissenyats per ser petits, contenint només la informació mínima necessària per reduir el risc de trencar contractes.
+
+Aquí teniu un exemple de com pot ser un esdeveniment de notificació:
+
+```json
+{
+  "eventName": "PaymentSuccessful",
+  "details": {
+    "data": {
+      "paymentId": "UUID"
+    }
+  }
+}
+```
+
+Els esdeveniments de notificació segueixen un model pull, permetent als consumidors obtenir informació addicional dels publicadors segons calgui. Això introdueix un patró de callback i afegirà latència addicional al sistema, però ajuda a evitar problemes d'ordenació en la majoria dels casos.
+
+Com que els esdeveniments de notificació tenen un nombre limitat de camps, certes funcionalitats proporcionades pels mediadors, com la validació, l'encaminament i el filtratge, poden veure's reduïdes.
+
+## Transferència d'Estat Transportada per Esdeveniments
+
+Aquest tipus d'esdeveniment es pot considerar l'oposat dels Esdeveniments de Notificació. Inclou tant les dades de l'esdeveniment com l'estat actual del sistema, permetent a la part receptora actualitzar el seu propi estat en conseqüència. Aquests esdeveniments són més grans, ja que inclouen totes les dades disponibles que el publicador té sobre l'esdeveniment/subjecte.
+
+Aquí teniu un exemple d'aquest tipus d'esdeveniment:
+
+```json
+{
+  "eventName": "PaymentSuccessful",
+  "details": {
+    "data": {
+      "paymentId": "UUID",
+      "paymentType": "Card",
+      "timestamp": "yyyy-mm-dd hh:mm:ss",
+      "accountId": "UUID",
+      "currencyCode": "GBP"
+    }
+  }
+}
+```
+
+A causa de la seva mida més gran i la informació augmentada, aquests esdeveniments comporten un risc més elevat de trencar contractes, filtrar informació personal identificable (PII) i trobar problemes amb la consistència eventual i/o l'ordenació. L'acoblament en aquest cas es produeix en el contracte, i segueix un model push on l'estat s'envia als consumidors.
+
+A més, aquests esdeveniments proporcionen més opcions per afegir regles de filtratge i encaminament al servei mediador. Això elimina la necessitat que els consumidors gestionin aquesta lògica i millora enormement la capacitat de dirigir-se a serveis específics.
+
+## Esdeveniments Delta
+
+Els esdeveniments delta només contenen els canvis o actualitzacions que s'han produït des de l'últim esdeveniment, reduint la quantitat de dades transmeses.
+
+Aquí teniu un exemple d'un esdeveniment delta:
+
+```json
+{
+  "eventName": "PaymentUpdated",
+  "details": {
+    "data": {
+      "paymentId": "UUID",
+      "updatedFields": ["paymentType", "timestamp"],
+      "updatedValues": ["Credit Card", "yyyy-mm-dd hh:mm:ss"]
+    }
+  }
+}
+```
+
+Els esdeveniments delta poden ser útils per identificar canvis i gestionar l'ordenació d'esdeveniments de manera més efectiva. També poden ser més eficients que enviar tot el contingut de l'esdeveniment o obtenir informació dels serveis publicadors.
+
+## Esdeveniments de Negoci
+
+Aquests esdeveniments són específics del domini o del context de negoci.
+
+Com amb tots els sistemes, la realitat us situarà entre esdeveniments, i els vostres esdeveniments tendiran a reduir el contingut a la informació que es necessita.
+
+En alguns casos, serà útil crear esdeveniments restringits a un domini de negoci i incloure camps interns que només són importants per al vostre domini.
+
+Aquí teniu un exemple d'un esdeveniment de negoci per a un pagament reeixit:
+
+```json
+{
+  "eventName": "PaymentSuccessful",
+  "details": {
+    "data": {
+      "paymentId": "UUID",
+      "accountId": "UUID",
+      "amount": 100.00,
+      "currencyCode": "USD",
+      "timestamp": "yyyy-mm-dd hh:mm:ss",
+      "transactionId": "UUID",
+      "paymentMethod": "Credit Card",
+      "status": "AD345"
+    }
+  }
+}
+```
+
+La majoria d'esdeveniments de negoci poden acabar graduant-se per convertir-se en esdeveniments pels quals altres parts del sistema estan interessades. Intenteu evitar haver de reemetre esdeveniments i intenteu absorbir les transformacions.
+
+## Reptes i Consideracions
+
+Quan decidiu aplicar l'Arquitectura Orientada a Esdeveniments al vostre sistema, hi ha diversos reptes i consideracions a tenir en compte.
+
+En primer lloc, els esdeveniments tenen un paper crucial en el sistema i requereixen una cura i atenció especials. És important considerar acuradament elements com el nom de l'esdeveniment, el tipus, la marca temporal (inici, final, rang...) i l'estructura general des del principi.
+
+La documentació i el versionatge dels esdeveniments són essencials. Les EDAs haurien de permetre que els esdeveniments evolucionin i canviïn amb el temps, cosa que només es pot aconseguir mitjançant una governança adequada, documentació i control de versions.
+
+Tot i que les EDAs milloren l'escalabilitat del sistema, també introdueixen complexitat. Factors com l'ordenació dels missatges, el lliurament, la consistència eventual i la duplicació s'han de tenir en compte.
+
+La complexitat operacional també augmentarà. La monitorització, la gestió i els processos operacionals necessiten un èmfasi addicional.
+
+La resiliència davant de fallades és primordial en una EDA. Mesures com els reintents de missatges, les cues de lletres mortes i altres mecanismes s'haurien d'implementar per assegurar la recuperació del sistema.
+
+L'impacte de l'EDA en el procés de desenvolupament també s'ha de considerar. Les estratègies de proves, desplegament i depuració s'han d'adaptar en conseqüència.
+
+Les preocupacions de seguretat i dades són de la màxima importància, particularment quan es tracta amb dades sensibles o la retenció de dades a llarg termini. S'ha d'abordar el compliment de marcs reguladors com el RGPD.
+
+Finalment, l'impacte organitzatiu de l'EDA s'ha d'avaluar. L'organització de l'equip, la gestió i les estratègies de comunicació s'han d'alinear amb els requisits d'un sistema basat en EDAs.
+
+## Conclusió
+
+En aquest document, hem examinat què són els esdeveniments, les arquitectures orientades a esdeveniments, els sistemes mediadors, els tipus d'esdeveniments que podeu trobar al vostre sistema, per acabar amb alguns reptes i consideracions.
+
+Hauríeu d'utilitzar una EDA al vostre sistema? La resposta és: depèn. Recomanaria no dependre únicament d'una EDA, sinó utilitzar-la en combinació amb altres arquitectures.
+
+Les EDAs són un patró potent per augmentar l'escalabilitat i la flexibilitat del vostre sistema, però també comporten molts reptes i consideracions que s'han de tenir en compte.

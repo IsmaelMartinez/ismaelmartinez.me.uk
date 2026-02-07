@@ -1,0 +1,61 @@
+---
+title: "Configurando Mi Primer Proyecto Python de Codigo Abierto"
+description: "Una serie que documenta el proceso de configuracion para lanzar mi primer proyecto en PyPI, logger-to-kibana, y las lecciones aprendidas en el camino."
+publishedDate: 2019-11-28
+originalUrl: "https://dev.to/ismaelmartinez/setting-up-my-first-opensource-python-project-4k1o"
+originalPlatform: "devto"
+tags: ["Codigo Abierto", "Python", "Automatizacion", "Logs"]
+draft: false
+---
+
+Este es el inicio de una serie que documenta la creacion de mi primer proyecto en PyPI. Reconozco que esto representa tanto mi primera contribucion al codigo abierto como mi primera incursion en Python, por lo que hay un margen considerable de mejora.
+
+## Vision General del Proyecto
+
+El proyecto se llama **logger-to-kibana** y se centra en principios de automatizacion. La herramienta analiza los loggers en el codigo y genera visualizaciones de Kibana a partir de los mensajes de log encontrados durante la ejecucion.
+
+## Caracteristicas Principales
+
+El proyecto incluye tres comandos principales:
+
+- `process` -- procesa una carpeta
+- `process_and_generate` -- procesa una carpeta y genera visualizaciones
+- `process_generate_and_send` -- ejecuta el pipeline completo incluyendo la transmision a Kibana
+
+## Instalacion
+
+Los usuarios pueden instalar las dependencias mediante:
+
+```bash
+pip install -r requirements.txt
+```
+
+Y acceder a la documentacion de ayuda ejecutando:
+
+```bash
+python main.py
+```
+
+## Configuracion
+
+Existen ajustes predeterminados en `settings.ini`, con la posibilidad de personalizacion a traves de la variable de entorno `LOGGER_TO_KIBANA_CONFIG`.
+
+Esto te permite configurar:
+
+- La URL del endpoint de Kibana
+- Credenciales de autenticacion
+- Plantillas y valores predeterminados de visualizacion
+- Patrones de analisis de logs
+
+## Proximos Pasos
+
+En las proximas partes de esta serie, cubrire:
+
+- Configuracion de CI/CD con GitHub Actions
+- Publicacion en PyPI
+- Escritura de pruebas y documentacion
+- Gestion de contribuciones de la comunidad
+
+Agradezco los comentarios constructivos y animo a los lectores a desarrollar soluciones de codigo abierto que aborden tareas repetitivas. El proyecto esta disponible en PyPI y GitHub para oportunidades de contribucion.
+
+Si has pasado por un proceso similar de publicar tu primer proyecto de codigo abierto, me encantaria conocer tu experiencia y cualquier consejo que puedas tener.

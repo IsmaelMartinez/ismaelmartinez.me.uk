@@ -1,0 +1,64 @@
+---
+title: "Automatizando la Generacion de Visualizaciones en Kibana"
+description: "Como construi logger-to-kibana, una herramienta de codigo abierto que analiza el codigo fuente y genera automaticamente visualizaciones de Kibana a partir de las sentencias de logging."
+publishedDate: 2019-11-28
+originalUrl: "https://dev.to/ismaelmartinez/automating-kibana-visualisations-generation-56o4"
+originalPlatform: "devto"
+tags: ["Codigo Abierto", "Logs", "Automatizacion", "Kibana"]
+draft: false
+---
+
+Como desarrollador, cuando me encuentro haciendo la misma tarea una y otra vez, doy un paso atras y considero si hay una forma mejor.
+
+## El Problema
+
+Mantener la sincronizacion entre los cambios de codigo y las visualizaciones de Kibana en entornos de microservicios y AWS Lambda es una tarea manual repetitiva. Cada vez que cambian los logs, las visualizaciones correspondientes necesitan actualizarse. Esto viola el principio DRY y desperdicia tiempo valioso del desarrollador.
+
+## La Solucion
+
+Cree **logger-to-kibana**, una herramienta de codigo abierto que analiza el codigo fuente y genera automaticamente visualizaciones de Kibana basadas en las sentencias de logging encontradas en el codigo.
+
+## Como Funciona
+
+La herramienta analiza archivos fuente de Python para identificar mensajes de log y crea visualizaciones de metricas agrupadas por:
+
+- Estructura de subcarpetas
+- Nombre de archivo
+- Nombre de funcion
+
+Por ejemplo, dado este codigo Python:
+
+```python
+import logging
+from datetime import datetime
+
+LOG = logging.getLogger()
+
+def lambda_handler(event, context):
+    LOG.info('lambda_handler called')
+    return {'message': datetime.now()}
+```
+
+La herramienta genera una visualizacion de metricas correspondiente en Kibana.
+
+## Instalacion y Uso
+
+```bash
+pip install logger-to-kibana
+logger-to-kibana process_generate_and_send -f <folder>
+```
+
+Esto procesa todos los archivos Python en el directorio especificado, analizandolos mediante expresiones regulares para identificar las sentencias de log.
+
+## Beneficios Clave
+
+- Identificar mensajes de log redundantes o inconsistentes
+- Asegurar que el codigo y las visualizaciones se mantengan sincronizados
+- Generar automaticamente documentacion sobre el logging de la aplicacion
+- Integracion en pipelines de despliegue para actualizaciones continuas
+
+## Direccion Futura
+
+El plan es extender el soporte a otros sistemas de monitorizacion como CloudWatch y Grafana, potencialmente renombrando la herramienta a algo mas generico.
+
+Si te encuentras creando manualmente visualizaciones de Kibana cada vez que cambian tus logs, dale una oportunidad a logger-to-kibana y cuentame que te parece.

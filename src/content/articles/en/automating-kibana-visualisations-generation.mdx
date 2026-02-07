@@ -1,0 +1,64 @@
+---
+title: "Automating Kibana Visualisations Generation"
+description: "How I built logger-to-kibana, an open-source tool that parses source code and automatically generates Kibana visualizations from logging statements."
+publishedDate: 2019-11-28
+originalUrl: "https://dev.to/ismaelmartinez/automating-kibana-visualisations-generation-56o4"
+originalPlatform: "devto"
+tags: ["Open Source", "Logs", "Automation", "Kibana"]
+draft: false
+---
+
+As a developer, when I find myself doing the same task over and over, I take a step back and consider if there is a better way.
+
+## The Problem
+
+Maintaining synchronization between code changes and Kibana visualizations in microservices and AWS Lambda environments is a repetitive manual task. Every time logging changes, the corresponding visualizations need updating. This violates the DRY principle and wastes valuable developer time.
+
+## The Solution
+
+I created **logger-to-kibana**, an open-source tool that parses source code and automatically generates Kibana visualizations based on logging statements found in the code.
+
+## How It Works
+
+The tool analyzes Python source files to identify log messages and creates metric visualizations grouped by:
+
+- Subfolder structure
+- Filename
+- Function name
+
+For example, given this Python code:
+
+```python
+import logging
+from datetime import datetime
+
+LOG = logging.getLogger()
+
+def lambda_handler(event, context):
+    LOG.info('lambda_handler called')
+    return {'message': datetime.now()}
+```
+
+The tool generates a corresponding metric visualization in Kibana.
+
+## Installation & Usage
+
+```bash
+pip install logger-to-kibana
+logger-to-kibana process_generate_and_send -f <folder>
+```
+
+This processes all Python files in the specified directory, parsing them via regex to identify log statements.
+
+## Key Benefits
+
+- Identifying redundant or inconsistent log messages
+- Ensuring code and visualizations stay synchronized
+- Auto-generating documentation about application logging
+- Integration into deployment pipelines for continuous updates
+
+## Future Direction
+
+The plan is to extend support to other monitoring systems like CloudWatch and Grafana, potentially renaming the tool to something more generic.
+
+If you find yourself manually creating Kibana visualizations every time your logging changes, give logger-to-kibana a try and let me know what you think.

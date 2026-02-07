@@ -27,13 +27,12 @@ const { link, lang } = Astro.props;
     background: var(--color-bg-secondary);
     border: 1px solid var(--color-border);
     border-radius: 0.75rem;
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease;
     color: var(--color-text);
   }
 
   .link-card:hover {
     border-color: var(--color-accent);
-    transform: translateX(4px);
   }
 
   .link-card-icon {
@@ -63,11 +62,10 @@ const { link, lang } = Astro.props;
 
   .link-arrow {
     color: var(--color-text-muted);
-    transition: transform 0.2s ease;
+    transition: color 0.2s ease;
   }
 
   .link-card:hover .link-arrow {
-    transform: translateX(4px);
     color: var(--color-accent);
   }
 </style>

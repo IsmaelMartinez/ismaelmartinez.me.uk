@@ -34,7 +34,7 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
           <li><a href={getLocalizedPath('/', lang)}>{t('nav.home')}</a></li>
           <li><a href={getLocalizedPath('/projects', lang)}>{t('nav.projects')}</a></li>
           <li><a href={getLocalizedPath('/writing', lang)}>{t('nav.writing')}</a></li>
-          <li><a href={getLocalizedPath('/fun', lang)}>{t('nav.fun')}</a></li>
+          <li id="arcade-nav" class="arcade-nav-hidden"><a href={getLocalizedPath('/fun', lang)}>{t('nav.fun')}</a></li>
           <li><a href={getLocalizedPath('/connect', lang)}>{t('nav.connect')}</a></li>
         </ul>
 
@@ -67,15 +67,24 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
     <!-- Easter Egg: Konami Code -->
     <div id="konami-overlay" class="konami-overlay">
       <div class="konami-content">
-        <div class="konami-emoji">🎉</div>
-        <h2>You found the secret!</h2>
-        <p>You're clearly a person of culture. Here's a virtual high five! ✋</p>
+        <div class="konami-emoji">🕹️</div>
+        <h2>SECRET ARCADE UNLOCKED!</h2>
+        <p>You've discovered the hidden arcade. Game on!</p>
         <div class="konami-confetti"></div>
-        <button id="konami-close" class="btn btn-primary">Nice!</button>
+        <a id="konami-enter" href={getLocalizedPath('/fun', lang)} class="btn btn-arcade">Enter Arcade</a>
       </div>
     </div>
 
     <script>
+      // Check if arcade is unlocked on page load
+      function checkArcadeUnlocked() {
+        const arcadeNav = document.getElementById('arcade-nav');
+        if (localStorage.getItem('arcadeUnlocked') === 'true') {
+          arcadeNav?.classList.remove('arcade-nav-hidden');
+        }
+      }
+      checkArcadeUnlocked();
+
       // Konami Code: ↑ ↑ ↓ ↓ ← → ← → B A
       const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
       let konamiIndex = 0;
@@ -93,14 +102,16 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
       });
 
       function activateKonami() {
+        // Unlock the arcade
+        localStorage.setItem('arcadeUnlocked', 'true');
+        const arcadeNav = document.getElementById('arcade-nav');
+        arcadeNav?.classList.remove('arcade-nav-hidden');
+
+        // Show celebration overlay
         const overlay = document.getElementById('konami-overlay');
         overlay?.classList.add('active');
         createConfetti();
       }
-
-      document.getElementById('konami-close')?.addEventListener('click', () => {
-        document.getElementById('konami-overlay')?.classList.remove('active');
-      });
 
       function createConfetti() {
         const confettiContainer = document.querySelector('.konami-confetti');
@@ -177,6 +188,10 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
 
   .nav-links a:hover {
     color: var(--color-text);
+  }
+
+  .arcade-nav-hidden {
+    display: none;
   }
 
   .lang-switcher {
@@ -319,5 +334,33 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+
+  .btn-arcade {
+    display: inline-block;
+    padding: var(--space-md) var(--space-xl);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #0ff;
+    background: transparent;
+    border: 2px solid #0ff;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    text-decoration: none;
+    animation: neon-pulse 1.5s ease-in-out infinite;
+  }
+
+  .btn-arcade:hover {
+    background: #0ff;
+    color: #000;
+    box-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+  }
+
+  @keyframes neon-pulse {
+    0%, 100% { box-shadow: 0 0 5px #0ff, 0 0 10px #0ff; }
+    50% { box-shadow: 0 0 15px #0ff, 0 0 30px #0ff; }
   }
 </style>

@@ -39,7 +39,7 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
         </ul>
 
         <div class="lang-switcher">
-          {Object.entries(languages).map(([code, name]) => (
+          {Object.entries(languages).map(([code, _name]) => (
             <a
               href={getLocalizedPath(currentPath, code)}
               class:list={['lang-link', { active: lang === code }]}

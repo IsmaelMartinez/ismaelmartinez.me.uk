@@ -85,8 +85,8 @@ img {
 }
 
 .section-title {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 600;
   margin-bottom: var(--space-sm);
 }
 
@@ -101,12 +101,11 @@ img {
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: var(--space-lg);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--color-accent);
 }
 
 /* Grid */
@@ -177,12 +176,11 @@ img {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .link-card:hover {
   border-color: var(--color-accent);
-  transform: translateX(4px);
 }
 
 .link-card-icon {

@@ -1,0 +1,212 @@
+---
+title: "Event Driven Architectures"
+description: "A comprehensive exploration of Event-Driven Architectures: events, mediating systems, event types, and the challenges of building distributed systems."
+publishedDate: 2024-05-16
+originalUrl: "https://medium.com/@ismaelmartinez/event-driven-architectures-1e17cf305eef"
+originalPlatform: "medium"
+tags: ["Event-Driven Architecture", "Software Architecture", "Distributed Systems"]
+draft: false
+---
+
+In the dynamic landscape of Agile and LEAN development, architectural patterns continually evolve to provide adaptable solutions. We rarely build full systems; instead, we use frameworks, libraries, and third-party services to be more efficient.
+
+We aim for architecture patterns that encourage flexibility, adaptability, experimentation, scalability, and security in our specific domain.
+
+In this article, I'll look into Event-Driven Architectures (EDAs), exploring mediating systems, event types, and the challenges I've encountered throughout my career.
+
+Although their roots can in some form trace back to the [1950s](https://en.wikipedia.org/wiki/Whirlwind_I), EDAs have grown to help Agile and LEAN teams do their job.
+
+## What is an Event?
+
+Let's start with the head of the show: the Event.
+
+> An Event is an immutable fact. Something that has happened, it cannot be undone or changed.
+
+Events occur continuously in our lives, from the moment we wake up, get ready for the day, eat, pay for the bus, and so on. Events fill our lives.
+
+We have the choice to listen, record, and decide what to do with the information we gather from these events. Alternatively, we may choose not to share or care about certain events.
+
+For me, this is the essence of Event-Driven Architectures and why they can be an extremely helpful pattern for many use cases. Let's dive in!
+
+## What are Event Driven Architectures?
+
+EDAs are architectural patterns that rely on events as their contract. They are designed to react to changes by leveraging the immutable nature of events.
+
+EDAs typically follow a publish/subscriber pattern, where services publish events to a mediator service and subscribers consume those events. The publisher service does not need to be aware of who consumes the events or if anyone reacts to them. This approach enhances the decoupling of services, as the coupling is based on the content of the event.
+
+One of the key benefits of EDAs is their ability to facilitate scalability and adaptability. As the system's traffic increases, we can add more consumers to handle the additional events, and we can remove them when all events are consumed. This flexibility allows for experimentation and the ability to continuously swap services. By adding things like feature flags and exponential rollouts, teams can execute this process multiple times a day and experiment, reducing risk and increasing their velocity.
+
+However, it's important to note that EDAs can introduce complexity because of their distributed nature. They may also result in duplicate messages and eventual consistency. Subscribers need to consider the ordering of events and ensure they are idempotent, meaning they can process the same event multiple times without generating different outcomes.
+
+EDAs are mostly relevant for asynchronous processes such as auditing, data processing, and backend operations. They are helpful for systems with sudden spikes in traffic. However, it's important to consider the additional latency introduced by this architecture.
+
+Overall, EDAs offer advantages in terms of decoupling, scalability, adaptability, and experimentation. However, they require careful consideration of complexity, duplicate messages, and eventual consistency...
+
+## Mediating Systems
+
+In EDA, publishers and subscribers require a scalable system that acts as a mediator to ensure events are delivered to the interested services. This section explores the various mediator systems commonly found in these architectures.
+
+## Message Brokers and Event Buses
+
+By far, the most well-known intermediary components in EDAs are message brokers and event buses. All major cloud providers offer services that efficiently handle the mediation process. I have had the opportunity to learn and explore AWS, which has done an excellent job with their AWS EventBridge service and its integration with other services and third-party providers.
+
+When deciding which service to use, it ultimately depends on your specific use case. If you are already reliant on AWS, EventBridge might just be everything you're looking for. However, if you are using another cloud provider, it is worth exploring their offerings as they may also meet your requirements.
+
+Now, let's dive deeper into the topic. What exactly do these intermediary systems do?
+
+In the Pub/Mediator/Sub model, publishers send their events to the mediator, and subscribers subscribe to the events they are interested in. These mediator systems provide functionality, such as routing, transformation, validation, event schema/catalogue management, archiving, and more, depending on the chosen solution.
+
+In the past, message brokers were often seen as persistent systems similar to databases, while event buses were more memory-based systems that discarded events after a certain period. However, the line between brokers and buses has become increasingly blurred. For example, AWS EventBridge, which is an event bus, offers features for archiving and replaying messages, while message brokers can provide ephemeral queues.
+
+## Queues and Streams
+
+While not considered mediators on their own, queues and streams are components that work really well in EDAs. They can help you improve, enhance and/or simplify solutions.
+
+Let's get a quick overview on Queues and Streams.
+
+### Queues
+
+Queues are excellent companions for Event Buses and Messaging Brokers. They provide a simple way to store and transmit events between components, ensuring no data is lost and giving the consumer control over the processing speed of events.
+
+Similar to real-life queues, there are different types, such as ordered queues (FIFO, LIFO), priority queues, DLQs, etc; and you will need to configure their retention period, retries and so on, but they are fairly straightforward systems that just work and do what it says on the can.
+
+They are an excellent and simple way to decouple systems and make life simpler for consumers.
+
+### Streams
+
+Streams are designed for real-time data processing and analysis in systems that require low latency data transfer and analysis across multiple time windows.
+
+Here you will be looking at configuring for writers, readers and retention. Useful if you got a defined use case where you need to do an analysis on large amount of continuously changing data.
+
+## Event Types
+
+Now that we have looked at the core of EDA, we will go deeper into the different types of events you can find.
+
+There are 4 types; Notification, Event-Carried State Transfer, Delta Events and Business Events.
+
+Let's have a closer look at each of these event types.
+
+## Notification Events
+
+Notification events are used to inform interested parties about specific occurrences or updates. These events are designed to be small, containing only the minimum information necessary to reduce the risk of breaking contracts.
+
+Here is an example of what a notification event can look like:
+
+```json
+{
+  "eventName": "PaymentSuccessful",
+  "details": {
+    "data": {
+      "paymentId": "UUID"
+    }
+  }
+}
+```
+
+Notification events follow a pull model, allowing consumers to retrieve additional information from the publishers as needed. This introduces a callback pattern and will add extra latency to the system, but it helps to avoid ordering problems in most cases.
+
+Since notification events have a limited number of fields, certain functionalities provided by mediators, such as validation, routing, and filtering, may be reduced.
+
+## Event-Carried State Transfer
+
+This type of event can be considered the opposite of Notification Events. It includes both the event data and the current state of the system, allowing the receiving party to update its own state accordingly. These events are larger, as they include all the available data that the publisher has about the event/subject.
+
+Here is an example of such an event:
+
+```json
+{
+  "eventName": "PaymentSuccessful",
+  "details": {
+    "data": {
+      "paymentId": "UUID",
+      "paymentType": "Card",
+      "timestamp": "yyyy-mm-dd hh:mm:ss",
+      "accountId": "UUID",
+      "currencyCode": "GBP"
+    }
+  }
+}
+```
+
+Because of their larger size and increased information, these events carry a higher risk of breaking contracts, leaking personally identifiable information (PII), and encountering problems with eventual consistency and/or ordering. The coupling in this case occurs in the contract, and it follows a push model where the state is pushed to the consumers.
+
+Additionally, these events provide more options for adding filtering and routing rules in the mediator service. This removes the need for consumers to handle such logic and greatly improves the ability to target specific services.
+
+## Delta Events
+
+Delta events only contain the changes or updates that have occurred since the last event, reducing the amount of data transmitted.
+
+Here is an example of a delta event:
+
+```json
+{
+  "eventName": "PaymentUpdated",
+  "details": {
+    "data": {
+      "paymentId": "UUID",
+      "updatedFields": ["paymentType", "timestamp"],
+      "updatedValues": ["Credit Card", "yyyy-mm-dd hh:mm:ss"]
+    }
+  }
+}
+```
+
+Event deltas can be useful for identifying changes and managing event ordering more effectively. They can also be more efficient than sending the entire event content or getting information from the publisher services.
+
+## Business Events
+
+These events are specific to the domain or business context.
+
+As with all systems, reality will put you in between events, and your events will tend to reduce the content to the information that is needed.
+
+In some cases, it will be useful to create events that are constrained by a business domain and include internal fields only important to your domain.
+
+Here is an example of a business event for a successful payment:
+
+```json
+{
+  "eventName": "PaymentSuccessful",
+  "details": {
+    "data": {
+      "paymentId": "UUID",
+      "accountId": "UUID",
+      "amount": 100.00,
+      "currencyCode": "USD",
+      "timestamp": "yyyy-mm-dd hh:mm:ss",
+      "transactionId": "UUID",
+      "paymentMethod": "Credit Card",
+      "status": "AD345"
+    }
+  }
+}
+```
+
+Most business events can end up graduating to become events that other parts of the system are interested in. Try to avoid needing to re-emit events and try to absorb transformations.
+
+## Challenges and Considerations
+
+When deciding to apply Event-Driven Architecture in your system, there are several challenges and considerations to keep in mind.
+
+Firstly, events play a crucial role in the system and require special care and attention. It is important to carefully consider things like the event's name, type, timestamp (start, end, range…), and overall structure from the beginning.
+
+Documentation and versioning of events are essential. EDAs should allow for events to evolve and change over time, which can only be achieved through proper governance, documentation and version control.
+
+While EDAs enhance system scalability, they also introduce complexity. Factors such as message ordering, delivery, eventual consistency, and duplication must be taken into account.
+
+Operational complexity will also increase. Monitoring, management, and operational processes need to be given extra emphasis.
+
+Resilience to failures is paramount in an EDA. Measures such as message retries, dead-letter queues, and other mechanisms should be implemented to ensure system recovery.
+
+The impact of EDA on the development process should also be considered. Testing, deployment, and debugging strategies need to be adapted accordingly.
+
+Security and data concerns are of utmost importance, particularly when dealing with sensitive data or long-term data retention. Compliance with regulatory frameworks like GDPR needs to be addressed.
+
+Lastly, the organizational impact of EDA needs to be evaluated. Team organization, management, and communication strategies should be aligned with the requirements of an EDA-based system.
+
+## Conclusion
+
+In this document, we have looked at what are events, event driven architectures, the mediating systems, the types of events you can find in your system, to finish with some challenges and considerations.
+
+Should you use an EDA in your system? The answer is, it depends. I would recommend to not only rely on EDA, but to use it in combination with other architectures.
+
+EDAs are a powerful pattern to increase the scalability and flexibility of your system, but they also bring a lot of challenges and considerations that must be taken into account.

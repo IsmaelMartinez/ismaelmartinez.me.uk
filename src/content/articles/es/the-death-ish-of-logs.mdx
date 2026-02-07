@@ -1,0 +1,171 @@
+---
+title: "La muerte (más o menos) de los logs"
+description: "Un viaje a través de las décadas explorando cómo los logs evolucionaron de registros impresos a flujos de datos estructurados y su papel en OpenTelemetry y la observabilidad moderna."
+publishedDate: 2025-04-22
+originalUrl: "https://medium.com/@ismaelmartinez/the-death-ish-of-logs-6e48ee6eed95"
+originalPlatform: "medium"
+tags: ["Logs", "OpenTelemetry", "Observabilidad", "Monitorización"]
+draft: false
+---
+
+Los logs han sido nuestros fieles compañeros durante décadas. Empezaron como simples sentencias print y, con el tiempo, se convirtieron en flujos de datos masivos y estructurados, evolucionando con nuestras necesidades.
+
+Acompáñame en un viaje a través de las décadas mientras exploramos la evolución de los logs y su papel en OpenTelemetry y la observabilidad moderna.
+
+## Los primeros días
+
+Durante muchos años, los logs no tenían una estructura fija. Su formato dependía enteramente del sistema o del programador que los escribía.
+
+```
+User 1234 bought 7 bananas at 19:07
+```
+
+Cuando solo tienes un puñado de usuarios comprando plátanos, es bastante sencillo, y útil, tener esos mensajes de log.
+
+Puede convertirse en un mensaje de auditoría que se imprime y almacena para la posteridad, y durante muchos años, eso fue exactamente lo que hicimos. Imprimíamos mensajes de log, y si tienes la edad suficiente, recordarás una de estas.
+
+Esa era nuestra base de datos, nuestro registro de auditoría y un dispositivo peligroso para tener cerca cuando te exigían llevar corbata en el trabajo.
+
+Los logs fueron (y siguen siendo) diseñados para humanos. Su propósito es informar a los humanos de que algo ha ocurrido y registrar esa información imprimiéndola.
+
+Los sistemas que construíamos en aquella época eran principalmente monolitos, y los logs impresos eran lo más parecido que teníamos a una base de datos fiable (dejando de lado las cintas magnéticas).
+
+## Del papel al disco
+
+En los años 70, 80 y principios de los 90, era mucho más caro almacenar datos en un disco duro que imprimirlos en papel. Algo casi inimaginable en la actualidad.
+
+Las bases de datos eran increíblemente caras, lentas y solo servían para casos de uso muy específicos. Para buscar en los logs, bueno, había que revisar mucho papel, pero eso estaba bien.
+
+Los desarrolladores añadieron estructura a sus logs, ya que la cantidad de datos seguía creciendo con la adopción de ordenadores por parte de empresas y particulares. El objetivo era encontrar el equilibrio para proporcionar información fácilmente buscable sin perder el contexto de legibilidad humana. Algo así:
+
+```
+user,bananas,time
+1234,7,19:07
+...,...,...
+```
+
+Probablemente reconozcas el CSV aquí, un "estándar" tan adaptable que todavía se usa hoy en día. Una de las primeras interfaces o contratos para los que tuvimos estándares adoptados de forma general, junto con syslog y similares.
+
+### Los discos duros se abarataron
+
+En la segunda mitad de los 90, ocurrió algo interesante. A medida que la gente empezó a adoptar los ordenadores, los discos duros se abarataron, y eso impulsó el mercado hacia ordenadores más baratos. Internet estaba en auge y cabalgábamos la burbuja de las puntocom, pero solo unos pocos lo sabían.
+
+La gente empezó a almacenar cada vez más datos, lo que hizo que los ordenadores fueran más interesantes. Las tecnologías de bases de datos evolucionaron y dejamos de usar logs para registrar cuántos plátanos compraba un usuario. Bueno, en muchos casos hacíamos ambas cosas porque realmente no nos fiábamos de las bases de datos. Nos iban a quitar el trabajo.
+
+La cantidad de datos almacenados aumentó. Empezamos a almacenar los datos en formato relacional para poder buscar la información que nuestros clientes necesitaban de forma racional y eficiente.
+
+Nos movimos hacia una arquitectura por capas y empezamos a crear diferentes sistemas que rara vez interactuaban entre sí.
+
+### Las bases de datos reemplazaron el almacenamiento en logs
+
+Los logs seguían en uso, pero nos dimos cuenta de que no eran tan fiables como las bases de datos, que ofrecían un conjunto diferente de ventajas. Podíamos consultar grandes cantidades de datos en minutos, hacer agregaciones, relaciones y más con unos buenos índices y relaciones o abstracciones claras.
+
+Los logs volvieron a ser una herramienta del programador. Regresamos a algo parecido a esto:
+
+```
+2025-03-19T07:43:00Z: User 1234 bought 7 bananas
+```
+
+Teníamos una estructura, pero había demasiados estándares compitiendo, y si eras el programador, lo más probable es que logearas para tu propio beneficio de depuración.
+
+Los logs seguían en uso, pero el enfoque se desplazó hacia una visibilidad más operativa. Necesitábamos analítica en tiempo real, pero no nos preocupaba tanto mantener los logs consultables, para eso teníamos las bases de datos.
+
+## SOA y la consolidación tras la burbuja
+
+Durante los 2000, y probablemente relacionado con el hecho de que la burbuja puntocom casi mata toda la economía, las cosas se calmaron un poco, pero los logs siguieron transformándose.
+
+Empezamos a usar servicios, y SOA (Arquitecturas Orientadas a Servicios) se afianzó para ayudar a los servicios a comunicarse entre sí de forma orientada a eventos/mensajes. Pero seguía siendo demasiado complejo. Todo el mundo usaba bases de datos relacionales, y empezamos a generar una gran cantidad de datos.
+
+Como teníamos múltiples servicios dispersos comunicándose entre sí, empezamos a necesitar la recopilación centralizada de logs para tener visibilidad.
+
+Esto nos llevó a investigar cómo buscar en esos datos, algo para lo que las bases de datos relacionales no estaban bien preparadas, y empezamos a añadir estructura a los logs.
+
+Algo así:
+
+```json
+{
+  "timestamp": "2025-03-19:07:43Z",
+  "message": "User bought bananas",
+  "numberOfBananas": 7,
+  "userId": 1234
+}
+```
+
+Añadimos contexto consultable a nuestros logs, y mucha gente se quejó de que "Eso no se hace con los logs. Deberías usar una base de datos para eso."
+
+Y aunque era cierto, las bases de datos relacionales no eran buenas almacenando datos para ser consultados de muchas formas diferentes sin afectar la fase de escritura. Cuantos más índices añades, más costoso es insertar datos, y cuando realmente no sabes durante el diseño qué vas a consultar, esto se complica. Había que ser ágil.
+
+Necesitábamos analítica en tiempo real y consultas, y la monitorización proactiva se convirtió en práctica habitual. Correlacionabas los logs mirando la marca de tiempo, lo cual generalmente era "suficientemente bueno" para la mayoría de los sistemas. Empezó a ser habitual añadir IDs de correlación, IDs de causalidad, etc.
+
+Surgieron empresas enfocadas en este problema y en ofrecer una solución; como Splunk, ELK y muchas otras.
+
+## La década del Big Data y la observabilidad
+
+A partir de 2010, la cantidad de datos que generábamos explotó, y solo sigue aumentando cada segundo. El IoT iba a cambiar nuestras vidas, pero pronto nos dimos cuenta de que tardaría unos años más y nos centramos en lo importante: tener luces ambientales a las que puedes gritar, altavoces de vigilancia que te dicen el tiempo, reproducen una canción y a los que puedes gritar, y timbres... a los que definitivamente gritarás si se cae tu Internet y no puedes entrar en casa.
+
+Bromas aparte, tuvimos que empezar a investigar cómo consultar grandes cantidades de datos. El almacenamiento era tan barato que las tecnologías de bases de datos no relacionales tenían más sentido. Teníamos otros patrones de uso que atender.
+
+Los microservicios son la nueva norma, aumentando la complejidad de nuestros sistemas. Todos hablamos de deuda técnica, pero nos convencen fácilmente de que es mejor construir una funcionalidad nueva y llamativa que simplificar nuestros sistemas.
+
+Realmente necesitábamos saber qué llamó a qué y cuándo, pero confiar en las marcas de tiempo ya no era adecuado, ya que los servicios podían ejecutarse dentro del mismo microsegundo (o el reloj del hardware podía estar ligeramente "desajustado").
+
+Todos usamos logs contextuales e IDs de correlación — o al menos, sabemos que deberíamos. El cubo de la deuda técnica se está llenando, así que le ponemos nombres diferentes.
+
+Nuestros logs empezaron a capturar todo lo que posiblemente podían, y más:
+
+```json
+{
+  "timestamp": "2025-03-19:07:43Z",
+  "logLevel": "INFO",
+  "message": "User bought bananas",
+  "operation": "PurchaseCheckout",
+  "numberOfBananas": 7,
+  "traceId": "5e6c8d3f2c834abcd940e23b7d9a8e6b",
+  "spanId": "a74bf12984e2",
+  "user": {
+    "userId": 1234,
+    "userSegment": "premium"
+  },
+  "purchase": {
+    "cartId": "c78910",
+    "totalItems": 7,
+    "totalValue": {
+      "amount": 5.97,
+      "currency": "GBP"
+    },
+    "paymentMethod": "credit_card"
+  },
+  "serviceName": "Bananaitor",
+  "metadata": {
+    "host": "checkout-service-7c89b7f9c6-2m7d2",
+    "environment": "production",
+    "region": "us-east-1"
+  }
+}
+```
+
+Como el almacenamiento es barato, dejamos de preocuparnos por el tamaño de los logs. Bueno, sí nos importa cuando tenemos que enviarlos a un proveedor externo y nos intentan cobrar una fortuna, pero entonces convertimos esos mensajes en mensajes DEBUG, contaminando nuestro código con líneas raramente usadas que nunca se imprimen.
+
+Al final de la década, OpenTelemetry finalmente se consolidó, trayendo algo de cordura a esta locura.
+
+## ¿Y ahora qué?
+
+Pues bien, en OpenTelemetry tenemos traces, métricas, logs — y pronto, eventos y perfiles también.
+
+Algunos dicen que los eventos son logs simples. Similares al original:
+
+```
+User 1234 bought 7 bananas
+```
+
+Entonces... ¿deberíamos matar los logs? ¿Por qué no depender únicamente de eventos, traces y métricas?
+
+Personalmente, creo que no. Pero los logs sí necesitan evolucionar.
+
+Los sistemas modernos exigen claridad. Cada señal — ya sea un trace, una métrica o un evento — tiene un propósito específico. Combinadas, nos dan mejor visibilidad, como se analiza en el artículo [Observabilidad con OpenTelemetry](/es/articles/observability-with-opentelemetry).
+
+¿Los logs? Necesitan encontrar su lugar de nuevo.
+
+Aun así, creo que los logs no desaparecerán. Evolucionarán — como siempre lo han hecho — para ayudarnos a dar sentido a toda esta locura distribuida.
+
+¿Qué opinas? ¿Deberíamos matar los logs?

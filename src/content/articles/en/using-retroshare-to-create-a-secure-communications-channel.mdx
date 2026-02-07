@@ -1,0 +1,79 @@
+---
+title: "Using Retroshare to Create a Secure Communications Channel"
+description: "A practical guide to establishing secure communications using Retroshare, a friend-to-friend network employing GPG, P2P, and Tor/I2P technologies."
+publishedDate: 2019-10-17
+originalUrl: "https://medium.com/@ismaelmartinez/using-retroshare-to-create-a-secure-communications-channel-4211c21f4c"
+originalPlatform: "medium"
+tags: ["Privacy", "Security", "Retroshare", "Decentralisation"]
+draft: false
+---
+
+During the last days, Catalunya has been experiencing demonstrations and street protests.
+
+To facilitate them, a group called [Tsunami Democratic (Democratic Tsunami)](https://tsunamidemocratic.cat/) is using an app to organise their actions. The app uses [Retroshare](https://retroshare.cc) as their base network/framework.
+
+I decided, with the limited information that I have, to have a go into creating a secure communications channel for groups.
+
+I will try to avoid, as much as I can, any political remarks on this article.
+
+## Retroshare
+
+[Retroshare](http://retroshare.cc/) is an open source project that has been going for over a decade (since 2006). It is a friend to friend network that uses [GPG](https://www.gnupg.org/), [P2P](https://en.wikipedia.org/wiki/Peer-to-peer) and [Tor](https://www.torproject.org/) or [I2P](https://geti2p.net/en/) networks to ensure sharing of information is secure, anonymous and decentralised.
+
+It generates a key pair ([GPG](https://www.gnupg.org/)) and uses [OpenSSL](https://www.openssl.org/) to ensure an end-to-end encryption between you and your friends.
+
+You can only see your friends and what your friends want to share with you, but can introduce other friends and/or subscribe to channels (depending on the privacy level that you and your friends set-up)
+
+It uses a distributed hash table ([DHT](https://en.wikipedia.org/wiki/Distributed_hash_table)) to provide decentralisation in the same way as [BitTorrent](https://en.wikipedia.org/wiki/BitTorrent), [Freenet](https://freenetproject.org/index.html) and [IPFS](https://ipfs.io/) do (to mention a few).
+
+## Getting Started
+
+The first thing to do is to install [Retroshare](http://retroshare.cc/). It is available for multiple OS. In my case I am going for the lazy option and download the AppImage package.
+
+Download the file and change the permissions to make it executable.
+
+```bash
+chmod 750 retroshare-gui-...
+```
+
+Execute it
+
+```bash
+./retroshare-gui...
+```
+
+This will open the Retroshare interface; I recommend clicking **Advanced options**, selecting the node type *Hidden node (over Tor)* and setting encryption to *Very high*. Then choose a channel name (in my case `mytestchannel`) and click **Go!**.
+
+This will then start connecting to the [Tor](https://www.torproject.org/) Network. After a bit of time, it should open that app with a message showing that you need to add friends.
+
+That is it, you got a secure channel. Your channel will be as secure as the way you share it (and the people are in it).
+
+[Retroshare](http://retroshare.cc/) provides many services to help with communication including, one2one chat, mail, public and private chat lobbies, forum (anonymous or authenticated), file sharing, share links, VoIP and Video calls.
+
+The [documentation on how to use](https://retroshare.readthedocs.io/en/latest/) it is good and extensive. The UI feels dated but does the job.
+
+I didn't look into the option of running [Retroshare](http://retroshare.cc/) in headless mode.
+
+**What about the app?**
+
+I have been only able to download the app, start it but not activate it. The next section is a set of guess and assumptions.
+
+The app is a client to facilitate people to connect to their [Retroshare](http://retroshare.cc/) channel/network. It requires a QR for you to get into the network. That QR will, more than probable, be the public key of one participant in the network.
+
+I am only to assume that once you get a certain trust; they allow you to invite other users to the network. If they find a bad participant, it is possible to remove a node without affecting most of the network.
+
+## Conclusion
+
+My only concerns are:
+
+- Because of the decentralised nature of the network, it is difficult to remove the shared information in [Retroshare](http://retroshare.cc/). I will be careful what you post/upload in it. I assume that is why they when with the app to limit what can a user upload.
+- The app needs of Internet to communicate. Governments can shut down Internet and even simpler, there is a limit in the number of users a Mobile networks can support. In big demonstrations it might not be possible to pass information as participants cannot get the message. Using [B.A.T.M.A.N.](https://www.open-mesh.org/projects/open-mesh/wiki) protocols is gaining momentum in that area.
+- My biggest concern is the secrecy on the back of it. I can only assume they want to take the necessary steps to ensure they share no participants information with bad actors.
+
+The people from [*Tsunami Democratic*](https://tsunamidemocratic.cat/) have done an incredible work in facilitating democracy in difficult times.
+
+In my opinion, the technology choice and the app itself are excellent and trust they will take the right decisions.
+
+Hopefully, they can avoid censorship and enable people to organise themselves without the Big Brother watching over their heads. I will try to do my best to help on that endeavour on whatever I can contribute.
+
+Anims i força.

@@ -1,0 +1,95 @@
+---
+title: "Coreografia i Orquestració"
+description: "Comparació entre la coreografia descentralitzada i l'orquestració centralitzada en sistemes distribuïts, els seus compromisos i quan utilitzar cada enfocament."
+publishedDate: 2025-03-17
+originalUrl: "https://medium.com/@ismaelmartinez/choreography-and-orchestration-232bd967ce82"
+originalPlatform: "medium"
+tags: ["Arquitectura Orientada a Esdeveniments", "Coreografia", "Orquestració", "Arquitectura de Programari"]
+draft: false
+---
+
+Hi ha molta documentació sobre els patrons arquitectònics de "coreografia" i "orquestració", però volia descriure'ls des de la meva perspectiva.
+
+Aquests dos patrons s'han convertit en enfocaments estàndard en sistemes distribuïts, especialment en les [arquitectures orientades a esdeveniments](/cat/articles/event-driven-architectures), ja que ajuden a simplificar les solucions.
+
+Entenent les diferències entre ells, podeu dissenyar sistemes escalables, mantenibles i eficients.
+
+Comencem explorant els conceptes de coreografia i orquestració, els seus beneficis i reptes, i acabarem amb algunes pautes sobre com triar l'enfocament adequat per al vostre problema.
+
+## Coreografia
+
+La coreografia és com un ball on cada participant coneix els seus passos i es coordina amb els altres de manera descentralitzada. Com en una rutina de ball ben executada, el resultat pot ser fascinant.
+
+Tanmateix, quan la coreografia no està ben dissenyada, les coses es poden complicar i esdevenir difícils de gestionar. S'obté un sistema més "complicat".
+
+Una coreografia deficient pot conduir a una complexitat no desitjada, fent el sistema més difícil d'entendre i mantenir.
+
+En un sistema distribuït, la coreografia permet que els serveis interactuïn indirectament comunicant-se mitjançant esdeveniments i missatges, reaccionant als canvis i desencadenant accions segons calgui.
+
+Explorem els beneficis de la coreografia.
+
+### Beneficis de la Coreografia
+
+1. **Descentralització**: Cada servei és responsable del seu propi comportament, fent el sistema general més resilient i adaptable. No hi ha un únic punt de fallada i els colls d'ampolla es poden identificar i abordar més fàcilment.
+2. **Escalabilitat equilibrada**: Cada servei gestiona la seva lògica de manera independent i respon als esdeveniments de forma autònoma. Això permet una escalabilitat eficient i us permet seleccionar l'eina, el patró o la solució més adequada per a cada problema específic.
+3. **Flexibilitat**: Quan la vostra lògica està autocontinguda dins del servei adequat, obteniu un major control, cosa que facilita la substitució de serveis, l'execució d'experiments i la implementació de canvis sense necessitat d'una coordinació extensa amb altres serveis o equips.
+
+### Reptes de la Coreografia
+
+1. **Complexitat**: La gestió de les interaccions entre molts serveis pot esdevenir un repte, especialment a mesura que el sistema creix. Entendre el flux general de dades i esdeveniments requereix una visió d'alt nivell del sistema.
+2. **Monitorització**: Sense un controlador central, el seguiment de problemes i la comprensió de l'estat del sistema pot ser difícil. Un registre, monitorització i traçabilitat eficaços són essencials per gestionar aquesta complexitat.
+3. **Consistència**: Garantir la consistència de les dades entre serveis pot ser més complicat, particularment en entorns distribuïts on la latència de xarxa i les fallades són habituals.
+
+## Orquestració
+
+En contrast, l'orquestració és com un director dirigint una orquestra: un servei central gestiona les interaccions entre components, assegurant que cada servei sap què ha de fer i quan.
+
+Un controlador entén tot el sistema i gestiona totes les interaccions, assegurant l'execució correcta dels fluxos de treball.
+
+### Beneficis de l'Orquestració
+
+1. **Gestió centralitzada**: L'orquestrador té una visió completa del flux de treball, cosa que facilita la seva comprensió, gestió i modificació.
+2. **Depuració simplificada**: Com que totes les interaccions passen per un orquestrador central, el seguiment de problemes i la comprensió de l'estat del sistema es torna molt més fàcil.
+3. **Consistència i fiabilitat**: L'orquestrador garanteix la consistència i pot gestionar reintents, assegurant que les tasques es completen amb èxit, fins i tot davant de fallades.
+
+### Reptes de l'Orquestració
+
+1. **Punt únic de fallada:** Un controlador central pot convertir-se en un coll d'ampolla i/o un punt únic de fallada. Si l'orquestrador cau, pot interrompre tot el flux de treball.
+2. **Escalabilitat**: L'orquestrador ha de gestionar totes les interaccions, cosa que pot provocar problemes de rendiment sota una càrrega elevada. Escalar el propi orquestrador pot ser un repte.
+3. **Complexitat:** A mesura que el sistema creix, l'orquestrador pot tornar-se excessivament complex, conduint al que jo anomeno deute arquitectònic, on els equips eviten fer canvis perquè el sistema s'ha tornat massa rígid.
+4. **Flexibilitat**: Modificar el flux de treball sovint requereix actualitzar l'orquestrador, cosa que pot ser més lenta que modificar serveis individuals en un sistema coreografiat.
+
+## Triar l'enfocament adequat
+
+L'elecció entre coreografia i orquestració depèn de múltiples factors, incloent-hi la complexitat del vostre sistema, l'experiència de l'equip i els requisits operacionals. Aquí teniu algunes consideracions clau per guiar la vostra decisió:
+
+| Consideració | Coreografia | Orquestració |
+|---|---|---|
+| Complexitat | Millor per a interaccions simples i desacoblades | Millor per a fluxos de treball complexos i multi-pas |
+| Escalabilitat | Escala de manera independent per servei | Risc de coll d'ampolla centralitzat |
+| Depuració | Més difícil de traçar entre serveis | Més fàcil amb control centralitzat |
+| Flexibilitat | Més fàcil intercanviar serveis individuals | Requereix actualitzacions de l'orquestrador |
+| Consistència | Consistència eventual | Garanties de consistència més fortes |
+| Resiliència | Cap punt únic de fallada | L'orquestrador és un punt de risc |
+
+## Per què no tots dos?
+
+No heu de triar un únic enfocament: molts sistemes es beneficien d'un model híbrid.
+
+Personalment, m'inclino cap a l'orquestració per a fluxos interns que requereixen un control robust, com ara el processament de pagaments o l'alta d'usuaris.
+
+D'altra banda, prefereixo la coreografia per a la comunicació asíncrona a nivell de sistema, ja que ofereix una millor resiliència i escalabilitat.
+
+Combinant estratègicament ambdós enfocaments, podeu maximitzar els seus punts forts i construir un sistema més resilient.
+
+## Conclusió
+
+La coreografia i l'orquestració són dos enfocaments diferenciats per gestionar les interaccions en sistemes distribuïts, cadascun amb els seus propis punts forts i reptes.
+
+Entenent aquests conceptes i avaluant les vostres necessitats específiques, podeu triar l'enfocament adequat per dissenyar sistemes de programari robusts, escalables i mantenibles.
+
+Tant si opteu per la coordinació autònoma de la coreografia com pel control centralitzat de l'orquestració, la clau és alinear la vostra arquitectura amb els vostres objectius de negoci i requisits tècnics.
+
+Teniu altres criteris per triar un enfocament per sobre de l'altre? Alguna altra reflexió? Si us plau, compartiu-les als comentaris a continuació.
+
+Bon disseny!

@@ -1,0 +1,95 @@
+---
+title: "Choreography and Orchestration"
+description: "Comparing decentralised choreography with centralised orchestration in distributed systems, their trade-offs, and when to use each approach."
+publishedDate: 2025-03-17
+originalUrl: "https://medium.com/@ismaelmartinez/choreography-and-orchestration-232bd967ce82"
+originalPlatform: "medium"
+tags: ["Event-Driven Architecture", "Choreography", "Orchestration", "Software Architecture"]
+draft: false
+---
+
+There is plenty of documentation about "choreography" and "orchestration" architectural patterns, but I wanted to describe them from my perspective.
+
+These two patterns have become standard approaches in distributed systems, especially in [event-driven architectures](/en/articles/event-driven-architectures), as they help simplify solutions.
+
+By understanding the differences between them, you can design scalable, maintainable, and efficient systems.
+
+Let's start by exploring the concepts of choreography and orchestration, their benefits and challenges, and then finish with some starters on how to choose the right approach for your problem.
+
+## Choreography
+
+Choreography is like a dance where each participant knows their steps and coordinates with others in a decentralised manner. As with a well-executed dance routine, the result can be mesmerizing.
+
+However, when choreography is not properly designed, things can get messy and difficult to manage. You get a more "complicated" system.
+
+Poor choreography can lead to unintended complexity, making the system harder to understand and maintain.
+
+In a distributed system, choreography allows services to interact indirectly by communicating through events and messages, reacting to changes, and triggering actions as needed.
+
+Let's explore the benefits of choreography.
+
+### Benefits of Choreography
+
+1. **Decentralization**: Each service is responsible for its behavior, making the overall system more resilient and adaptable. There is no single point of failure, and bottlenecks can be identified and addressed more easily.
+2. **Balanced Scalability**: Each service independently manages its logic and responds to events autonomously. This enables efficient scaling and allows you to select the most suitable tool, pattern or solution for each specific problem.
+3. **Flexibility**: When your logic is self-contained within the appropriate service, you gain greater control, making it easier to replace services, run experiments, and implement changes without needing extensive coordination with other services or teams.
+
+### Challenges of Choreography
+
+1. **Complexity**: Managing interactions between many services can become challenging, especially as the system grows. Understanding the overall flow of data and events requires a high-level view of the system.
+2. **Monitoring**: With no central controller, tracking issues and understanding the system's state can be difficult. Effective logging, monitoring, and tracing are essential to manage this complexity.
+3. **Consistency**: Ensuring data consistency across services can be trickier, particularly in distributed environments where network latency and failures are common.
+
+## Orchestration
+
+In contrast, orchestration is like a conductor directing an orchestra — a central service manages the interactions between components, ensuring that each service knows what to do and when.
+
+A controller understands the entire system and manages all interactions, enforcing the correct execution of workflows.
+
+### Benefits of Orchestration
+
+1. **Centralised Management**: The orchestrator has a complete view of the workflow, making it easier to understand, manage, and modify.
+2. **Simplified Debugging**: Since all interactions go through a central orchestrator, tracing issues and understanding the system's state becomes much easier.
+3. **Consistency and Reliability**: The orchestrator enforces consistency and can handle retries, ensuring that tasks complete successfully, even in the face of failures.
+
+### Challenges of Orchestration
+
+1. **Single Point of Failure:** A central controller can become a bottleneck and/or a single point of failure. If the orchestrator goes down, it can disrupt the entire workflow.
+2. **Scalability**: The orchestrator must manage all interactions, which can lead to performance issues under heavy load. Scaling the orchestrator itself can be challenging.
+3. **Complexity:** As the system grows, the orchestrator can become overly complex, leading to what I call architectural debt — where teams avoid making changes because the system has become too rigid.
+4. **Flexibility**: Modifying the workflow often requires updating the orchestrator, which can be more time-consuming than modifying individual services in a choreographed system.
+
+## Choosing the Right Approach
+
+The choice between choreography and orchestration depends on multiple factors, including the complexity of your system, team expertise/experience, and operational requirements. Here are some key considerations to help guide your decision:
+
+| Consideration | Choreography | Orchestration |
+|---|---|---|
+| Complexity | Better for simple, decoupled interactions | Better for complex, multi-step workflows |
+| Scalability | Scales independently per service | Centralised bottleneck risk |
+| Debugging | Harder to trace across services | Easier with centralised control |
+| Flexibility | Easier to swap individual services | Requires orchestrator updates |
+| Consistency | Eventual consistency | Stronger consistency guarantees |
+| Resilience | No single point of failure | Orchestrator is a risk point |
+
+## Why not both?
+
+You don't have to choose just one approach — many systems benefit from a hybrid model.
+
+Personally, I lean towards orchestration for internal flows that require robust control, such as payment processing or user onboarding.
+
+On the other hand, I prefer choreography for asynchronous system-wide communication, since it offers better resilience and scalability.
+
+By strategically combining both approaches, you can maximise their strengths and build a more resilient system.
+
+## Conclusion
+
+Choreography and orchestration are two distinct approaches to managing interactions in distributed systems, each with its own strengths and challenges.
+
+By understanding these concepts and evaluating your specific needs, you can choose the right approach to design robust, scalable, and maintainable software systems.
+
+Whether you opt for the autonomous coordination of choreography or the centralised control of orchestration, the key is to align your architecture with your business goals and technical requirements.
+
+Do you have any other criteria to choose one approach over the other? Any other thoughts? Please share them in the comments below.
+
+Happy designing!

@@ -1,0 +1,111 @@
+---
+title: "Observability with OpenTelemetry"
+description: "Understanding the difference between monitoring and observability, and how OpenTelemetry standardises telemetry collection with traces, metrics, logs, and more."
+publishedDate: 2025-03-24
+originalUrl: "https://medium.com/@ismaelmartinez/observability-with-opentelemetry-43e3ed38aedf"
+originalPlatform: "medium"
+tags: ["Observability", "OpenTelemetry", "SRE", "Software Engineering", "Monitoring"]
+draft: false
+---
+
+I have previously written about [event-driven architectures](/en/articles/event-driven-architectures) and how they help agile teams deliver resilient, scalable, flexible, and adaptable systems. However, it comes at the cost of complexity: distributed complexity.
+
+In a highly distributed system, monitoring alone is not enough. Observability must be a core characteristic. Without it, you may find yourself regretting the move to a distributed architecture and even advocating for a return to the monolith.
+
+> To be clear, monoliths still have a place in many organisations. If you don't need the added complexity, don't introduce it. However, as your engineering team grows, the benefits of a distributed system become more apparent.
+
+## Monitoring and Observability
+
+Let's go back to the basics and break down what monitoring and observability are.
+
+### Monitoring
+
+Monitoring focuses on tracking known metrics and alerts. It's reactive by nature and serves as a good starting point to determine whether a system is working as expected.
+
+You care about each individual transaction.
+
+You use logs and metrics to collect information, build dashboards to track trends, and set alerts for when a metric exceeds a threshold or an error log message appears.
+
+Monitoring helps you understand individual components of your system and pinpoint specific issues. It has served us well for many years, but it is no longer enough.
+
+### Observability
+
+Observability, on the other hand, provides a higher-level, aggregated view of the system. Instead of focusing solely on individual transactions, you analyse patterns across all signals, to identify issues before they escalate.
+
+With observability, you can:
+
+- Gain a clearer understanding of system behaviour and performance.
+- Find cause-and-effect relationships across components.
+- Identify bottlenecks, complexity, and architectural problems.
+
+Observability is not a new concept. It was first coined by Rudolf E. Kálmán (see [his paper](https://www.sciencedirect.com/science/article/pii/S1474667017700948?via%3Dihub)), and the main idea still applies: understanding a system's internal state by analysing its outputs.
+
+## Why does observability matter?
+
+Today's complex distributed systems require a higher-level view.
+
+For example, you can monitor your home energy usage to reduce consumption or detect when a fridge is about to [break down](https://www.sciencedirect.com/science/article/abs/pii/S0306261919300613).
+
+But if you're managing the entire energy grid, you need more than individual data points.
+
+- You analyse weather patterns to predict renewable energy production.
+- You study social behaviour to determine when people will switch on their kettle, and other behavioural patterns.
+
+Your focus shifts from isolated events to aggregated insights and predictions derived from multiple signals.
+
+Our distributed systems may not be as complex as an energy grid, but they share similar challenges.
+
+Observability provides that extra level of understanding, helping to:
+
+- Identify patterns before they cause failures.
+- Categorise, diagnose, and resolve issues faster.
+- Optimise performance and enhance user experience (including for developers), to name just a few.
+
+Observability isn't a new challenge — it's a familiar one that has grown more complex due to modern architecture patterns and needs.
+
+This is where OpenTelemetry (OTel) comes in — a framework designed to standardise telemetry collection across systems and address these challenges.
+
+## OpenTelemetry (OTel)
+
+OpenTelemetry is an open source, vendor- and tool-agnostic, observability framework and toolkit. It was born in [2019, when OpenTracing and OpenCensus](https://medium.com/opentracing/a-roadmap-to-convergence-b074e5815289) deprecated themselves to focus entirely on OpenTelemetry.
+
+Its goal is to simplify the generation, collection, processing, and exporting of telemetry data (signals).
+
+While OpenTelemetry is still relatively young, it is actively developed and widely adopted by major industry players. In fact, it is the largest project within the [Cloud Native Computing Foundation](https://www.cncf.io/projects/) ([CNCF](https://www.cncf.io)), alongside projects like Kubernetes, Backstage, CloudEvents and many more.
+
+### How does it work?
+
+One of OpenTelemetry's main goals is auto-instrumentation — it should "just work" for common libraries and frameworks.
+
+The telemetry data is typically:
+
+1. Generated by instrumented services.
+2. Collected by an OpenTelemetry Collector.
+3. Processed and exported to your preferred observability platform.
+
+If you've used LogStash or worked with data pipelines, this pattern will feel familiar.
+
+In OpenTelemetry, data is represented as signals.
+
+### Signals
+
+Currently, OpenTelemetry supports four core types of signals:
+
+- [Traces](https://opentelemetry.io/docs/concepts/signals/traces/): The path of a request through your application.
+- [Metrics](https://opentelemetry.io/docs/concepts/signals/metrics/): A measurement captured at runtime.
+- [Logs](https://opentelemetry.io/docs/concepts/signals/logs/): A recording of an event.
+- [Baggage](https://opentelemetry.io/docs/concepts/signals/baggage/): Contextual information that is passed between signals.
+
+I won't cover each in detail here, as I will explore these in more detail in an OpenTelemetry Signals post. Other emerging signals include Events and Profiles — for real user monitoring.
+
+## What comes next?
+
+Modern distributed systems require us to rethink how we monitor and observe them. OpenTelemetry is a major step towards standardising telemetry data collection.
+
+But observability is more than just gathering data — it's about collecting the right signals that provide actionable insights.
+
+In my next post, I'll take a deeper dive into OpenTelemetry signals — traces, metrics, logs, and new types like events and real user monitoring profiles.
+
+Observability isn't just about more data — it's about the right data, delivering real insights that drive action.
+
+Stay tuned!

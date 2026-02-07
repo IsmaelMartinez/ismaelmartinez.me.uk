@@ -1,0 +1,111 @@
+---
+title: "Observabilitat amb OpenTelemetry"
+description: "Entenent la diferència entre monitoratge i observabilitat, i com OpenTelemetry estandarditza la recol·lecció de telemetria amb traces, mètriques, logs i més."
+publishedDate: 2025-03-24
+originalUrl: "https://medium.com/@ismaelmartinez/observability-with-opentelemetry-43e3ed38aedf"
+originalPlatform: "medium"
+tags: ["Observabilitat", "OpenTelemetry", "SRE", "Enginyeria de Software", "Monitoratge"]
+draft: false
+---
+
+Anteriorment he escrit sobre les [arquitectures dirigides per esdeveniments](/cat/articles/event-driven-architectures) i com ajuden els equips àgils a lliurar sistemes resilients, escalables, flexibles i adaptables. Tanmateix, això comporta un cost de complexitat: complexitat distribuïda.
+
+En un sistema altament distribuït, el monitoratge per si sol no és suficient. L'observabilitat ha de ser una característica fonamental. Sense ella, podries trobar-te lamentant el canvi a una arquitectura distribuïda i fins i tot defensant un retorn al monòlit.
+
+> Per ser clar, els monòlits encara tenen el seu lloc en moltes organitzacions. Si no necessites la complexitat afegida, no la introdueixis. Tanmateix, a mesura que el teu equip d'enginyeria creix, els beneficis d'un sistema distribuït es fan més evidents.
+
+## Monitoratge i observabilitat
+
+Tornem als fonaments i desgranarem què són el monitoratge i l'observabilitat.
+
+### Monitoratge
+
+El monitoratge se centra en el seguiment de mètriques i alertes conegudes. És reactiu per naturalesa i serveix com a bon punt de partida per determinar si un sistema funciona com s'espera.
+
+Et preocupes per cada transacció individual.
+
+Utilitzes logs i mètriques per recollir informació, construeixes taulers per fer seguiment de tendències i configures alertes per quan una mètrica supera un llindar o apareix un missatge de log d'error.
+
+El monitoratge t'ajuda a comprendre els components individuals del teu sistema i a localitzar problemes específics. Ens ha servit bé durant molts anys, però ja no és suficient.
+
+### Observabilitat
+
+L'observabilitat, d'altra banda, proporciona una vista agregada de més alt nivell del sistema. En lloc de centrar-se únicament en transaccions individuals, analitzes patrons a través de tots els senyals per identificar problemes abans que s'escalin.
+
+Amb l'observabilitat, pots:
+
+- Obtenir una comprensió més clara del comportament i el rendiment del sistema.
+- Trobar relacions causa-efecte entre components.
+- Identificar colls d'ampolla, complexitat i problemes arquitectònics.
+
+L'observabilitat no és un concepte nou. Va ser encunyada per primera vegada per Rudolf E. Kalman (vegeu [el seu article](https://www.sciencedirect.com/science/article/pii/S1474667017700948?via%3Dihub)), i la idea principal encara s'aplica: comprendre l'estat intern d'un sistema analitzant les seves sortides.
+
+## Per què importa l'observabilitat?
+
+Els sistemes distribuïts complexos d'avui dia requereixen una vista de més alt nivell.
+
+Per exemple, pots monitorar el consum energètic de casa teva per reduir el consum o detectar quan una nevera està a punt d'[espatllar-se](https://www.sciencedirect.com/science/article/abs/pii/S0306261919300613).
+
+Però si estàs gestionant tota la xarxa elèctrica, necessites més que punts de dades individuals.
+
+- Analitzes patrons meteorològics per predir la producció d'energia renovable.
+- Estudies el comportament social per determinar quan la gent encendrà el bullidor, i altres patrons de comportament.
+
+El teu focus es desplaça d'esdeveniments aïllats a coneixements agregats i prediccions derivades de múltiples senyals.
+
+Els nostres sistemes distribuïts potser no són tan complexos com una xarxa elèctrica, però comparteixen reptes similars.
+
+L'observabilitat proporciona aquest nivell extra de comprensió, ajudant a:
+
+- Identificar patrons abans que causin fallades.
+- Categoritzar, diagnosticar i resoldre problemes més ràpidament.
+- Optimitzar el rendiment i millorar l'experiència d'usuari (incloent-hi la dels desenvolupadors), per esmentar-ne només algunes.
+
+L'observabilitat no és un repte nou — és un de familiar que s'ha tornat més complex a causa dels patrons i necessitats arquitectòniques modernes.
+
+Aquí és on entra OpenTelemetry (OTel) — un framework dissenyat per estandarditzar la recol·lecció de telemetria entre sistemes i abordar aquests reptes.
+
+## OpenTelemetry (OTel)
+
+OpenTelemetry és un framework i conjunt d'eines d'observabilitat de codi obert, independent de proveïdor i d'eina. Va néixer el [2019, quan OpenTracing i OpenCensus](https://medium.com/opentracing/a-roadmap-to-convergence-b074e5815289) es van deprecar per centrar-se completament en OpenTelemetry.
+
+El seu objectiu és simplificar la generació, recol·lecció, processament i exportació de dades de telemetria (senyals).
+
+Tot i que OpenTelemetry encara és relativament jove, es desenvolupa activament i és àmpliament adoptat pels principals actors de la indústria. De fet, és el projecte més gran dins de la [Cloud Native Computing Foundation](https://www.cncf.io/projects/) ([CNCF](https://www.cncf.io)), juntament amb projectes com Kubernetes, Backstage, CloudEvents i molts més.
+
+### Com funciona?
+
+Un dels principals objectius d'OpenTelemetry és l'auto-instrumentació — hauria de "funcionar directament" per a biblioteques i frameworks habituals.
+
+Les dades de telemetria normalment:
+
+1. Són generades pels serveis instrumentats.
+2. Són recollides per un OpenTelemetry Collector.
+3. Són processades i exportades a la teva plataforma d'observabilitat preferida.
+
+Si has utilitzat LogStash o has treballat amb pipelines de dades, aquest patró et resultarà familiar.
+
+A OpenTelemetry, les dades es representen com a senyals.
+
+### Senyals
+
+Actualment, OpenTelemetry dóna suport a quatre tipus bàsics de senyals:
+
+- [Traces](https://opentelemetry.io/docs/concepts/signals/traces/): El camí d'una petició a través de la teva aplicació.
+- [Metrics](https://opentelemetry.io/docs/concepts/signals/metrics/): Una mesura capturada en temps d'execució.
+- [Logs](https://opentelemetry.io/docs/concepts/signals/logs/): Un registre d'un esdeveniment.
+- [Baggage](https://opentelemetry.io/docs/concepts/signals/baggage/): Informació contextual que es passa entre senyals.
+
+No entraré en detall sobre cadascun aquí, ja que els exploraré amb més profunditat en un article sobre els senyals d'OpenTelemetry. Altres senyals emergents inclouen Events i Profiles — per al monitoratge d'usuaris reals.
+
+## Què ve a continuació?
+
+Els sistemes distribuïts moderns requereixen que replantegem com els monitoritzem i observem. OpenTelemetry és un pas important cap a l'estandardització de la recol·lecció de dades de telemetria.
+
+Però l'observabilitat és més que simplement recollir dades — es tracta de recollir els senyals correctes que proporcionin coneixements accionables.
+
+En el meu proper article, faré una immersió més profunda en els senyals d'OpenTelemetry — traces, mètriques, logs, i nous tipus com esdeveniments i perfils de monitoratge d'usuaris reals.
+
+L'observabilitat no es tracta de tenir més dades — es tracta de tenir les dades correctes, que lliurin coneixements reals que impulsin l'acció.
+
+Estigueu atents!

@@ -1,0 +1,171 @@
+---
+title: "The Death(ish) of Logs"
+description: "A journey through the decades exploring how logs evolved from printed records to structured data streams and their role in OpenTelemetry and modern observability."
+publishedDate: 2025-04-22
+originalUrl: "https://medium.com/@ismaelmartinez/the-death-ish-of-logs-6e48ee6eed95"
+originalPlatform: "medium"
+tags: ["Logs", "OpenTelemetry", "Observability", "Monitoring"]
+draft: false
+---
+
+Logs have been our faithful companions for decades. They started as simple print statements and, over time, became massive, structured data streams, evolving with our needs.
+
+Join me on a journey through the decades as we explore the evolution of logs and their role in OpenTelemetry and modern observability.
+
+## The early days
+
+For many years, logs had no fixed structure. Their format depended entirely on the system or programmer who wrote them.
+
+```
+User 1234 bought 7 bananas at 19:07
+```
+
+When you only have a handful of users buying bananas, it is fairly simple, and useful, to have those log messages.
+
+It can become an audit message that can be printed and stored for posterity, and for many years, that's exactly what we did. We printed log messages, and if you are old enough, you will remember one of these.
+
+That was our database, audit trail and a dangerous device to have near you when you are required to wear a tie at work.
+
+Logs were (and still are) designed for humans. Their intent is to tell humans something has happened and to record that information by printing it.
+
+The systems we built at that time were mostly monoliths, and printed logs were the closest thing we had to a reliable database (magnetic tapes aside).
+
+## From paper to disk
+
+In the 70s, 80s and early 90s, it was far more expensive to store data on a hard drive, than to print it on paper. Something almost unimaginable in the present day.
+
+Databases were incredibly expensive, slow and only for niche use cases. To search through the logs, well, you had to go through a lot of paper, but that was fine.
+
+Developers added a structure to their logs, as the amount of data continued to increase with the adoption of computers by companies and individuals. The aim was to find the balance to provide easily searchable information without losing the human readability context. Something like this:
+
+```
+user,bananas,time
+1234,7,19:07
+...,...,...
+```
+
+You probably recognise CSV in here, a "standard" so adaptable that it's still in use today. One of the early interfaces or contracts we had standards for that was generally adopted, along with syslog and the likes.
+
+### Hard drives became cheaper
+
+In the second part of the 90s, something interesting happened. As people started to adopt computers, hard drives became cheaper, and that drove the market to cheaper computers. The Internet was booming and we were riding the dot-com bubble, but only a few knew it.
+
+People started to store more and more data, which made computers more interesting. Database technologies evolved and we did stop using logs to keep how many bananas a user bought. Well, in many cases we did both as we didn't really trust the databases. They were going to take our jobs.
+
+The amount of data stored increased. We started storing the data in a relational format to be able to search for the information our customers needed in a rational and efficient way.
+
+We moved towards a layered architecture and started to create different systems that rarely interacted with each other.
+
+### Databases replaced log storage
+
+Logs were still in use, but we realised they weren't as reliable as databases, which offered a different set of advantages. We could query vast amounts of data in minutes, do aggregations, relations and others with a few good indexes and clear relations or abstractions.
+
+Logs once again became a tool for the programmer. We went back to something similar to this:
+
+```
+2025-03-19T07:43:00Z: User 1234 bought 7 bananas
+```
+
+We had a structure, but there were too many competing standards, and if you were the programmer, chances were you logged for your own debugging benefit.
+
+Logs were still used, but the focus shifted to a more operational visibility. We needed real-time analytics, but we didn't care that much about keeping logs searchable, we had databases for that.
+
+## SOA and The bubble consolidation
+
+During the 00s, and probably related to the dotcom bubble almost killing the whole economy, things calmed down a bit, but logs continued to morph.
+
+We started to use services, and SOA (Service Oriented Architectures) took hold to help services talk to each other in an event/message-driven way. But it was still far too complex. Everybody used relational databases, and we started to generate a lot of data.
+
+As we had multiple scattered services talking with each other, we started to need centralised log collection for visibility.
+
+This drove us to look into how to search that data, which relational databases weren't well suited for, and started to add structure to the logs.
+
+Something like this:
+
+```json
+{
+  "timestamp": "2025-03-19:07:43Z",
+  "message": "User bought bananas",
+  "numberOfBananas": 7,
+  "userId": 1234
+}
+```
+
+We added searchable context to our logs, and lots of people complained that "It wasn't something you do with logs. You should use a database for that."
+
+While true, relational databases weren't great at storing data to be queried in many different ways while not affecting the write phase. The more indexes you add, the more costly is to insert data, and when you don't really know during design what you are going to query, this gets complicated. You had to be agile.
+
+We needed real-time analytics and queries, and proactive monitoring became common practice. You correlated the logs by looking at the timestamp, which was generally "good enough" for most systems. It started to become common to add correlation IDs, causation IDs, etc.
+
+Companies that focus on this problem and providing a solution emerged; like Splunk, ELK and many others.
+
+## Big Data and Observability decade
+
+From 2010 onwards, the amount of data we generated exploded, and is only increasing by the second. IoT is going to change our lives but we soon realise it is going to take a few more years and focus on the important things — having ambient lights you can shout at, surveillance speakers that tell you the weather, plays a song and that you can shout at, and doorbells… that you will definitely shout at if your Internet is down and you can't get home.
+
+Jokes aside, we had to start looking into how to query large amounts of data. Storage was so cheap that non-relational database technology made more sense. We had other usage patterns to cater for.
+
+Microservices are the new norm, increasing the complexity of our systems. We all talk about technical debt but are easily convinced it's better to build a fancy new feature than simplify our systems.
+
+We really need to know what called what and when, but relying on timestamps was no longer suitable, as services could run within the same microsecond (or the hardware clock might be slightly "off")
+
+We all use contextual logs and correlation IDs — or at least, we know we should. The tech debt bucket is starting to get full so we give it different names.
+
+Our logs started to capture everything they possibly could, and more:
+
+```json
+{
+  "timestamp": "2025-03-19:07:43Z",
+  "logLevel": "INFO",
+  "message": "User bought bananas",
+  "operation": "PurchaseCheckout",
+  "numberOfBananas": 7,
+  "traceId": "5e6c8d3f2c834abcd940e23b7d9a8e6b",
+  "spanId": "a74bf12984e2",
+  "user": {
+    "userId": 1234,
+    "userSegment": "premium"
+  },
+  "purchase": {
+    "cartId": "c78910",
+    "totalItems": 7,
+    "totalValue": {
+      "amount": 5.97,
+      "currency": "GBP"
+    },
+    "paymentMethod": "credit_card"
+  },
+  "serviceName": "Bananaitor",
+  "metadata": {
+    "host": "checkout-service-7c89b7f9c6-2m7d2",
+    "environment": "production",
+    "region": "us-east-1"
+  }
+}
+```
+
+As storage is cheap, we stop worrying about log size. Well, we do care when we need to send them to a 3rd party provider and they try to charge us a fortune, but then we turn those messages into DEBUG messages, polluting our code with rarely used lines of code that never get printed.
+
+By the end of the decade, OpenTelemetry finally took hold, bringing some sense to this madness.
+
+## What now?
+
+Well, in OpenTelemetry we have traces, metrics, logs — soon, events and profiles too.
+
+Some say events are simple logs. Similar to the original:
+
+```
+User 1234 bought 7 bananas
+```
+
+So… should we kill the logs? Why not rely solely on events, traces, and metrics?
+
+Personally, I don't think so. But logs do need to evolve.
+
+Modern systems demand clarity. Each signal — be it a trace, a metric, or an event — has a specific purpose. Combined, they give us better visibility, as discussed in the [Observability with OpenTelemetry](/en/articles/observability-with-opentelemetry) post.
+
+Logs? They need to find their place again.
+
+Still, I believe logs won't disappear. They will evolve — as they always have — to help us make sense of all this distributed madness.
+
+What do you think? Should we kill the logs?

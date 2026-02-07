@@ -1,0 +1,87 @@
+---
+title: "Fent audibles les visualitzacions de dades"
+description: "Una idea d'un hackathon de fa 10 anys finalment es fa realitat. Presentem sound3fy, una biblioteca de codi obert que afegeix sonificació als gràfics D3.js per a usuaris cecs i amb baixa visió."
+publishedDate: 2025-12-22
+originalUrl: "https://medium.com/@ismaelmartinez/making-data-visualisations-audible-08df20b7f1cd"
+originalPlatform: "medium"
+tags: ["Accessibilitat", "Visualització de Dades", "D3.js", "Desenvolupament Web"]
+draft: false
+---
+
+## Una idea d'un hackathon de fa 10 anys finalment es fa realitat
+
+Fa uns 10 anys, vaig assistir a un hackathon de Web Audio API, i me'n vaig anar amb una idea per a un projecte paral·lel: i si els usuaris cecs poguessin "escoltar" les visualitzacions de dades?
+
+Els gràfics són a tot arreu. Taulers de vendes, preus d'accions, estadístiques de la COVID, dades climàtiques. Per als usuaris amb visió, un cop d'ull ràpid revela tendències, valors atípics i patrons. Però per als [2.200 milions de persones amb discapacitat visual a tot el món](https://www.who.int/news-room/fact-sheets/detail/blindness-and-visual-impairment), aquestes visualitzacions són essencialment murs invisibles.
+
+Els lectors de pantalla normalment anuncien que existeix un gràfic, o llegeixen els valors seqüencialment. Aquella comprensió instantània que proporcionen les visualitzacions es perd.
+
+La vida es va complicar, i aquella idea del hackathon va quedar als meus apunts durant una dècada, fins ara. Amb l'ajuda de la programació en parella amb IA, vaig poder convertir aquella idea d'una dècada en un prototip funcional en una fracció del temps.
+
+## Presentem sound3fy
+
+**sound3fy** és una biblioteca de codi obert que afegeix sonificació a les visualitzacions D3.js. Una sola línia de codi fa audibles molts gràfics:
+
+```javascript
+d3.selectAll(".bar").sonify({ pitch: "value" });
+```
+
+Funciona amb gràfics D3.js existents. Sense reescriptures. Sense formats de dades especials.
+
+**sound3fy** no pretén substituir les taules ni els lectors de pantalla, sinó complementar-los restaurant part del reconeixement ràpid de patrons d'alt nivell que els usuaris amb visió obtenen dels gràfics.
+
+## Com funciona sound3fy
+
+- **Navegació per teclat**: Tecles de fletxa per explorar punts de dades individuals
+- **Suport per a lectors de pantalla**: Regions ARIA en directe anuncien els valors
+- **Mapatge de to**: Valors de dades més alts reprodueixen notes més agudes
+- **Panoràmica estèreo**: La posició es mapeja als canals d'àudio esquerre/dret
+- **Escales musicals**: Notes quantitzades a escales agradables com la pentatònica o la major
+
+## Prova-ho tu mateix
+
+[Demo en directe](https://ismaelmartinez.github.io/sound3fy/) (gràfics sonificats interactius)
+
+La demo inclou gràfics de barres, gràfics de línies i diagrames de dispersió. Prova de tancar els ulls i prémer Play. Pots distingir si les vendes augmenten o disminueixen?
+
+## Per què la sonificació?
+
+La recerca mostra que els humans són particularment bons detectant patrons a través del so. To ascendent per a tendències, ritme per a regularitat i posicionament estèreo per a relacions espacials.
+
+Estudis sobre eines de sonificació suggereixen que els usuaris cecs poden comprendre tendències i comparacions d'una manera molt més propera a com els usuaris amb visió llegeixen els gràfics.
+
+La recerca recent ho confirma. Un [estudi de 2024 de la UIUC](https://arxiv.org/abs/2403.00717) va trobar que combinar la sonificació amb altres modalitats ajuda els usuaris cecs a interpretar gràfics estadístics amb una alta precisió.
+
+## Treball previ
+
+La [sonificació per a l'accessibilitat](https://drum.lib.umd.edu/items/66d33f10-0c1c-4028-ba5c-a59729a10daa) no és nova. Highcharts ofereix un [mòdul de sonificació](https://www.highcharts.com/docs/accessibility/sonification) des de fa anys, i eines com [TwoTone](https://twotone.io/) permeten a qualsevol convertir dades en música sense codi.
+
+Eines de recerca com [MAIDR](https://github.com/xability/maidr) han explorat enfocaments multimodals que combinen so amb braille i àudio natural.
+
+**sound3fy** té com a objectiu portar aquesta capacitat a l'ecosistema D3.js, on viuen moltes visualitzacions personalitzades però les eines d'accessibilitat són escasses. [Chart2Music](https://www.chart2music.com/docs/) és una alternativa vàlida, especialment si no estàs utilitzant D3.js per als teus gràfics.
+
+## Disseny tècnic
+
+**sound3fy** utilitza la Web Audio API per a la generació de so amb baixa latència. Les decisions de disseny clau inclouen:
+
+1. **Escales musicals**
+   El mapatge de freqüència en brut sona aspre. Quantitzar a escales pentatòniques fa que l'àudio sigui agradable tot preservant les relacions entre les dades.
+2. **Arquitectura de plugin per a D3.js**
+   Ha de funcionar amb qualsevol visualització D3.js existent. No cal reconstruir els teus gràfics.
+3. **Accessibilitat primer**
+   Navegació completa per teclat, atributs ARIA, gestió del focus i anuncis per a lectors de pantalla hi són integrats.
+
+## Busquem opinions
+
+Això és un prototip inicial, i necessito opinions, especialment d'usuaris cecs i amb baixa visió. Vull assegurar-me que això és genuïnament útil, no només ben intencionat.
+
+- La sonificació t'ajuda a comprendre les dades?
+- La navegació per teclat és intuïtiva?
+- Què és confús o què hi falta?
+
+Espero que ajudi a reduir la bretxa en accessibilitat. Si no ho fa, també és un aprenentatge útil. Espero que desperti una conversa sobre com podem millorar.
+
+**GitHub:** [https://github.com/IsmaelMartinez/sound3fy](https://github.com/IsmaelMartinez/sound3fy)
+**Instal·lació:** `npm install sound3fy`
+
+Si treballes en accessibilitat, visualització de dades, o coneixes algú que pugui beneficiar-se d'aquesta eina, m'encantaria saber de tu.

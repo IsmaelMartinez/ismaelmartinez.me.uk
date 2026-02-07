@@ -1,0 +1,111 @@
+---
+title: "Observabilidad con OpenTelemetry"
+description: "Entendiendo la diferencia entre monitorización y observabilidad, y cómo OpenTelemetry estandariza la recopilación de telemetría con traces, métricas, logs y más."
+publishedDate: 2025-03-24
+originalUrl: "https://medium.com/@ismaelmartinez/observability-with-opentelemetry-43e3ed38aedf"
+originalPlatform: "medium"
+tags: ["Observabilidad", "OpenTelemetry", "SRE", "Ingeniería de Software", "Monitorización"]
+draft: false
+---
+
+He escrito anteriormente sobre [arquitecturas orientadas a eventos](/es/articles/event-driven-architectures) y cómo ayudan a los equipos ágiles a entregar sistemas resilientes, escalables, flexibles y adaptables. Sin embargo, esto tiene un coste: la complejidad distribuida.
+
+En un sistema altamente distribuido, la monitorización por sí sola no es suficiente. La observabilidad debe ser una característica fundamental. Sin ella, podrías terminar lamentando la transición a una arquitectura distribuida e incluso abogando por un retorno al monolito.
+
+> Para ser claro, los monolitos siguen teniendo cabida en muchas organizaciones. Si no necesitas la complejidad añadida, no la introduzcas. Sin embargo, a medida que tu equipo de ingeniería crece, los beneficios de un sistema distribuido se hacen más evidentes.
+
+## Monitorización y observabilidad
+
+Volvamos a lo básico y desglosemos qué son la monitorización y la observabilidad.
+
+### Monitorización
+
+La monitorización se centra en el seguimiento de métricas y alertas conocidas. Es reactiva por naturaleza y sirve como buen punto de partida para determinar si un sistema está funcionando como se espera.
+
+Te importa cada transacción individual.
+
+Usas logs y métricas para recopilar información, construyes cuadros de mando para seguir tendencias y configuras alertas para cuando una métrica supera un umbral o aparece un mensaje de error en los logs.
+
+La monitorización te ayuda a entender componentes individuales de tu sistema y a localizar problemas específicos. Nos ha servido bien durante muchos años, pero ya no es suficiente.
+
+### Observabilidad
+
+La observabilidad, por otro lado, proporciona una vista agregada de nivel superior del sistema. En lugar de centrarse únicamente en transacciones individuales, analizas patrones a través de todas las señales para identificar problemas antes de que escalen.
+
+Con la observabilidad, puedes:
+
+- Obtener una comprensión más clara del comportamiento y rendimiento del sistema.
+- Encontrar relaciones de causa y efecto entre componentes.
+- Identificar cuellos de botella, complejidad y problemas arquitectónicos.
+
+La observabilidad no es un concepto nuevo. Fue acuñada por primera vez por Rudolf E. Kalman (véase [su artículo](https://www.sciencedirect.com/science/article/pii/S1474667017700948?via%3Dihub)), y la idea principal sigue vigente: entender el estado interno de un sistema analizando sus salidas.
+
+## ¿Por qué importa la observabilidad?
+
+Los complejos sistemas distribuidos de hoy requieren una vista de nivel superior.
+
+Por ejemplo, puedes monitorizar el consumo energético de tu hogar para reducir el consumo o detectar cuándo un frigorífico está a punto de [averiarse](https://www.sciencedirect.com/science/article/abs/pii/S0306261919300613).
+
+Pero si estás gestionando toda la red eléctrica, necesitas más que datos individuales.
+
+- Analizas patrones meteorológicos para predecir la producción de energía renovable.
+- Estudias el comportamiento social para determinar cuándo la gente va a encender su tetera y otros patrones de comportamiento.
+
+Tu enfoque pasa de eventos aislados a información agregada y predicciones derivadas de múltiples señales.
+
+Nuestros sistemas distribuidos puede que no sean tan complejos como una red eléctrica, pero comparten desafíos similares.
+
+La observabilidad proporciona ese nivel extra de comprensión, ayudando a:
+
+- Identificar patrones antes de que causen fallos.
+- Categorizar, diagnosticar y resolver problemas más rápido.
+- Optimizar el rendimiento y mejorar la experiencia del usuario (incluida la de los desarrolladores), por nombrar solo algunos.
+
+La observabilidad no es un desafío nuevo — es un desafío conocido que se ha vuelto más complejo debido a los patrones y necesidades de la arquitectura moderna.
+
+Aquí es donde entra OpenTelemetry (OTel) — un framework diseñado para estandarizar la recopilación de telemetría entre sistemas y abordar estos desafíos.
+
+## OpenTelemetry (OTel)
+
+OpenTelemetry es un framework y kit de herramientas de observabilidad open source, agnóstico de proveedor y de herramienta. Nació en [2019, cuando OpenTracing y OpenCensus](https://medium.com/opentracing/a-roadmap-to-convergence-b074e5815289) se deprecaron para centrarse enteramente en OpenTelemetry.
+
+Su objetivo es simplificar la generación, recopilación, procesamiento y exportación de datos de telemetría (señales).
+
+Aunque OpenTelemetry es relativamente joven, se desarrolla activamente y cuenta con amplia adopción por parte de los principales actores de la industria. De hecho, es el proyecto más grande dentro de la [Cloud Native Computing Foundation](https://www.cncf.io/projects/) ([CNCF](https://www.cncf.io)), junto con proyectos como Kubernetes, Backstage, CloudEvents y muchos más.
+
+### ¿Cómo funciona?
+
+Uno de los principales objetivos de OpenTelemetry es la auto-instrumentación — debería "simplemente funcionar" para librerías y frameworks comunes.
+
+Los datos de telemetría típicamente:
+
+1. Son generados por servicios instrumentados.
+2. Son recopilados por un OpenTelemetry Collector.
+3. Son procesados y exportados a tu plataforma de observabilidad preferida.
+
+Si has usado LogStash o trabajado con pipelines de datos, este patrón te resultará familiar.
+
+En OpenTelemetry, los datos se representan como señales.
+
+### Señales
+
+Actualmente, OpenTelemetry soporta cuatro tipos principales de señales:
+
+- [Traces](https://opentelemetry.io/docs/concepts/signals/traces/): El recorrido de una petición a través de tu aplicación.
+- [Métricas](https://opentelemetry.io/docs/concepts/signals/metrics/): Una medición capturada en tiempo de ejecución.
+- [Logs](https://opentelemetry.io/docs/concepts/signals/logs/): Un registro de un evento.
+- [Baggage](https://opentelemetry.io/docs/concepts/signals/baggage/): Información contextual que se pasa entre señales.
+
+No entraré en detalle sobre cada una aquí, ya que las exploraré con más profundidad en un artículo sobre señales de OpenTelemetry. Otras señales emergentes incluyen Events y Profiles — para monitorización de usuarios reales.
+
+## ¿Qué viene después?
+
+Los sistemas distribuidos modernos nos exigen repensar cómo los monitorizamos y observamos. OpenTelemetry es un gran paso hacia la estandarización de la recopilación de datos de telemetría.
+
+Pero la observabilidad es más que simplemente recopilar datos — se trata de recopilar las señales correctas que proporcionen información procesable.
+
+En mi próximo artículo, profundizaré en las señales de OpenTelemetry — traces, métricas, logs y nuevos tipos como eventos y perfiles de monitorización de usuarios reales.
+
+La observabilidad no consiste solo en tener más datos — sino en tener los datos correctos, que ofrezcan información real que impulse la acción.
+
+¡Estad atentos!

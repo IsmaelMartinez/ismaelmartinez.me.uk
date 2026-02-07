@@ -1,0 +1,61 @@
+---
+title: "Setting Up My First OpenSource Python Project"
+description: "A series documenting the setup process for launching my first PyPI project, logger-to-kibana, and lessons learned along the way."
+publishedDate: 2019-11-28
+originalUrl: "https://dev.to/ismaelmartinez/setting-up-my-first-opensource-python-project-4k1o"
+originalPlatform: "devto"
+tags: ["Open Source", "Python", "Automation", "Logs"]
+draft: false
+---
+
+This is the start of a series documenting the creation of my first PyPI project. I acknowledge this represents both my first open-source contribution and initial Python endeavour, so there's considerable room for improvement.
+
+## Project Overview
+
+The project is called **logger-to-kibana**, and it centres on automation principles. The tool parses loggers in code and generates Kibana visualizations from log messages encountered during execution.
+
+## Key Features
+
+The project includes three main commands:
+
+- `process` — processes a folder
+- `process_and_generate` — processes a folder and generates visualizations
+- `process_generate_and_send` — executes full pipeline including transmission to Kibana
+
+## Installation
+
+Users can install dependencies via:
+
+```bash
+pip install -r requirements.txt
+```
+
+And access help documentation by running:
+
+```bash
+python main.py
+```
+
+## Configuration
+
+Default settings exist in `settings.ini`, with customisation available through the `LOGGER_TO_KIBANA_CONFIG` environment variable.
+
+This allows you to configure:
+
+- The Kibana endpoint URL
+- Authentication credentials
+- Visualization templates and defaults
+- Log parsing patterns
+
+## What's Next
+
+In the upcoming parts of this series, I'll cover:
+
+- Setting up CI/CD with GitHub Actions
+- Publishing to PyPI
+- Writing tests and documentation
+- Handling community contributions
+
+I welcome constructive feedback and encourage readers to develop open-source solutions addressing repetitive tasks. The project is available on PyPI and GitHub for contribution opportunities.
+
+If you've gone through a similar process of publishing your first open-source project, I'd love to hear about your experience and any tips you might have.

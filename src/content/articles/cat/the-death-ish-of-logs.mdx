@@ -1,0 +1,171 @@
+---
+title: "La mort (més o menys) dels logs"
+description: "Un viatge a través de les dècades explorant com els logs van evolucionar de registres impresos a fluxos de dades estructurades i el seu paper a OpenTelemetry i l'observabilitat moderna."
+publishedDate: 2025-04-22
+originalUrl: "https://medium.com/@ismaelmartinez/the-death-ish-of-logs-6e48ee6eed95"
+originalPlatform: "medium"
+tags: ["Logs", "OpenTelemetry", "Observabilitat", "Monitoratge"]
+draft: false
+---
+
+Els logs han estat els nostres fidels companys durant dècades. Van començar com a simples sentències d'impressió i, amb el temps, es van convertir en fluxos massius de dades estructurades, evolucionant amb les nostres necessitats.
+
+Acompanya'm en un viatge a través de les dècades mentre explorem l'evolució dels logs i el seu paper a OpenTelemetry i l'observabilitat moderna.
+
+## Els primers dies
+
+Durant molts anys, els logs no tenien una estructura fixa. El seu format depenia completament del sistema o del programador que els escrivia.
+
+```
+User 1234 bought 7 bananas at 19:07
+```
+
+Quan només tens un grapat d'usuaris comprant plàtans, és bastant senzill, i útil, tenir aquests missatges de log.
+
+Pot convertir-se en un missatge d'auditoria que es pot imprimir i guardar per a la posteritat, i durant molts anys, això és exactament el que vam fer. Imprimíem missatges de log, i si ets prou gran, recordaràs una d'aquestes.
+
+Aquesta era la nostra base de dades, pista d'auditoria i un dispositiu perillós per tenir a prop quan et demanen portar corbata a la feina.
+
+Els logs van ser (i encara són) dissenyats per a humans. La seva intenció és dir als humans que alguna cosa ha passat i registrar aquesta informació imprimint-la.
+
+Els sistemes que construíem en aquella època eren majoritàriament monòlits, i els logs impresos eren el més semblant que teníem a una base de dades fiable (deixant de banda les cintes magnètiques).
+
+## Del paper al disc
+
+Als anys 70, 80 i principis dels 90, era molt més car emmagatzemar dades en un disc dur que imprimir-les en paper. Alguna cosa gairebé inimaginable avui dia.
+
+Les bases de dades eren increïblement cares, lentes i només per a casos d'ús molt específics. Per buscar entre els logs, bé, havies de passar per molt de paper, però això anava bé.
+
+Els desenvolupadors van afegir estructura als seus logs, a mesura que la quantitat de dades continuava augmentant amb l'adopció dels ordinadors per part d'empreses i particulars. L'objectiu era trobar l'equilibri per proporcionar informació fàcilment cercable sense perdre el context de llegibilitat humana. Alguna cosa així:
+
+```
+user,bananas,time
+1234,7,19:07
+...,...,...
+```
+
+Probablement hi reconeixeràs el CSV, un "estàndard" tan adaptable que encara s'utilitza avui dia. Una de les primeres interfícies o contractes per als quals vam tenir estàndards generalment adoptats, juntament amb syslog i similars.
+
+### Els discs durs es van abaratir
+
+A la segona part dels anys 90, va passar una cosa interessant. A mesura que la gent començava a adoptar els ordinadors, els discs durs es van abaratir, i això va impulsar el mercat cap a ordinadors més barats. Internet estava en plena efervescència i estàvem navegant la bombolla de les punt-com, però només uns pocs ho sabien.
+
+La gent va començar a emmagatzemar cada cop més dades, cosa que va fer els ordinadors més interessants. Les tecnologies de bases de dades van evolucionar i vam deixar d'utilitzar els logs per registrar quants plàtans comprava un usuari. Bé, en molts casos fèiem les dues coses perquè no ens refiem gaire de les bases de dades. Ens anaven a treure la feina.
+
+La quantitat de dades emmagatzemades va augmentar. Vam començar a guardar les dades en format relacional per poder buscar la informació que els nostres clients necessitaven d'una manera racional i eficient.
+
+Ens vam moure cap a una arquitectura per capes i vam començar a crear sistemes diferents que rarament interactuaven entre si.
+
+### Les bases de dades van substituir l'emmagatzematge de logs
+
+Els logs encara s'utilitzaven, però ens vam adonar que no eren tan fiables com les bases de dades, que oferien un conjunt diferent d'avantatges. Podíem consultar grans quantitats de dades en minuts, fer agregacions, relacions i altres operacions amb uns bons índexs i relacions o abstraccions clares.
+
+Els logs van tornar a ser una eina per al programador. Vam tornar a alguna cosa similar a això:
+
+```
+2025-03-19T07:43:00Z: User 1234 bought 7 bananas
+```
+
+Teníem una estructura, però hi havia massa estàndards en competència, i si eres el programador, el més probable és que fessis logs per al teu propi benefici de depuració.
+
+Els logs encara s'utilitzaven, però el focus es va desplaçar cap a una visibilitat més operativa. Necessitàvem analítiques en temps real, però no ens importava tant mantenir els logs cercables; teníem bases de dades per a això.
+
+## SOA i la consolidació de la bombolla
+
+Durant els anys 2000, i probablement relacionat amb el fet que la bombolla de les punt-com gairebé va matar tota l'economia, les coses es van calmar una mica, però els logs van continuar transformant-se.
+
+Vam començar a utilitzar serveis, i SOA (Arquitectures Orientades a Serveis) es va consolidar per ajudar els serveis a comunicar-se entre si d'una manera dirigida per esdeveniments/missatges. Però encara era massa complex. Tothom utilitzava bases de dades relacionals, i vam començar a generar moltes dades.
+
+Com que teníem múltiples serveis dispersos comunicant-se entre si, vam començar a necessitar una recol·lecció centralitzada de logs per tenir visibilitat.
+
+Això ens va portar a investigar com buscar entre aquelles dades, per a les quals les bases de dades relacionals no estaven ben preparades, i vam començar a afegir estructura als logs.
+
+Alguna cosa així:
+
+```json
+{
+  "timestamp": "2025-03-19:07:43Z",
+  "message": "User bought bananas",
+  "numberOfBananas": 7,
+  "userId": 1234
+}
+```
+
+Vam afegir context cercable als nostres logs, i molta gent es va queixar que "Això no es fa amb els logs. Hauries d'utilitzar una base de dades per a això."
+
+Tot i ser cert, les bases de dades relacionals no eren gaire bones emmagatzemant dades per ser consultades de moltes maneres diferents sense afectar la fase d'escriptura. Com més índexs afegeixes, més costós és inserir dades, i quan no saps realment durant el disseny què consultaràs, això es complica. Havies de ser àgil.
+
+Necessitàvem analítiques i consultes en temps real, i el monitoratge proactiu es va convertir en una pràctica habitual. Correlacionaves els logs mirant la marca de temps, que generalment era "prou bona" per a la majoria de sistemes. Va començar a ser comú afegir IDs de correlació, IDs de causalitat, etc.
+
+Van emergir empreses centrades en aquest problema i en proporcionar una solució; com Splunk, ELK i moltes altres.
+
+## La dècada del Big Data i l'observabilitat
+
+A partir del 2010, la quantitat de dades que generàvem va explotar, i només augmenta a cada segon. L'IoT canviarà les nostres vides, però aviat ens vam adonar que trigaria uns quants anys més i ens vam centrar en les coses importants — tenir llums ambientals a les quals pots cridar, altaveus de vigilància que et diuen el temps, posen una cançó i als quals pots cridar, i timbres... als quals definitivament cridaràs si Internet cau i no pots entrar a casa.
+
+Bromes a part, vam haver de començar a investigar com consultar grans quantitats de dades. L'emmagatzematge era tan barat que les tecnologies de bases de dades no relacionals tenien més sentit. Teníem altres patrons d'ús als quals donar servei.
+
+Els microserveis són la nova norma, augmentant la complexitat dels nostres sistemes. Tots parlem de deute tècnic, però ens convencem fàcilment que és millor construir una funcionalitat nova i vistosa que simplificar els nostres sistemes.
+
+Realment necessitàvem saber què havia cridat què i quan, però confiar en les marques de temps ja no era adequat, ja que els serveis podien executar-se dins del mateix microsegon (o el rellotge del maquinari podia estar lleugerament "desajustat").
+
+Tots utilitzem logs contextuals i IDs de correlació — o almenys sabem que ho hauríem de fer. El cubell del deute tècnic comença a omplir-se, així que li donem noms diferents.
+
+Els nostres logs van començar a capturar tot el que podien, i més:
+
+```json
+{
+  "timestamp": "2025-03-19:07:43Z",
+  "logLevel": "INFO",
+  "message": "User bought bananas",
+  "operation": "PurchaseCheckout",
+  "numberOfBananas": 7,
+  "traceId": "5e6c8d3f2c834abcd940e23b7d9a8e6b",
+  "spanId": "a74bf12984e2",
+  "user": {
+    "userId": 1234,
+    "userSegment": "premium"
+  },
+  "purchase": {
+    "cartId": "c78910",
+    "totalItems": 7,
+    "totalValue": {
+      "amount": 5.97,
+      "currency": "GBP"
+    },
+    "paymentMethod": "credit_card"
+  },
+  "serviceName": "Bananaitor",
+  "metadata": {
+    "host": "checkout-service-7c89b7f9c6-2m7d2",
+    "environment": "production",
+    "region": "us-east-1"
+  }
+}
+```
+
+Com que l'emmagatzematge és barat, deixem de preocupar-nos per la mida dels logs. Bé, sí que ens importa quan els hem d'enviar a un proveïdor de tercers i intenten cobrar-nos una fortuna, però llavors convertim aquells missatges en missatges DEBUG, contaminant el nostre codi amb línies de codi rarament utilitzades que mai s'imprimeixen.
+
+Cap al final de la dècada, OpenTelemetry finalment es va consolidar, aportant una mica de sentit a aquesta bogeria.
+
+## I ara què?
+
+Bé, a OpenTelemetry tenim traces, mètriques, logs — aviat, també esdeveniments i perfils.
+
+Alguns diuen que els esdeveniments són logs simples. Similars a l'original:
+
+```
+User 1234 bought 7 bananas
+```
+
+Llavors... hauríem de matar els logs? Per què no confiar únicament en esdeveniments, traces i mètriques?
+
+Personalment, no ho crec. Però els logs sí que necessiten evolucionar.
+
+Els sistemes moderns demanen claredat. Cada senyal — sigui una traça, una mètrica o un esdeveniment — té un propòsit específic. Combinats, ens donen millor visibilitat, com es discuteix a l'article [Observabilitat amb OpenTelemetry](/cat/articles/observability-with-opentelemetry).
+
+Els logs? Necessiten trobar el seu lloc de nou.
+
+Tot i així, crec que els logs no desapareixeran. Evolucionaran — com sempre han fet — per ajudar-nos a donar sentit a tota aquesta bogeria distribuïda.
+
+Què en penses? Hauríem de matar els logs?

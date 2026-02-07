@@ -1,6 +1,6 @@
 ---
 title: "Arquitecturas Orientadas a Eventos"
-description: "Una exploracion completa de las Arquitecturas Orientadas a Eventos: eventos, sistemas mediadores, tipos de eventos y los desafios de construir sistemas distribuidos."
+description: "Una exploración completa de las Arquitecturas Orientadas a Eventos: eventos, sistemas mediadores, tipos de eventos y los desafíos de construir sistemas distribuidos."
 publishedDate: 2024-05-16
 originalUrl: "https://medium.com/@ismaelmartinez/event-driven-architectures-1e17cf305eef"
 originalPlatform: "medium"
@@ -8,39 +8,39 @@ tags: ["Arquitectura Orientada a Eventos", "Arquitectura de Software", "Sistemas
 draft: false
 ---
 
-En el panorama dinamico del desarrollo Agile y LEAN, los patrones arquitectonicos evolucionan continuamente para ofrecer soluciones adaptables. Raramente construimos sistemas completos; en su lugar, utilizamos frameworks, bibliotecas y servicios de terceros para ser mas eficientes.
+En el panorama dinámico del desarrollo Agile y LEAN, los patrones arquitectónicos evolucionan continuamente para ofrecer soluciones adaptables. Raramente construimos sistemas completos; en su lugar, utilizamos frameworks, bibliotecas y servicios de terceros para ser más eficientes.
 
-Buscamos patrones de arquitectura que fomenten la flexibilidad, adaptabilidad, experimentacion, escalabilidad y seguridad en nuestro dominio especifico.
+Buscamos patrones de arquitectura que fomenten la flexibilidad, adaptabilidad, experimentación, escalabilidad y seguridad en nuestro dominio específico.
 
-En este articulo, profundizare en las Arquitecturas Orientadas a Eventos (EDAs), explorando los sistemas mediadores, los tipos de eventos y los desafios que he encontrado a lo largo de mi carrera.
+En este artículo, profundizaré en las Arquitecturas Orientadas a Eventos (EDAs), explorando los sistemas mediadores, los tipos de eventos y los desafíos que he encontrado a lo largo de mi carrera.
 
-Aunque sus raices pueden rastrearse de alguna forma hasta la [decada de 1950](https://en.wikipedia.org/wiki/Whirlwind_I), las EDAs han evolucionado para ayudar a los equipos Agile y LEAN a hacer su trabajo.
+Aunque sus raíces pueden rastrearse de alguna forma hasta la [década de 1950](https://en.wikipedia.org/wiki/Whirlwind_I), las EDAs han evolucionado para ayudar a los equipos Agile y LEAN a hacer su trabajo.
 
-## Que es un Evento?
+## ¿Qué es un Evento?
 
-Comencemos con el protagonista del espectaculo: el Evento.
+Comencemos con el protagonista del espectáculo: el Evento.
 
 > Un Evento es un hecho inmutable. Algo que ha sucedido, no puede deshacerse ni cambiarse.
 
-Los eventos ocurren continuamente en nuestras vidas, desde el momento en que nos despertamos, nos preparamos para el dia, comemos, pagamos el autobus, y asi sucesivamente. Los eventos llenan nuestras vidas.
+Los eventos ocurren continuamente en nuestras vidas, desde el momento en que nos despertamos, nos preparamos para el día, comemos, pagamos el autobús, y así sucesivamente. Los eventos llenan nuestras vidas.
 
-Tenemos la opcion de escuchar, registrar y decidir que hacer con la informacion que obtenemos de estos eventos. Alternativamente, podemos optar por no compartir o no preocuparnos por ciertos eventos.
+Tenemos la opción de escuchar, registrar y decidir qué hacer con la información que obtenemos de estos eventos. Alternativamente, podemos optar por no compartir o no preocuparnos por ciertos eventos.
 
-Para mi, esta es la esencia de las Arquitecturas Orientadas a Eventos y la razon por la que pueden ser un patron extremadamente util para muchos casos de uso. Profundicemos!
+Para mí, esta es la esencia de las Arquitecturas Orientadas a Eventos y la razón por la que pueden ser un patrón extremadamente útil para muchos casos de uso. ¡Profundicemos!
 
-## Que son las Arquitecturas Orientadas a Eventos?
+## ¿Qué son las Arquitecturas Orientadas a Eventos?
 
-Las EDAs son patrones arquitectonicos que se basan en los eventos como su contrato. Estan disenadas para reaccionar a los cambios aprovechando la naturaleza inmutable de los eventos.
+Las EDAs son patrones arquitectónicos que se basan en los eventos como su contrato. Están diseñadas para reaccionar a los cambios aprovechando la naturaleza inmutable de los eventos.
 
-Las EDAs tipicamente siguen un patron de publicacion/suscripcion, donde los servicios publican eventos en un servicio mediador y los suscriptores consumen esos eventos. El servicio publicador no necesita saber quien consume los eventos ni si alguien reacciona a ellos. Este enfoque mejora el desacoplamiento de servicios, ya que el acoplamiento se basa en el contenido del evento.
+Las EDAs típicamente siguen un patrón de publicación/suscripción, donde los servicios publican eventos en un servicio mediador y los suscriptores consumen esos eventos. El servicio publicador no necesita saber quién consume los eventos ni si alguien reacciona a ellos. Este enfoque mejora el desacoplamiento de servicios, ya que el acoplamiento se basa en el contenido del evento.
 
-Uno de los beneficios clave de las EDAs es su capacidad para facilitar la escalabilidad y la adaptabilidad. A medida que aumenta el trafico del sistema, podemos agregar mas consumidores para gestionar los eventos adicionales, y podemos eliminarlos cuando todos los eventos hayan sido consumidos. Esta flexibilidad permite la experimentacion y la capacidad de intercambiar servicios continuamente. Al agregar elementos como feature flags y despliegues exponenciales, los equipos pueden ejecutar este proceso varias veces al dia y experimentar, reduciendo el riesgo y aumentando su velocidad.
+Uno de los beneficios clave de las EDAs es su capacidad para facilitar la escalabilidad y la adaptabilidad. A medida que aumenta el tráfico del sistema, podemos agregar más consumidores para gestionar los eventos adicionales, y podemos eliminarlos cuando todos los eventos hayan sido consumidos. Esta flexibilidad permite la experimentación y la capacidad de intercambiar servicios continuamente. Al agregar elementos como feature flags y despliegues exponenciales, los equipos pueden ejecutar este proceso varias veces al día y experimentar, reduciendo el riesgo y aumentando su velocidad.
 
-Sin embargo, es importante senalar que las EDAs pueden introducir complejidad debido a su naturaleza distribuida. Tambien pueden resultar en mensajes duplicados y consistencia eventual. Los suscriptores necesitan considerar el orden de los eventos y asegurarse de que sean idempotentes, lo que significa que pueden procesar el mismo evento multiples veces sin generar resultados diferentes.
+Sin embargo, es importante señalar que las EDAs pueden introducir complejidad debido a su naturaleza distribuida. También pueden resultar en mensajes duplicados y consistencia eventual. Los suscriptores necesitan considerar el orden de los eventos y asegurarse de que sean idempotentes, lo que significa que pueden procesar el mismo evento múltiples veces sin generar resultados diferentes.
 
-Las EDAs son principalmente relevantes para procesos asincronos como auditoria, procesamiento de datos y operaciones de backend. Son utiles para sistemas con picos repentinos de trafico. Sin embargo, es importante considerar la latencia adicional que introduce esta arquitectura.
+Las EDAs son principalmente relevantes para procesos asíncronos como auditoría, procesamiento de datos y operaciones de backend. Son útiles para sistemas con picos repentinos de tráfico. Sin embargo, es importante considerar la latencia adicional que introduce esta arquitectura.
 
-En general, las EDAs ofrecen ventajas en terminos de desacoplamiento, escalabilidad, adaptabilidad y experimentacion. Sin embargo, requieren una consideracion cuidadosa de la complejidad, los mensajes duplicados y la consistencia eventual...
+En general, las EDAs ofrecen ventajas en términos de desacoplamiento, escalabilidad, adaptabilidad y experimentación. Sin embargo, requieren una consideración cuidadosa de la complejidad, los mensajes duplicados y la consistencia eventual...
 
 ## Sistemas Mediadores
 
@@ -48,49 +48,49 @@ En las EDAs, los publicadores y suscriptores requieren un sistema escalable que 
 
 ## Message Brokers y Event Buses
 
-Con diferencia, los componentes intermediarios mas conocidos en las EDAs son los message brokers y los event buses. Todos los principales proveedores de nube ofrecen servicios que gestionan eficientemente el proceso de mediacion. He tenido la oportunidad de aprender y explorar AWS, que ha hecho un excelente trabajo con su servicio AWS EventBridge y su integracion con otros servicios y proveedores externos.
+Con diferencia, los componentes intermediarios más conocidos en las EDAs son los message brokers y los event buses. Todos los principales proveedores de nube ofrecen servicios que gestionan eficientemente el proceso de mediación. He tenido la oportunidad de aprender y explorar AWS, que ha hecho un excelente trabajo con su servicio AWS EventBridge y su integración con otros servicios y proveedores externos.
 
-A la hora de decidir que servicio utilizar, depende en ultima instancia de tu caso de uso especifico. Si ya dependes de AWS, EventBridge podria ser exactamente lo que necesitas. Sin embargo, si utilizas otro proveedor de nube, vale la pena explorar sus ofertas, ya que tambien podrian cumplir con tus requisitos.
+A la hora de decidir qué servicio utilizar, depende en última instancia de tu caso de uso específico. Si ya dependes de AWS, EventBridge podría ser exactamente lo que necesitas. Sin embargo, si utilizas otro proveedor de nube, vale la pena explorar sus ofertas, ya que también podrían cumplir con tus requisitos.
 
-Ahora, profundicemos en el tema. Que hacen exactamente estos sistemas intermediarios?
+Ahora, profundicemos en el tema. ¿Qué hacen exactamente estos sistemas intermediarios?
 
-En el modelo Pub/Mediador/Sub, los publicadores envian sus eventos al mediador y los suscriptores se suscriben a los eventos que les interesan. Estos sistemas mediadores proporcionan funcionalidades como enrutamiento, transformacion, validacion, gestion de esquemas/catalogos de eventos, archivado y mas, dependiendo de la solucion elegida.
+En el modelo Pub/Mediador/Sub, los publicadores envían sus eventos al mediador y los suscriptores se suscriben a los eventos que les interesan. Estos sistemas mediadores proporcionan funcionalidades como enrutamiento, transformación, validación, gestión de esquemas/catálogos de eventos, archivado y más, dependiendo de la solución elegida.
 
-En el pasado, los message brokers se veian a menudo como sistemas persistentes similares a bases de datos, mientras que los event buses eran sistemas mas basados en memoria que descartaban los eventos despues de un cierto periodo. Sin embargo, la linea entre brokers y buses se ha vuelto cada vez mas difusa. Por ejemplo, AWS EventBridge, que es un event bus, ofrece funciones para archivar y reproducir mensajes, mientras que los message brokers pueden proporcionar colas efimeras.
+En el pasado, los message brokers se veían a menudo como sistemas persistentes similares a bases de datos, mientras que los event buses eran sistemas más basados en memoria que descartaban los eventos después de un cierto periodo. Sin embargo, la línea entre brokers y buses se ha vuelto cada vez más difusa. Por ejemplo, AWS EventBridge, que es un event bus, ofrece funciones para archivar y reproducir mensajes, mientras que los message brokers pueden proporcionar colas efímeras.
 
 ## Colas y Streams
 
-Aunque no se consideran mediadores por si solos, las colas y los streams son componentes que funcionan muy bien en las EDAs. Pueden ayudarte a mejorar, potenciar y/o simplificar soluciones.
+Aunque no se consideran mediadores por sí solos, las colas y los streams son componentes que funcionan muy bien en las EDAs. Pueden ayudarte a mejorar, potenciar y/o simplificar soluciones.
 
-Veamos una descripcion general rapida de las Colas y los Streams.
+Veamos una descripción general rápida de las Colas y los Streams.
 
 ### Colas
 
-Las colas son excelentes companeras de los Event Buses y los Message Brokers. Proporcionan una forma sencilla de almacenar y transmitir eventos entre componentes, asegurando que no se pierdan datos y dando al consumidor control sobre la velocidad de procesamiento de los eventos.
+Las colas son excelentes compañeras de los Event Buses y los Message Brokers. Proporcionan una forma sencilla de almacenar y transmitir eventos entre componentes, asegurando que no se pierdan datos y dando al consumidor control sobre la velocidad de procesamiento de los eventos.
 
-Al igual que las colas en la vida real, existen diferentes tipos, como colas ordenadas (FIFO, LIFO), colas de prioridad, DLQs, etc.; y necesitaras configurar su periodo de retencion, reintentos y demas, pero son sistemas bastante sencillos que simplemente funcionan y hacen lo que prometen.
+Al igual que las colas en la vida real, existen diferentes tipos, como colas ordenadas (FIFO, LIFO), colas de prioridad, DLQs, etc.; y necesitarás configurar su periodo de retención, reintentos y demás, pero son sistemas bastante sencillos que simplemente funcionan y hacen lo que prometen.
 
 Son una forma excelente y sencilla de desacoplar sistemas y simplificar la vida de los consumidores.
 
 ### Streams
 
-Los streams estan disenados para el procesamiento y analisis de datos en tiempo real en sistemas que requieren transferencia y analisis de datos con baja latencia a traves de multiples ventanas temporales.
+Los streams están diseñados para el procesamiento y análisis de datos en tiempo real en sistemas que requieren transferencia y análisis de datos con baja latencia a través de múltiples ventanas temporales.
 
-Aqui tendras que configurar escritores, lectores y retencion. Son utiles si tienes un caso de uso definido donde necesitas realizar un analisis sobre grandes cantidades de datos en constante cambio.
+Aquí tendrás que configurar escritores, lectores y retención. Son útiles si tienes un caso de uso definido donde necesitas realizar un análisis sobre grandes cantidades de datos en constante cambio.
 
 ## Tipos de Eventos
 
-Ahora que hemos visto el nucleo de las EDAs, profundizaremos en los diferentes tipos de eventos que puedes encontrar.
+Ahora que hemos visto el núcleo de las EDAs, profundizaremos en los diferentes tipos de eventos que puedes encontrar.
 
-Existen 4 tipos: Notificacion, Transferencia de Estado Transportada por Eventos, Eventos Delta y Eventos de Negocio.
+Existen 4 tipos: Notificación, Transferencia de Estado Transportada por Eventos, Eventos Delta y Eventos de Negocio.
 
-Veamos mas de cerca cada uno de estos tipos de eventos.
+Veamos más de cerca cada uno de estos tipos de eventos.
 
-## Eventos de Notificacion
+## Eventos de Notificación
 
-Los eventos de notificacion se utilizan para informar a las partes interesadas sobre ocurrencias o actualizaciones especificas. Estos eventos estan disenados para ser pequenos, conteniendo solo la informacion minima necesaria para reducir el riesgo de romper contratos.
+Los eventos de notificación se utilizan para informar a las partes interesadas sobre ocurrencias o actualizaciones específicas. Estos eventos están diseñados para ser pequeños, conteniendo solo la información mínima necesaria para reducir el riesgo de romper contratos.
 
-Aqui tienes un ejemplo de como puede verse un evento de notificacion:
+Aquí tienes un ejemplo de cómo puede verse un evento de notificación:
 
 ```json
 {
@@ -103,15 +103,15 @@ Aqui tienes un ejemplo de como puede verse un evento de notificacion:
 }
 ```
 
-Los eventos de notificacion siguen un modelo pull, permitiendo a los consumidores obtener informacion adicional de los publicadores segun sea necesario. Esto introduce un patron de callback y anadira latencia extra al sistema, pero ayuda a evitar problemas de ordenamiento en la mayoria de los casos.
+Los eventos de notificación siguen un modelo pull, permitiendo a los consumidores obtener información adicional de los publicadores según sea necesario. Esto introduce un patrón de callback y añadirá latencia extra al sistema, pero ayuda a evitar problemas de ordenamiento en la mayoría de los casos.
 
-Dado que los eventos de notificacion tienen un numero limitado de campos, ciertas funcionalidades proporcionadas por los mediadores, como la validacion, el enrutamiento y el filtrado, pueden verse reducidas.
+Dado que los eventos de notificación tienen un número limitado de campos, ciertas funcionalidades proporcionadas por los mediadores, como la validación, el enrutamiento y el filtrado, pueden verse reducidas.
 
 ## Transferencia de Estado Transportada por Eventos
 
-Este tipo de evento puede considerarse el opuesto de los Eventos de Notificacion. Incluye tanto los datos del evento como el estado actual del sistema, permitiendo a la parte receptora actualizar su propio estado en consecuencia. Estos eventos son mas grandes, ya que incluyen todos los datos disponibles que el publicador tiene sobre el evento/sujeto.
+Este tipo de evento puede considerarse el opuesto de los Eventos de Notificación. Incluye tanto los datos del evento como el estado actual del sistema, permitiendo a la parte receptora actualizar su propio estado en consecuencia. Estos eventos son más grandes, ya que incluyen todos los datos disponibles que el publicador tiene sobre el evento/sujeto.
 
-Aqui tienes un ejemplo de este tipo de evento:
+Aquí tienes un ejemplo de este tipo de evento:
 
 ```json
 {
@@ -128,15 +128,15 @@ Aqui tienes un ejemplo de este tipo de evento:
 }
 ```
 
-Debido a su mayor tamano e informacion incrementada, estos eventos conllevan un mayor riesgo de romper contratos, filtrar informacion de identificacion personal (PII) y encontrar problemas con la consistencia eventual y/o el ordenamiento. El acoplamiento en este caso ocurre en el contrato, y sigue un modelo push donde el estado se envia a los consumidores.
+Debido a su mayor tamaño e información incrementada, estos eventos conllevan un mayor riesgo de romper contratos, filtrar información de identificación personal (PII) y encontrar problemas con la consistencia eventual y/o el ordenamiento. El acoplamiento en este caso ocurre en el contrato, y sigue un modelo push donde el estado se envía a los consumidores.
 
-Adicionalmente, estos eventos proporcionan mas opciones para agregar reglas de filtrado y enrutamiento en el servicio mediador. Esto elimina la necesidad de que los consumidores gestionen dicha logica y mejora enormemente la capacidad de dirigirse a servicios especificos.
+Adicionalmente, estos eventos proporcionan más opciones para agregar reglas de filtrado y enrutamiento en el servicio mediador. Esto elimina la necesidad de que los consumidores gestionen dicha lógica y mejora enormemente la capacidad de dirigirse a servicios específicos.
 
 ## Eventos Delta
 
 Los eventos delta solo contienen los cambios o actualizaciones que han ocurrido desde el ultimo evento, reduciendo la cantidad de datos transmitidos.
 
-Aqui tienes un ejemplo de un evento delta:
+Aquí tienes un ejemplo de un evento delta:
 
 ```json
 {
@@ -151,17 +151,17 @@ Aqui tienes un ejemplo de un evento delta:
 }
 ```
 
-Los eventos delta pueden ser utiles para identificar cambios y gestionar el ordenamiento de eventos de manera mas efectiva. Tambien pueden ser mas eficientes que enviar el contenido completo del evento u obtener informacion de los servicios publicadores.
+Los eventos delta pueden ser útiles para identificar cambios y gestionar el ordenamiento de eventos de manera más efectiva. También pueden ser más eficientes que enviar el contenido completo del evento u obtener información de los servicios publicadores.
 
 ## Eventos de Negocio
 
-Estos eventos son especificos del dominio o contexto de negocio.
+Estos eventos son específicos del dominio o contexto de negocio.
 
-Como con todos los sistemas, la realidad te situara entre eventos, y tus eventos tenderan a reducir el contenido a la informacion que se necesita.
+Como con todos los sistemas, la realidad te situará entre eventos, y tus eventos tenderán a reducir el contenido a la información que se necesita.
 
-En algunos casos, sera util crear eventos que esten limitados por un dominio de negocio e incluyan campos internos que solo sean importantes para tu dominio.
+En algunos casos, será útil crear eventos que estén limitados por un dominio de negocio e incluyan campos internos que solo sean importantes para tu dominio.
 
-Aqui tienes un ejemplo de un evento de negocio para un pago exitoso:
+Aquí tienes un ejemplo de un evento de negocio para un pago exitoso:
 
 ```json
 {
@@ -181,32 +181,32 @@ Aqui tienes un ejemplo de un evento de negocio para un pago exitoso:
 }
 ```
 
-La mayoria de los eventos de negocio pueden terminar graduandose para convertirse en eventos que otras partes del sistema necesitan. Intenta evitar tener que reemitir eventos e intenta absorber las transformaciones.
+La mayoría de los eventos de negocio pueden terminar graduándose para convertirse en eventos que otras partes del sistema necesitan. Intenta evitar tener que reemitir eventos e intenta absorber las transformaciones.
 
-## Desafios y Consideraciones
+## Desafíos y Consideraciones
 
-Al decidir aplicar una Arquitectura Orientada a Eventos en tu sistema, hay varios desafios y consideraciones a tener en cuenta.
+Al decidir aplicar una Arquitectura Orientada a Eventos en tu sistema, hay varios desafíos y consideraciones a tener en cuenta.
 
-En primer lugar, los eventos juegan un papel crucial en el sistema y requieren especial cuidado y atencion. Es importante considerar cuidadosamente aspectos como el nombre del evento, su tipo, la marca temporal (inicio, fin, rango...) y la estructura general desde el principio.
+En primer lugar, los eventos juegan un papel crucial en el sistema y requieren especial cuidado y atención. Es importante considerar cuidadosamente aspectos como el nombre del evento, su tipo, la marca temporal (inicio, fin, rango...) y la estructura general desde el principio.
 
-La documentacion y el versionado de los eventos son esenciales. Las EDAs deben permitir que los eventos evolucionen y cambien con el tiempo, lo cual solo puede lograrse mediante una gobernanza adecuada, documentacion y control de versiones.
+La documentación y el versionado de los eventos son esenciales. Las EDAs deben permitir que los eventos evolucionen y cambien con el tiempo, lo cual solo puede lograrse mediante una gobernanza adecuada, documentación y control de versiones.
 
-Aunque las EDAs mejoran la escalabilidad del sistema, tambien introducen complejidad. Factores como el ordenamiento de mensajes, la entrega, la consistencia eventual y la duplicacion deben tenerse en cuenta.
+Aunque las EDAs mejoran la escalabilidad del sistema, también introducen complejidad. Factores como el ordenamiento de mensajes, la entrega, la consistencia eventual y la duplicación deben tenerse en cuenta.
 
-La complejidad operativa tambien aumentara. La monitorizacion, la gestion y los procesos operativos necesitan un enfasis adicional.
+La complejidad operativa también aumentará. La monitorización, la gestión y los procesos operativos necesitan un énfasis adicional.
 
-La resiliencia ante fallos es primordial en una EDA. Medidas como reintentos de mensajes, colas de mensajes fallidos y otros mecanismos deben implementarse para garantizar la recuperacion del sistema.
+La resiliencia ante fallos es primordial en una EDA. Medidas como reintentos de mensajes, colas de mensajes fallidos y otros mecanismos deben implementarse para garantizar la recuperación del sistema.
 
-El impacto de las EDAs en el proceso de desarrollo tambien debe considerarse. Las estrategias de pruebas, despliegue y depuracion necesitan adaptarse en consecuencia.
+El impacto de las EDAs en el proceso de desarrollo también debe considerarse. Las estrategias de pruebas, despliegue y depuración necesitan adaptarse en consecuencia.
 
-Las preocupaciones de seguridad y datos son de suma importancia, particularmente cuando se manejan datos sensibles o retencion de datos a largo plazo. El cumplimiento con marcos regulatorios como el RGPD debe abordarse.
+Las preocupaciones de seguridad y datos son de suma importancia, particularmente cuando se manejan datos sensibles o retención de datos a largo plazo. El cumplimiento con marcos regulatorios como el RGPD debe abordarse.
 
-Por ultimo, el impacto organizativo de las EDAs necesita evaluarse. La organizacion del equipo, la gestion y las estrategias de comunicacion deben alinearse con los requisitos de un sistema basado en EDAs.
+Por último, el impacto organizativo de las EDAs necesita evaluarse. La organización del equipo, la gestión y las estrategias de comunicación deben alinearse con los requisitos de un sistema basado en EDAs.
 
-## Conclusion
+## Conclusión
 
-En este documento, hemos visto que son los eventos, las arquitecturas orientadas a eventos, los sistemas mediadores, los tipos de eventos que puedes encontrar en tu sistema, para terminar con algunos desafios y consideraciones.
+En este documento, hemos visto qué son los eventos, las arquitecturas orientadas a eventos, los sistemas mediadores, los tipos de eventos que puedes encontrar en tu sistema, para terminar con algunos desafíos y consideraciones.
 
-Deberias usar una EDA en tu sistema? La respuesta es: depende. Recomendaria no depender unicamente de las EDAs, sino usarlas en combinacion con otras arquitecturas.
+¿Deberías usar una EDA en tu sistema? La respuesta es: depende. Recomendaría no depender únicamente de las EDAs, sino usarlas en combinación con otras arquitecturas.
 
-Las EDAs son un patron poderoso para aumentar la escalabilidad y flexibilidad de tu sistema, pero tambien traen consigo muchos desafios y consideraciones que deben tenerse en cuenta.
+Las EDAs son un patrón poderoso para aumentar la escalabilidad y flexibilidad de tu sistema, pero también traen consigo muchos desafíos y consideraciones que deben tenerse en cuenta.

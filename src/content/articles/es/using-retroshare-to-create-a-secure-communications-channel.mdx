@@ -1,79 +1,79 @@
 ---
 title: "Usando Retroshare para Crear un Canal de Comunicaciones Seguro"
-description: "Una guia practica para establecer comunicaciones seguras usando Retroshare, una red amigo-a-amigo que emplea tecnologias GPG, P2P y Tor/I2P."
+description: "Una guía práctica para establecer comunicaciones seguras usando Retroshare, una red amigo-a-amigo que emplea tecnologías GPG, P2P y Tor/I2P."
 publishedDate: 2019-10-17
 originalUrl: "https://medium.com/@ismaelmartinez/using-retroshare-to-create-a-secure-communications-channel-4211c21f4c"
 originalPlatform: "medium"
-tags: ["Privacidad", "Seguridad", "Retroshare", "Descentralizacion"]
+tags: ["Privacidad", "Seguridad", "Retroshare", "Descentralización"]
 draft: false
 ---
 
-Durante los ultimos dias, Catalunya ha estado viviendo manifestaciones y protestas callejeras.
+Durante los últimos días, Catalunya ha estado viviendo manifestaciones y protestas callejeras.
 
-Para facilitarlas, un grupo llamado [Tsunami Democratic (Tsunami Democratico)](https://tsunamidemocratic.cat/) esta utilizando una aplicacion para organizar sus acciones. La aplicacion usa [Retroshare](https://retroshare.cc) como su red/framework base.
+Para facilitarlas, un grupo llamado [Tsunami Democratic (Tsunami Democrático)](https://tsunamidemocratic.cat/) está utilizando una aplicación para organizar sus acciones. La aplicación usa [Retroshare](https://retroshare.cc) como su red/framework base.
 
-Decidi, con la informacion limitada que tengo, intentar crear un canal de comunicaciones seguro para grupos.
+Decidí, con la información limitada que tengo, intentar crear un canal de comunicaciones seguro para grupos.
 
-Intentare evitar, en la medida de lo posible, cualquier comentario politico en este articulo.
+Intentaré evitar, en la medida de lo posible, cualquier comentario político en este artículo.
 
 ## Retroshare
 
-[Retroshare](http://retroshare.cc/) es un proyecto de codigo abierto que lleva en funcionamiento mas de una decada (desde 2006). Es una red amigo-a-amigo que utiliza [GPG](https://www.gnupg.org/), [P2P](https://en.wikipedia.org/wiki/Peer-to-peer) y redes [Tor](https://www.torproject.org/) o [I2P](https://geti2p.net/en/) para garantizar que el intercambio de informacion sea seguro, anonimo y descentralizado.
+[Retroshare](http://retroshare.cc/) es un proyecto de código abierto que lleva en funcionamiento más de una década (desde 2006). Es una red amigo-a-amigo que utiliza [GPG](https://www.gnupg.org/), [P2P](https://en.wikipedia.org/wiki/Peer-to-peer) y redes [Tor](https://www.torproject.org/) o [I2P](https://geti2p.net/en/) para garantizar que el intercambio de información sea seguro, anónimo y descentralizado.
 
-Genera un par de claves ([GPG](https://www.gnupg.org/)) y utiliza [OpenSSL](https://www.openssl.org/) para asegurar un cifrado de extremo a extremo entre tu y tus amigos.
+Genera un par de claves ([GPG](https://www.gnupg.org/)) y utiliza [OpenSSL](https://www.openssl.org/) para asegurar un cifrado de extremo a extremo entre tú y tus amigos.
 
-Solo puedes ver a tus amigos y lo que tus amigos quieren compartir contigo, pero puedes presentar a otros amigos y/o suscribirte a canales (dependiendo del nivel de privacidad que tu y tus amigos configuren).
+Solo puedes ver a tus amigos y lo que tus amigos quieren compartir contigo, pero puedes presentar a otros amigos y/o suscribirte a canales (dependiendo del nivel de privacidad que tú y tus amigos configuren).
 
-Utiliza una tabla hash distribuida ([DHT](https://en.wikipedia.org/wiki/Distributed_hash_table)) para proporcionar descentralizacion de la misma manera que [BitTorrent](https://en.wikipedia.org/wiki/BitTorrent), [Freenet](https://freenetproject.org/index.html) e [IPFS](https://ipfs.io/) lo hacen (por mencionar algunos).
+Utiliza una tabla hash distribuida ([DHT](https://en.wikipedia.org/wiki/Distributed_hash_table)) para proporcionar descentralización de la misma manera que [BitTorrent](https://en.wikipedia.org/wiki/BitTorrent), [Freenet](https://freenetproject.org/index.html) e [IPFS](https://ipfs.io/) lo hacen (por mencionar algunos).
 
 ## Primeros Pasos
 
-Lo primero que hay que hacer es instalar [Retroshare](http://retroshare.cc/). Esta disponible para multiples sistemas operativos. En mi caso, voy a optar por la opcion mas sencilla y descargar el paquete AppImage.
+Lo primero que hay que hacer es instalar [Retroshare](http://retroshare.cc/). Está disponible para múltiples sistemas operativos. En mi caso, voy a optar por la opción más sencilla y descargar el paquete AppImage.
 
 Descarga el archivo y cambia los permisos para hacerlo ejecutable.
 
 ```bash
-chmod 750 restroshare-gui-...
+chmod 750 retroshare-gui-...
 ```
 
-Ejecutalo
+Ejecútalo
 
 ```bash
 ./retroshare-gui...
 ```
 
-Esto abrira una interfaz de usuario. Recomiendo hacer clic en las opciones avanzadas. Selecciona el tipo de nodo como *Hidden node (over Tor)* y el cifrado *Very high*. Elige un nombre de canal (en mi caso mytestchannel) y haz clic en Go!
+Esto abrirá una interfaz de usuario. Recomiendo hacer clic en las opciones avanzadas. Selecciona el tipo de nodo como *Hidden node (over Tor)* y el cifrado *Very high*. Elige un nombre de canal (en mi caso mytestchannel) y haz clic en Go!
 
-Esto comenzara a conectarse a la red [Tor](https://www.torproject.org/). Despues de un tiempo, deberia abrir la aplicacion con un mensaje indicando que necesitas agregar amigos.
+Esto comenzará a conectarse a la red [Tor](https://www.torproject.org/). Después de un tiempo, debería abrir la aplicación con un mensaje indicando que necesitas agregar amigos.
 
-Eso es todo, ya tienes un canal seguro. Tu canal sera tan seguro como la forma en que lo compartas (y las personas que esten en el).
+Eso es todo, ya tienes un canal seguro. Tu canal será tan seguro como la forma en que lo compartas (y las personas que estén en él).
 
-[Retroshare](http://retroshare.cc/) proporciona muchos servicios para facilitar la comunicacion, incluyendo chat uno a uno, correo, salas de chat publicas y privadas, foro (anonimo o autenticado), comparticion de archivos, compartir enlaces, llamadas VoIP y videollamadas.
+[Retroshare](http://retroshare.cc/) proporciona muchos servicios para facilitar la comunicación, incluyendo chat uno a uno, correo, salas de chat públicas y privadas, foro (anónimo o autenticado), compartición de archivos, compartir enlaces, llamadas VoIP y videollamadas.
 
-La [documentacion sobre como usarlo](https://retroshare.readthedocs.io/en/latest/) es buena y extensa. La interfaz se siente anticuada pero cumple su funcion.
+La [documentación sobre cómo usarlo](https://retroshare.readthedocs.io/en/latest/) es buena y extensa. La interfaz se siente anticuada pero cumple su función.
 
-No investigue la opcion de ejecutar [Retroshare](http://retroshare.cc/) en modo headless.
+No investigué la opción de ejecutar [Retroshare](http://retroshare.cc/) en modo headless.
 
-**Y la aplicacion?**
+**¿Y la aplicación?**
 
-Solo he podido descargar la aplicacion, iniciarla pero no activarla. La siguiente seccion es un conjunto de suposiciones y conjeturas.
+Solo he podido descargar la aplicación, iniciarla pero no activarla. La siguiente sección es un conjunto de suposiciones y conjeturas.
 
-La aplicacion es un cliente para facilitar que las personas se conecten a su canal/red de [Retroshare](http://retroshare.cc/). Requiere un codigo QR para acceder a la red. Ese QR, con toda probabilidad, sera la clave publica de un participante en la red.
+La aplicación es un cliente para facilitar que las personas se conecten a su canal/red de [Retroshare](http://retroshare.cc/). Requiere un código QR para acceder a la red. Ese QR, con toda probabilidad, será la clave pública de un participante en la red.
 
 Solo puedo suponer que una vez que obtienes un cierto nivel de confianza, te permiten invitar a otros usuarios a la red. Si encuentran un participante malintencionado, es posible eliminar un nodo sin afectar a la mayor parte de la red.
 
-## Conclusion
+## Conclusión
 
-Mis unicas preocupaciones son:
+Mis únicas preocupaciones son:
 
-- Debido a la naturaleza descentralizada de la red, es dificil eliminar la informacion compartida en [Retroshare](http://retroshare.cc/). Ten cuidado con lo que publicas/subes. Supongo que por eso optaron por la aplicacion, para limitar lo que un usuario puede subir.
-- La aplicacion necesita Internet para comunicarse. Los gobiernos pueden cortar Internet e, incluso mas sencillo, existe un limite en el numero de usuarios que las redes moviles pueden soportar. En grandes manifestaciones podria no ser posible transmitir informacion ya que los participantes no pueden recibir el mensaje. El uso de protocolos [B.A.T.M.A.N.](https://www.open-mesh.org/projects/open-mesh/wiki) esta ganando impulso en ese ambito.
-- Mi mayor preocupacion es el secretismo detras de todo esto. Solo puedo suponer que quieren tomar las medidas necesarias para asegurar que no compartan informacion de los participantes con actores malintencionados.
+- Debido a la naturaleza descentralizada de la red, es difícil eliminar la información compartida en [Retroshare](http://retroshare.cc/). Ten cuidado con lo que publicas/subes. Supongo que por eso optaron por la aplicación, para limitar lo que un usuario puede subir.
+- La aplicación necesita Internet para comunicarse. Los gobiernos pueden cortar Internet e, incluso más sencillo, existe un límite en el número de usuarios que las redes móviles pueden soportar. En grandes manifestaciones podría no ser posible transmitir información ya que los participantes no pueden recibir el mensaje. El uso de protocolos [B.A.T.M.A.N.](https://www.open-mesh.org/projects/open-mesh/wiki) está ganando impulso en ese ámbito.
+- Mi mayor preocupación es el secretismo detrás de todo esto. Solo puedo suponer que quieren tomar las medidas necesarias para asegurar que no compartan información de los participantes con actores malintencionados.
 
-La gente de [*Tsunami Democratic*](https://tsunamidemocratic.cat/) ha hecho un trabajo increible facilitando la democracia en tiempos dificiles.
+La gente de [*Tsunami Democratic*](https://tsunamidemocratic.cat/) ha hecho un trabajo increíble facilitando la democracia en tiempos difíciles.
 
-En mi opinion, la eleccion tecnologica y la aplicacion en si son excelentes y confio en que tomaran las decisiones correctas.
+En mi opinión, la elección tecnológica y la aplicación en sí son excelentes y confío en que tomarán las decisiones correctas.
 
-Esperemos que puedan evitar la censura y permitir que las personas se organicen sin que el Gran Hermano vigile sobre sus cabezas. Intentare hacer todo lo posible para ayudar en ese esfuerzo con lo que pueda contribuir.
+Esperemos que puedan evitar la censura y permitir que las personas se organicen sin que el Gran Hermano vigile sobre sus cabezas. Intentaré hacer todo lo posible para ayudar en ese esfuerzo con lo que pueda contribuir.
 
-Anims i forca.
+Ànims i força.

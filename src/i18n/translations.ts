@@ -37,7 +37,7 @@ export const translations = {
     'about.writing.title': 'Writing & Speaking',
     'about.writing.description': 'I write about software engineering, architecture, and the intersection of technology with accessibility and sustainability. My articles are published here first and syndicated to platforms like Medium and Dev.to. I also enjoy speaking at conferences and meetups, sharing lessons from two decades of building and shipping software.',
     'about.fun.title': 'Beyond Code',
-    'about.fun.description': 'When I am not at a keyboard, you will find me tending my bonnie wee plot in the garden, exploring Edinburgh with my family, or switching between English, Spanish, and Catalan in the same conversation. Life is richer in three languages.',
+    'about.fun.description': 'When I am not at a keyboard, you will find me tending my bonnie wee allotment, exploring Edinburgh with my family, or switching between English, Spanish, and Catalan in the same conversation. Life is richer in three languages.',
 
     'section.projects': 'Open Source Projects',
     'section.projects.description': 'Some of my contributions to the open source community',
@@ -131,7 +131,7 @@ export const translations = {
     'about.writing.title': 'Escritura y charlas',
     'about.writing.description': 'Escribo sobre ingeniería de software, arquitectura y la intersección de la tecnología con la accesibilidad y la sostenibilidad. Mis artículos se publican aquí primero y se sindican a plataformas como Medium y Dev.to. También disfruto hablando en conferencias y meetups, compartiendo lecciones de dos décadas construyendo y desplegando software.',
     'about.fun.title': 'Más allá del código',
-    'about.fun.description': 'Cuando no estoy frente al teclado, me encontrarás cuidando mi bonnie wee plot en el jardín, explorando Edimburgo con mi familia, o alternando entre inglés, español y catalán en la misma conversación. La vida es más rica en tres idiomas.',
+    'about.fun.description': 'Cuando no estoy frente al teclado, me encontrarás cuidando mi bonnie wee allotment, explorando Edimburgo con mi familia, o alternando entre inglés, español y catalán en la misma conversación. La vida es más rica en tres idiomas.',
 
     'section.projects': 'Proyectos Open Source',
     'section.projects.description': 'Algunas de mis contribuciones a la comunidad de código abierto',
@@ -225,7 +225,7 @@ export const translations = {
     'about.writing.title': 'Escriptura i xerrades',
     'about.writing.description': 'Escric sobre enginyeria de programari, arquitectura i la intersecció de la tecnologia amb l\'accessibilitat i la sostenibilitat. Els meus articles es publiquen aquí primer i es sindiquen a plataformes com Medium i Dev.to. També gaudeixo parlant a conferències i meetups, compartint lliçons de dues dècades construint i desplegant programari.',
     'about.fun.title': 'Més enllà del codi',
-    'about.fun.description': 'Quan no estic davant del teclat, em trobaràs cuidant el meu bonnie wee plot al jardí, explorant Edimburg amb la meva família, o alternant entre anglès, castellà i català a la mateixa conversa. La vida és més rica en tres idiomes.',
+    'about.fun.description': 'Quan no estic davant del teclat, em trobaràs cuidant el meu bonnie wee allotment, explorant Edimburg amb la meva família, o alternant entre anglès, castellà i català a la mateixa conversa. La vida és més rica en tres idiomes.',
 
     'section.projects': 'Projectes Open Source',
     'section.projects.description': 'Algunes de les meves contribucions a la comunitat de codi obert',

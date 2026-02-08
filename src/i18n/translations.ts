@@ -18,10 +18,27 @@ export const translations = {
     // Hero
     'hero.greeting': "Hi, I'm",
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Software Engineer & Open Source Enthusiast',
-    'hero.description': 'I build things, write about technology, and contribute to open source. Welcome to my corner of the internet.',
+    'hero.tagline': 'Senior Software Engineer · Building for accessibility, sustainability & open source',
+    'hero.description': 'With over 20 years of experience spanning infrastructure, cloud architecture, and distributed systems, I craft software that is accessible, sustainable, and open. Based in Edinburgh, originally from Barcelona.',
+
+    // Navigation
+    'nav.about': 'About',
 
     // Sections
+    'section.about': 'About',
+    'section.about.description': 'A bit more about me and what drives my work',
+
+    // About page
+    'about.intro': 'I have spent over two decades building software, starting from infrastructure and operations in Barcelona and evolving through cloud architecture, distributed systems, and platform engineering in Edinburgh. That journey across domains, languages, and cultures has shaped how I approach technology — with curiosity, pragmatism, and a deep respect for the people who use what we build.',
+    'about.expertise.title': 'What I Do',
+    'about.expertise.description': 'My work spans distributed systems, event-driven architectures, observability, and cloud-native platforms. I care deeply about accessibility and sustainability in software, and I have been increasingly involved in AI governance — ensuring that the systems we build are responsible and fair. I gravitate toward problems where engineering meets human impact.',
+    'about.values.title': 'What I Care About',
+    'about.values.description': 'I believe in thoughtful simplicity — solving real problems without overengineering. Sustainability and accessibility are not afterthoughts but foundations. I practise content ownership through the POSSE model (Publish on your Own Site, Syndicate Elsewhere), and I value knowledge sharing as a way to give back to the community that helped me grow.',
+    'about.writing.title': 'Writing & Speaking',
+    'about.writing.description': 'I write about software engineering, architecture, and the intersection of technology with accessibility and sustainability. My articles are published here first and syndicated to platforms like Medium and Dev.to. I also enjoy speaking at conferences and meetups, sharing lessons from two decades of building and shipping software.',
+    'about.fun.title': 'Beyond Code',
+    'about.fun.description': 'When I am not at a keyboard, you will find me tending my bonnie wee plot in the garden, exploring Edinburgh with my family, or switching between English, Spanish, and Catalan in the same conversation. Life is richer in three languages.',
+
     'section.projects': 'Open Source Projects',
     'section.projects.description': 'Some of my contributions to the open source community',
     'section.writing': 'Latest Writing',
@@ -95,10 +112,27 @@ export const translations = {
     // Hero
     'hero.greeting': 'Hola, soy',
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Ingeniero de Software y Entusiasta del Open Source',
-    'hero.description': 'Construyo cosas, escribo sobre tecnología y contribuyo al código abierto. Bienvenido a mi rincón de internet.',
+    'hero.tagline': 'Ingeniero de Software Senior · Construyendo para la accesibilidad, la sostenibilidad y el open source',
+    'hero.description': 'Con más de 20 años de experiencia en infraestructura, arquitectura cloud y sistemas distribuidos, creo software accesible, sostenible y abierto. Vivo en Edimburgo, originalmente de Barcelona.',
+
+    // Navigation
+    'nav.about': 'Sobre mí',
 
     // Sections
+    'section.about': 'Sobre mí',
+    'section.about.description': 'Un poco más sobre mí y lo que impulsa mi trabajo',
+
+    // About page
+    'about.intro': 'He dedicado más de dos décadas a construir software, comenzando en infraestructura y operaciones en Barcelona y evolucionando a través de la arquitectura cloud, los sistemas distribuidos y la ingeniería de plataformas en Edimburgo. Ese viaje a través de dominios, idiomas y culturas ha moldeado cómo me acerco a la tecnología — con curiosidad, pragmatismo y un profundo respeto por las personas que usan lo que construimos.',
+    'about.expertise.title': 'Lo que hago',
+    'about.expertise.description': 'Mi trabajo abarca sistemas distribuidos, arquitecturas dirigidas por eventos, observabilidad y plataformas cloud-native. Me importan profundamente la accesibilidad y la sostenibilidad en el software, y he estado cada vez más involucrado en la gobernanza de la IA — asegurando que los sistemas que construimos sean responsables y justos. Me atraen los problemas donde la ingeniería se encuentra con el impacto humano.',
+    'about.values.title': 'Lo que me importa',
+    'about.values.description': 'Creo en la simplicidad reflexiva — resolver problemas reales sin sobreingeniería. La sostenibilidad y la accesibilidad no son ocurrencias tardías sino cimientos. Practico la propiedad del contenido a través del modelo POSSE (Publish on your Own Site, Syndicate Elsewhere), y valoro compartir conocimiento como forma de devolver a la comunidad que me ayudó a crecer.',
+    'about.writing.title': 'Escritura y charlas',
+    'about.writing.description': 'Escribo sobre ingeniería de software, arquitectura y la intersección de la tecnología con la accesibilidad y la sostenibilidad. Mis artículos se publican aquí primero y se sindican a plataformas como Medium y Dev.to. También disfruto hablando en conferencias y meetups, compartiendo lecciones de dos décadas construyendo y desplegando software.',
+    'about.fun.title': 'Más allá del código',
+    'about.fun.description': 'Cuando no estoy frente al teclado, me encontrarás cuidando mi bonnie wee plot en el jardín, explorando Edimburgo con mi familia, o alternando entre inglés, español y catalán en la misma conversación. La vida es más rica en tres idiomas.',
+
     'section.projects': 'Proyectos Open Source',
     'section.projects.description': 'Algunas de mis contribuciones a la comunidad de código abierto',
     'section.writing': 'Últimos Escritos',
@@ -172,10 +206,27 @@ export const translations = {
     // Hero
     'hero.greeting': 'Hola, sóc',
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Enginyer de Software i Entusiasta de l\'Open Source',
-    'hero.description': 'Construeixo coses, escric sobre tecnologia i contribueixo al codi obert. Benvingut al meu racó d\'internet.',
+    'hero.tagline': 'Enginyer de Software Senior · Construint per a l\'accessibilitat, la sostenibilitat i l\'open source',
+    'hero.description': 'Amb més de 20 anys d\'experiència en infraestructura, arquitectura cloud i sistemes distribuïts, creo programari accessible, sostenible i obert. Visc a Edimburg, originalment de Barcelona.',
+
+    // Navigation
+    'nav.about': 'Sobre mi',
 
     // Sections
+    'section.about': 'Sobre mi',
+    'section.about.description': 'Una mica més sobre mi i el que impulsa la meva feina',
+
+    // About page
+    'about.intro': 'He dedicat més de dues dècades a construir programari, començant en infraestructura i operacions a Barcelona i evolucionant a través de l\'arquitectura cloud, els sistemes distribuïts i l\'enginyeria de plataformes a Edimburg. Aquest viatge a través de dominis, idiomes i cultures ha modelat com m\'acosto a la tecnologia — amb curiositat, pragmatisme i un profund respecte per les persones que fan servir el que construïm.',
+    'about.expertise.title': 'El que faig',
+    'about.expertise.description': 'La meva feina abasta sistemes distribuïts, arquitectures dirigides per esdeveniments, observabilitat i plataformes cloud-native. Em preocupen profundament l\'accessibilitat i la sostenibilitat en el programari, i he estat cada cop més involucrat en la governança de la IA — assegurant que els sistemes que construïm siguin responsables i justos. Em sento atret pels problemes on l\'enginyeria es troba amb l\'impacte humà.',
+    'about.values.title': 'El que m\'importa',
+    'about.values.description': 'Crec en la simplicitat reflexiva — resoldre problemes reals sense sobreenginyeria. La sostenibilitat i l\'accessibilitat no són ocurrències tardanes sinó fonaments. Practico la propietat del contingut a través del model POSSE (Publish on your Own Site, Syndicate Elsewhere), i valoro compartir coneixement com a forma de retornar a la comunitat que em va ajudar a créixer.',
+    'about.writing.title': 'Escriptura i xerrades',
+    'about.writing.description': 'Escric sobre enginyeria de programari, arquitectura i la intersecció de la tecnologia amb l\'accessibilitat i la sostenibilitat. Els meus articles es publiquen aquí primer i es sindiquen a plataformes com Medium i Dev.to. També gaudeixo parlant a conferències i meetups, compartint lliçons de dues dècades construint i desplegant programari.',
+    'about.fun.title': 'Més enllà del codi',
+    'about.fun.description': 'Quan no estic davant del teclat, em trobaràs cuidant el meu bonnie wee plot al jardí, explorant Edimburg amb la meva família, o alternant entre anglès, castellà i català a la mateixa conversa. La vida és més rica en tres idiomes.',
+
     'section.projects': 'Projectes Open Source',
     'section.projects.description': 'Algunes de les meves contribucions a la comunitat de codi obert',
     'section.writing': 'Últims Escrits',

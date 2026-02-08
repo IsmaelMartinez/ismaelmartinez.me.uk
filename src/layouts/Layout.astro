@@ -32,6 +32,7 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
 
         <ul class="nav-links">
           <li><a href={getLocalizedPath('/', lang)}>{t('nav.home')}</a></li>
+          <li><a href={getLocalizedPath('/about', lang)}>{t('nav.about')}</a></li>
           <li><a href={getLocalizedPath('/projects', lang)}>{t('nav.projects')}</a></li>
           <li><a href={getLocalizedPath('/writing', lang)}>{t('nav.writing')}</a></li>
           <li id="arcade-nav" class="arcade-nav-hidden"><a href={getLocalizedPath('/fun', lang)}>{t('nav.fun')}</a></li>

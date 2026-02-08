@@ -1,0 +1,69 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { useTranslations } from '../../i18n/translations';
+
+const lang = 'en';
+const t = useTranslations(lang);
+---
+
+<Layout title="About" lang={lang}>
+  <section class="section">
+    <div class="container">
+      <header class="page-header">
+        <h1 class="page-title">{t('section.about')}</h1>
+        <p class="page-description">{t('section.about.description')}</p>
+      </header>
+
+      <div class="about-content">
+        <p>{t('about.intro')}</p>
+
+        <h2>{t('about.expertise.title')}</h2>
+        <p>{t('about.expertise.description')}</p>
+
+        <h2>{t('about.values.title')}</h2>
+        <p>{t('about.values.description')}</p>
+
+        <h2>{t('about.writing.title')}</h2>
+        <p>{t('about.writing.description')}</p>
+
+        <h2>{t('about.fun.title')}</h2>
+        <p>{t('about.fun.description')}</p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-header {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: var(--space-md);
+  }
+
+  .page-description {
+    font-size: 1.125rem;
+    color: var(--color-text-muted);
+    max-width: 600px;
+  }
+
+  .about-content {
+    max-width: 700px;
+    line-height: 1.8;
+  }
+
+  .about-content h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: var(--space-2xl);
+    margin-bottom: var(--space-md);
+  }
+
+  .about-content p {
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-lg);
+  }
+</style>

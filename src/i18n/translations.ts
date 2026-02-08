@@ -18,7 +18,7 @@ export const translations = {
     // Hero
     'hero.greeting': "Hi, I'm",
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Senior Software Engineer · Building for accessibility, sustainability & open source',
+    'hero.tagline': 'Principal Software Developer · Building for accessibility, sustainability & open source',
     'hero.description': 'With over 20 years of experience spanning infrastructure, cloud architecture, and distributed systems, I craft software that is accessible, sustainable, and open. Based in Edinburgh, originally from Barcelona.',
 
     // Navigation
@@ -112,7 +112,7 @@ export const translations = {
     // Hero
     'hero.greeting': 'Hola, soy',
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Ingeniero de Software Senior · Construyendo para la accesibilidad, la sostenibilidad y el open source',
+    'hero.tagline': 'Desarrollador de Software Principal · Construyendo para la accesibilidad, la sostenibilidad y el open source',
     'hero.description': 'Con más de 20 años de experiencia en infraestructura, arquitectura cloud y sistemas distribuidos, creo software accesible, sostenible y abierto. Vivo en Edimburgo, originalmente de Barcelona.',
 
     // Navigation
@@ -206,7 +206,7 @@ export const translations = {
     // Hero
     'hero.greeting': 'Hola, sóc',
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Enginyer de Software Senior · Construint per a l\'accessibilitat, la sostenibilitat i l\'open source',
+    'hero.tagline': 'Desenvolupador de Software Principal · Construint per a l\'accessibilitat, la sostenibilitat i l\'open source',
     'hero.description': 'Amb més de 20 anys d\'experiència en infraestructura, arquitectura cloud i sistemes distribuïts, creo programari accessible, sostenible i obert. Visc a Edimburg, originalment de Barcelona.',
 
     // Navigation

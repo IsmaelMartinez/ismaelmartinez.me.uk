@@ -39,7 +39,7 @@ const platformLabels = {
 };
 ---
 
-<Layout title={title} lang={lang}>
+<Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags}>
   {originalUrl && <link rel="canonical" href={originalUrl} slot="head" />}
 
   <article class="article">

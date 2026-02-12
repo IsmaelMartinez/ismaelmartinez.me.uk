@@ -25,7 +25,7 @@ const availableTranslations = allArticles
   .map(article => article.slug.split('/')[0]);
 
 const formatDate = (date: Date) => {
-  return date.toLocaleDateString(lang === 'cat' ? 'ca-ES' : lang === 'es' ? 'es-ES' : 'en-GB', {
+  return date.toLocaleDateString({ en: 'en-GB', es: 'es-ES', cat: 'ca-ES' }[lang], {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
@@ -39,8 +39,7 @@ const platformLabels = {
 };
 ---
 
-<Layout title={title} lang={lang}>
-  {originalUrl && <link rel="canonical" href={originalUrl} slot="head" />}
+<Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags} canonical={originalUrl}>
 
   <article class="article">
     <div class="container">

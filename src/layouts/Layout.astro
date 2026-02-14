@@ -1,4 +1,5 @@
 ---
+import { ViewTransitions } from 'astro:transitions';
 import { languages, useTranslations, getLocalizedPath } from '../i18n/translations';
 import '../styles/global.css';
 
@@ -57,6 +58,16 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
     <slot name="head" />
 
+    <!-- Theme: prevent FOUC -->
+    <script is:inline>
+      (function() {
+        const theme = localStorage.getItem('theme');
+        if (theme) document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
+    <ViewTransitions />
+
     <!-- Umami Analytics -->
     <script defer src="https://cloud.umami.is/script.js" data-website-id="d3ef0011-73bb-46a5-a248-f5220efa13eb"></script>
   </head>
@@ -75,17 +86,23 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           <li><a href={getLocalizedPath('/connect', lang)} aria-current={currentPath === '/connect' ? 'page' : undefined}>{t('nav.connect')}</a></li>
         </ul>
 
-        <div class="lang-switcher" role="navigation" aria-label={t('nav.languageSwitcher')}>
-          {Object.entries(languages).map(([code, name]) => (
-            <a
-              href={getLocalizedPath(currentPath, code)}
-              class:list={['lang-link', { active: lang === code }]}
-              aria-current={lang === code ? 'true' : undefined}
-              lang={hreflangMap[code]}
-            >
-              {code.toUpperCase()}
-            </a>
-          ))}
+        <div class="nav-actions">
+          <div class="lang-switcher" role="navigation" aria-label={t('nav.languageSwitcher')}>
+            {Object.entries(languages).map(([code, name]) => (
+              <a
+                href={getLocalizedPath(currentPath, code)}
+                class:list={['lang-link', { active: lang === code }]}
+                aria-current={lang === code ? 'true' : undefined}
+                lang={hreflangMap[code]}
+              >
+                {code.toUpperCase()}
+              </a>
+            ))}
+          </div>
+          <button id="theme-toggle" class="theme-toggle" aria-label={t('nav.themeToggle')} type="button">
+            <span class="theme-icon-light">&#9788;</span>
+            <span class="theme-icon-dark">&#9790;</span>
+          </button>
         </div>
       </div>
     </nav>
@@ -100,6 +117,8 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> {t('footer.and')} ☕
         </p>
         <p class="footer-links">
+          <a href={getLocalizedPath('/uses', lang)} class="footer-link">{t('nav.uses')}</a>
+          <span class="footer-separator">·</span>
           <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">RSS</a>
         </p>
         <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez</p>
@@ -126,6 +145,9 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         }
       }
       checkArcadeUnlocked();
+
+      // Re-check after View Transitions navigation
+      document.addEventListener('astro:after-swap', checkArcadeUnlocked);
 
       // Konami Code: ↑ ↑ ↓ ↓ ← → ← → B A
       const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
@@ -196,6 +218,34 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           logoClicks = 0;
         }
       });
+
+      // Theme toggle
+      function initThemeToggle() {
+        const toggle = document.getElementById('theme-toggle');
+        if (!toggle) return;
+
+        toggle.addEventListener('click', () => {
+          const current = document.documentElement.getAttribute('data-theme');
+          let next: string;
+          if (current) {
+            // If manual override is set, toggle it
+            next = current === 'dark' ? 'light' : 'dark';
+          } else {
+            // No manual override — detect system preference and go opposite
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            next = prefersDark ? 'light' : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', next);
+          localStorage.setItem('theme', next);
+        });
+      }
+      initThemeToggle();
+
+      document.addEventListener('astro:after-swap', () => {
+        const theme = localStorage.getItem('theme');
+        if (theme) document.documentElement.setAttribute('data-theme', theme);
+        initThemeToggle();
+      });
     </script>
   </body>
 </html>
@@ -262,9 +312,46 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     display: none;
   }
 
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
   .lang-switcher {
     display: flex;
     gap: var(--space-sm);
+  }
+
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    padding: var(--space-xs) var(--space-sm);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+  }
+
+  .theme-toggle:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  /* Show sun in dark mode, moon in light mode */
+  .theme-icon-light { display: none; }
+  .theme-icon-dark { display: inline; }
+
+  :global(:root[data-theme="light"]) .theme-icon-light { display: inline; }
+  :global(:root[data-theme="light"]) .theme-icon-dark { display: none; }
+
+  @media (prefers-color-scheme: light) {
+    :global(:root:not([data-theme="dark"])) .theme-icon-light { display: inline; }
+    :global(:root:not([data-theme="dark"])) .theme-icon-dark { display: none; }
   }
 
   .lang-link {
@@ -294,6 +381,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     margin-top: var(--space-sm);
   }
 
+  .footer-link,
   .footer-rss {
     color: var(--color-text-muted);
     text-decoration: none;
@@ -301,8 +389,14 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     font-weight: 500;
   }
 
+  .footer-link:hover,
   .footer-rss:hover {
     color: var(--color-accent);
+  }
+
+  .footer-separator {
+    color: var(--color-text-muted);
+    margin: 0 var(--space-xs);
   }
 
   .footer-copy {

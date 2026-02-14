@@ -14,6 +14,9 @@ export const translations = {
     'nav.writing': 'Writing',
     'nav.connect': 'Connect',
     'nav.fun': 'Arcade',
+    'nav.skipToContent': 'Skip to content',
+    'nav.mainNavigation': 'Main navigation',
+    'nav.languageSwitcher': 'Language switcher',
 
     // Hero
     'hero.greeting': "Hi, I'm",
@@ -91,6 +94,9 @@ export const translations = {
     'nav.writing': 'Escritos',
     'nav.connect': 'Conectar',
     'nav.fun': 'Arcade',
+    'nav.skipToContent': 'Saltar al contenido',
+    'nav.mainNavigation': 'Navegación principal',
+    'nav.languageSwitcher': 'Selector de idioma',
 
     // Hero
     'hero.greeting': 'Hola, soy',
@@ -168,6 +174,9 @@ export const translations = {
     'nav.writing': 'Escrits',
     'nav.connect': 'Connectar',
     'nav.fun': 'Arcade',
+    'nav.skipToContent': 'Saltar al contingut',
+    'nav.mainNavigation': 'Navegació principal',
+    'nav.languageSwitcher': 'Selector d\'idioma',
 
     // Hero
     'hero.greeting': 'Hola, sóc',

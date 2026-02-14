@@ -1,0 +1,60 @@
+---
+import '../styles/global.css';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Page not found" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="robots" content="noindex" />
+    <title>404 — Page Not Found | Ismael Martinez</title>
+  </head>
+  <body>
+    <main class="error-page">
+      <div class="container">
+        <h1 class="error-code">404</h1>
+        <p class="error-message">This page doesn't exist — but these do:</p>
+
+        <nav class="locale-links" aria-label="Choose a language">
+          <a href="/en/" class="btn btn-primary">English</a>
+          <a href="/es/" class="btn btn-outline">Español</a>
+          <a href="/cat/" class="btn btn-outline">Català</a>
+        </nav>
+      </div>
+    </main>
+  </body>
+</html>
+
+<style>
+  .error-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .error-code {
+    font-size: 6rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: var(--space-md);
+    color: var(--color-text-muted);
+  }
+
+  .error-message {
+    font-size: 1.25rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-xl);
+  }
+
+  .locale-links {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>

@@ -64,7 +64,7 @@ const articleJsonLd = {
 ---
 
 <Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags} canonical={originalUrl}>
-  <script slot="head" type="application/ld+json" set:html={JSON.stringify(articleJsonLd)} />
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(articleJsonLd).replace(/</g, '\\u003c')} />
 
   <article class="article">
     <div class="container">

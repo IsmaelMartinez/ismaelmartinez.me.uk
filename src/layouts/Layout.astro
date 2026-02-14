@@ -146,8 +146,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       }
       checkArcadeUnlocked();
 
-      // Re-check after View Transitions navigation
-      document.addEventListener('astro:after-swap', checkArcadeUnlocked);
+
 
       // Konami Code: ↑ ↑ ↓ ↓ ← → ← → B A
       const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
@@ -245,6 +244,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         const theme = localStorage.getItem('theme');
         if (theme) document.documentElement.setAttribute('data-theme', theme);
         initThemeToggle();
+        checkArcadeUnlocked();
       });
     </script>
   </body>
@@ -342,7 +342,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     border-color: var(--color-accent);
   }
 
-  /* Show sun in dark mode, moon in light mode */
+  /* Show moon in dark mode, sun in light mode */
   .theme-icon-light { display: none; }
   .theme-icon-dark { display: inline; }
 

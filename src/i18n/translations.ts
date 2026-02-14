@@ -17,6 +17,8 @@ export const translations = {
     'nav.skipToContent': 'Skip to content',
     'nav.mainNavigation': 'Main navigation',
     'nav.languageSwitcher': 'Language switcher',
+    'nav.themeToggle': 'Toggle dark/light mode',
+    'nav.uses': 'Uses',
 
     // Hero
     'hero.greeting': "Hi, I'm",
@@ -52,6 +54,11 @@ export const translations = {
     'article.noArticles': 'No articles yet. Check back soon!',
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'External Platforms',
+    'article.minRead': 'min read',
+
+    // Uses
+    'uses.title': 'Uses',
+    'uses.description': 'Tools, software, and hardware I use for development and everyday work',
 
     // Fun Section
     'fun.title': 'Fun Stuff',
@@ -97,6 +104,8 @@ export const translations = {
     'nav.skipToContent': 'Saltar al contenido',
     'nav.mainNavigation': 'Navegación principal',
     'nav.languageSwitcher': 'Selector de idioma',
+    'nav.themeToggle': 'Cambiar modo oscuro/claro',
+    'nav.uses': 'Herramientas',
 
     // Hero
     'hero.greeting': 'Hola, soy',
@@ -132,6 +141,11 @@ export const translations = {
     'article.noArticles': 'Aún no hay artículos. ¡Vuelve pronto!',
     'article.localArticles': 'Artículos',
     'article.externalPlatforms': 'Plataformas Externas',
+    'article.minRead': 'min de lectura',
+
+    // Uses
+    'uses.title': 'Herramientas',
+    'uses.description': 'Herramientas, software y hardware que uso para desarrollo y trabajo diario',
 
     // Fun Section
     'fun.title': 'Diversión',
@@ -177,6 +191,8 @@ export const translations = {
     'nav.skipToContent': 'Saltar al contingut',
     'nav.mainNavigation': 'Navegació principal',
     'nav.languageSwitcher': 'Selector d\'idioma',
+    'nav.themeToggle': 'Canviar mode fosc/clar',
+    'nav.uses': 'Eines',
 
     // Hero
     'hero.greeting': 'Hola, sóc',
@@ -212,6 +228,11 @@ export const translations = {
     'article.noArticles': 'Encara no hi ha articles. Torna aviat!',
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'Plataformes Externes',
+    'article.minRead': 'min de lectura',
+
+    // Uses
+    'uses.title': 'Eines',
+    'uses.description': 'Eines, software i hardware que faig servir per al desenvolupament i treball diari',
 
     // Fun Section
     'fun.title': 'Diversió',

@@ -1,5 +1,5 @@
 :root {
-  /* Colors */
+  /* Colors (dark default) */
   --color-bg: #0f0f0f;
   --color-bg-secondary: #1a1a1a;
   --color-text: #e5e5e5;
@@ -26,9 +26,9 @@
   --nav-height: 4rem;
 }
 
-/* Light mode */
+/* Light mode — system preference (when no manual override) */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     --color-bg: #fafafa;
     --color-bg-secondary: #f5f5f5;
     --color-text: #171717;
@@ -37,6 +37,17 @@
     --color-accent-hover: #1d4ed8;
     --color-border: #e5e5e5;
   }
+}
+
+/* Light mode — manual override */
+:root[data-theme="light"] {
+  --color-bg: #fafafa;
+  --color-bg-secondary: #f5f5f5;
+  --color-text: #171717;
+  --color-text-muted: #525252;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-border: #e5e5e5;
 }
 
 /* Reset */
@@ -201,4 +212,59 @@ img {
 .link-card-content p {
   font-size: 0.875rem;
   color: var(--color-text-muted);
+}
+
+/* Print Stylesheet */
+@media print {
+  :root {
+    --color-bg: #fff;
+    --color-bg-secondary: #fff;
+    --color-text: #000;
+    --color-text-muted: #333;
+    --color-accent: #000;
+    --color-border: #ccc;
+  }
+
+  nav,
+  footer,
+  .skip-link,
+  .lang-switcher,
+  .konami-overlay,
+  .theme-toggle {
+    display: none !important;
+  }
+
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  a {
+    color: #000;
+    text-decoration: underline;
+  }
+
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #555;
+  }
+
+  .container {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .article-content {
+    font-size: 11pt;
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
 }

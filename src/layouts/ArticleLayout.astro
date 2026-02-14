@@ -13,9 +13,10 @@ interface Props {
   tags: string[];
   lang: 'en' | 'es' | 'cat';
   slug: string;
+  readingTime?: number;
 }
 
-const { title, description, publishedDate, updatedDate, originalUrl, originalPlatform, tags, lang, slug } = Astro.props;
+const { title, description, publishedDate, updatedDate, originalUrl, originalPlatform, tags, lang, slug, readingTime } = Astro.props;
 const t = useTranslations(lang);
 
 // Get available translations for this article
@@ -37,9 +38,33 @@ const platformLabels = {
   devto: 'Dev.to',
   self: t('article.originallyPublished')
 };
+
+const articleJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": title,
+  "description": description,
+  "datePublished": publishedDate.toISOString(),
+  ...(updatedDate && { "dateModified": updatedDate.toISOString() }),
+  "author": {
+    "@type": "Person",
+    "name": "Ismael Martinez",
+    "url": "https://ismaelmartinez.me.uk"
+  },
+  "publisher": {
+    "@type": "Person",
+    "name": "Ismael Martinez"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": `https://ismaelmartinez.me.uk/${lang}/articles/${slug.split('/')[1]}`
+  },
+  ...(tags.length > 0 && { "keywords": tags.join(', ') })
+};
 ---
 
 <Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags} canonical={originalUrl}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(articleJsonLd).replace(/</g, '\\u003c')} />
 
   <article class="article">
     <div class="container">
@@ -50,6 +75,9 @@ const platformLabels = {
             <span class="updated">
               · {t('article.updated')} {formatDate(updatedDate)}
             </span>
+          )}
+          {readingTime && (
+            <span class="reading-time">· {readingTime} {t('article.minRead')}</span>
           )}
         </div>
 

@@ -1,6 +1,7 @@
 ---
 import { getCollection } from 'astro:content';
 import ArticleLayout from '../../../layouts/ArticleLayout.astro';
+import { getReadingTime } from '../../../utils/reading-time';
 
 export async function getStaticPaths() {
   const articles = await getCollection('articles', ({ slug }) => {
@@ -15,6 +16,7 @@ export async function getStaticPaths() {
 
 const { article } = Astro.props;
 const { Content } = await article.render();
+const readingTime = getReadingTime(article.body || '');
 const lang = 'cat';
 ---
 
@@ -28,6 +30,7 @@ const lang = 'cat';
   tags={article.data.tags}
   lang={lang}
   slug={article.slug}
+  readingTime={readingTime}
 >
   <Content />
 </ArticleLayout>

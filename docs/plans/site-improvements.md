@@ -16,29 +16,9 @@ A prioritised list of improvements identified during a site review. Grouped by i
 - [x] Accessibility — skip-to-content link, `aria-label` on nav & language switcher, `aria-current="page"` on active nav links, Escape key to close Konami overlay, `role="dialog"` + `aria-modal` on Konami overlay
 - [x] hreflang tags — `<link rel="alternate" hreflang="...">` for each locale + `x-default`
 - [x] Custom 404 page — `src/pages/404.astro` with links to all three locales
-
-## Nice Touches — Lower Priority
-
-### View Transitions
-
-Astro has built-in support. Near zero-config, adds smooth page navigation.
-
-### Article Reading Time
-
-Utility function dividing word count by 200. Display next to publish date.
-
-### Print Stylesheet
-
-`@media print` block in `global.css` — hide nav/footer, clean typography, show URLs.
-
-### JSON-LD Structured Data
-
-`Person` schema on homepage, `Article` schema on article pages. Helps rich results in search.
-
-### Dark/Light Mode Toggle
-
-Currently system-preference only. Add a manual toggle stored in `localStorage`.
-
-### /uses Page
-
-Tools, hardware, software stack. Common on developer sites, good for SEO.
+- [x] View Transitions — Astro `<ViewTransitions />` for smooth page navigation, `astro:after-swap` for state persistence
+- [x] Article Reading Time — `src/utils/reading-time.ts` utility (word count ÷ 200), displayed next to publish date in article header
+- [x] Print Stylesheet — `@media print` block in `global.css` hiding nav/footer, clean typography, showing URLs after links
+- [x] JSON-LD Structured Data — `Person` schema on all homepage locales, `Article` schema on article pages
+- [x] Dark/Light Mode Toggle — manual toggle button in nav with `localStorage` persistence, `data-theme` attribute, FOUC prevention script
+- [x] /uses Page — tech stack showcase at `/en/uses`, `/es/uses`, `/cat/uses` with categorised tools, hardware, and software

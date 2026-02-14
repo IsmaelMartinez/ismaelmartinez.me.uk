@@ -1,0 +1,109 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { useTranslations } from '../../i18n/translations';
+import { usesData } from '../../data/uses';
+
+const lang = 'es';
+const t = useTranslations(lang);
+---
+
+<Layout title="Herramientas" lang={lang}>
+  <section class="section">
+    <div class="container">
+      <header class="page-header">
+        <h1 class="page-title">{t('uses.title')}</h1>
+        <p class="page-description">{t('uses.description')}</p>
+      </header>
+
+      {usesData.map(category => (
+        <div class="uses-category">
+          <h2 class="category-title">{category.title[lang]}</h2>
+          <ul class="uses-list">
+            {category.items.map(item => (
+              <li class="uses-item">
+                <div class="uses-item-name">
+                  {item.url ? (
+                    <a href={item.url} target="_blank" rel="noopener noreferrer">{item.name}</a>
+                  ) : (
+                    <span>{item.name}</span>
+                  )}
+                </div>
+                <p class="uses-item-description">{item.description[lang]}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-header {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: var(--space-md);
+  }
+
+  .page-description {
+    font-size: 1.125rem;
+    color: var(--color-text-muted);
+    max-width: 600px;
+  }
+
+  .uses-category {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .category-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .uses-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .uses-item {
+    padding: var(--space-md) var(--space-lg);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .uses-item:hover {
+    border-color: var(--color-accent);
+  }
+
+  .uses-item-name {
+    font-weight: 600;
+    margin-bottom: var(--space-xs);
+  }
+
+  .uses-item-name a {
+    color: var(--color-text);
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .uses-item-name a:hover {
+    color: var(--color-accent);
+  }
+
+  .uses-item-description {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+  }
+</style>

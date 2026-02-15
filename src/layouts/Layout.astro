@@ -15,7 +15,11 @@ interface Props {
 
 const { title, description = "Ismael Martinez - Software Engineer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical } = Astro.props;
 const t = useTranslations(lang);
-const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
+const rawPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
+// Tag names are locale-specific with no cross-locale mapping, so the language
+// switcher on tag detail pages links to the tags index for other locales.
+const tagDetailMatch = rawPath.match(/^\/tags\/[^/]/);
+const currentPath = tagDetailMatch ? '/tags/' : rawPath;
 const canonicalUrl = customCanonical || new URL(Astro.url.pathname, Astro.site).href;
 const fullTitle = `${title} | Ismael Martinez`;
 const locales = ['en', 'es', 'cat'] as const;
@@ -27,6 +31,13 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Security -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloud.umami.is; frame-ancestors 'none'" />
+
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={canonicalUrl} />
@@ -69,7 +80,8 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <ViewTransitions />
 
     <!-- Umami Analytics -->
-    <script defer src="https://cloud.umami.is/script.js" data-website-id="d3ef0011-73bb-46a5-a248-f5220efa13eb"></script>
+    <!-- SRI pins a specific script version. If Umami updates the script and the hash breaks, it's acceptable to remove the integrity attribute and rely on CSP alone. -->
+    <script defer src="https://cloud.umami.is/script.js" data-website-id="d3ef0011-73bb-46a5-a248-f5220efa13eb" integrity="sha384-njZ5sCqL2nQlDz+tuOzt4BOOdB4zc8UVx7AiE6EGDrjYZPfNHel8zAmY2ESoQilv" crossorigin="anonymous"></script>
   </head>
   <body>
     <a href="#main-content" class="skip-link">{t('nav.skipToContent')}</a>
@@ -119,7 +131,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <footer class="footer">
       <div class="container">
         <p>
-          {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> {t('footer.and')} ☕
+          {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> {t('footer.and')} ☕
         </p>
         <p class="footer-links">
           <a href={getLocalizedPath('/uses', lang)} class="footer-link">{t('nav.uses')}</a>

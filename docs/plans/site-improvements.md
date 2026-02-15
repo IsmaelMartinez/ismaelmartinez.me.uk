@@ -31,3 +31,12 @@ A prioritised list of improvements identified during a site review. Grouped by i
 - [x] Reading Progress Bar — fixed 3px bar at top of article pages filling as reader scrolls, themed via CSS custom properties, hidden on non-article pages
 - [x] Related Articles — 2–3 related articles at bottom of each article based on shared tags, falls back to most recent, uses existing ArticleCard component
 - [x] About Page — `/[lang]/about` pages with bio, career highlights, and interests. Added to main navigation between Home and Projects. Includes JSON-LD Person schema with extended properties (description, knowsAbout, alumniOf)
+
+## Phase 4
+
+- [x] Node.js 24 LTS — `.nvmrc` and CI workflows updated from Node 20 to Node 24
+- [x] Security Hardening — CSP meta tag, SRI on analytics script, Referrer-Policy, X-Content-Type-Options, Permissions-Policy, consistent `rel="noopener noreferrer"`, DOM API cleanup in quiz
+- [x] Page Deduplication — replaced 39 per-locale page files with 13 dynamic `[lang]` routes using `getStaticPaths()`
+- [x] Test Foundation — vitest 4, unit tests for reading-time and translations, build output integration tests
+- [x] Improved Link Checker — verifies internal links resolve to actual files in dist/
+- [x] Lighthouse CI — automated performance, accessibility, and best-practices audits in CI pipeline

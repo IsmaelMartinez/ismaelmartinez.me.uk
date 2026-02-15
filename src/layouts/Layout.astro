@@ -93,7 +93,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
         <div class="nav-actions">
           <div class="lang-switcher" role="navigation" aria-label={t('nav.languageSwitcher')}>
-            {Object.entries(languages).map(([code, name]) => (
+            {Object.entries(languages).map(([code, _name]) => (
               <a
                 href={getLocalizedPath(currentPath, code)}
                 class:list={['lang-link', { active: lang === code }]}

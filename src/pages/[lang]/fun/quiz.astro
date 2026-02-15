@@ -110,8 +110,7 @@ const results = quizResults[lang];
 
     document.querySelectorAll('.answer-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const button = (e.target).closest('.answer-btn');
-        if (!button) return;
+        const button = e.currentTarget;
         const type = button.dataset.type;
         scores[type]++;
 
@@ -170,6 +169,12 @@ const results = quizResults[lang];
 </script>
 
 <style>
+  :root {
+    --color-quiz-accent: #8b5cf6;
+    --color-quiz-accent-light: #a78bfa;
+    --color-quiz-accent-bg: rgba(139, 92, 246, 0.1);
+  }
+
   .quiz-section {
     min-height: calc(100vh - var(--nav-height) - 200px);
     padding: var(--space-2xl) 0;
@@ -238,7 +243,7 @@ const results = quizResults[lang];
 
   .progress {
     height: 100%;
-    background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+    background: linear-gradient(90deg, var(--color-quiz-accent), var(--color-quiz-accent-light));
     transition: width 0.3s ease;
     border-radius: 3px;
   }
@@ -296,8 +301,8 @@ const results = quizResults[lang];
     min-width: 2rem;
     height: 2rem;
     border-radius: 50%;
-    background: rgba(139, 92, 246, 0.1);
-    color: #8b5cf6;
+    background: var(--color-quiz-accent-bg);
+    color: var(--color-quiz-accent);
     font-weight: 700;
     font-size: 0.85rem;
     flex-shrink: 0;
@@ -308,22 +313,22 @@ const results = quizResults[lang];
   }
 
   .answer-btn:hover {
-    border-color: #8b5cf6;
+    border-color: var(--color-quiz-accent);
     transform: translateX(4px);
   }
 
   .answer-btn:hover .answer-label {
-    background: #8b5cf6;
+    background: var(--color-quiz-accent);
     color: #fff;
   }
 
   .answer-btn.selected {
-    border-color: #8b5cf6;
-    background: rgba(139, 92, 246, 0.1);
+    border-color: var(--color-quiz-accent);
+    background: var(--color-quiz-accent-bg);
   }
 
   .answer-btn.selected .answer-label {
-    background: #8b5cf6;
+    background: var(--color-quiz-accent);
     color: #fff;
   }
 
@@ -358,7 +363,7 @@ const results = quizResults[lang];
   .quiz-result h2 {
     font-size: 2rem;
     margin-bottom: var(--space-md);
-    color: #8b5cf6;
+    color: var(--color-quiz-accent);
   }
 
   .quiz-result p {

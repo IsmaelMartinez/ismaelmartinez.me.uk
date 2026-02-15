@@ -220,10 +220,14 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         }
       }
 
-      // Easter egg: Click the logo 5 times
+      // Easter egg: Click/tap the logo 5 times to unlock the arcade
+      // This provides a mobile-friendly alternative to the Konami Code
       let logoClicks = 0;
+      let logoClickTimer: ReturnType<typeof setTimeout>;
       document.querySelector('.nav-logo')?.addEventListener('click', (e) => {
         logoClicks++;
+        clearTimeout(logoClickTimer);
+        logoClickTimer = setTimeout(() => { logoClicks = 0; }, 2000);
         if (logoClicks >= 5) {
           e.preventDefault();
           const logo = e.target as HTMLElement;
@@ -232,6 +236,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
             logo.style.animation = '';
           }, 500);
           logoClicks = 0;
+          activateKonami();
         }
       });
 

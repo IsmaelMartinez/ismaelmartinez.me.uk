@@ -7,7 +7,7 @@ const { tocTitle } = Astro.props;
 ---
 
 <nav id="toc" class="toc" aria-label={tocTitle}>
-  <button id="toc-toggle" class="toc-toggle" aria-expanded="false" type="button">
+  <button id="toc-toggle" class="toc-toggle" aria-expanded="false" aria-controls="toc-list" type="button">
     {tocTitle}
     <span class="toc-arrow">&#9662;</span>
   </button>
@@ -15,7 +15,12 @@ const { tocTitle } = Astro.props;
 </nav>
 
 <script>
+  let tocAbort: AbortController | null = null;
+
   function initToc() {
+    tocAbort?.abort();
+    tocAbort = new AbortController();
+
     const tocList = document.getElementById('toc-list');
     const tocToggle = document.getElementById('toc-toggle');
     const toc = document.getElementById('toc');
@@ -51,7 +56,7 @@ const { tocTitle } = Astro.props;
       const expanded = tocToggle.getAttribute('aria-expanded') === 'true';
       tocToggle.setAttribute('aria-expanded', String(!expanded));
       tocList.classList.toggle('open');
-    });
+    }, { signal: tocAbort.signal });
   }
 
   initToc();

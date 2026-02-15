@@ -46,7 +46,7 @@ const platformIcon = {
   {tags.length > 0 && (
     <div class="article-card-tags">
       {tags.slice(0, 3).map(tag => (
-        <a href={getLocalizedPath(`/tags/${tag}`, lang)} class="tag tag-small tag-link">{tag}</a>
+        <a href={getLocalizedPath(`/tags/${encodeURIComponent(tag)}`, lang)} class="tag tag-small tag-link">{tag}</a>
       ))}
       {tags.length > 3 && (
         <span class="tag tag-small tag-more">+{tags.length - 3}</span>

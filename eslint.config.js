@@ -9,14 +9,17 @@ export default [
   {
     files: ['**/*.ts', '**/*.tsx'],
     ...tseslint.configs.recommended[0],
+    rules: {
+      ...tseslint.configs.recommended[0].rules,
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_'
+      }],
+    },
   },
   {
     rules: {
       'no-console': 'warn',
-      'no-unused-vars': ['error', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_'
-      }],
     },
   },
   {

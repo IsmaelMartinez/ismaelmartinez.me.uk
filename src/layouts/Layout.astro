@@ -78,7 +78,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       <div class="container nav-container">
         <a href={getLocalizedPath('/', lang)} class="nav-logo">IMR</a>
 
-        <button id="menu-toggle" class="menu-toggle" aria-label={t('nav.menuToggle')} aria-expanded="false" type="button">
+        <button id="menu-toggle" class="menu-toggle" aria-label={t('nav.menuToggle')} aria-controls="nav-links" aria-expanded="false" type="button">
           <span class="menu-icon"></span>
         </button>
 
@@ -224,7 +224,13 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       });
 
       // Mobile menu toggle
+      let menuAbort: AbortController | null = null;
+
       function initMenuToggle() {
+        menuAbort?.abort();
+        menuAbort = new AbortController();
+        const signal = menuAbort.signal;
+
         const toggle = document.getElementById('menu-toggle');
         const navLinks = document.getElementById('nav-links');
         if (!toggle || !navLinks) return;
@@ -233,7 +239,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           const expanded = toggle.getAttribute('aria-expanded') === 'true';
           toggle.setAttribute('aria-expanded', String(!expanded));
           navLinks.classList.toggle('open');
-        });
+        }, { signal });
 
         // Close on Escape
         document.addEventListener('keydown', (e) => {
@@ -242,20 +248,25 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
             navLinks.classList.remove('open');
             toggle.focus();
           }
-        });
+        }, { signal });
 
         // Close when clicking a nav link
         navLinks.querySelectorAll('a').forEach(link => {
           link.addEventListener('click', () => {
             toggle.setAttribute('aria-expanded', 'false');
             navLinks.classList.remove('open');
-          });
+          }, { signal });
         });
       }
       initMenuToggle();
 
       // Theme toggle
+      let themeAbort: AbortController | null = null;
+
       function initThemeToggle() {
+        themeAbort?.abort();
+        themeAbort = new AbortController();
+
         const toggle = document.getElementById('theme-toggle');
         if (!toggle) return;
 
@@ -272,7 +283,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           }
           document.documentElement.setAttribute('data-theme', next);
           localStorage.setItem('theme', next);
-        });
+        }, { signal: themeAbort!.signal });
       }
       initThemeToggle();
 

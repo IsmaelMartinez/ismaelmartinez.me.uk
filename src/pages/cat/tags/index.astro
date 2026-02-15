@@ -30,7 +30,7 @@ const sortedTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
 
       <div class="tags-grid">
         {sortedTags.map(([tag, count]) => (
-          <a href={getLocalizedPath(`/tags/${tag}`, lang)} class="tag-card">
+          <a href={getLocalizedPath(`/tags/${encodeURIComponent(tag)}`, lang)} class="tag-card">
             <span class="tag-name">{tag}</span>
             <span class="tag-count">{count} {count === 1 ? t('tags.article') : t('tags.articles')}</span>
           </a>

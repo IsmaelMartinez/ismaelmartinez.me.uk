@@ -105,7 +105,7 @@ const relatedArticles = scoredArticles
         {tags.length > 0 && (
           <div class="article-tags">
             {tags.map(tag => (
-              <a href={getLocalizedPath(`/tags/${tag}`, lang)} class="tag tag-link">{tag}</a>
+              <a href={getLocalizedPath(`/tags/${encodeURIComponent(tag)}`, lang)} class="tag tag-link">{tag}</a>
             ))}
           </div>
         )}
@@ -168,7 +168,12 @@ const relatedArticles = scoredArticles
   </article>
 
   <script>
+    let progressAbort: AbortController | null = null;
+
     function initProgressBar() {
+      progressAbort?.abort();
+      progressAbort = new AbortController();
+
       const bar = document.getElementById('reading-progress');
       const article = document.querySelector('.article-content');
       if (!bar || !article) return;
@@ -182,7 +187,7 @@ const relatedArticles = scoredArticles
         bar!.style.transform = `scaleX(${progress})`;
       }
 
-      window.addEventListener('scroll', updateProgress, { passive: true });
+      window.addEventListener('scroll', updateProgress, { passive: true, signal: progressAbort.signal });
       updateProgress();
     }
 

@@ -1,15 +1,20 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
 import { quizQuestions, quizResults } from '../../../data/fun';
 
-const lang = 'cat';
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 const questions = quizQuestions[lang];
 const results = quizResults[lang];
 ---
 
-<Layout title="Quiz de Desenvolupador" lang={lang}>
+<Layout title="Developer Quiz" lang={lang}>
   <section class="quiz-section">
     <div class="container">
       <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>

@@ -1,16 +1,21 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import ArcadeCabinet from '../../../components/ArcadeCabinet.astro';
-import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
 
-const lang = 'es';
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
 const _t = useTranslations(lang);
 
 const arcadeGames = [
   {
     id: 'quiz',
-    title: 'QUIZ DEV',
-    description: '¿Qué tipo de dev eres?',
+    title: 'DEV QUIZ',
+    description: 'What type of dev are you?',
     icon: '🧠',
     color: '#8b5cf6',
     path: '/fun/quiz'
@@ -18,7 +23,7 @@ const arcadeGames = [
   {
     id: 'snake',
     title: 'SNAKE',
-    description: '¡Acción retro clásica!',
+    description: 'Classic retro action!',
     icon: '🐍',
     color: '#22c55e',
     path: '/fun/snake'
@@ -26,16 +31,16 @@ const arcadeGames = [
 ];
 ---
 
-<Layout title="El Arcade" lang={lang}>
+<Layout title="The Arcade" lang={lang}>
   <div class="arcade-room">
     <div class="neon-grid"></div>
 
     <div class="arcade-header">
       <div class="neon-sign">
-        <span class="neon-text">ARCADE DE</span>
-        <span class="neon-text accent">ISMAEL</span>
+        <span class="neon-text">ISMAEL'S</span>
+        <span class="neon-text accent">ARCADE</span>
       </div>
-      <p class="arcade-subtitle">Inserta moneda para jugar</p>
+      <p class="arcade-subtitle">Insert coin to play</p>
     </div>
 
     <div class="arcade-floor">
@@ -58,7 +63,7 @@ const arcadeGames = [
     </div>
 
     <div class="arcade-tip">
-      <p>Consejo: Prueba el Código Konami en cualquier parte del sitio...</p>
+      <p>Tip: Try the Konami Code anywhere on the site...</p>
     </div>
   </div>
 </Layout>
@@ -82,6 +87,8 @@ const arcadeGames = [
       linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
       linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
     background-size: 50px 50px;
+    perspective: 500px;
+    transform-style: preserve-3d;
     animation: gridMove 20s linear infinite;
   }
 
@@ -133,8 +140,12 @@ const arcadeGames = [
   }
 
   @keyframes neonFlicker {
-    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
-    20%, 24%, 55% { opacity: 0.8; }
+    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+      opacity: 1;
+    }
+    20%, 24%, 55% {
+      opacity: 0.8;
+    }
   }
 
   .arcade-subtitle {
@@ -146,7 +157,9 @@ const arcadeGames = [
     animation: blink 1.5s step-end infinite;
   }
 
-  @keyframes blink { 50% { opacity: 0.5; } }
+  @keyframes blink {
+    50% { opacity: 0.5; }
+  }
 
   .arcade-floor {
     position: relative;
@@ -197,12 +210,22 @@ const arcadeGames = [
   }
 
   @media (max-width: 768px) {
-    .arcade-room { padding: var(--space-xl) var(--space-md); }
-    .cabinets-row { gap: var(--space-xl); }
+    .arcade-room {
+      padding: var(--space-xl) var(--space-md);
+    }
+
+    .cabinets-row {
+      gap: var(--space-xl);
+    }
   }
 
   @media (max-width: 480px) {
-    .neon-text { letter-spacing: 0.1em; }
-    .cabinets-row { gap: var(--space-lg); }
+    .neon-text {
+      letter-spacing: 0.1em;
+    }
+
+    .cabinets-row {
+      gap: var(--space-lg);
+    }
   }
 </style>

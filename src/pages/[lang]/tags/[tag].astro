@@ -1,33 +1,37 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import ArticleCard from '../../../components/ArticleCard.astro';
-import { useTranslations } from '../../../i18n/translations';
+import { useTranslations, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
 import { getCollection } from 'astro:content';
 
 export async function getStaticPaths() {
-  const articles = await getCollection('articles', ({ slug, data }) => {
-    return slug.startsWith('es/') && (import.meta.env.DEV || !data.draft);
+  const allArticles = await getCollection('articles', ({ data }) => {
+    return import.meta.env.DEV || !data.draft;
   });
 
-  const tags = new Set<string>();
-  for (const article of articles) {
-    for (const tag of article.data.tags) {
-      tags.add(tag);
+  return locales.flatMap(lang => {
+    const localeArticles = allArticles.filter(a => a.slug.startsWith(`${lang}/`));
+    const tags = new Set<string>();
+    for (const article of localeArticles) {
+      for (const tag of article.data.tags) {
+        tags.add(tag);
+      }
     }
-  }
 
-  return [...tags].map(tag => ({
-    params: { tag },
-    props: {
-      tag,
-      articles: articles
-        .filter(a => a.data.tags.includes(tag))
-        .sort((a, b) => b.data.publishedDate.valueOf() - a.data.publishedDate.valueOf()),
-    },
-  }));
+    return [...tags].map(tag => ({
+      params: { lang, tag },
+      props: {
+        tag,
+        articles: localeArticles
+          .filter(a => a.data.tags.includes(tag))
+          .sort((a, b) => b.data.publishedDate.valueOf() - a.data.publishedDate.valueOf()),
+      },
+    }));
+  });
 }
 
-const lang = 'es';
+const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 const { tag, articles } = Astro.props;
 ---
@@ -46,7 +50,7 @@ const { tag, articles } = Astro.props;
             title={article.data.title}
             description={article.data.description}
             publishedDate={article.data.publishedDate}
-            slug={article.slug.replace('es/', '')}
+            slug={article.slug.replace(`${lang}/`, '')}
             tags={article.data.tags}
             lang={lang}
             originalPlatform={article.data.originalPlatform}

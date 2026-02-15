@@ -1,13 +1,18 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
 import { getCollection } from 'astro:content';
 
-const lang = 'es';
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
 const articles = await getCollection('articles', ({ slug, data }) => {
-  return slug.startsWith('es/') && (import.meta.env.DEV || !data.draft);
+  return slug.startsWith(`${lang}/`) && (import.meta.env.DEV || !data.draft);
 });
 
 const tagCounts = new Map<string, number>();

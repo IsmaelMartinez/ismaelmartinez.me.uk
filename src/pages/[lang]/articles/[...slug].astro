@@ -2,22 +2,26 @@
 import { getCollection } from 'astro:content';
 import ArticleLayout from '../../../layouts/ArticleLayout.astro';
 import { getReadingTime } from '../../../utils/reading-time';
+import { locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
 
 export async function getStaticPaths() {
-  const articles = await getCollection('articles', ({ slug }) => {
-    return slug.startsWith('en/');
-  });
+  const articles = await getCollection('articles');
 
-  return articles.map(article => ({
-    params: { slug: article.slug.replace('en/', '') },
-    props: { article },
-  }));
+  return locales.flatMap(lang =>
+    articles
+      .filter(article => article.slug.startsWith(`${lang}/`))
+      .map(article => ({
+        params: { lang, slug: article.slug.replace(`${lang}/`, '') },
+        props: { article },
+      }))
+  );
 }
 
+const lang = Astro.params.lang as Locale;
 const { article } = Astro.props;
 const { Content } = await article.render();
 const readingTime = getReadingTime(article.body || '');
-const lang = 'en';
 ---
 
 <ArticleLayout

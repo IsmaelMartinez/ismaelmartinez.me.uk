@@ -145,6 +145,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <!-- Easter Egg: Konami Code -->
     <div id="konami-overlay" class="konami-overlay" role="dialog" aria-modal="true" aria-label="Secret Arcade Unlocked">
       <div class="konami-content">
+        <button id="konami-close" class="konami-close" aria-label="Close" type="button">&times;</button>
         <div class="konami-emoji">🕹️</div>
         <h2>SECRET ARCADE UNLOCKED!</h2>
         <p>You've discovered the hidden arcade. Game on!</p>
@@ -164,6 +165,23 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       checkArcadeUnlocked();
 
 
+
+      // Close Konami overlay (close button or tap outside content)
+      function initKonamiClose() {
+        const overlay = document.getElementById('konami-overlay');
+        const closeBtn = document.getElementById('konami-close');
+
+        closeBtn?.addEventListener('click', () => {
+          overlay?.classList.remove('active');
+        });
+
+        overlay?.addEventListener('click', (e) => {
+          if (e.target === overlay) {
+            overlay.classList.remove('active');
+          }
+        });
+      }
+      initKonamiClose();
 
       // Konami Code: ↑ ↑ ↓ ↓ ← → ← → B A
       const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
@@ -220,20 +238,33 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         }
       }
 
-      // Easter egg: Click the logo 5 times
-      let logoClicks = 0;
-      document.querySelector('.nav-logo')?.addEventListener('click', (e) => {
-        logoClicks++;
-        if (logoClicks >= 5) {
-          e.preventDefault();
-          const logo = e.target as HTMLElement;
-          logo.style.animation = 'spin 0.5s ease';
-          setTimeout(() => {
-            logo.style.animation = '';
-          }, 500);
-          logoClicks = 0;
-        }
-      });
+      // Easter egg: Click/tap the logo 5 times to unlock the arcade
+      // This provides a mobile-friendly alternative to the Konami Code
+      let logoAbort: AbortController | null = null;
+
+      function initLogoEasterEgg() {
+        logoAbort?.abort();
+        logoAbort = new AbortController();
+        let logoClicks = 0;
+        let logoClickTimer: ReturnType<typeof setTimeout>;
+
+        document.querySelector('.nav-logo')?.addEventListener('click', (e) => {
+          logoClicks++;
+          clearTimeout(logoClickTimer);
+          logoClickTimer = setTimeout(() => { logoClicks = 0; }, 2000);
+          if (logoClicks >= 5) {
+            e.preventDefault();
+            const logo = e.target as HTMLElement;
+            logo.style.animation = 'spin 0.5s ease';
+            setTimeout(() => {
+              logo.style.animation = '';
+            }, 500);
+            logoClicks = 0;
+            activateKonami();
+          }
+        }, { signal: logoAbort.signal });
+      }
+      initLogoEasterEgg();
 
       // Mobile menu toggle
       let menuAbort: AbortController | null = null;
@@ -304,6 +335,8 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         if (theme) document.documentElement.setAttribute('data-theme', theme);
         initThemeToggle();
         initMenuToggle();
+        initLogoEasterEgg();
+        initKonamiClose();
         checkArcadeUnlocked();
       });
     </script>
@@ -572,6 +605,31 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   .konami-content {
     text-align: center;
     z-index: 1;
+    position: relative;
+  }
+
+  .konami-close {
+    position: absolute;
+    top: -1rem;
+    right: -1rem;
+    background: none;
+    border: 1px solid var(--color-text-muted);
+    border-radius: 50%;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    line-height: 1;
+  }
+
+  .konami-close:hover {
+    color: #fff;
+    border-color: #fff;
   }
 
   .konami-emoji {

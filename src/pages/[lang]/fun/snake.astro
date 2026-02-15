@@ -345,7 +345,8 @@ const t = useTranslations(lang);
 
   const gameArea = document.querySelector('.game-area')!;
 
-  gameArea.addEventListener('touchstart', (e) => {
+  gameArea.addEventListener('touchstart', (ev) => {
+    const e = ev as TouchEvent;
     // Don't prevent default on overlay buttons so taps work for Start/Restart
     const target = e.target as HTMLElement;
     if (target.closest('.game-overlay')) return;
@@ -360,7 +361,8 @@ const t = useTranslations(lang);
     e.preventDefault();
   }, { passive: false });
 
-  gameArea.addEventListener('touchend', (e) => {
+  gameArea.addEventListener('touchend', (ev) => {
+    const e = ev as TouchEvent;
     const target = e.target as HTMLElement;
     if (target.closest('.game-overlay')) return;
     e.preventDefault();

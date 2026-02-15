@@ -1,14 +1,19 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import LinkCard from '../../components/LinkCard.astro';
-import { useTranslations } from '../../i18n/translations';
+import { useTranslations, locales } from '../../i18n/translations';
+import type { Locale } from '../../i18n/translations';
 import { socialLinks } from '../../data/links';
 
-const lang = 'es';
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 ---
 
-<Layout title="Conectar" lang={lang}>
+<Layout title="Connect" lang={lang}>
   <section class="section">
     <div class="container">
       <header class="page-header">

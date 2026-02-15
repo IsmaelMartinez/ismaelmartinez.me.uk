@@ -6,6 +6,13 @@ export const languages = {
 
 export const defaultLang = 'en';
 
+export const locales = ['en', 'es', 'cat'] as const;
+export type Locale = typeof locales[number];
+
+export function isValidLocale(lang: string): lang is Locale {
+  return locales.includes(lang as Locale);
+}
+
 export const translations = {
   en: {
     // Navigation

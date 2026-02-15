@@ -72,6 +72,11 @@ const results = quizResults[lang];
     const questionDiv = document.createElement('div');
     questionDiv.className = 'question';
 
+    const counter = document.createElement('span');
+    counter.className = 'question-counter';
+    counter.textContent = `${currentQuestion + 1} / ${questions.length}`;
+    questionDiv.appendChild(counter);
+
     const h2 = document.createElement('h2');
     h2.className = 'question-text';
     h2.textContent = q.question;
@@ -80,12 +85,23 @@ const results = quizResults[lang];
     const answersDiv = document.createElement('div');
     answersDiv.className = 'answers';
 
+    const labels = ['A', 'B', 'C', 'D'];
     q.answers.forEach((a, i) => {
       const btn = document.createElement('button');
       btn.className = 'answer-btn';
       btn.dataset.type = a.type;
       btn.dataset.index = String(i);
-      btn.textContent = a.text;
+
+      const label = document.createElement('span');
+      label.className = 'answer-label';
+      label.textContent = labels[i];
+
+      const text = document.createElement('span');
+      text.className = 'answer-text';
+      text.textContent = a.text;
+
+      btn.appendChild(label);
+      btn.appendChild(text);
       answersDiv.appendChild(btn);
     });
 
@@ -232,10 +248,22 @@ const results = quizResults[lang];
     border: 1px solid var(--color-border);
   }
 
+  .question-counter {
+    display: block;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-md);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
   .question-text {
     font-size: 1.5rem;
     margin-bottom: var(--space-xl);
     text-align: center;
+    line-height: 1.4;
   }
 
   .answers {
@@ -245,6 +273,9 @@ const results = quizResults[lang];
   }
 
   .answer-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
     padding: var(--space-lg);
     background: var(--color-bg);
     border: 2px solid var(--color-border);
@@ -256,14 +287,42 @@ const results = quizResults[lang];
     transition: all 0.2s ease;
   }
 
+  .answer-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  .answer-text {
+    flex: 1;
+  }
+
   .answer-btn:hover {
     border-color: #8b5cf6;
     transform: translateX(4px);
   }
 
+  .answer-btn:hover .answer-label {
+    background: #8b5cf6;
+    color: #fff;
+  }
+
   .answer-btn.selected {
     border-color: #8b5cf6;
     background: rgba(139, 92, 246, 0.1);
+  }
+
+  .answer-btn.selected .answer-label {
+    background: #8b5cf6;
+    color: #fff;
   }
 
   .quiz-result {

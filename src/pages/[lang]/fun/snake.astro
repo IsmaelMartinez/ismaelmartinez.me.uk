@@ -281,8 +281,15 @@ const t = useTranslations(lang);
     }, 1000);
   }
 
-  // Keyboard controls
+  // Prevent arrow keys from scrolling the page when game area is visible
+  const gameKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'W', 'a', 'A', 's', 'S', 'd', 'D']);
+
   document.addEventListener('keydown', (e) => {
+    // Always prevent arrow/WASD from scrolling when game section is visible
+    if (gameKeys.has(e.key)) {
+      e.preventDefault();
+    }
+
     if (!gameLoop) return;
 
     switch (e.key) {
@@ -290,25 +297,21 @@ const t = useTranslations(lang);
       case 'w':
       case 'W':
         if (direction.y !== 1) nextDirection = { x: 0, y: -1 };
-        e.preventDefault();
         break;
       case 'ArrowDown':
       case 's':
       case 'S':
         if (direction.y !== -1) nextDirection = { x: 0, y: 1 };
-        e.preventDefault();
         break;
       case 'ArrowLeft':
       case 'a':
       case 'A':
         if (direction.x !== 1) nextDirection = { x: -1, y: 0 };
-        e.preventDefault();
         break;
       case 'ArrowRight':
       case 'd':
       case 'D':
         if (direction.x !== -1) nextDirection = { x: 1, y: 0 };
-        e.preventDefault();
         break;
     }
   });
@@ -336,16 +339,24 @@ const t = useTranslations(lang);
     });
   });
 
-  // Touch controls (swipe)
+  // Touch controls (swipe) - prevent scrolling on game area
   let touchStartX = 0;
   let touchStartY = 0;
 
-  canvas.addEventListener('touchstart', (e) => {
+  const gameArea = document.querySelector('.game-area')!;
+
+  gameArea.addEventListener('touchstart', (e) => {
+    e.preventDefault();
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
-  });
+  }, { passive: false });
 
-  canvas.addEventListener('touchend', (e) => {
+  gameArea.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+  }, { passive: false });
+
+  gameArea.addEventListener('touchend', (e) => {
+    e.preventDefault();
     if (!gameLoop) return;
 
     const touchEndX = e.changedTouches[0].clientX;
@@ -453,6 +464,7 @@ const t = useTranslations(lang);
     border-radius: 1rem;
     overflow: hidden;
     border: 2px solid var(--color-border);
+    touch-action: none;
   }
 
   #game-canvas {

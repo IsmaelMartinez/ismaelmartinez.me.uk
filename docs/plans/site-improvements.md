@@ -22,3 +22,12 @@ A prioritised list of improvements identified during a site review. Grouped by i
 - [x] JSON-LD Structured Data — `Person` schema on all homepage locales, `Article` schema on article pages
 - [x] Dark/Light Mode Toggle — manual toggle button in nav with `localStorage` persistence, `data-theme` attribute, FOUC prevention script
 - [x] /uses Page — tech stack showcase at `/en/uses`, `/es/uses`, `/cat/uses` with categorised tools, hardware, and software
+
+## Phase 3
+
+- [x] Mobile Hamburger Menu — hamburger toggle on screens ≤600px, replacing wrapping nav links. Keyboard accessible (Escape to close), language switcher and theme toggle remain visible
+- [x] Tag Pages — dynamic `/[lang]/tags/[tag]` routes listing articles by tag, `/[lang]/tags/` index with all tags and article counts, clickable tags in ArticleCard and ArticleLayout
+- [x] Article Table of Contents — auto-generated from h2/h3 headings, sticky sidebar on desktop (≥1100px), collapsible section on mobile, anchor IDs and smooth scroll
+- [x] Reading Progress Bar — fixed 3px bar at top of article pages filling as reader scrolls, themed via CSS custom properties, hidden on non-article pages
+- [x] Related Articles — 2–3 related articles at bottom of each article based on shared tags, falls back to most recent, uses existing ArticleCard component
+- [x] About Page — `/[lang]/about` pages with bio, career highlights, and interests. Added to main navigation between Home and Projects. Includes JSON-LD Person schema with extended properties (description, knowsAbout, alumniOf)

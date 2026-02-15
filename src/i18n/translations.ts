@@ -92,7 +92,37 @@ export const translations = {
     'fun.trivia.wrong': 'Wrong!',
     'fun.trivia.score': 'Your Score',
     'fun.trivia.playAgain': 'Play Again',
-    'fun.backToFun': 'Back to Fun Stuff'
+    'fun.backToFun': 'Back to Fun Stuff',
+
+    // Mobile Menu
+    'nav.menuToggle': 'Toggle menu',
+
+    // Tags
+    'tags.title': 'Tags',
+    'tags.description': 'Browse articles by topic',
+    'tags.articlesTagged': 'Articles tagged',
+    'tags.article': 'article',
+    'tags.articles': 'articles',
+
+    // Table of Contents
+    'toc.title': 'Table of Contents',
+
+    // Related Articles
+    'related.title': 'Related Articles',
+
+    // About
+    'nav.about': 'About',
+    'about.title': 'About',
+    'about.description': 'Software Engineer, open source enthusiast, and lifelong learner',
+    'about.bioTitle': 'Hello!',
+    'about.bio': "I'm Ismael Martinez, a software engineer based in the UK with a passion for building reliable, well-crafted software. I enjoy working across the full stack, contributing to open source, and writing about what I learn along the way.",
+    'about.careerTitle': 'Career Highlights',
+    'about.career1': 'Over 15 years of experience in software engineering across multiple industries',
+    'about.career2': 'Specialising in cloud-native architectures, DevOps practices, and platform engineering',
+    'about.career3': 'Active open source contributor and community participant',
+    'about.career4': 'Regular writer on Medium and Dev.to covering software development topics',
+    'about.interestsTitle': 'Interests',
+    'about.interests': 'Outside of coding, I enjoy exploring new technologies, reading about software architecture, and spending time with my family. I believe in continuous learning and sharing knowledge with the community.'
   },
   es: {
     // Navigation
@@ -179,7 +209,37 @@ export const translations = {
     'fun.trivia.wrong': '¡Incorrecto!',
     'fun.trivia.score': 'Tu Puntuación',
     'fun.trivia.playAgain': 'Jugar de Nuevo',
-    'fun.backToFun': 'Volver a Diversión'
+    'fun.backToFun': 'Volver a Diversión',
+
+    // Mobile Menu
+    'nav.menuToggle': 'Alternar menú',
+
+    // Tags
+    'tags.title': 'Etiquetas',
+    'tags.description': 'Explorar artículos por tema',
+    'tags.articlesTagged': 'Artículos etiquetados',
+    'tags.article': 'artículo',
+    'tags.articles': 'artículos',
+
+    // Table of Contents
+    'toc.title': 'Tabla de Contenidos',
+
+    // Related Articles
+    'related.title': 'Artículos Relacionados',
+
+    // About
+    'nav.about': 'Sobre mí',
+    'about.title': 'Sobre mí',
+    'about.description': 'Ingeniero de Software, entusiasta del código abierto y aprendiz permanente',
+    'about.bioTitle': '¡Hola!',
+    'about.bio': 'Soy Ismael Martinez, ingeniero de software en Reino Unido con pasión por construir software fiable y bien diseñado. Me gusta trabajar en todo el stack, contribuir al código abierto y escribir sobre lo que aprendo.',
+    'about.careerTitle': 'Trayectoria',
+    'about.career1': 'Más de 15 años de experiencia en ingeniería de software en múltiples industrias',
+    'about.career2': 'Especializado en arquitecturas cloud-native, prácticas DevOps e ingeniería de plataformas',
+    'about.career3': 'Contribuidor activo de código abierto y participante de la comunidad',
+    'about.career4': 'Escritor habitual en Medium y Dev.to sobre desarrollo de software',
+    'about.interestsTitle': 'Intereses',
+    'about.interests': 'Fuera del código, me gusta explorar nuevas tecnologías, leer sobre arquitectura de software y pasar tiempo con mi familia. Creo en el aprendizaje continuo y en compartir conocimiento con la comunidad.'
   },
   cat: {
     // Navigation
@@ -266,7 +326,37 @@ export const translations = {
     'fun.trivia.wrong': 'Incorrecte!',
     'fun.trivia.score': 'La Teva Puntuació',
     'fun.trivia.playAgain': 'Jugar de Nou',
-    'fun.backToFun': 'Tornar a Diversió'
+    'fun.backToFun': 'Tornar a Diversió',
+
+    // Mobile Menu
+    'nav.menuToggle': 'Alternar menú',
+
+    // Tags
+    'tags.title': 'Etiquetes',
+    'tags.description': 'Explorar articles per tema',
+    'tags.articlesTagged': 'Articles etiquetats',
+    'tags.article': 'article',
+    'tags.articles': 'articles',
+
+    // Table of Contents
+    'toc.title': 'Taula de Continguts',
+
+    // Related Articles
+    'related.title': 'Articles Relacionats',
+
+    // About
+    'nav.about': 'Sobre mi',
+    'about.title': 'Sobre mi',
+    'about.description': 'Enginyer de Software, entusiasta del codi obert i aprenent permanent',
+    'about.bioTitle': 'Hola!',
+    'about.bio': "Sóc Ismael Martinez, enginyer de software al Regne Unit amb passió per construir software fiable i ben dissenyat. M'agrada treballar en tot l'stack, contribuir al codi obert i escriure sobre el que aprenc.",
+    'about.careerTitle': 'Trajectòria',
+    'about.career1': "Més de 15 anys d'experiència en enginyeria de software en múltiples indústries",
+    'about.career2': 'Especialitzat en arquitectures cloud-native, pràctiques DevOps i enginyeria de plataformes',
+    'about.career3': 'Contribuïdor actiu de codi obert i participant de la comunitat',
+    'about.career4': 'Escriptor habitual a Medium i Dev.to sobre desenvolupament de software',
+    'about.interestsTitle': 'Interessos',
+    'about.interests': "Fora del codi, m'agrada explorar noves tecnologies, llegir sobre arquitectura de software i passar temps amb la meva família. Crec en l'aprenentatge continu i en compartir coneixement amb la comunitat."
   }
 } as const;
 

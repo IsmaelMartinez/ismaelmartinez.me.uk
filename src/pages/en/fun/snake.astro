@@ -81,7 +81,7 @@ const t = useTranslations(lang);
   let nextDirection: { x: number; y: number } = { x: 1, y: 0 };
   let score = 0;
   let highScore = parseInt(localStorage.getItem('snake-high-score') || '0');
-  let gameLoop: number | null = null;
+  let gameLoop: ReturnType<typeof setInterval> | null = null;
   let gameSpeed = 150;
 
   highScoreEl.textContent = highScore.toString();

@@ -78,8 +78,13 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       <div class="container nav-container">
         <a href={getLocalizedPath('/', lang)} class="nav-logo">IMR</a>
 
-        <ul class="nav-links">
+        <button id="menu-toggle" class="menu-toggle" aria-label={t('nav.menuToggle')} aria-controls="nav-links" aria-expanded="false" type="button">
+          <span class="menu-icon"></span>
+        </button>
+
+        <ul id="nav-links" class="nav-links">
           <li><a href={getLocalizedPath('/', lang)} aria-current={currentPath === '/' ? 'page' : undefined}>{t('nav.home')}</a></li>
+          <li><a href={getLocalizedPath('/about', lang)} aria-current={currentPath === '/about' ? 'page' : undefined}>{t('nav.about')}</a></li>
           <li><a href={getLocalizedPath('/projects', lang)} aria-current={currentPath === '/projects' ? 'page' : undefined}>{t('nav.projects')}</a></li>
           <li><a href={getLocalizedPath('/writing', lang)} aria-current={currentPath === '/writing' ? 'page' : undefined}>{t('nav.writing')}</a></li>
           <li id="arcade-nav" class="arcade-nav-hidden"><a href={getLocalizedPath('/fun', lang)} aria-current={currentPath.startsWith('/fun') ? 'page' : undefined}>{t('nav.fun')}</a></li>
@@ -88,7 +93,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
         <div class="nav-actions">
           <div class="lang-switcher" role="navigation" aria-label={t('nav.languageSwitcher')}>
-            {Object.entries(languages).map(([code, name]) => (
+            {Object.entries(languages).map(([code, _name]) => (
               <a
                 href={getLocalizedPath(currentPath, code)}
                 class:list={['lang-link', { active: lang === code }]}
@@ -218,8 +223,50 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         }
       });
 
+      // Mobile menu toggle
+      let menuAbort: AbortController | null = null;
+
+      function initMenuToggle() {
+        menuAbort?.abort();
+        menuAbort = new AbortController();
+        const signal = menuAbort.signal;
+
+        const toggle = document.getElementById('menu-toggle');
+        const navLinks = document.getElementById('nav-links');
+        if (!toggle || !navLinks) return;
+
+        toggle.addEventListener('click', () => {
+          const expanded = toggle.getAttribute('aria-expanded') === 'true';
+          toggle.setAttribute('aria-expanded', String(!expanded));
+          navLinks.classList.toggle('open');
+        }, { signal });
+
+        // Close on Escape
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && navLinks.classList.contains('open')) {
+            toggle.setAttribute('aria-expanded', 'false');
+            navLinks.classList.remove('open');
+            toggle.focus();
+          }
+        }, { signal });
+
+        // Close when clicking a nav link
+        navLinks.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            toggle.setAttribute('aria-expanded', 'false');
+            navLinks.classList.remove('open');
+          }, { signal });
+        });
+      }
+      initMenuToggle();
+
       // Theme toggle
+      let themeAbort: AbortController | null = null;
+
       function initThemeToggle() {
+        themeAbort?.abort();
+        themeAbort = new AbortController();
+
         const toggle = document.getElementById('theme-toggle');
         if (!toggle) return;
 
@@ -236,7 +283,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           }
           document.documentElement.setAttribute('data-theme', next);
           localStorage.setItem('theme', next);
-        });
+        }, { signal: themeAbort!.signal });
       }
       initThemeToggle();
 
@@ -244,6 +291,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         const theme = localStorage.getItem('theme');
         if (theme) document.documentElement.setAttribute('data-theme', theme);
         initThemeToggle();
+        initMenuToggle();
         checkArcadeUnlocked();
       });
     </script>
@@ -369,6 +417,51 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     background: var(--color-bg-secondary);
   }
 
+  /* Hamburger menu button */
+  .menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--space-sm);
+    z-index: 101;
+  }
+
+  .menu-icon,
+  .menu-icon::before,
+  .menu-icon::after {
+    display: block;
+    width: 1.25rem;
+    height: 2px;
+    background: var(--color-text);
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .menu-icon::before,
+  .menu-icon::after {
+    content: '';
+    position: absolute;
+    left: 0;
+  }
+
+  .menu-icon::before { top: -6px; }
+  .menu-icon::after { top: 6px; }
+
+  .menu-toggle[aria-expanded="true"] .menu-icon {
+    background: transparent;
+  }
+
+  .menu-toggle[aria-expanded="true"] .menu-icon::before {
+    top: 0;
+    transform: rotate(45deg);
+  }
+
+  .menu-toggle[aria-expanded="true"] .menu-icon::after {
+    top: 0;
+    transform: rotate(-45deg);
+  }
+
   .footer {
     border-top: 1px solid var(--color-border);
     padding: var(--space-xl) 0;
@@ -412,17 +505,33 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   }
 
   @media (max-width: 600px) {
-    .nav-container {
-      flex-wrap: wrap;
-      padding: var(--space-sm) var(--space-lg);
-      height: auto;
+    .menu-toggle {
+      display: block;
     }
 
     .nav-links {
-      order: 3;
-      width: 100%;
-      justify-content: center;
+      display: none;
+      position: absolute;
+      top: var(--nav-height);
+      left: 0;
+      right: 0;
+      flex-direction: column;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+      padding: var(--space-md) var(--space-lg);
+      gap: 0;
+    }
+
+    .nav-links.open {
+      display: flex;
+    }
+
+    .nav-links li {
       padding: var(--space-sm) 0;
+    }
+
+    .nav {
+      position: sticky;
     }
   }
 

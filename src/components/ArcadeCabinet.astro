@@ -8,7 +8,7 @@ interface Props {
   icon: string;
 }
 
-const { id, title, description, href, color, icon } = Astro.props;
+const { id: _id, title, description, href, color, icon } = Astro.props;
 ---
 
 <a href={href} class="arcade-cabinet" style={`--cabinet-color: ${color}; --cabinet-glow: ${color}40;`}>

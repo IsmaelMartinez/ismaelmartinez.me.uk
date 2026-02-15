@@ -43,7 +43,7 @@ const results = quizResults[lang];
   </section>
 </Layout>
 
-<script define:vars={{ questions, results, t_next: t('fun.quiz.next'), t_seeResults: t('fun.quiz.seeResults') }}>
+<script define:vars={{ questions, results }}>
   let currentQuestion = 0;
   let scores = { perfectionist: 0, yolo: 0, architect: 0, pragmatist: 0 };
 
@@ -57,7 +57,7 @@ const results = quizResults[lang];
 
   function showQuestion() {
     const q = questions[currentQuestion];
-    const isLast = currentQuestion === questions.length - 1;
+    const _isLast = currentQuestion === questions.length - 1;
 
     progressEl.style.width = `${((currentQuestion + 1) / questions.length) * 100}%`;
 

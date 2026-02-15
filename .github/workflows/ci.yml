@@ -34,5 +34,11 @@ jobs:
       - name: Build the site
         run: npm run build
 
+      - name: Run tests
+        run: npm test
+
       - name: Check links
         run: npm run check-links
+
+      - name: Lighthouse CI
+        run: npx lhci autorun --collect.staticDistDir=./dist --collect.url=/en/ --assert.assertions.categories:performance=off --assert.assertions.categories:accessibility=warn --assert.assertions.categories:best-practices=warn --assert.assertions.categories:seo=warn

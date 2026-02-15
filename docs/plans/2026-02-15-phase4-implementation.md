@@ -332,7 +332,7 @@ git commit -m "test: add unit tests for reading-time and translations"
 
 ---
 
-### Task 6: Page Deduplication — Simple Pages
+### Task 6: Page Deduplication — Simple Pages ✅
 
 Consolidate the simpler pages (no async data): `connect`, `projects`, `about`, `uses`.
 
@@ -411,7 +411,7 @@ git commit -m "refactor: deduplicate connect, projects, about, uses pages via [l
 
 ---
 
-### Task 7: Page Deduplication — Index and Writing Pages
+### Task 7: Page Deduplication — Index and Writing Pages ✅
 
 These pages have async data (content collections) so need `getStaticPaths` with async data fetching.
 

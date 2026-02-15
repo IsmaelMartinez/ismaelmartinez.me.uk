@@ -41,18 +41,18 @@ const platformIcon = {
 
     <h3 class="article-card-title">{title}</h3>
     <p class="article-card-description">{description}</p>
-
-    {tags.length > 0 && (
-      <div class="article-card-tags">
-        {tags.slice(0, 3).map(tag => (
-          <a href={getLocalizedPath(`/tags/${tag}`, lang)} class="tag tag-small tag-link">{tag}</a>
-        ))}
-        {tags.length > 3 && (
-          <span class="tag tag-small tag-more">+{tags.length - 3}</span>
-        )}
-      </div>
-    )}
   </a>
+
+  {tags.length > 0 && (
+    <div class="article-card-tags">
+      {tags.slice(0, 3).map(tag => (
+        <a href={getLocalizedPath(`/tags/${tag}`, lang)} class="tag tag-small tag-link">{tag}</a>
+      ))}
+      {tags.length > 3 && (
+        <span class="tag tag-small tag-more">+{tags.length - 3}</span>
+      )}
+    </div>
+  )}
 </article>
 
 <style>
@@ -70,6 +70,7 @@ const platformIcon = {
   .article-link {
     display: block;
     padding: var(--space-lg);
+    padding-bottom: var(--space-sm);
     text-decoration: none;
     color: inherit;
   }
@@ -116,6 +117,7 @@ const platformIcon = {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-xs);
+    padding: 0 var(--space-lg) var(--space-lg);
   }
 
   .tag-small {

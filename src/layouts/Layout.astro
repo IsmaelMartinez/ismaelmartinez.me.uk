@@ -15,7 +15,11 @@ interface Props {
 
 const { title, description = "Ismael Martinez - Software Engineer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical } = Astro.props;
 const t = useTranslations(lang);
-const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
+const rawPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
+// Tag names are locale-specific with no cross-locale mapping, so the language
+// switcher on tag detail pages links to the tags index for other locales.
+const tagDetailMatch = rawPath.match(/^\/tags\/[^/]/);
+const currentPath = tagDetailMatch ? '/tags/' : rawPath;
 const canonicalUrl = customCanonical || new URL(Astro.url.pathname, Astro.site).href;
 const fullTitle = `${title} | Ismael Martinez`;
 const locales = ['en', 'es', 'cat'] as const;

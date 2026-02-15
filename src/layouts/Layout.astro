@@ -1,4 +1,5 @@
 ---
+import { ViewTransitions } from 'astro:transitions';
 import { languages, useTranslations, getLocalizedPath } from '../i18n/translations';
 import '../styles/global.css';
 
@@ -6,11 +7,19 @@ interface Props {
   title: string;
   description?: string;
   lang?: 'en' | 'es' | 'cat';
+  ogType?: 'website' | 'article';
+  publishedDate?: Date;
+  tags?: string[];
+  canonical?: string;
 }
 
-const { title, description = "Ismael Martinez - Software Engineer & Open Source Enthusiast", lang = 'en' } = Astro.props;
+const { title, description = "Ismael Martinez - Software Engineer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical } = Astro.props;
 const t = useTranslations(lang);
 const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
+const canonicalUrl = customCanonical || new URL(Astro.url.pathname, Astro.site).href;
+const fullTitle = `${title} | Ismael Martinez`;
+const locales = ['en', 'es', 'cat'] as const;
+const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 ---
 
 <!doctype html>
@@ -20,38 +29,90 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>{title} | Ismael Martinez</title>
+    <link rel="canonical" href={canonicalUrl} />
+    <title>{fullTitle}</title>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:site_name" content="Ismael Martinez" />
+    <meta property="og:locale" content={{ en: 'en_GB', es: 'es_ES', cat: 'ca_ES' }[lang]} />
+    {publishedDate && <meta property="article:published_time" content={publishedDate.toISOString()} />}
+    {tags?.map(tag => <meta property="article:tag" content={tag} />)}
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+
+    <!-- hreflang alternates -->
+    {locales.map(locale => (
+      <link rel="alternate" hreflang={hreflangMap[locale]} href={new URL(getLocalizedPath(currentPath, locale), Astro.site).href} />
+    ))}
+    <link rel="alternate" hreflang="x-default" href={new URL(getLocalizedPath(currentPath, 'en'), Astro.site).href} />
+
+    <!-- RSS Feed -->
+    <link rel="alternate" type="application/rss+xml" title={`Ismael Martinez (${lang.toUpperCase()})`} href={`/${lang}/rss.xml`} />
+
+    <slot name="head" />
+
+    <!-- Theme: prevent FOUC -->
+    <script is:inline>
+      (function() {
+        const theme = localStorage.getItem('theme');
+        if (theme) document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
+    <ViewTransitions />
 
     <!-- Umami Analytics -->
     <script defer src="https://cloud.umami.is/script.js" data-website-id="d3ef0011-73bb-46a5-a248-f5220efa13eb"></script>
   </head>
   <body>
-    <nav class="nav">
+    <a href="#main-content" class="skip-link">{t('nav.skipToContent')}</a>
+
+    <nav class="nav" aria-label={t('nav.mainNavigation')}>
       <div class="container nav-container">
         <a href={getLocalizedPath('/', lang)} class="nav-logo">IMR</a>
 
-        <ul class="nav-links">
-          <li><a href={getLocalizedPath('/', lang)}>{t('nav.home')}</a></li>
-          <li><a href={getLocalizedPath('/projects', lang)}>{t('nav.projects')}</a></li>
-          <li><a href={getLocalizedPath('/writing', lang)}>{t('nav.writing')}</a></li>
-          <li id="arcade-nav" class="arcade-nav-hidden"><a href={getLocalizedPath('/fun', lang)}>{t('nav.fun')}</a></li>
-          <li><a href={getLocalizedPath('/connect', lang)}>{t('nav.connect')}</a></li>
+        <button id="menu-toggle" class="menu-toggle" aria-label={t('nav.menuToggle')} aria-expanded="false" type="button">
+          <span class="menu-icon"></span>
+        </button>
+
+        <ul id="nav-links" class="nav-links">
+          <li><a href={getLocalizedPath('/', lang)} aria-current={currentPath === '/' ? 'page' : undefined}>{t('nav.home')}</a></li>
+          <li><a href={getLocalizedPath('/about', lang)} aria-current={currentPath === '/about' ? 'page' : undefined}>{t('nav.about')}</a></li>
+          <li><a href={getLocalizedPath('/projects', lang)} aria-current={currentPath === '/projects' ? 'page' : undefined}>{t('nav.projects')}</a></li>
+          <li><a href={getLocalizedPath('/writing', lang)} aria-current={currentPath === '/writing' ? 'page' : undefined}>{t('nav.writing')}</a></li>
+          <li id="arcade-nav" class="arcade-nav-hidden"><a href={getLocalizedPath('/fun', lang)} aria-current={currentPath.startsWith('/fun') ? 'page' : undefined}>{t('nav.fun')}</a></li>
+          <li><a href={getLocalizedPath('/connect', lang)} aria-current={currentPath === '/connect' ? 'page' : undefined}>{t('nav.connect')}</a></li>
         </ul>
 
-        <div class="lang-switcher">
-          {Object.entries(languages).map(([code, _name]) => (
-            <a
-              href={getLocalizedPath(currentPath, code)}
-              class:list={['lang-link', { active: lang === code }]}
-            >
-              {code.toUpperCase()}
-            </a>
-          ))}
+        <div class="nav-actions">
+          <div class="lang-switcher" role="navigation" aria-label={t('nav.languageSwitcher')}>
+            {Object.entries(languages).map(([code, name]) => (
+              <a
+                href={getLocalizedPath(currentPath, code)}
+                class:list={['lang-link', { active: lang === code }]}
+                aria-current={lang === code ? 'true' : undefined}
+                lang={hreflangMap[code]}
+              >
+                {code.toUpperCase()}
+              </a>
+            ))}
+          </div>
+          <button id="theme-toggle" class="theme-toggle" aria-label={t('nav.themeToggle')} type="button">
+            <span class="theme-icon-light">&#9788;</span>
+            <span class="theme-icon-dark">&#9790;</span>
+          </button>
         </div>
       </div>
     </nav>
 
-    <main>
+    <main id="main-content">
       <slot />
     </main>
 
@@ -60,12 +121,17 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
         <p>
           {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> {t('footer.and')} ☕
         </p>
+        <p class="footer-links">
+          <a href={getLocalizedPath('/uses', lang)} class="footer-link">{t('nav.uses')}</a>
+          <span class="footer-separator">·</span>
+          <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">RSS</a>
+        </p>
         <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez</p>
       </div>
     </footer>
 
     <!-- Easter Egg: Konami Code -->
-    <div id="konami-overlay" class="konami-overlay">
+    <div id="konami-overlay" class="konami-overlay" role="dialog" aria-modal="true" aria-label="Secret Arcade Unlocked">
       <div class="konami-content">
         <div class="konami-emoji">🕹️</div>
         <h2>SECRET ARCADE UNLOCKED!</h2>
@@ -85,11 +151,20 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
       }
       checkArcadeUnlocked();
 
+
+
       // Konami Code: ↑ ↑ ↓ ↓ ← → ← → B A
       const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
       let konamiIndex = 0;
 
       document.addEventListener('keydown', (e) => {
+        // Escape key closes Konami overlay
+        if (e.key === 'Escape') {
+          const overlay = document.getElementById('konami-overlay');
+          overlay?.classList.remove('active');
+          return;
+        }
+
         if (e.code === konamiCode[konamiIndex]) {
           konamiIndex++;
           if (konamiIndex === konamiCode.length) {
@@ -147,11 +222,90 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
           logoClicks = 0;
         }
       });
+
+      // Mobile menu toggle
+      function initMenuToggle() {
+        const toggle = document.getElementById('menu-toggle');
+        const navLinks = document.getElementById('nav-links');
+        if (!toggle || !navLinks) return;
+
+        toggle.addEventListener('click', () => {
+          const expanded = toggle.getAttribute('aria-expanded') === 'true';
+          toggle.setAttribute('aria-expanded', String(!expanded));
+          navLinks.classList.toggle('open');
+        });
+
+        // Close on Escape
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && navLinks.classList.contains('open')) {
+            toggle.setAttribute('aria-expanded', 'false');
+            navLinks.classList.remove('open');
+            toggle.focus();
+          }
+        });
+
+        // Close when clicking a nav link
+        navLinks.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            toggle.setAttribute('aria-expanded', 'false');
+            navLinks.classList.remove('open');
+          });
+        });
+      }
+      initMenuToggle();
+
+      // Theme toggle
+      function initThemeToggle() {
+        const toggle = document.getElementById('theme-toggle');
+        if (!toggle) return;
+
+        toggle.addEventListener('click', () => {
+          const current = document.documentElement.getAttribute('data-theme');
+          let next: string;
+          if (current) {
+            // If manual override is set, toggle it
+            next = current === 'dark' ? 'light' : 'dark';
+          } else {
+            // No manual override — detect system preference and go opposite
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            next = prefersDark ? 'light' : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', next);
+          localStorage.setItem('theme', next);
+        });
+      }
+      initThemeToggle();
+
+      document.addEventListener('astro:after-swap', () => {
+        const theme = localStorage.getItem('theme');
+        if (theme) document.documentElement.setAttribute('data-theme', theme);
+        initThemeToggle();
+        initMenuToggle();
+        checkArcadeUnlocked();
+      });
     </script>
   </body>
 </html>
 
 <style>
+  .skip-link {
+    position: absolute;
+    top: -100%;
+    left: var(--space-md);
+    z-index: 200;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: 0 0 0.25rem 0.25rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.2s ease;
+  }
+
+  .skip-link:focus {
+    top: 0;
+  }
+
   .nav {
     position: sticky;
     top: 0;
@@ -186,7 +340,8 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
     transition: color 0.2s ease;
   }
 
-  .nav-links a:hover {
+  .nav-links a:hover,
+  .nav-links a[aria-current="page"] {
     color: var(--color-text);
   }
 
@@ -194,9 +349,46 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
     display: none;
   }
 
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
   .lang-switcher {
     display: flex;
     gap: var(--space-sm);
+  }
+
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    padding: var(--space-xs) var(--space-sm);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+  }
+
+  .theme-toggle:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  /* Show moon in dark mode, sun in light mode */
+  .theme-icon-light { display: none; }
+  .theme-icon-dark { display: inline; }
+
+  :global(:root[data-theme="light"]) .theme-icon-light { display: inline; }
+  :global(:root[data-theme="light"]) .theme-icon-dark { display: none; }
+
+  @media (prefers-color-scheme: light) {
+    :global(:root:not([data-theme="dark"])) .theme-icon-light { display: inline; }
+    :global(:root:not([data-theme="dark"])) .theme-icon-dark { display: none; }
   }
 
   .lang-link {
@@ -214,12 +406,79 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
     background: var(--color-bg-secondary);
   }
 
+  /* Hamburger menu button */
+  .menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--space-sm);
+    z-index: 101;
+  }
+
+  .menu-icon,
+  .menu-icon::before,
+  .menu-icon::after {
+    display: block;
+    width: 1.25rem;
+    height: 2px;
+    background: var(--color-text);
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .menu-icon::before,
+  .menu-icon::after {
+    content: '';
+    position: absolute;
+    left: 0;
+  }
+
+  .menu-icon::before { top: -6px; }
+  .menu-icon::after { top: 6px; }
+
+  .menu-toggle[aria-expanded="true"] .menu-icon {
+    background: transparent;
+  }
+
+  .menu-toggle[aria-expanded="true"] .menu-icon::before {
+    top: 0;
+    transform: rotate(45deg);
+  }
+
+  .menu-toggle[aria-expanded="true"] .menu-icon::after {
+    top: 0;
+    transform: rotate(-45deg);
+  }
+
   .footer {
     border-top: 1px solid var(--color-border);
     padding: var(--space-xl) 0;
     text-align: center;
     color: var(--color-text-muted);
     font-size: 0.875rem;
+  }
+
+  .footer-links {
+    margin-top: var(--space-sm);
+  }
+
+  .footer-link,
+  .footer-rss {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .footer-link:hover,
+  .footer-rss:hover {
+    color: var(--color-accent);
+  }
+
+  .footer-separator {
+    color: var(--color-text-muted);
+    margin: 0 var(--space-xs);
   }
 
   .footer-copy {
@@ -235,17 +494,33 @@ const currentPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
   }
 
   @media (max-width: 600px) {
-    .nav-container {
-      flex-wrap: wrap;
-      padding: var(--space-sm) var(--space-lg);
-      height: auto;
+    .menu-toggle {
+      display: block;
     }
 
     .nav-links {
-      order: 3;
-      width: 100%;
-      justify-content: center;
+      display: none;
+      position: absolute;
+      top: var(--nav-height);
+      left: 0;
+      right: 0;
+      flex-direction: column;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+      padding: var(--space-md) var(--space-lg);
+      gap: 0;
+    }
+
+    .nav-links.open {
+      display: flex;
+    }
+
+    .nav-links li {
       padding: var(--space-sm) 0;
+    }
+
+    .nav {
+      position: sticky;
     }
   }
 

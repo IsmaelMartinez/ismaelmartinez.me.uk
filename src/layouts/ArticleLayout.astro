@@ -1,5 +1,7 @@
 ---
 import Layout from './Layout.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+import ArticleCard from '../components/ArticleCard.astro';
 import { useTranslations, getLocalizedPath } from '../i18n/translations';
 import { getCollection } from 'astro:content';
 
@@ -13,9 +15,10 @@ interface Props {
   tags: string[];
   lang: 'en' | 'es' | 'cat';
   slug: string;
+  readingTime?: number;
 }
 
-const { title, description, publishedDate, updatedDate, originalUrl, originalPlatform, tags, lang, slug } = Astro.props;
+const { title, description, publishedDate, updatedDate, originalUrl, originalPlatform, tags, lang, slug, readingTime } = Astro.props;
 const t = useTranslations(lang);
 
 // Get available translations for this article
@@ -25,7 +28,7 @@ const availableTranslations = allArticles
   .map(article => article.slug.split('/')[0]);
 
 const formatDate = (date: Date) => {
-  return date.toLocaleDateString(lang === 'cat' ? 'ca-ES' : lang === 'es' ? 'es-ES' : 'en-GB', {
+  return date.toLocaleDateString({ en: 'en-GB', es: 'es-ES', cat: 'ca-ES' }[lang], {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
@@ -37,10 +40,49 @@ const platformLabels = {
   devto: 'Dev.to',
   self: t('article.originallyPublished')
 };
+
+const articleJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": title,
+  "description": description,
+  "datePublished": publishedDate.toISOString(),
+  ...(updatedDate && { "dateModified": updatedDate.toISOString() }),
+  "author": {
+    "@type": "Person",
+    "name": "Ismael Martinez",
+    "url": "https://ismaelmartinez.me.uk"
+  },
+  "publisher": {
+    "@type": "Person",
+    "name": "Ismael Martinez"
+  },
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": `https://ismaelmartinez.me.uk/${lang}/articles/${slug.split('/')[1]}`
+  },
+  ...(tags.length > 0 && { "keywords": tags.join(', ') })
+};
+
+// Related articles: find articles sharing tags, fall back to most recent
+const sameLocaleArticles = allArticles
+  .filter(a => a.slug.startsWith(`${lang}/`) && a.slug !== slug && (import.meta.env.DEV || !a.data.draft));
+
+const scoredArticles = sameLocaleArticles.map(a => ({
+  article: a,
+  score: a.data.tags.filter(t => tags.includes(t)).length,
+}));
+
+const relatedArticles = scoredArticles
+  .sort((a, b) => b.score - a.score || b.article.data.publishedDate.valueOf() - a.article.data.publishedDate.valueOf())
+  .slice(0, 3)
+  .map(s => s.article);
 ---
 
-<Layout title={title} lang={lang}>
-  {originalUrl && <link rel="canonical" href={originalUrl} slot="head" />}
+<Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags} canonical={originalUrl}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(articleJsonLd).replace(/</g, '\\u003c')} />
+
+  <div id="reading-progress" class="reading-progress" aria-hidden="true"></div>
 
   <article class="article">
     <div class="container">
@@ -52,6 +94,9 @@ const platformLabels = {
               · {t('article.updated')} {formatDate(updatedDate)}
             </span>
           )}
+          {readingTime && (
+            <span class="reading-time">· {readingTime} {t('article.minRead')}</span>
+          )}
         </div>
 
         <h1 class="article-title">{title}</h1>
@@ -60,7 +105,7 @@ const platformLabels = {
         {tags.length > 0 && (
           <div class="article-tags">
             {tags.map(tag => (
-              <span class="tag">{tag}</span>
+              <a href={getLocalizedPath(`/tags/${tag}`, lang)} class="tag tag-link">{tag}</a>
             ))}
           </div>
         )}
@@ -80,9 +125,30 @@ const platformLabels = {
         )}
       </header>
 
+      <TableOfContents tocTitle={t('toc.title')} />
+
       <div class="article-content">
         <slot />
       </div>
+
+      {relatedArticles.length > 0 && (
+        <section class="related-articles">
+          <h2 class="related-title">{t('related.title')}</h2>
+          <div class="related-grid">
+            {relatedArticles.map(article => (
+              <ArticleCard
+                title={article.data.title}
+                description={article.data.description}
+                publishedDate={article.data.publishedDate}
+                slug={article.slug.replace(`${lang}/`, '')}
+                tags={article.data.tags}
+                lang={lang}
+                originalPlatform={article.data.originalPlatform}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <footer class="article-footer">
         {originalUrl && originalPlatform && (
@@ -100,9 +166,45 @@ const platformLabels = {
       </footer>
     </div>
   </article>
+
+  <script>
+    function initProgressBar() {
+      const bar = document.getElementById('reading-progress');
+      const article = document.querySelector('.article-content');
+      if (!bar || !article) return;
+
+      function updateProgress() {
+        const rect = article!.getBoundingClientRect();
+        const articleTop = rect.top + window.scrollY;
+        const articleHeight = rect.height;
+        const scrolled = window.scrollY - articleTop;
+        const progress = Math.min(Math.max(scrolled / articleHeight, 0), 1);
+        bar!.style.transform = `scaleX(${progress})`;
+      }
+
+      window.addEventListener('scroll', updateProgress, { passive: true });
+      updateProgress();
+    }
+
+    initProgressBar();
+    document.addEventListener('astro:after-swap', initProgressBar);
+  </script>
 </Layout>
 
 <style>
+  .reading-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: var(--color-accent);
+    transform-origin: left;
+    transform: scaleX(0);
+    z-index: 200;
+    transition: transform 0.1s linear;
+  }
+
   .article {
     padding: var(--space-2xl) 0;
   }
@@ -137,6 +239,16 @@ const platformLabels = {
     flex-wrap: wrap;
     gap: var(--space-xs);
     margin-bottom: var(--space-lg);
+  }
+
+  .tag-link {
+    text-decoration: none;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .tag-link:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
   }
 
   .language-versions {
@@ -281,6 +393,24 @@ const platformLabels = {
 
   .back-link:hover {
     color: var(--color-accent);
+  }
+
+  .related-articles {
+    margin-top: var(--space-2xl);
+    padding-top: var(--space-xl);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .related-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+  }
+
+  .related-grid {
+    display: grid;
+    gap: var(--space-lg);
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   }
 
   @media (max-width: 768px) {

@@ -45,7 +45,7 @@ const platformIcon = {
     {tags.length > 0 && (
       <div class="article-card-tags">
         {tags.slice(0, 3).map(tag => (
-          <span class="tag tag-small">{tag}</span>
+          <a href={getLocalizedPath(`/tags/${tag}`, lang)} class="tag tag-small tag-link">{tag}</a>
         ))}
         {tags.length > 3 && (
           <span class="tag tag-small tag-more">+{tags.length - 3}</span>
@@ -126,5 +126,17 @@ const platformIcon = {
   .tag-more {
     background: transparent;
     border: 1px dashed var(--color-border);
+  }
+
+  .tag-link {
+    text-decoration: none;
+    position: relative;
+    z-index: 1;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .tag-link:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
   }
 </style>

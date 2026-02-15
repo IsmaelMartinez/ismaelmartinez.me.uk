@@ -4,62 +4,71 @@ Thank you for your interest in contributing!
 
 ## Running the Project Locally
 
-To run this Hugo blog locally, follow these steps:
+This site is built with [Astro](https://astro.build/). To run it locally:
 
-1. **Install Hugo**  
-   On macOS, you can use Homebrew:
+1. **Install dependencies**
    ```sh
-   brew install hugo
+   npm install
    ```
 
-2. **Clone the Repository**
+2. **Start the development server**
    ```sh
-   git clone https://github.com/ismaelmartinez/ismaelmartinez.me.uk.git
-   cd ismaelmartinez.me.uk
+   npm run dev
    ```
 
-3. **Install Theme Submodules**  
-   If the theme is a git submodule, initialize and update it:
-   ```sh
-   git submodule update --init --recursive
+3. **View the site**
+   Open [http://localhost:4321/](http://localhost:4321/) in your browser.
+
+## Available Commands
+
+| Command           | Action                                      |
+|-------------------|---------------------------------------------|
+| `npm run dev`     | Start development server                    |
+| `npm run build`   | Build for production (output in `./dist`)   |
+| `npm run preview` | Preview production build locally            |
+
+## Adding Articles
+
+Articles use Astro Content Collections with MDX format. To add a new article:
+
+1. Create an `.mdx` file in the appropriate locale folder:
+   ```
+   src/content/articles/en/my-new-article.mdx
+   src/content/articles/es/my-new-article.mdx
+   src/content/articles/cat/my-new-article.mdx
    ```
 
-4. **Start the Hugo Server**
-   ```sh
-   hugo server
+2. Include the required frontmatter:
+   ```yaml
+   ---
+   title: "My New Article"
+   description: "A brief description"
+   publishedDate: 2026-01-01
+   tags: ["tag1", "tag2"]
+   draft: false
+   originalUrl: "https://..."
+   originalPlatform: "self"
+   ---
    ```
-   Or, to include draft posts:
-   ```sh
-   hugo server --buildDrafts
-   ```
 
-5. **View the Site**  
-   Open [http://localhost:1313/](http://localhost:1313/) in your browser.
+3. The slug must match across all three locale folders for translation linking to work.
 
-## Adding Content
+## Project Structure
 
-- Create new posts using:
-  ```sh
-  hugo new <language>/posts/<your-post>.md
-  ```
-  For example:
-  ```sh
-  hugo new en/posts/my-new-post.md
-  ```
-
-- Edit the generated file and add your content below the front matter.
-
-For more details on the project structure and multi-language setup, see the [blog post](./content/en/posts/configuring-multilanguage-hugo.md).
-
-## Building the Site
-
-To build the site for production, run:
-```sh
-hugo
+```
+src/
+├── pages/          # File-based routing with locale prefixes (/en/, /es/, /cat/)
+├── layouts/        # Layout.astro (base) and ArticleLayout.astro
+├── components/     # Shared components (Hero, ProjectCard, etc.)
+├── content/        # Content collections (articles in MDX)
+├── data/           # Static data (projects, links, fun quiz)
+├── i18n/           # Translation system
+└── styles/         # Global CSS design tokens
 ```
 
-This will generate the static files in the `public` directory.
+## Multi-language Support
 
+The site supports English, Spanish, and Catalan. When adding or editing content, keep all three locales in sync. See `src/i18n/translations.ts` for UI string translations.
 
 ---
-Thank you for helping improve this blog!
+Thank you for helping improve this site!

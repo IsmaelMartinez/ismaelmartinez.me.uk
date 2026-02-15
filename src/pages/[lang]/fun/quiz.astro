@@ -110,11 +110,13 @@ const results = quizResults[lang];
 
     document.querySelectorAll('.answer-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const type = e.target.dataset.type;
+        const button = (e.target).closest('.answer-btn');
+        if (!button) return;
+        const type = button.dataset.type;
         scores[type]++;
 
         document.querySelectorAll('.answer-btn').forEach(b => b.classList.remove('selected'));
-        e.target.classList.add('selected');
+        button.classList.add('selected');
 
         setTimeout(() => {
           if (currentQuestion < questions.length - 1) {

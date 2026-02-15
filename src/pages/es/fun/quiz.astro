@@ -57,22 +57,35 @@ const results = quizResults[lang];
 
   function showQuestion() {
     const q = questions[currentQuestion];
-    const _isLast = currentQuestion === questions.length - 1;
 
     progressEl.style.width = `${((currentQuestion + 1) / questions.length) * 100}%`;
 
-    questionContainer.innerHTML = `
-      <div class="question">
-        <h2 class="question-text">${q.question}</h2>
-        <div class="answers">
-          ${q.answers.map((a, i) => `
-            <button class="answer-btn" data-type="${a.type}" data-index="${i}">
-              ${a.text}
-            </button>
-          `).join('')}
-        </div>
-      </div>
-    `;
+    while (questionContainer.firstChild) {
+      questionContainer.removeChild(questionContainer.firstChild);
+    }
+
+    const questionDiv = document.createElement('div');
+    questionDiv.className = 'question';
+
+    const h2 = document.createElement('h2');
+    h2.className = 'question-text';
+    h2.textContent = q.question;
+    questionDiv.appendChild(h2);
+
+    const answersDiv = document.createElement('div');
+    answersDiv.className = 'answers';
+
+    q.answers.forEach((a, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'answer-btn';
+      btn.dataset.type = a.type;
+      btn.dataset.index = String(i);
+      btn.textContent = a.text;
+      answersDiv.appendChild(btn);
+    });
+
+    questionDiv.appendChild(answersDiv);
+    questionContainer.appendChild(questionDiv);
 
     document.querySelectorAll('.answer-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -106,7 +119,14 @@ const results = quizResults[lang];
     document.getElementById('result-description').textContent = result.description;
 
     const traitsEl = document.getElementById('result-traits');
-    traitsEl.innerHTML = result.traits.map(trait => `<li>${trait}</li>`).join('');
+    while (traitsEl.firstChild) {
+      traitsEl.removeChild(traitsEl.firstChild);
+    }
+    result.traits.forEach(trait => {
+      const li = document.createElement('li');
+      li.textContent = trait;
+      traitsEl.appendChild(li);
+    });
 
     resultEl.classList.add('show');
   }

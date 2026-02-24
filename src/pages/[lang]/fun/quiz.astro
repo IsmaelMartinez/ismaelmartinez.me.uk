@@ -48,7 +48,7 @@ const results = quizResults[lang];
   </section>
 </Layout>
 
-<script define:vars={{ questions, results }}>
+<script is:inline define:vars={{ questions, results }}>
   let currentQuestion = 0;
   let scores = { perfectionist: 0, yolo: 0, architect: 0, pragmatist: 0 };
 

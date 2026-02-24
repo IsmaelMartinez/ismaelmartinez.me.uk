@@ -12,7 +12,7 @@ export interface SocialLink {
 export const socialLinks: SocialLink[] = [
   {
     name: 'GitHub',
-    url: 'https://github.com/ismaelmartinez',
+    url: 'https://github.com/IsmaelMartinez',
     icon: '💻',
     description: {
       en: 'Check out my open source projects and contributions',

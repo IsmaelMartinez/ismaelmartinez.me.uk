@@ -48,25 +48,19 @@ const t = useTranslations(lang);
 
         <!-- Game Screen -->
         <div id="game-screen" class="screen" style="display:none;">
+          <div class="game-top-bar">
+            <span class="hud-poos" id="poo-counter">💩 0/0</span>
+            <span id="streak-display" class="streak"></span>
+          </div>
+
           <div class="game-hud">
-            <div class="hud-left">
-              <span class="hud-item" id="level-display"></span>
-              <span class="hud-item" id="rank-display"></span>
-            </div>
-            <div class="hud-center">
-              <span class="hud-poos" id="poo-counter">💩 0/0</span>
-            </div>
-            <div class="hud-right">
-              <span class="hud-item" id="score-display">0</span>
-              <span class="hud-item hud-timer" id="timer-display">60</span>
-            </div>
+            <span class="hud-item" id="level-display"></span>
+            <span class="hud-item" id="rank-display"></span>
+            <span class="hud-item" id="score-display">0</span>
+            <span class="hud-item hud-timer" id="timer-display">60</span>
           </div>
 
           <div id="game-grid" class="game-grid"></div>
-
-          <div class="game-footer">
-            <span id="streak-display" class="streak"></span>
-          </div>
         </div>
 
         <!-- Level Complete Screen -->
@@ -288,7 +282,7 @@ const t = useTranslations(lang);
   // ── Render Grid ───────────────────────────────────────────────
   function renderGrid() {
     gameGrid.innerHTML = '';
-    gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+    gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, minmax(0, 1fr))`;
 
     grid.forEach((cell, index) => {
       const tile = document.createElement('button');
@@ -710,6 +704,16 @@ const t = useTranslations(lang);
   .poo-section {
     min-height: calc(100vh - var(--nav-height) - 200px);
     padding: var(--space-2xl) 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .poo-section .container {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .back-link {
@@ -717,6 +721,7 @@ const t = useTranslations(lang);
     margin-bottom: var(--space-xl);
     color: var(--color-text-muted);
     transition: color 0.2s ease;
+    align-self: flex-start;
   }
 
   .back-link:hover {
@@ -724,12 +729,13 @@ const t = useTranslations(lang);
   }
 
   #game-wrapper {
-    max-width: 600px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: 500px;
   }
 
   .screen {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 500px;
@@ -808,35 +814,52 @@ const t = useTranslations(lang);
     line-height: 1.5;
   }
 
-  /* ── Game HUD ────────────────────────────────────── */
+  /* ── Game Top Bar (title + poo counter) ───────────── */
+  .game-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+    width: 100%;
+  }
+
+  .hud-poos {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  .streak {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #f59e0b;
+    animation: streak-pop 0.3s ease;
+  }
+
+  @keyframes streak-pop {
+    0% { transform: scale(1.5); }
+    100% { transform: scale(1); }
+  }
+
+  /* ── Game HUD (secondary stats) ─────────────────── */
   .game-hud {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-xs) var(--space-md);
     background: var(--color-bg-secondary);
     border: 1px solid var(--color-border);
     border-radius: 0.75rem;
     margin-bottom: var(--space-md);
-    flex-wrap: wrap;
+    width: 100%;
     gap: var(--space-sm);
   }
 
-  .hud-left, .hud-right {
-    display: flex;
-    gap: var(--space-md);
-    align-items: center;
-  }
-
   .hud-item {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--color-text-muted);
-  }
-
-  .hud-poos {
-    font-size: 1.1rem;
-    font-weight: 700;
   }
 
   .hud-timer {
@@ -855,24 +878,6 @@ const t = useTranslations(lang);
     50% { opacity: 0.5; }
   }
 
-  .game-footer {
-    text-align: center;
-    min-height: 2rem;
-    margin-top: var(--space-sm);
-  }
-
-  .streak {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #f59e0b;
-    animation: streak-pop 0.3s ease;
-  }
-
-  @keyframes streak-pop {
-    0% { transform: scale(1.5); }
-    100% { transform: scale(1); }
-  }
-
   /* ── Game Grid ───────────────────────────────────── */
   .game-grid {
     display: grid;
@@ -881,10 +886,12 @@ const t = useTranslations(lang);
     background: var(--color-bg-secondary);
     border: 2px solid var(--color-border);
     border-radius: 1rem;
+    width: 100%;
   }
 
   .tile {
     aspect-ratio: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: center;

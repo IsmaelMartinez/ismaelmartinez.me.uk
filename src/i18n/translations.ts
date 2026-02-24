@@ -101,6 +101,26 @@ export const translations = {
     'fun.trivia.playAgain': 'Play Again',
     'fun.backToFun': 'Back to Fun Stuff',
 
+    // Poo Poo Land
+    'fun.pooLand.title': 'Poo Poo Land',
+    'fun.pooLand.description': 'Find the hidden poos!',
+    'fun.pooLand.subtitle': 'A detective game of epic proportions',
+    'fun.pooLand.start': 'Start Investigation',
+    'fun.pooLand.instructions': 'Find all the hidden 💩 among the decoys. Tiles you search show how many poos are nearby!',
+    'fun.pooLand.level': 'Level',
+    'fun.pooLand.score': 'Score',
+    'fun.pooLand.highScore': 'High Score',
+    'fun.pooLand.levelComplete': 'Case Closed!',
+    'fun.pooLand.accuracy': 'Accuracy',
+    'fun.pooLand.timeBonus': 'Time Bonus',
+    'fun.pooLand.nextLevel': 'Next Case',
+    'fun.pooLand.gameOver': 'Investigation Over!',
+    'fun.pooLand.totalPoos': 'Poos Found',
+    'fun.pooLand.playAgain': 'New Investigation',
+    'fun.pooLand.bonusRound': 'BONUS ROUND!',
+    'fun.pooLand.miniPoo': 'POO!',
+    'fun.pooLand.miniNot': 'NOT POO!',
+
     // Mobile Menu
     'nav.menuToggle': 'Toggle menu',
 
@@ -218,6 +238,26 @@ export const translations = {
     'fun.trivia.playAgain': 'Jugar de Nuevo',
     'fun.backToFun': 'Volver a Diversión',
 
+    // Poo Poo Land
+    'fun.pooLand.title': 'Poo Poo Land',
+    'fun.pooLand.description': '¡Encuentra las cacas ocultas!',
+    'fun.pooLand.subtitle': 'Un juego de detective de proporciones épicas',
+    'fun.pooLand.start': 'Iniciar Investigación',
+    'fun.pooLand.instructions': 'Encuentra todos los 💩 entre los señuelos. ¡Las casillas buscadas muestran cuántas cacas hay cerca!',
+    'fun.pooLand.level': 'Nivel',
+    'fun.pooLand.score': 'Puntos',
+    'fun.pooLand.highScore': 'Récord',
+    'fun.pooLand.levelComplete': '¡Caso Cerrado!',
+    'fun.pooLand.accuracy': 'Precisión',
+    'fun.pooLand.timeBonus': 'Bonus de Tiempo',
+    'fun.pooLand.nextLevel': 'Siguiente Caso',
+    'fun.pooLand.gameOver': '¡Investigación Terminada!',
+    'fun.pooLand.totalPoos': 'Cacas Encontradas',
+    'fun.pooLand.playAgain': 'Nueva Investigación',
+    'fun.pooLand.bonusRound': '¡RONDA BONUS!',
+    'fun.pooLand.miniPoo': '¡CACA!',
+    'fun.pooLand.miniNot': '¡NO CACA!',
+
     // Mobile Menu
     'nav.menuToggle': 'Alternar menú',
 
@@ -334,6 +374,26 @@ export const translations = {
     'fun.trivia.score': 'La Teva Puntuació',
     'fun.trivia.playAgain': 'Jugar de Nou',
     'fun.backToFun': 'Tornar a Diversió',
+
+    // Poo Poo Land
+    'fun.pooLand.title': 'Poo Poo Land',
+    'fun.pooLand.description': 'Troba les caques amagades!',
+    'fun.pooLand.subtitle': 'Un joc de detectiu de proporcions èpiques',
+    'fun.pooLand.start': 'Iniciar Investigació',
+    'fun.pooLand.instructions': 'Troba tots els 💩 entre els senyuelos. Les caselles cercades mostren quantes caques hi ha a prop!',
+    'fun.pooLand.level': 'Nivell',
+    'fun.pooLand.score': 'Punts',
+    'fun.pooLand.highScore': 'Rècord',
+    'fun.pooLand.levelComplete': 'Cas Tancat!',
+    'fun.pooLand.accuracy': 'Precisió',
+    'fun.pooLand.timeBonus': 'Bonus de Temps',
+    'fun.pooLand.nextLevel': 'Següent Cas',
+    'fun.pooLand.gameOver': 'Investigació Acabada!',
+    'fun.pooLand.totalPoos': 'Caques Trobades',
+    'fun.pooLand.playAgain': 'Nova Investigació',
+    'fun.pooLand.bonusRound': 'RONDA BONUS!',
+    'fun.pooLand.miniPoo': 'CACA!',
+    'fun.pooLand.miniNot': 'NO CACA!',
 
     // Mobile Menu
     'nav.menuToggle': 'Alternar menú',

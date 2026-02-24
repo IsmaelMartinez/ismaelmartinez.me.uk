@@ -730,7 +730,7 @@ const t = useTranslations(lang);
 
   #game-wrapper {
     width: 100%;
-    max-width: 500px;
+    max-width: 600px;
   }
 
   .screen {
@@ -881,12 +881,13 @@ const t = useTranslations(lang);
   /* ── Game Grid ───────────────────────────────────── */
   .game-grid {
     display: grid;
-    gap: 6px;
-    padding: var(--space-md);
+    gap: 5px;
+    padding: var(--space-sm);
     background: var(--color-bg-secondary);
     border: 2px solid var(--color-border);
     border-radius: 1rem;
     width: 100%;
+    box-sizing: border-box;
   }
 
   .tile {

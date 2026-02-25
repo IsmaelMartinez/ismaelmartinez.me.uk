@@ -187,6 +187,10 @@ const t = useTranslations(lang);
   ];
 
   const MINI_GAME_EMOJIS = ['💩','🍫','🍩','🧁','🍮','🌰','🥜','🍠','🪵','🍂','🐻','🏈','🥔','🫘','🧆'];
+  const MINI_GAME_DECOYS = MINI_GAME_EMOJIS.slice(1);
+  const BASE_POO_POINTS = 100;
+  const MAX_STREAK_MULTIPLIER = 5;
+  const TIME_BONUS_MULTIPLIER = 10;
 
   // ── State ─────────────────────────────────────────────────────
   interface Cell {
@@ -207,7 +211,13 @@ const t = useTranslations(lang);
   let gridSize = 4;
   let streak = 0;
   let timerInterval: ReturnType<typeof setInterval> | null = null;
-  let highScore = parseInt(localStorage.getItem('poo-land-high-score') || '0');
+  let highScore = (() => {
+    try {
+      return Number(localStorage.getItem('poo-land-high-score')) || 0;
+    } catch {
+      return 0;
+    }
+  })();
   let miniGamePending = false;
 
   menuHighScore.textContent = highScore.toString();
@@ -306,10 +316,16 @@ const t = useTranslations(lang);
         tile.classList.add('tile-hidden');
       }
 
-      tile.addEventListener('click', () => handleTileClick(index));
       gameGrid.appendChild(tile);
     });
   }
+
+  gameGrid.addEventListener('click', (event) => {
+    const tile = (event.target as HTMLElement).closest('.tile') as HTMLElement | null;
+    if (tile?.dataset.index) {
+      handleTileClick(Number(tile.dataset.index));
+    }
+  });
 
   // ── HUD Update ────────────────────────────────────────────────
   function updateHUD() {
@@ -340,15 +356,15 @@ const t = useTranslations(lang);
       poosFoundThisLevel++;
       totalPoosFound++;
       streak++;
-      const multiplier = Math.min(streak, 5);
-      const points = 100 * level * multiplier;
+      const multiplier = Math.min(streak, MAX_STREAK_MULTIPLIER);
+      const points = BASE_POO_POINTS * level * multiplier;
       score += points;
 
       showFloatingText(index, `+${points}`, '#22c55e');
 
       if (poosFoundThisLevel >= poosToFind) {
         stopTimer();
-        const timeBonus = timeLeft * 10;
+        const timeBonus = timeLeft * TIME_BONUS_MULTIPLIER;
         score += timeBonus;
         renderGrid();
         updateHUD();
@@ -488,7 +504,11 @@ const t = useTranslations(lang);
   function updateHighScore() {
     if (score > highScore) {
       highScore = score;
-      localStorage.setItem('poo-land-high-score', highScore.toString());
+      try {
+        localStorage.setItem('poo-land-high-score', highScore.toString());
+      } catch {
+        // localStorage unavailable
+      }
       menuHighScore.textContent = highScore.toString();
     }
   }
@@ -645,8 +665,7 @@ const t = useTranslations(lang);
       if (currentIsPoo) {
         currentEmoji = '💩';
       } else {
-        const decoys = MINI_GAME_EMOJIS.slice(1);
-        currentEmoji = decoys[Math.floor(Math.random() * decoys.length)];
+        currentEmoji = MINI_GAME_DECOYS[Math.floor(Math.random() * MINI_GAME_DECOYS.length)];
       }
       emojiDisplay.textContent = currentEmoji;
       emojiDisplay.className = 'sniff-emoji sniff-appear';

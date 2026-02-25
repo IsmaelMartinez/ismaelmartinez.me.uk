@@ -380,7 +380,7 @@ export const translations = {
     'fun.pooLand.description': 'Troba les caques amagades!',
     'fun.pooLand.subtitle': 'Un joc de detectiu de proporcions èpiques',
     'fun.pooLand.start': 'Iniciar Investigació',
-    'fun.pooLand.instructions': 'Troba tots els 💩 entre els senyuelos. Les caselles cercades mostren quantes caques hi ha a prop!',
+    'fun.pooLand.instructions': 'Troba tots els 💩 entre els esquers. Les caselles cercades mostren quantes caques hi ha a prop!',
     'fun.pooLand.level': 'Nivell',
     'fun.pooLand.score': 'Punts',
     'fun.pooLand.highScore': 'Rècord',

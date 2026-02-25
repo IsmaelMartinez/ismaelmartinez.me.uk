@@ -1,0 +1,1231 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+---
+
+<Layout title={t('fun.pooLand.title')} lang={lang}>
+  <section class="poo-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">&larr; {t('fun.backToFun')}</a>
+
+      <div id="game-wrapper"
+        data-t-level={t('fun.pooLand.level')}
+        data-t-score={t('fun.pooLand.score')}
+        data-t-level-complete={t('fun.pooLand.levelComplete')}
+        data-t-accuracy={t('fun.pooLand.accuracy')}
+        data-t-time-bonus={t('fun.pooLand.timeBonus')}
+        data-t-next-level={t('fun.pooLand.nextLevel')}
+        data-t-game-over={t('fun.pooLand.gameOver')}
+        data-t-total-poos={t('fun.pooLand.totalPoos')}
+        data-t-play-again={t('fun.pooLand.playAgain')}
+        data-t-bonus-round={t('fun.pooLand.bonusRound')}
+        data-t-high-score={t('fun.pooLand.highScore')}
+        data-t-mini-poo={t('fun.pooLand.miniPoo')}
+        data-t-mini-not={t('fun.pooLand.miniNot')}
+      >
+        <!-- Menu Screen -->
+        <div id="menu-screen" class="screen">
+          <div class="menu-content">
+            <div class="title-emoji">🔍💩</div>
+            <h1>{t('fun.pooLand.title')}</h1>
+            <p class="menu-subtitle">{t('fun.pooLand.subtitle')}</p>
+            <div class="menu-stats">
+              <span class="stat-label">{t('fun.pooLand.highScore')}</span>
+              <span class="stat-value" id="menu-high-score">0</span>
+            </div>
+            <button id="start-btn" class="btn btn-primary btn-game">{t('fun.pooLand.start')}</button>
+            <p class="instructions">{t('fun.pooLand.instructions')}</p>
+          </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen" style="display:none;">
+          <div class="game-top-bar">
+            <span class="hud-poos" id="poo-counter">💩 0/0</span>
+            <span id="streak-display" class="streak"></span>
+          </div>
+
+          <div class="game-hud">
+            <span class="hud-item" id="level-display"></span>
+            <span class="hud-item" id="rank-display"></span>
+            <span class="hud-item" id="score-display">0</span>
+            <span class="hud-item hud-timer" id="timer-display">60</span>
+          </div>
+
+          <div id="game-grid" class="game-grid"></div>
+        </div>
+
+        <!-- Level Complete Screen -->
+        <div id="level-complete-screen" class="screen" style="display:none;">
+          <div class="result-content">
+            <div class="result-emoji">🎉</div>
+            <h2 id="level-complete-title"></h2>
+            <div class="result-stats">
+              <div class="result-stat">
+                <span class="result-stat-label" id="lc-accuracy-label"></span>
+                <span class="result-stat-value" id="lc-accuracy"></span>
+              </div>
+              <div class="result-stat">
+                <span class="result-stat-label" id="lc-time-label"></span>
+                <span class="result-stat-value" id="lc-time"></span>
+              </div>
+              <div class="result-stat">
+                <span class="result-stat-label" id="lc-score-label"></span>
+                <span class="result-stat-value" id="lc-score"></span>
+              </div>
+            </div>
+            <button id="next-level-btn" class="btn btn-primary btn-game"></button>
+          </div>
+        </div>
+
+        <!-- Mini Game Screen -->
+        <div id="mini-game-screen" class="screen" style="display:none;">
+          <div class="mini-game-wrapper">
+            <h2 id="mini-game-title" class="mini-title"></h2>
+            <div id="mini-game-area" class="mini-game-area"></div>
+            <div class="mini-game-hud">
+              <span id="mini-score">{t('fun.pooLand.score')}: 0</span>
+              <span id="mini-timer">15</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="screen" style="display:none;">
+          <div class="result-content">
+            <div class="result-emoji">💀</div>
+            <h2 id="game-over-title"></h2>
+            <div class="result-stats">
+              <div class="result-stat">
+                <span class="result-stat-label" id="go-level-label"></span>
+                <span class="result-stat-value" id="go-level"></span>
+              </div>
+              <div class="result-stat">
+                <span class="result-stat-label" id="go-poos-label"></span>
+                <span class="result-stat-value" id="go-poos"></span>
+              </div>
+              <div class="result-stat">
+                <span class="result-stat-label" id="go-score-label"></span>
+                <span class="result-stat-value" id="go-score"></span>
+              </div>
+            </div>
+            <button id="restart-btn" class="btn btn-primary btn-game"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ── DOM Refs ──────────────────────────────────────────────────
+  const wrapper = document.getElementById('game-wrapper')!;
+  const menuScreen = document.getElementById('menu-screen')!;
+  const gameScreen = document.getElementById('game-screen')!;
+  const levelCompleteScreen = document.getElementById('level-complete-screen')!;
+  const miniGameScreen = document.getElementById('mini-game-screen')!;
+  const gameOverScreen = document.getElementById('game-over-screen')!;
+
+  const menuHighScore = document.getElementById('menu-high-score')!;
+  const startBtn = document.getElementById('start-btn')!;
+
+  const levelDisplay = document.getElementById('level-display')!;
+  const rankDisplay = document.getElementById('rank-display')!;
+  const pooCounter = document.getElementById('poo-counter')!;
+  const scoreDisplay = document.getElementById('score-display')!;
+  const timerDisplay = document.getElementById('timer-display')!;
+  const gameGrid = document.getElementById('game-grid')!;
+  const streakDisplay = document.getElementById('streak-display')!;
+
+  const nextLevelBtn = document.getElementById('next-level-btn')!;
+  const restartBtn = document.getElementById('restart-btn')!;
+
+  // ── Translations ──────────────────────────────────────────────
+  const T = {
+    level: wrapper.dataset.tLevel || 'Level',
+    score: wrapper.dataset.tScore || 'Score',
+    levelComplete: wrapper.dataset.tLevelComplete || 'Case Closed!',
+    accuracy: wrapper.dataset.tAccuracy || 'Accuracy',
+    timeBonus: wrapper.dataset.tTimeBonus || 'Time Bonus',
+    nextLevel: wrapper.dataset.tNextLevel || 'Next Case',
+    gameOver: wrapper.dataset.tGameOver || 'Investigation Over!',
+    totalPoos: wrapper.dataset.tTotalPoos || 'Poos Found',
+    playAgain: wrapper.dataset.tPlayAgain || 'New Investigation',
+    bonusRound: wrapper.dataset.tBonusRound || 'BONUS ROUND!',
+    highScore: wrapper.dataset.tHighScore || 'High Score',
+    miniPoo: wrapper.dataset.tMiniPoo || 'POO!',
+    miniNot: wrapper.dataset.tMiniNot || 'NOT POO!',
+  };
+
+  // ── Constants ─────────────────────────────────────────────────
+  const THEMES = [
+    ['🌳','🌲','🌿','🌺','🌻','🪨','🍄','🪴','🌵','🎋','🌾','🍀'],
+    ['🍳','🥘','🍲','🧁','🎂','🍩','🥧','🍪','🍰','🧇','🥞','🍕'],
+    ['🐚','🦀','🪸','⛱️','🧊','🪣','🐠','🦐','🐡','🪼','🐢','🦑'],
+    ['🏢','🚗','🗑️','📫','🚧','🧱','🏠','🚲','🪑','📦','🛒','🚌'],
+    ['🦊','🐿️','🦉','🐻','🦌','🐺','🐇','🍂','🍁','🪵','🌲','🐛'],
+    ['🚀','🛸','⭐','🌙','☄️','🪐','👾','🤖','🛰️','🌍','🔭','💫'],
+    ['🎸','🎹','🎺','🥁','🎻','🎷','🎤','🎵','🎶','📻','🎧','🪘'],
+    ['🏀','⚽','🎾','🏈','🏐','🎱','🏓','🥊','🏋️','⛷️','🏄','🚴'],
+  ];
+
+  const RANKS = [
+    { threshold: 0, name: 'Rookie', emoji: '🔰' },
+    { threshold: 500, name: 'Tracker', emoji: '👃' },
+    { threshold: 1500, name: 'Sniffer', emoji: '🐕' },
+    { threshold: 3000, name: 'Inspector', emoji: '🕵️' },
+    { threshold: 6000, name: 'Master', emoji: '🎖️' },
+    { threshold: 10000, name: 'Legend', emoji: '👑' },
+  ];
+
+  const MINI_GAME_EMOJIS = ['💩','🍫','🍩','🧁','🍮','🌰','🥜','🍠','🪵','🍂','🐻','🏈','🥔','🫘','🧆'];
+  const MINI_GAME_DECOYS = MINI_GAME_EMOJIS.slice(1);
+  const BASE_POO_POINTS = 100;
+  const MAX_STREAK_MULTIPLIER = 5;
+  const TIME_BONUS_MULTIPLIER = 10;
+
+  // ── State ─────────────────────────────────────────────────────
+  interface Cell {
+    isPoo: boolean;
+    emoji: string;
+    adjacentPoos: number;
+    revealed: boolean;
+  }
+
+  let level = 1;
+  let score = 0;
+  let totalPoosFound = 0;
+  let poosFoundThisLevel = 0;
+  let clicksThisLevel = 0;
+  let poosToFind = 0;
+  let timeLeft = 0;
+  let grid: Cell[] = [];
+  let gridSize = 4;
+  let streak = 0;
+  let timerInterval: ReturnType<typeof setInterval> | null = null;
+  let highScore = (() => {
+    try {
+      return Number(localStorage.getItem('poo-land-high-score')) || 0;
+    } catch {
+      return 0;
+    }
+  })();
+  let miniGamePending = false;
+
+  menuHighScore.textContent = highScore.toString();
+
+  // ── Level Config ──────────────────────────────────────────────
+  function getLevelConfig(lvl: number) {
+    const gs = Math.min(4 + Math.floor((lvl - 1) / 3), 8);
+    const np = Math.min(2 + Math.floor((lvl) / 2), Math.floor(gs * gs * 0.25));
+    const tl = Math.max(20, 60 - (lvl - 1) * 3);
+    return { gridSize: gs, numPoos: Math.max(2, np), timeLimit: tl };
+  }
+
+  // ── Grid Generation ───────────────────────────────────────────
+  function generateGrid(gs: number, numPoos: number): Cell[] {
+    const totalCells = gs * gs;
+    const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
+
+    const pooPositions = new Set<number>();
+    while (pooPositions.size < numPoos) {
+      pooPositions.add(Math.floor(Math.random() * totalCells));
+    }
+
+    const cells: Cell[] = [];
+    for (let i = 0; i < totalCells; i++) {
+      cells.push({
+        isPoo: pooPositions.has(i),
+        emoji: theme[Math.floor(Math.random() * theme.length)],
+        adjacentPoos: 0,
+        revealed: false,
+      });
+    }
+
+    // Calculate adjacency
+    for (let i = 0; i < totalCells; i++) {
+      if (cells[i].isPoo) continue;
+      const row = Math.floor(i / gs);
+      const col = i % gs;
+      let count = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const r = row + dr;
+          const c = col + dc;
+          if (r >= 0 && r < gs && c >= 0 && c < gs) {
+            if (cells[r * gs + c].isPoo) count++;
+          }
+        }
+      }
+      cells[i].adjacentPoos = count;
+    }
+
+    return cells;
+  }
+
+  // ── Screen Management ─────────────────────────────────────────
+  function showScreen(screen: HTMLElement) {
+    [menuScreen, gameScreen, levelCompleteScreen, miniGameScreen, gameOverScreen].forEach(s => {
+      s.style.display = 'none';
+    });
+    screen.style.display = 'flex';
+  }
+
+  // ── Rank ──────────────────────────────────────────────────────
+  function getRank(s: number) {
+    let rank = RANKS[0];
+    for (const r of RANKS) {
+      if (s >= r.threshold) rank = r;
+    }
+    return rank;
+  }
+
+  // ── Render Grid ───────────────────────────────────────────────
+  function renderGrid() {
+    gameGrid.innerHTML = '';
+    gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, minmax(0, 1fr))`;
+
+    grid.forEach((cell, index) => {
+      const tile = document.createElement('button');
+      tile.className = 'tile';
+      tile.dataset.index = index.toString();
+      tile.setAttribute('aria-label', `Tile ${index + 1}`);
+
+      if (cell.revealed) {
+        if (cell.isPoo) {
+          tile.textContent = '💩';
+          tile.classList.add('tile-found');
+        } else {
+          tile.textContent = cell.adjacentPoos > 0 ? cell.adjacentPoos.toString() : '';
+          tile.classList.add('tile-searched');
+          if (cell.adjacentPoos >= 3) tile.classList.add('tile-hot');
+          else if (cell.adjacentPoos >= 1) tile.classList.add('tile-warm');
+          else tile.classList.add('tile-cold');
+        }
+      } else {
+        tile.textContent = cell.emoji;
+        tile.classList.add('tile-hidden');
+      }
+
+      gameGrid.appendChild(tile);
+    });
+  }
+
+  gameGrid.addEventListener('click', (event) => {
+    const tile = (event.target as HTMLElement).closest('.tile') as HTMLElement | null;
+    if (tile?.dataset.index) {
+      handleTileClick(Number(tile.dataset.index));
+    }
+  });
+
+  // ── HUD Update ────────────────────────────────────────────────
+  function updateHUD() {
+    levelDisplay.textContent = `${T.level} ${level}`;
+    const rank = getRank(score);
+    rankDisplay.textContent = `${rank.emoji} ${rank.name}`;
+    pooCounter.textContent = `💩 ${poosFoundThisLevel}/${poosToFind}`;
+    scoreDisplay.textContent = `${T.score}: ${score}`;
+    timerDisplay.textContent = `⏱️ ${timeLeft}`;
+
+    if (streak >= 2) {
+      streakDisplay.textContent = `🔥 x${streak}`;
+      streakDisplay.style.display = 'inline';
+    } else {
+      streakDisplay.style.display = 'none';
+    }
+  }
+
+  // ── Tile Click ────────────────────────────────────────────────
+  function handleTileClick(index: number) {
+    const cell = grid[index];
+    if (cell.revealed) return;
+
+    cell.revealed = true;
+    clicksThisLevel++;
+
+    if (cell.isPoo) {
+      poosFoundThisLevel++;
+      totalPoosFound++;
+      streak++;
+      const multiplier = Math.min(streak, MAX_STREAK_MULTIPLIER);
+      const points = BASE_POO_POINTS * level * multiplier;
+      score += points;
+
+      showFloatingText(index, `+${points}`, '#22c55e');
+
+      if (poosFoundThisLevel >= poosToFind) {
+        stopTimer();
+        const timeBonus = timeLeft * TIME_BONUS_MULTIPLIER;
+        score += timeBonus;
+        renderGrid();
+        updateHUD();
+
+        const prevMilestone = Math.floor((totalPoosFound - poosFoundThisLevel) / 10);
+        const currentMilestone = Math.floor(totalPoosFound / 10);
+        miniGamePending = currentMilestone > prevMilestone;
+
+        setTimeout(() => showLevelComplete(timeBonus), 600);
+        return;
+      }
+    } else {
+      streak = 0;
+    }
+
+    renderGrid();
+    updateHUD();
+  }
+
+  // ── Floating Text ─────────────────────────────────────────────
+  function showFloatingText(index: number, text: string, color: string) {
+    const tiles = gameGrid.querySelectorAll('.tile');
+    const tile = tiles[index];
+    if (!tile) return;
+
+    const float = document.createElement('span');
+    float.className = 'float-text';
+    float.textContent = text;
+    float.style.color = color;
+    tile.appendChild(float);
+    setTimeout(() => float.remove(), 800);
+  }
+
+  // ── Timer ─────────────────────────────────────────────────────
+  function startTimer() {
+    stopTimer();
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      updateHUD();
+      if (timeLeft <= 10) {
+        timerDisplay.classList.add('timer-danger');
+      }
+      if (timeLeft <= 0) {
+        stopTimer();
+        showGameOver();
+      }
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    timerDisplay.classList.remove('timer-danger');
+  }
+
+  // ── Game Flow ─────────────────────────────────────────────────
+  function startGame() {
+    level = 1;
+    score = 0;
+    totalPoosFound = 0;
+    streak = 0;
+    startLevel();
+  }
+
+  function startLevel() {
+    const config = getLevelConfig(level);
+    gridSize = config.gridSize;
+    poosToFind = config.numPoos;
+    timeLeft = config.timeLimit;
+    poosFoundThisLevel = 0;
+    clicksThisLevel = 0;
+    streak = 0;
+
+    grid = generateGrid(gridSize, poosToFind);
+
+    showScreen(gameScreen);
+    renderGrid();
+    updateHUD();
+    startTimer();
+  }
+
+  function showLevelComplete(timeBonus: number) {
+    const lcTitle = document.getElementById('level-complete-title')!;
+    const lcAccLabel = document.getElementById('lc-accuracy-label')!;
+    const lcAcc = document.getElementById('lc-accuracy')!;
+    const lcTimeLabel = document.getElementById('lc-time-label')!;
+    const lcTime = document.getElementById('lc-time')!;
+    const lcScoreLabel = document.getElementById('lc-score-label')!;
+    const lcScore = document.getElementById('lc-score')!;
+
+    lcTitle.textContent = `${T.levelComplete} ${T.level} ${level}`;
+
+    const accuracy = clicksThisLevel > 0
+      ? Math.round((poosFoundThisLevel / clicksThisLevel) * 100)
+      : 100;
+    lcAccLabel.textContent = T.accuracy;
+    lcAcc.textContent = `${accuracy}%`;
+
+    lcTimeLabel.textContent = T.timeBonus;
+    lcTime.textContent = `+${timeBonus}`;
+
+    lcScoreLabel.textContent = T.score;
+    lcScore.textContent = score.toString();
+
+    nextLevelBtn.textContent = miniGamePending
+      ? `🎰 ${T.bonusRound}`
+      : T.nextLevel;
+
+    updateHighScore();
+    showScreen(levelCompleteScreen);
+  }
+
+  function showGameOver() {
+    const goTitle = document.getElementById('game-over-title')!;
+    const goLevelLabel = document.getElementById('go-level-label')!;
+    const goLevel = document.getElementById('go-level')!;
+    const goPoosLabel = document.getElementById('go-poos-label')!;
+    const goPoos = document.getElementById('go-poos')!;
+    const goScoreLabel = document.getElementById('go-score-label')!;
+    const goScore = document.getElementById('go-score')!;
+
+    goTitle.textContent = T.gameOver;
+    goLevelLabel.textContent = T.level;
+    goLevel.textContent = level.toString();
+    goPoosLabel.textContent = T.totalPoos;
+    goPoos.textContent = totalPoosFound.toString();
+    goScoreLabel.textContent = T.score;
+    goScore.textContent = score.toString();
+    restartBtn.textContent = T.playAgain;
+
+    updateHighScore();
+    showScreen(gameOverScreen);
+  }
+
+  function updateHighScore() {
+    if (score > highScore) {
+      highScore = score;
+      try {
+        localStorage.setItem('poo-land-high-score', highScore.toString());
+      } catch {
+        // localStorage unavailable
+      }
+      menuHighScore.textContent = highScore.toString();
+    }
+  }
+
+  // ── Mini-Games ────────────────────────────────────────────────
+  function startMiniGame() {
+    miniGamePending = false;
+    const types = ['whack', 'quicksniff'];
+    const type = types[Math.floor(Math.random() * types.length)];
+
+    const title = document.getElementById('mini-game-title')!;
+    const area = document.getElementById('mini-game-area')!;
+    const miniScoreEl = document.getElementById('mini-score')!;
+    const miniTimerEl = document.getElementById('mini-timer')!;
+
+    title.textContent = T.bonusRound;
+    area.innerHTML = '';
+    showScreen(miniGameScreen);
+
+    const miniTime = 15;
+    miniScoreEl.textContent = `${T.score}: 0`;
+    miniTimerEl.textContent = `⏱️ ${miniTime}`;
+
+    if (type === 'whack') {
+      runWhackAPoo(area, miniScoreEl, miniTimerEl, miniTime, (finalScore: number) => {
+        score += finalScore;
+        level++;
+        startLevel();
+      });
+    } else {
+      runQuickSniff(area, miniScoreEl, miniTimerEl, miniTime, (finalScore: number) => {
+        score += finalScore;
+        level++;
+        startLevel();
+      });
+    }
+  }
+
+  // ── Whack-a-Poo Mini-Game ─────────────────────────────────────
+  function runWhackAPoo(
+    area: HTMLElement,
+    scoreEl: HTMLElement,
+    timerEl: HTMLElement,
+    duration: number,
+    onComplete: (score: number) => void
+  ) {
+    let miniScore = 0;
+    let timeLeft = duration;
+
+    // Create 3x3 grid of holes
+    area.innerHTML = '';
+    area.className = 'mini-game-area whack-grid';
+    const holes: HTMLElement[] = [];
+    for (let i = 0; i < 9; i++) {
+      const hole = document.createElement('div');
+      hole.className = 'whack-hole';
+      const mole = document.createElement('span');
+      mole.className = 'whack-mole';
+      mole.textContent = '';
+      hole.appendChild(mole);
+      area.appendChild(hole);
+      holes.push(hole);
+
+      hole.addEventListener('click', () => {
+        const moleEl = hole.querySelector('.whack-mole') as HTMLElement;
+        if (!moleEl.textContent) return;
+        if (moleEl.textContent === '💩') {
+          miniScore += 100;
+          hole.classList.add('whack-hit');
+        } else {
+          miniScore = Math.max(0, miniScore - 50);
+          hole.classList.add('whack-miss');
+        }
+        moleEl.textContent = '';
+        moleEl.classList.remove('whack-up');
+        scoreEl.textContent = `${T.score}: ${miniScore}`;
+        setTimeout(() => {
+          hole.classList.remove('whack-hit', 'whack-miss');
+        }, 300);
+      });
+    }
+
+    // Spawn poos/decoys
+    const spawnInterval = setInterval(() => {
+      const available = holes.filter(h => {
+        const m = h.querySelector('.whack-mole') as HTMLElement;
+        return !m.textContent;
+      });
+      if (available.length === 0) return;
+
+      const hole = available[Math.floor(Math.random() * available.length)];
+      const moleEl = hole.querySelector('.whack-mole') as HTMLElement;
+      const isPoo = Math.random() < 0.65;
+      moleEl.textContent = isPoo ? '💩' : MINI_GAME_EMOJIS[Math.floor(Math.random() * (MINI_GAME_EMOJIS.length - 1)) + 1];
+      moleEl.classList.add('whack-up');
+
+      setTimeout(() => {
+        moleEl.textContent = '';
+        moleEl.classList.remove('whack-up');
+      }, 1200);
+    }, 700);
+
+    // Timer
+    const timer = setInterval(() => {
+      timeLeft--;
+      timerEl.textContent = `⏱️ ${timeLeft}`;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        clearInterval(spawnInterval);
+        setTimeout(() => onComplete(miniScore), 500);
+      }
+    }, 1000);
+  }
+
+  // ── Quick Sniff Mini-Game ─────────────────────────────────────
+  function runQuickSniff(
+    area: HTMLElement,
+    scoreEl: HTMLElement,
+    timerEl: HTMLElement,
+    duration: number,
+    onComplete: (score: number) => void
+  ) {
+    let miniScore = 0;
+    let timeLeft = duration;
+    let currentEmoji = '';
+    let currentIsPoo = false;
+    let answered = false;
+
+    area.innerHTML = '';
+    area.className = 'mini-game-area sniff-area';
+
+    const emojiDisplay = document.createElement('div');
+    emojiDisplay.className = 'sniff-emoji';
+    area.appendChild(emojiDisplay);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'sniff-buttons';
+
+    const pooBtn = document.createElement('button');
+    pooBtn.className = 'btn btn-primary sniff-btn sniff-yes';
+    pooBtn.textContent = `💩 ${T.miniPoo}`;
+    btnRow.appendChild(pooBtn);
+
+    const notBtn = document.createElement('button');
+    notBtn.className = 'btn btn-outline sniff-btn sniff-no';
+    notBtn.textContent = `❌ ${T.miniNot}`;
+    btnRow.appendChild(notBtn);
+
+    area.appendChild(btnRow);
+
+    function showNext() {
+      answered = false;
+      currentIsPoo = Math.random() < 0.4;
+      if (currentIsPoo) {
+        currentEmoji = '💩';
+      } else {
+        currentEmoji = MINI_GAME_DECOYS[Math.floor(Math.random() * MINI_GAME_DECOYS.length)];
+      }
+      emojiDisplay.textContent = currentEmoji;
+      emojiDisplay.className = 'sniff-emoji sniff-appear';
+    }
+
+    function answer(saidPoo: boolean) {
+      if (answered) return;
+      answered = true;
+      const correct = saidPoo === currentIsPoo;
+      if (correct) {
+        miniScore += 100;
+        emojiDisplay.classList.add('sniff-correct');
+      } else {
+        miniScore = Math.max(0, miniScore - 50);
+        emojiDisplay.classList.add('sniff-wrong');
+      }
+      scoreEl.textContent = `${T.score}: ${miniScore}`;
+      setTimeout(showNext, 600);
+    }
+
+    pooBtn.addEventListener('click', () => answer(true));
+    notBtn.addEventListener('click', () => answer(false));
+
+    showNext();
+
+    const timer = setInterval(() => {
+      timeLeft--;
+      timerEl.textContent = `⏱️ ${timeLeft}`;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        pooBtn.disabled = true;
+        notBtn.disabled = true;
+        setTimeout(() => onComplete(miniScore), 500);
+      }
+    }, 1000);
+  }
+
+  // ── Event Listeners ───────────────────────────────────────────
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', () => {
+    showScreen(menuScreen);
+    menuHighScore.textContent = highScore.toString();
+  });
+  nextLevelBtn.addEventListener('click', () => {
+    if (miniGamePending) {
+      startMiniGame();
+    } else {
+      level++;
+      startLevel();
+    }
+  });
+</script>
+
+<style>
+  .poo-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  .poo-section .container {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+    align-self: flex-start;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
+  }
+
+  #game-wrapper {
+    width: 100%;
+    max-width: 600px;
+  }
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 500px;
+  }
+
+  /* ── Menu ─────────────────────────────────────────── */
+  .menu-content {
+    text-align: center;
+    padding: var(--space-xl);
+  }
+
+  .title-emoji {
+    font-size: 5rem;
+    margin-bottom: var(--space-md);
+    animation: detective-bob 2s ease-in-out infinite;
+  }
+
+  @keyframes detective-bob {
+    0%, 100% { transform: translateY(0) rotate(-3deg); }
+    50% { transform: translateY(-10px) rotate(3deg); }
+  }
+
+  .menu-content h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: var(--space-sm);
+    background: linear-gradient(135deg, #8B4513, #D2691E, #8B4513);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .menu-subtitle {
+    color: var(--color-text-muted);
+    font-size: 1.1rem;
+    margin-bottom: var(--space-xl);
+  }
+
+  .menu-stats {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+  }
+
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: var(--space-sm);
+  }
+
+  .stat-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #D2691E;
+  }
+
+  .btn-game {
+    padding: var(--space-md) var(--space-2xl);
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-radius: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .instructions {
+    margin-top: var(--space-lg);
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    max-width: 350px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.5;
+  }
+
+  /* ── Game Top Bar (title + poo counter) ───────────── */
+  .game-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+    width: 100%;
+  }
+
+  .hud-poos {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  .streak {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #f59e0b;
+    animation: streak-pop 0.3s ease;
+  }
+
+  @keyframes streak-pop {
+    0% { transform: scale(1.5); }
+    100% { transform: scale(1); }
+  }
+
+  /* ── Game HUD (secondary stats) ─────────────────── */
+  .game-hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-xs) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    margin-bottom: var(--space-md);
+    width: 100%;
+    gap: var(--space-sm);
+  }
+
+  .hud-item {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+
+  .hud-timer {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    min-width: 4rem;
+    text-align: right;
+  }
+
+  .timer-danger {
+    color: #ef4444 !important;
+    animation: timer-pulse 0.5s ease-in-out infinite;
+  }
+
+  @keyframes timer-pulse {
+    50% { opacity: 0.5; }
+  }
+
+  /* ── Game Grid ───────────────────────────────────── */
+  .game-grid {
+    display: grid;
+    gap: 5px;
+    padding: var(--space-sm);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .tile {
+    aspect-ratio: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1.2rem, 4vw, 2rem);
+    border: 2px solid var(--color-border);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: var(--color-bg);
+    position: relative;
+    overflow: hidden;
+    padding: 0;
+    color: var(--color-text);
+    font-family: inherit;
+    line-height: 1;
+  }
+
+  .tile-hidden:hover {
+    transform: scale(1.08);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+  }
+
+  .tile-hidden:active {
+    transform: scale(0.95);
+  }
+
+  .tile-found {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+    animation: found-pop 0.4s ease;
+    cursor: default;
+  }
+
+  @keyframes found-pop {
+    0% { transform: scale(0.8); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+
+  .tile-searched {
+    cursor: default;
+    opacity: 0.7;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+
+  .tile-cold {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+  }
+
+  .tile-warm {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+  }
+
+  .tile-hot {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+  }
+
+  :global(.float-text) {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8rem;
+    font-weight: 700;
+    pointer-events: none;
+    animation: float-up 0.8s ease forwards;
+    z-index: 10;
+  }
+
+  @keyframes float-up {
+    0% { opacity: 1; top: 50%; }
+    100% { opacity: 0; top: -20px; }
+  }
+
+  /* ── Result Screens (Level Complete & Game Over) ── */
+  .result-content {
+    text-align: center;
+    padding: var(--space-xl);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .result-emoji {
+    font-size: 4rem;
+    margin-bottom: var(--space-md);
+  }
+
+  .result-content h2 {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-xl);
+  }
+
+  .result-stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+  }
+
+  .result-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg);
+    border-radius: 0.5rem;
+  }
+
+  .result-stat-label {
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+
+  .result-stat-value {
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+
+  /* ── Mini-Game ───────────────────────────────────── */
+  .mini-game-wrapper {
+    text-align: center;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .mini-title {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-lg);
+    color: #f59e0b;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    animation: neon-glow 1s ease-in-out infinite;
+  }
+
+  @keyframes neon-glow {
+    0%, 100% { text-shadow: 0 0 5px #f59e0b, 0 0 10px #f59e0b; }
+    50% { text-shadow: 0 0 15px #f59e0b, 0 0 30px #f59e0b; }
+  }
+
+  .mini-game-area {
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mini-game-hud {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-md);
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  /* Whack-a-Poo */
+  .whack-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: var(--space-md);
+    width: 100%;
+  }
+
+  .whack-hole {
+    aspect-ratio: 1;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    overflow: hidden;
+  }
+
+  .whack-hole:active {
+    transform: scale(0.9);
+  }
+
+  .whack-hit {
+    background: rgba(34, 197, 94, 0.2) !important;
+    border-color: #22c55e !important;
+  }
+
+  .whack-miss {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: #ef4444 !important;
+  }
+
+  .whack-mole {
+    font-size: 2rem;
+    transition: all 0.15s ease;
+    transform: scale(0);
+  }
+
+  .whack-up {
+    transform: scale(1);
+    animation: pop-up 0.2s ease;
+  }
+
+  @keyframes pop-up {
+    0% { transform: scale(0) translateY(20px); }
+    70% { transform: scale(1.2) translateY(-5px); }
+    100% { transform: scale(1) translateY(0); }
+  }
+
+  /* Quick Sniff */
+  .sniff-area {
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  .sniff-emoji {
+    font-size: 6rem;
+    transition: all 0.3s ease;
+  }
+
+  .sniff-appear {
+    animation: sniff-in 0.3s ease;
+  }
+
+  @keyframes sniff-in {
+    0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+
+  .sniff-correct {
+    animation: sniff-correct 0.4s ease;
+  }
+
+  @keyframes sniff-correct {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); filter: brightness(1.5); }
+    100% { transform: scale(1); }
+  }
+
+  .sniff-wrong {
+    animation: sniff-wrong 0.4s ease;
+  }
+
+  @keyframes sniff-wrong {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-15px); }
+    75% { transform: translateX(15px); }
+  }
+
+  .sniff-buttons {
+    display: flex;
+    gap: var(--space-md);
+  }
+
+  .sniff-btn {
+    padding: var(--space-md) var(--space-xl);
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-radius: 0.75rem;
+    min-width: 140px;
+  }
+
+  .sniff-yes {
+    background: #22c55e;
+  }
+
+  .sniff-yes:hover {
+    background: #16a34a;
+  }
+
+  /* ── Responsive ──────────────────────────────────── */
+  @media (max-width: 480px) {
+    .game-grid {
+      gap: 4px;
+      padding: var(--space-sm);
+    }
+
+    .tile {
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      border-radius: 0.35rem;
+    }
+
+    .game-hud {
+      font-size: 0.75rem;
+      padding: var(--space-xs) var(--space-sm);
+    }
+
+    .hud-poos {
+      font-size: 0.9rem;
+    }
+
+    .menu-content h1 {
+      font-size: 2rem;
+    }
+
+    .title-emoji {
+      font-size: 3.5rem;
+    }
+
+    .sniff-emoji {
+      font-size: 4rem;
+    }
+
+    .sniff-btn {
+      min-width: 100px;
+      padding: var(--space-sm) var(--space-md);
+    }
+  }
+</style>

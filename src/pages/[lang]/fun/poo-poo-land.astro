@@ -30,6 +30,7 @@ const t = useTranslations(lang);
         data-t-high-score={t('fun.pooLand.highScore')}
         data-t-mini-poo={t('fun.pooLand.miniPoo')}
         data-t-mini-not={t('fun.pooLand.miniNot')}
+        data-t-power-up={t('fun.pooLand.powerUp')}
       >
         <!-- Menu Screen -->
         <div id="menu-screen" class="screen">
@@ -51,6 +52,9 @@ const t = useTranslations(lang);
           <div class="game-top-bar">
             <span class="hud-poos" id="poo-counter">💩 0/0</span>
             <span id="streak-display" class="streak"></span>
+            <button id="powerup-btn" class="powerup-btn" disabled>
+              🐕 <span id="powerup-count">0</span>
+            </button>
           </div>
 
           <div class="game-hud">
@@ -147,6 +151,8 @@ const t = useTranslations(lang);
 
   const nextLevelBtn = document.getElementById('next-level-btn')!;
   const restartBtn = document.getElementById('restart-btn')!;
+  const powerUpBtn = document.getElementById('powerup-btn')! as HTMLButtonElement;
+  const powerUpCount = document.getElementById('powerup-count')!;
 
   // ── Translations ──────────────────────────────────────────────
   const T = {
@@ -163,6 +169,7 @@ const t = useTranslations(lang);
     highScore: wrapper.dataset.tHighScore || 'High Score',
     miniPoo: wrapper.dataset.tMiniPoo || 'POO!',
     miniNot: wrapper.dataset.tMiniNot || 'NOT POO!',
+    powerUp: wrapper.dataset.tPowerUp || 'Sniff',
   };
 
   // ── Constants ─────────────────────────────────────────────────
@@ -210,6 +217,7 @@ const t = useTranslations(lang);
   let grid: Cell[] = [];
   let gridSize = 4;
   let streak = 0;
+  let powerUps = 0;
   let timerInterval: ReturnType<typeof setInterval> | null = null;
   let highScore = (() => {
     try {
@@ -344,6 +352,40 @@ const t = useTranslations(lang);
     }
   }
 
+  // ── Power-Up ────────────────────────────────────────────────
+  function updatePowerUpButton() {
+    powerUpCount.textContent = powerUps.toString();
+    powerUpBtn.disabled = powerUps <= 0;
+    if (powerUps > 0) {
+      powerUpBtn.classList.add('powerup-available');
+    } else {
+      powerUpBtn.classList.remove('powerup-available');
+    }
+  }
+
+  function usePowerUp() {
+    if (powerUps <= 0) return;
+
+    const hiddenPoos = grid
+      .map((cell, i) => ({ cell, i }))
+      .filter(({ cell }) => cell.isPoo && !cell.revealed);
+
+    if (hiddenPoos.length === 0) return;
+
+    powerUps--;
+    updatePowerUpButton();
+
+    const target = hiddenPoos[Math.floor(Math.random() * hiddenPoos.length)];
+    const tiles = gameGrid.querySelectorAll('.tile');
+    const tile = tiles[target.i] as HTMLElement;
+    if (tile) {
+      tile.classList.add('tile-hint');
+      setTimeout(() => tile.classList.remove('tile-hint'), 1500);
+    }
+  }
+
+  powerUpBtn.addEventListener('click', usePowerUp);
+
   // ── Tile Click ────────────────────────────────────────────────
   function handleTileClick(index: number) {
     const cell = grid[index];
@@ -360,7 +402,13 @@ const t = useTranslations(lang);
       const points = BASE_POO_POINTS * level * multiplier;
       score += points;
 
-      showFloatingText(index, `+${points}`, '#22c55e');
+      if (streak >= 2) {
+        powerUps++;
+        updatePowerUpButton();
+        showFloatingText(index, `+${points} 🐕+1`, '#22c55e');
+      } else {
+        showFloatingText(index, `+${points}`, '#22c55e');
+      }
 
       if (poosFoundThisLevel >= poosToFind) {
         stopTimer();
@@ -428,6 +476,8 @@ const t = useTranslations(lang);
     score = 0;
     totalPoosFound = 0;
     streak = 0;
+    powerUps = 0;
+    updatePowerUpButton();
     startLevel();
   }
 
@@ -859,6 +909,65 @@ const t = useTranslations(lang);
   @keyframes streak-pop {
     0% { transform: scale(1.5); }
     100% { transform: scale(1); }
+  }
+
+  /* ── Power-Up Button ────────────────────────────── */
+  .powerup-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-size: 1rem;
+    font-weight: 700;
+    border: 2px solid var(--color-border);
+    border-radius: 2rem;
+    background: var(--color-bg-secondary);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+    opacity: 0.5;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    line-height: 1.4;
+  }
+
+  .powerup-btn.powerup-available {
+    opacity: 1;
+    cursor: pointer;
+    border-color: #a855f7;
+    color: #a855f7;
+    background: rgba(168, 85, 247, 0.1);
+    animation: powerup-pulse 2s ease-in-out infinite;
+  }
+
+  .powerup-btn.powerup-available:hover {
+    background: rgba(168, 85, 247, 0.2);
+    transform: scale(1.05);
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+  }
+
+  .powerup-btn.powerup-available:active {
+    transform: scale(0.95);
+  }
+
+  @keyframes powerup-pulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
+    50% { box-shadow: 0 0 10px rgba(168, 85, 247, 0.3); }
+  }
+
+  /* ── Tile Hint (power-up reveal) ───────────────── */
+  .tile-hint {
+    animation: hint-glow 1.5s ease-in-out !important;
+    border-color: #a855f7 !important;
+    box-shadow: 0 0 16px rgba(168, 85, 247, 0.6), inset 0 0 12px rgba(168, 85, 247, 0.2) !important;
+    z-index: 5;
+    position: relative;
+  }
+
+  @keyframes hint-glow {
+    0% { box-shadow: 0 0 0 rgba(168, 85, 247, 0); border-color: var(--color-border); }
+    15% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.7), inset 0 0 15px rgba(168, 85, 247, 0.3); border-color: #a855f7; transform: scale(1.1); }
+    50% { box-shadow: 0 0 16px rgba(168, 85, 247, 0.5), inset 0 0 10px rgba(168, 85, 247, 0.2); border-color: #a855f7; }
+    100% { box-shadow: 0 0 0 rgba(168, 85, 247, 0); border-color: var(--color-border); transform: scale(1); }
   }
 
   /* ── Game HUD (secondary stats) ─────────────────── */

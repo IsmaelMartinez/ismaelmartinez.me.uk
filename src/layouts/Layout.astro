@@ -99,7 +99,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           <li><a href={getLocalizedPath('/about', lang)} aria-current={currentPath === '/about' ? 'page' : undefined}>{t('nav.about')}</a></li>
           <li><a href={getLocalizedPath('/projects', lang)} aria-current={currentPath === '/projects' ? 'page' : undefined}>{t('nav.projects')}</a></li>
           <li><a href={getLocalizedPath('/writing', lang)} aria-current={currentPath === '/writing' ? 'page' : undefined}>{t('nav.writing')}</a></li>
-          <li id="arcade-nav" class="arcade-nav-hidden"><a href={getLocalizedPath('/fun', lang)} aria-current={currentPath.startsWith('/fun') ? 'page' : undefined}>{t('nav.fun')}</a></li>
+          <li><a href={getLocalizedPath('/fun', lang)} aria-current={currentPath.startsWith('/fun') ? 'page' : undefined}>{t('nav.fun')}</a></li>
           <li><a href={getLocalizedPath('/connect', lang)} aria-current={currentPath === '/connect' ? 'page' : undefined}>{t('nav.connect')}</a></li>
         </ul>
 
@@ -155,17 +155,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     </div>
 
     <script>
-      // Check if arcade is unlocked on page load
-      function checkArcadeUnlocked() {
-        const arcadeNav = document.getElementById('arcade-nav');
-        if (localStorage.getItem('arcadeUnlocked') === 'true') {
-          arcadeNav?.classList.remove('arcade-nav-hidden');
-        }
-      }
-      checkArcadeUnlocked();
-
-
-
       // Close Konami overlay (close button or tap outside content)
       function initKonamiClose() {
         const overlay = document.getElementById('konami-overlay');
@@ -207,11 +196,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       });
 
       function activateKonami() {
-        // Unlock the arcade
-        localStorage.setItem('arcadeUnlocked', 'true');
-        const arcadeNav = document.getElementById('arcade-nav');
-        arcadeNav?.classList.remove('arcade-nav-hidden');
-
         // Show celebration overlay
         const overlay = document.getElementById('konami-overlay');
         overlay?.classList.add('active');
@@ -337,7 +321,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         initMenuToggle();
         initLogoEasterEgg();
         initKonamiClose();
-        checkArcadeUnlocked();
       });
     </script>
   </body>
@@ -399,10 +382,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   .nav-links a:hover,
   .nav-links a[aria-current="page"] {
     color: var(--color-text);
-  }
-
-  .arcade-nav-hidden {
-    display: none;
   }
 
   .nav-actions {

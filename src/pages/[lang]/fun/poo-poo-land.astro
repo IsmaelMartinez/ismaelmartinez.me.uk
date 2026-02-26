@@ -375,12 +375,18 @@ const t = useTranslations(lang);
     powerUps--;
     updatePowerUpButton();
 
+    // Pick a random hidden poo and briefly show the 💩 emoji on it
     const target = hiddenPoos[Math.floor(Math.random() * hiddenPoos.length)];
     const tiles = gameGrid.querySelectorAll('.tile');
     const tile = tiles[target.i] as HTMLElement;
     if (tile) {
+      const originalEmoji = tile.textContent || '';
+      tile.textContent = '💩';
       tile.classList.add('tile-hint');
-      setTimeout(() => tile.classList.remove('tile-hint'), 1500);
+      setTimeout(() => {
+        tile.textContent = originalEmoji;
+        tile.classList.remove('tile-hint');
+      }, 1500);
     }
   }
 
@@ -958,16 +964,19 @@ const t = useTranslations(lang);
   .tile-hint {
     animation: hint-glow 1.5s ease-in-out !important;
     border-color: #a855f7 !important;
-    box-shadow: 0 0 16px rgba(168, 85, 247, 0.6), inset 0 0 12px rgba(168, 85, 247, 0.2) !important;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.8), inset 0 0 15px rgba(168, 85, 247, 0.3) !important;
     z-index: 5;
     position: relative;
+    background: rgba(168, 85, 247, 0.15) !important;
   }
 
   @keyframes hint-glow {
-    0% { box-shadow: 0 0 0 rgba(168, 85, 247, 0); border-color: var(--color-border); }
-    15% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.7), inset 0 0 15px rgba(168, 85, 247, 0.3); border-color: #a855f7; transform: scale(1.1); }
-    50% { box-shadow: 0 0 16px rgba(168, 85, 247, 0.5), inset 0 0 10px rgba(168, 85, 247, 0.2); border-color: #a855f7; }
-    100% { box-shadow: 0 0 0 rgba(168, 85, 247, 0); border-color: var(--color-border); transform: scale(1); }
+    0% { transform: scale(1); box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
+    10% { transform: scale(1.2); box-shadow: 0 0 25px rgba(168, 85, 247, 0.9); }
+    30% { transform: scale(1.1); }
+    50% { transform: scale(1.15); box-shadow: 0 0 20px rgba(168, 85, 247, 0.7); }
+    70% { transform: scale(1.1); }
+    100% { transform: scale(1); box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
   }
 
   /* ── Game HUD (secondary stats) ─────────────────── */

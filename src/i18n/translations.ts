@@ -120,6 +120,7 @@ export const translations = {
     'fun.pooLand.bonusRound': 'BONUS ROUND!',
     'fun.pooLand.miniPoo': 'POO!',
     'fun.pooLand.miniNot': 'NOT POO!',
+    'fun.pooLand.powerUp': 'Sniff',
 
     // Mobile Menu
     'nav.menuToggle': 'Toggle menu',
@@ -257,6 +258,7 @@ export const translations = {
     'fun.pooLand.bonusRound': '¡RONDA BONUS!',
     'fun.pooLand.miniPoo': '¡CACA!',
     'fun.pooLand.miniNot': '¡NO CACA!',
+    'fun.pooLand.powerUp': 'Olfatear',
 
     // Mobile Menu
     'nav.menuToggle': 'Alternar menú',
@@ -394,6 +396,7 @@ export const translations = {
     'fun.pooLand.bonusRound': 'RONDA BONUS!',
     'fun.pooLand.miniPoo': 'CACA!',
     'fun.pooLand.miniNot': 'NO CACA!',
+    'fun.pooLand.powerUp': 'Ensumar',
 
     // Mobile Menu
     'nav.menuToggle': 'Alternar menú',

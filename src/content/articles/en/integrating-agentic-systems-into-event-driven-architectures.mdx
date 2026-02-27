@@ -1,0 +1,112 @@
+---
+title: "Integrating Agentic Systems into Event Driven Architectures"
+description: "A simple layer model, three integration patterns, and the failure modes you must design around when bringing AI agents into event driven systems."
+publishedDate: 2026-02-25
+originalUrl: "https://medium.com/@ismaelmartinez/integrating-agentic-systems-into-event-driven-architectures-4217b5f24262"
+originalPlatform: "medium"
+tags: ["Agentic AI", "Event Driven Architecture", "AI", "Observability"]
+draft: false
+---
+
+Most enterprises already run event driven systems. Events move between services through streams, buses, and queues, with schemas and observability providing contract and visibility.
+
+At the same time, AI agents are entering production. They assist developers, automate operations, coordinate workflows, and recommend decisions.
+
+These two worlds are converging. The question is no longer whether we should use agents. It is where agents live inside our architecture. This article proposes a simple model, three integration patterns, and the failure modes you must design around.
+
+A common first step is to call an LLM synchronously inside an event consumer. That can work for prototypes, but production issues tend to be architectural. Cost and latency become unpredictable, traceability breaks down, outcomes can differ on replay, and feedback loops can emerge.
+
+## What Is an Agent in This Context?
+
+The word "agent" gets thrown around loosely. Here, an agent is a software component with goals that makes probabilistic decisions and emits intents or actions. It may maintain memory, use tools, or collaborate with other agents. Probabilistic decision making is the defining property because it breaks replay assumptions and complicates conflict resolution.
+
+A traditional event consumer is expected to be deterministic. Given the same inputs and dependencies, it should produce the same output on replay. An agent may not. That difference creates architectural tension around determinism, idempotency, replay, and observability.
+
+## A Simple Layer Model
+
+I like to look at the integration problem in the next four layers.
+
+Semantics describes what the agent is trying to achieve, including intent and delegation.
+Transport describes how messages move, including topics and queues, ordering, retries, and replay.
+Execution describes where side effects occur, such as payments, emails, and deployments.
+Governance describes who or what can approve actions, including policy, humans in the loop, and budgets.
+
+Event driven architecture primarily addresses transport. Agent prompts and agent to agent protocols, such as A2A, primarily shape semantics. Most failures happen when semantics and governance drift from execution and transport, so you want explicit boundaries between the layers.
+
+Thinking about how your agents affect those layers will help you understand how to tackle the problems we will be talking about next.
+
+Agents do not sit outside event driven architecture. They are just another service on the bus. They can consume events, emit decisions or intents, publish enrichment signals, or coordinate workflows. It is important to have a separation between proposing decisions and executing side effects.
+
+## Integration Patterns
+
+Let's look at three integration patterns you can use AI Agents for.
+
+### Pattern 1: Agent as Event Consumer and Decision Emitter
+
+This is the safest entry point. A domain event triggers an agent, which emits a proposal event. Execution is gated elsewhere by some sort of policy.
+
+A useful flow is domain.event to decision.proposed to policy.approved to action.executed.
+
+Example: a support ticket created event triggers an agent that emits resolution.proposed. A human reviewer or policy downstream service acts on the proposal.
+
+Antipattern: letting the agent emit action.executed directly can be an antipattern. Prefer decision.proposed or action.requested and route execution through a policy gate or a human in the loop.
+
+### Pattern 2: Agent as Asynchronous Enrichment Layer
+
+Make reasoning an asynchronous stage. An event is published, and an enrichment agent works on the problem and publishes a separate enrichment event that references the original. Examples are classification, summarisation, sentiment, or risk signals, among others. Downstream consumers subscribe to the enrichment when they need it.
+
+This pattern is decoupled, retryable, observable, scalable, and non blocking. The output is not a rewritten fact. It is additional context, and that context is probabilistic.
+
+Antipattern: mutating the original event. Publish an enrichment event with lineage, such as the original event id, so consumers can choose. This is not a new antipattern, but a well known thing to avoid in EDA.
+
+### Pattern 3: Agent as Autonomous Workflow Actor
+
+Instead of fixed choreography, an agent selects the next step dynamically and emits intents.
+
+Example: incident response. An alert event triggers a response agent that evaluates context, emits intents like diagnostic.requested or rollback.requested, and adapts based on follow up signals.
+
+Antipattern: hiding workflow state inside the agent. Keep workflow state explicit in a saga or process manager so you can observe it, replay it, and recover it.
+
+## What Breaks (and How to Adapt)
+
+In the next section I explore what things do need to change, but also provide some hints on how to adapt your systems for this new world.
+
+### Non Determinism and Cognitive Idempotency
+
+Agents can produce different decisions for the same event because they are a non deterministic system by nature. Things like model changes, prompt changes, tools behaviour, thinking time, or sampling, among others, can add a bigger variance. This creates a new idempotency problem: the system may receive multiple conflicting decisions for the same input, and they all might be valid.
+
+To tackle this, you can separate idempotency in two types. Decision idempotency ensures one accepted decision per input, or a controlled conflict resolution process. Action idempotency ensures side effects happen at most once, even if decisions are reprocessed.
+
+To handle decision idempotency, emit decision trace records, version decisions, and adopt a resolution strategy such as first write wins, quorum agreement, or escalation. At minimum, record input event id, agent and model version, prompt version, retrieved context references, and a trace id linked to the proposal. Use deterministic systems on the action idempotency side.
+
+### Observability Expands
+
+Classic observability tells you whether events flow. Agent aware observability tells you whether decision making is stable, safe, and cost effective. Track tokens, cost per decision, tool usage, escalation rates, confidence trends, and policy rejection rates.
+
+### Feedback Loops and Event Amplification
+
+Multi agent systems can create loops that amplify cost and instability. Use correlation and causation ids, intent time to live values, loop detection, rate limits, workflow budgets, and circuit breakers that cap total reasoning cost.
+
+While feedback loops can be a big problem in deterministic systems, adding the non determinism of AI Agents can make them evolvable feedback loops. This not only makes them more difficult to detect but almost impossible to stop, and you can't pull the plug now that we are in the cloud.
+
+### Governance and Guardrails
+
+Agents should not directly trigger sensitive side effects. Keep the separation: agent emits a decision, policy validates, systems execute.
+
+The approval step should be auditable and policy bound. It can use probabilistic reviews as inputs, but the final enforcement should follow explicit rules and risk thresholds.
+
+## Where A2A Fits
+
+We haven't talked about the Agent to Agent protocol. This protocol, while incredibly useful for agent communication, doesn't replace the tasks event driven architectures do.
+
+Event driven infrastructure delivers and persists messages with durability, fan out, and replay. A2A sits on top of event driven architecture.
+
+## Practical Recommendations
+
+Start with enrichment because it is low risk. Keep reasoning asynchronous. Treat outputs as proposals and gate side effects with policy or humans. Separate decision idempotency from action idempotency. Standardize decision trace records from day one. Use correlation and causation ids everywhere. Monitor cost per decision and per workflow, and add budgets and circuit breakers. Add loop detection and intent time to live values before multi agent rollout.
+
+## Conclusion
+
+Event driven architecture remains the nervous system. Agents become autonomous participants within it.
+
+The question is not whether agents will join the event bus. It is whether we are architecturally ready when they do.

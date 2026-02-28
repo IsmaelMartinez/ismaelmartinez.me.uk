@@ -1,0 +1,112 @@
+---
+title: "Integrando sistemas agénticos en arquitecturas dirigidas por eventos"
+description: "Un modelo de capas simple, tres patrones de integración y los modos de fallo que debes diseñar al incorporar agentes de IA en sistemas dirigidos por eventos."
+publishedDate: 2026-02-25
+originalUrl: "https://medium.com/@ismaelmartinez/integrating-agentic-systems-into-event-driven-architectures-4217b5f24262"
+originalPlatform: "medium"
+tags: ["IA Agéntica", "Arquitectura Dirigida por Eventos", "IA", "Observabilidad"]
+draft: false
+---
+
+La mayoría de las empresas ya ejecutan sistemas dirigidos por eventos. Los eventos se mueven entre servicios a través de streams, buses y colas, con esquemas y observabilidad proporcionando contrato y visibilidad.
+
+Al mismo tiempo, los agentes de IA están entrando en producción. Asisten a desarrolladores, automatizan operaciones, coordinan flujos de trabajo y recomiendan decisiones.
+
+Estos dos mundos están convergiendo. La pregunta ya no es si debemos usar agentes. Es dónde viven los agentes dentro de nuestra arquitectura. Este artículo propone un modelo simple, tres patrones de integración y los modos de fallo que debes diseñar.
+
+Un primer paso habitual es llamar a un LLM de forma síncrona dentro de un consumidor de eventos. Eso puede funcionar para prototipos, pero los problemas en producción tienden a ser arquitectónicos. El coste y la latencia se vuelven impredecibles, la trazabilidad se rompe, los resultados pueden diferir en el replay y pueden surgir bucles de retroalimentación.
+
+## ¿Qué es un agente en este contexto?
+
+La palabra "agente" se usa de forma muy libre. Aquí, un agente es un componente de software con objetivos que toma decisiones probabilísticas y emite intenciones o acciones. Puede mantener memoria, usar herramientas o colaborar con otros agentes. La toma de decisiones probabilística es la propiedad definitoria porque rompe las suposiciones de replay y complica la resolución de conflictos.
+
+Se espera que un consumidor de eventos tradicional sea determinista. Dados los mismos inputs y dependencias, debería producir el mismo output en el replay. Un agente puede que no. Esa diferencia crea tensión arquitectónica en torno al determinismo, la idempotencia, el replay y la observabilidad.
+
+## Un modelo de capas simple
+
+Me gusta ver el problema de integración en las siguientes cuatro capas.
+
+Semántica describe lo que el agente intenta conseguir, incluyendo la intención y la delegación.
+Transporte describe cómo se mueven los mensajes, incluyendo topics y colas, ordenación, reintentos y replay.
+Ejecución describe dónde ocurren los efectos secundarios, como pagos, emails y despliegues.
+Gobernanza describe quién o qué puede aprobar acciones, incluyendo políticas, humanos en el bucle y presupuestos.
+
+La arquitectura dirigida por eventos aborda principalmente el transporte. Los prompts de los agentes y los protocolos de agente a agente, como A2A, dan forma principalmente a la semántica. La mayoría de los fallos ocurren cuando la semántica y la gobernanza divergen de la ejecución y el transporte, por lo que conviene tener límites explícitos entre las capas.
+
+Pensar en cómo tus agentes afectan a esas capas te ayudará a entender cómo abordar los problemas de los que hablaremos a continuación.
+
+Los agentes no están fuera de la arquitectura dirigida por eventos. Son simplemente otro servicio en el bus. Pueden consumir eventos, emitir decisiones o intenciones, publicar señales de enriquecimiento o coordinar flujos de trabajo. Es importante tener una separación entre proponer decisiones y ejecutar efectos secundarios.
+
+## Patrones de integración
+
+Veamos tres patrones de integración que puedes usar con agentes de IA.
+
+### Patrón 1: Agente como consumidor de eventos y emisor de decisiones
+
+Este es el punto de entrada más seguro. Un evento de dominio activa un agente, que emite un evento de propuesta. La ejecución está controlada en otro lugar por algún tipo de política.
+
+Un flujo útil es domain.event a decision.proposed a policy.approved a action.executed.
+
+Ejemplo: un evento de ticket de soporte creado activa un agente que emite resolution.proposed. Un revisor humano o un servicio de política downstream actúa sobre la propuesta.
+
+Antipatrón: dejar que el agente emita action.executed directamente puede ser un antipatrón. Prefiere decision.proposed o action.requested y encamina la ejecución a través de una puerta de política o un humano en el bucle.
+
+### Patrón 2: Agente como capa de enriquecimiento asíncrono
+
+Convierte el razonamiento en una etapa asíncrona. Se publica un evento, y un agente de enriquecimiento trabaja en el problema y publica un evento de enriquecimiento separado que referencia al original. Ejemplos son clasificación, resumen, sentimiento o señales de riesgo, entre otros. Los consumidores downstream se suscriben al enriquecimiento cuando lo necesitan.
+
+Este patrón es desacoplado, reintentable, observable, escalable y no bloqueante. La salida no es un hecho reescrito. Es contexto adicional, y ese contexto es probabilístico.
+
+Antipatrón: mutar el evento original. Publica un evento de enriquecimiento con linaje, como el id del evento original, para que los consumidores puedan elegir. Este no es un antipatrón nuevo, sino algo bien conocido a evitar en EDA.
+
+### Patrón 3: Agente como actor autónomo de flujo de trabajo
+
+En lugar de una coreografía fija, un agente selecciona el siguiente paso dinámicamente y emite intenciones.
+
+Ejemplo: respuesta a incidentes. Un evento de alerta activa un agente de respuesta que evalúa el contexto, emite intenciones como diagnostic.requested o rollback.requested, y se adapta basándose en las señales de seguimiento.
+
+Antipatrón: ocultar el estado del flujo de trabajo dentro del agente. Mantén el estado del flujo de trabajo explícito en una saga o gestor de procesos para que puedas observarlo, replayarlo y recuperarlo.
+
+## Qué se rompe (y cómo adaptarse)
+
+En la siguiente sección exploro qué cosas necesitan cambiar, pero también proporciono algunas pistas sobre cómo adaptar tus sistemas a este nuevo mundo.
+
+### No determinismo e idempotencia cognitiva
+
+Los agentes pueden producir decisiones diferentes para el mismo evento porque son un sistema no determinista por naturaleza. Cosas como cambios de modelo, cambios de prompt, comportamiento de herramientas, tiempo de razonamiento o muestreo, entre otros, pueden añadir una varianza mayor. Esto crea un nuevo problema de idempotencia: el sistema puede recibir múltiples decisiones contradictorias para el mismo input, y todas podrían ser válidas.
+
+Para abordar esto, puedes separar la idempotencia en dos tipos. La idempotencia de decisión asegura una decisión aceptada por input, o un proceso controlado de resolución de conflictos. La idempotencia de acción asegura que los efectos secundarios ocurran como máximo una vez, incluso si las decisiones se reprocesan.
+
+Para manejar la idempotencia de decisión, emite registros de traza de decisión, versiona las decisiones y adopta una estrategia de resolución como primera escritura gana, acuerdo por quórum o escalación. Como mínimo, registra el id del evento de entrada, la versión del agente y modelo, la versión del prompt, las referencias del contexto recuperado y un id de traza vinculado a la propuesta. Usa sistemas deterministas en el lado de la idempotencia de acción.
+
+### La observabilidad se expande
+
+La observabilidad clásica te dice si los eventos fluyen. La observabilidad consciente de agentes te dice si la toma de decisiones es estable, segura y rentable. Rastrea tokens, coste por decisión, uso de herramientas, tasas de escalación, tendencias de confianza y tasas de rechazo de políticas.
+
+### Bucles de retroalimentación y amplificación de eventos
+
+Los sistemas multiagente pueden crear bucles que amplifican el coste y la inestabilidad. Usa ids de correlación y causación, valores de tiempo de vida de intención, detección de bucles, límites de tasa, presupuestos de flujo de trabajo y circuit breakers que limiten el coste total de razonamiento.
+
+Aunque los bucles de retroalimentación pueden ser un gran problema en sistemas deterministas, añadir el no determinismo de los agentes de IA puede convertirlos en bucles de retroalimentación evolutivos. Esto no solo los hace más difíciles de detectar sino casi imposibles de detener, y no puedes desenchufar ahora que estamos en la nube.
+
+### Gobernanza y barreras de protección
+
+Los agentes no deberían activar directamente efectos secundarios sensibles. Mantén la separación: el agente emite una decisión, la política valida, los sistemas ejecutan.
+
+El paso de aprobación debería ser auditable y vinculado a políticas. Puede usar revisiones probabilísticas como inputs, pero la aplicación final debería seguir reglas explícitas y umbrales de riesgo.
+
+## Dónde encaja A2A
+
+No hemos hablado del protocolo Agent to Agent. Este protocolo, aunque increíblemente útil para la comunicación entre agentes, no reemplaza las tareas que hacen las arquitecturas dirigidas por eventos.
+
+La infraestructura dirigida por eventos entrega y persiste mensajes con durabilidad, fan out y replay. A2A se sitúa sobre la arquitectura dirigida por eventos.
+
+## Recomendaciones prácticas
+
+Empieza con el enriquecimiento porque es de bajo riesgo. Mantén el razonamiento asíncrono. Trata las salidas como propuestas y controla los efectos secundarios con políticas o humanos. Separa la idempotencia de decisión de la idempotencia de acción. Estandariza los registros de traza de decisión desde el primer día. Usa ids de correlación y causación en todas partes. Monitoriza el coste por decisión y por flujo de trabajo, y añade presupuestos y circuit breakers. Añade detección de bucles y valores de tiempo de vida de intención antes del despliegue multiagente.
+
+## Conclusión
+
+La arquitectura dirigida por eventos sigue siendo el sistema nervioso. Los agentes se convierten en participantes autónomos dentro de ella.
+
+La pregunta no es si los agentes se unirán al bus de eventos. Es si estamos arquitectónicamente preparados cuando lo hagan.

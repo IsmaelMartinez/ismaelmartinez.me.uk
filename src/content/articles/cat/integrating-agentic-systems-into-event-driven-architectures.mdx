@@ -1,0 +1,112 @@
+---
+title: "Integrant sistemes agèntics en arquitectures dirigides per esdeveniments"
+description: "Un model de capes simple, tres patrons d'integració i els modes de fallada que has de dissenyar en incorporar agents d'IA en sistemes dirigits per esdeveniments."
+publishedDate: 2026-02-25
+originalUrl: "https://medium.com/@ismaelmartinez/integrating-agentic-systems-into-event-driven-architectures-4217b5f24262"
+originalPlatform: "medium"
+tags: ["IA Agèntica", "Arquitectura Dirigida per Esdeveniments", "IA", "Observabilitat"]
+draft: false
+---
+
+La majoria d'empreses ja executen sistemes dirigits per esdeveniments. Els esdeveniments es mouen entre serveis a través de streams, busos i cues, amb esquemes i observabilitat proporcionant contracte i visibilitat.
+
+Al mateix temps, els agents d'IA estan entrant en producció. Assisteixen desenvolupadors, automatitzen operacions, coordinen fluxos de treball i recomanen decisions.
+
+Aquests dos mons estan convergint. La pregunta ja no és si hem d'usar agents. És on viuen els agents dins la nostra arquitectura. Aquest article proposa un model simple, tres patrons d'integració i els modes de fallada que has de dissenyar.
+
+Un primer pas habitual és cridar un LLM de forma síncrona dins un consumidor d'esdeveniments. Això pot funcionar per a prototips, però els problemes en producció tendeixen a ser arquitectònics. El cost i la latència es tornen impredictibles, la traçabilitat es trenca, els resultats poden diferir en el replay i poden sorgir bucles de retroalimentació.
+
+## Què és un agent en aquest context?
+
+La paraula "agent" s'usa de forma molt lliure. Aquí, un agent és un component de software amb objectius que pren decisions probabilístiques i emet intencions o accions. Pot mantenir memòria, usar eines o col·laborar amb altres agents. La presa de decisions probabilística és la propietat definitòria perquè trenca les suposicions de replay i complica la resolució de conflictes.
+
+S'espera que un consumidor d'esdeveniments tradicional sigui determinista. Donats els mateixos inputs i dependències, hauria de produir el mateix output en el replay. Un agent pot ser que no. Aquesta diferència crea tensió arquitectònica al voltant del determinisme, la idempotència, el replay i l'observabilitat.
+
+## Un model de capes simple
+
+M'agrada veure el problema d'integració en les quatre capes següents.
+
+Semàntica descriu el que l'agent intenta aconseguir, incloent la intenció i la delegació.
+Transport descriu com es mouen els missatges, incloent topics i cues, ordenació, reintents i replay.
+Execució descriu on ocorren els efectes secundaris, com pagaments, correus electrònics i desplegaments.
+Governança descriu qui o què pot aprovar accions, incloent polítiques, humans en el bucle i pressupostos.
+
+L'arquitectura dirigida per esdeveniments aborda principalment el transport. Els prompts dels agents i els protocols d'agent a agent, com A2A, donen forma principalment a la semàntica. La majoria de fallades ocorren quan la semàntica i la governança divergeixen de l'execució i el transport, de manera que convé tenir límits explícits entre les capes.
+
+Pensar en com els teus agents afecten aquestes capes t'ajudarà a entendre com abordar els problemes dels quals parlarem a continuació.
+
+Els agents no estan fora de l'arquitectura dirigida per esdeveniments. Són simplement un altre servei al bus. Poden consumir esdeveniments, emetre decisions o intencions, publicar senyals d'enriquiment o coordinar fluxos de treball. És important tenir una separació entre proposar decisions i executar efectes secundaris.
+
+## Patrons d'integració
+
+Vegem tres patrons d'integració que pots usar amb agents d'IA.
+
+### Patró 1: Agent com a consumidor d'esdeveniments i emissor de decisions
+
+Aquest és el punt d'entrada més segur. Un esdeveniment de domini activa un agent, que emet un esdeveniment de proposta. L'execució està controlada en un altre lloc per algun tipus de política.
+
+Un flux útil és domain.event a decision.proposed a policy.approved a action.executed.
+
+Exemple: un esdeveniment de tiquet de suport creat activa un agent que emet resolution.proposed. Un revisor humà o un servei de política downstream actua sobre la proposta.
+
+Antipatró: deixar que l'agent emeti action.executed directament pot ser un antipatró. Prefereix decision.proposed o action.requested i encamina l'execució a través d'una porta de política o un humà en el bucle.
+
+### Patró 2: Agent com a capa d'enriquiment asíncron
+
+Converteix el raonament en una etapa asíncrona. Es publica un esdeveniment, i un agent d'enriquiment treballa en el problema i publica un esdeveniment d'enriquiment separat que referencia l'original. Exemples són classificació, resum, sentiment o senyals de risc, entre d'altres. Els consumidors downstream se subscriuen a l'enriquiment quan el necessiten.
+
+Aquest patró és desacoblat, reintentable, observable, escalable i no bloquejant. La sortida no és un fet reescrit. És context addicional, i aquest context és probabilístic.
+
+Antipatró: mutar l'esdeveniment original. Publica un esdeveniment d'enriquiment amb llinatge, com l'id de l'esdeveniment original, perquè els consumidors puguin triar. Aquest no és un antipatró nou, sinó una cosa ben coneguda a evitar en EDA.
+
+### Patró 3: Agent com a actor autònom de flux de treball
+
+En lloc d'una coreografia fixa, un agent selecciona el pas següent dinàmicament i emet intencions.
+
+Exemple: resposta a incidents. Un esdeveniment d'alerta activa un agent de resposta que avalua el context, emet intencions com diagnostic.requested o rollback.requested, i s'adapta basant-se en els senyals de seguiment.
+
+Antipatró: amagar l'estat del flux de treball dins l'agent. Mantén l'estat del flux de treball explícit en una saga o gestor de processos perquè puguis observar-lo, replay-jar-lo i recuperar-lo.
+
+## Què es trenca (i com adaptar-se)
+
+En la secció següent exploro quines coses necessiten canviar, però també proporciono algunes pistes sobre com adaptar els teus sistemes a aquest nou món.
+
+### No determinisme i idempotència cognitiva
+
+Els agents poden produir decisions diferents per al mateix esdeveniment perquè són un sistema no determinista per naturalesa. Coses com canvis de model, canvis de prompt, comportament d'eines, temps de raonament o mostreig, entre d'altres, poden afegir una variància més gran. Això crea un nou problema d'idempotència: el sistema pot rebre múltiples decisions contradictòries per al mateix input, i totes podrien ser vàlides.
+
+Per abordar això, pots separar la idempotència en dos tipus. La idempotència de decisió assegura una decisió acceptada per input, o un procés controlat de resolució de conflictes. La idempotència d'acció assegura que els efectes secundaris passin com a màxim un cop, fins i tot si les decisions es reprocessen.
+
+Per gestionar la idempotència de decisió, emet registres de traça de decisió, versiona les decisions i adopta una estratègia de resolució com primera escriptura guanya, acord per quòrum o escalació. Com a mínim, registra l'id de l'esdeveniment d'entrada, la versió de l'agent i model, la versió del prompt, les referències del context recuperat i un id de traça vinculat a la proposta. Usa sistemes deterministes en el costat de la idempotència d'acció.
+
+### L'observabilitat s'expandeix
+
+L'observabilitat clàssica et diu si els esdeveniments flueixen. L'observabilitat conscient d'agents et diu si la presa de decisions és estable, segura i rendible. Rastreja tokens, cost per decisió, ús d'eines, taxes d'escalació, tendències de confiança i taxes de rebuig de polítiques.
+
+### Bucles de retroalimentació i amplificació d'esdeveniments
+
+Els sistemes multiagent poden crear bucles que amplifiquen el cost i la inestabilitat. Usa ids de correlació i causació, valors de temps de vida d'intenció, detecció de bucles, límits de taxa, pressupostos de flux de treball i circuit breakers que limitin el cost total de raonament.
+
+Tot i que els bucles de retroalimentació poden ser un gran problema en sistemes deterministes, afegir el no determinisme dels agents d'IA pot convertir-los en bucles de retroalimentació evolutius. Això no només els fa més difícils de detectar sinó gairebé impossibles d'aturar, i no pots desendollar ara que som al núvol.
+
+### Governança i barreres de protecció
+
+Els agents no haurien d'activar directament efectes secundaris sensibles. Mantén la separació: l'agent emet una decisió, la política valida, els sistemes executen.
+
+El pas d'aprovació hauria de ser auditable i vinculat a polítiques. Pot usar revisions probabilístiques com a inputs, però l'aplicació final hauria de seguir regles explícites i llindars de risc.
+
+## On encaixa A2A
+
+No hem parlat del protocol Agent to Agent. Aquest protocol, tot i ser increïblement útil per a la comunicació entre agents, no reemplaça les tasques que fan les arquitectures dirigides per esdeveniments.
+
+La infraestructura dirigida per esdeveniments entrega i persisteix missatges amb durabilitat, fan out i replay. A2A se situa sobre l'arquitectura dirigida per esdeveniments.
+
+## Recomanacions pràctiques
+
+Comença amb l'enriquiment perquè és de baix risc. Mantén el raonament asíncron. Tracta les sortides com a propostes i controla els efectes secundaris amb polítiques o humans. Separa la idempotència de decisió de la idempotència d'acció. Estandarditza els registres de traça de decisió des del primer dia. Usa ids de correlació i causació a tot arreu. Monitoritza el cost per decisió i per flux de treball, i afegeix pressupostos i circuit breakers. Afegeix detecció de bucles i valors de temps de vida d'intenció abans del desplegament multiagent.
+
+## Conclusió
+
+L'arquitectura dirigida per esdeveniments segueix sent el sistema nerviós. Els agents es converteixen en participants autònoms dins d'ella.
+
+La pregunta no és si els agents s'uniran al bus d'esdeveniments. És si estem arquitectònicament preparats quan ho facin.

@@ -1,0 +1,100 @@
+---
+title: "OpenTelemetry Signals"
+description: "What each OpenTelemetry signal is for, how traces, metrics, logs, and baggage connect, and why splitting one big log into specialised signals is worth the complexity."
+publishedDate: 2026-02-27
+originalPlatform: "self"
+tags: ["Observability", "OpenTelemetry", "Signals", "SRE"]
+draft: true
+---
+
+OpenTelemetry gives us traces, metrics, logs, baggage, and soon events and profiles. That is a lot of signals. If you have followed the journey from [observability fundamentals](/en/articles/observability-with-opentelemetry) to the [evolution of logs](/en/articles/the-death-ish-of-logs), the natural next question is: what is each signal actually for, and how do they fit together?
+
+In this article, I will walk through each signal, how they complement each other, and what the move from a single log to multiple specialised signals means in practice.
+
+## Why Signals Matter
+
+When everything is a log, you force one storage engine, one query language, and one visualisation to handle very different jobs. Metrics are time-series data that need fast aggregation. Traces are hierarchical spans that need to show request paths. Logs are text that needs full-text search. One system cannot do all three well.
+
+By splitting telemetry into distinct signals, each one gets the architecture it deserves. Metrics go into time-series databases optimised for aggregation. Traces go into stores built for following requests across services. Logs go into search engines designed for text. The result is faster queries, cheaper storage, and better defaults out of the box.
+
+This also unlocks different retention and sampling strategies per signal. You can keep metrics for months, sample traces at one in a hundred, and retain debug logs for hours. When everything lived in one place, you either kept everything and paid for it, or dropped data and lost context.
+
+Standardised signals also mean standardised visualisations. Traces render as Gantt charts across every tool, from Jaeger to Datadog. Metrics render as time-series graphs. Engineers can move between systems without learning a new visual language. That matters when you are debugging at three in the morning.
+
+## Traces
+
+In the [Death(ish) of Logs](/en/articles/the-death-ish-of-logs), we followed a banana purchase through the evolution of logging. Let's buy those bananas again, but this time through a distributed system.
+
+A user adds seven bananas to their cart. The request hits the API gateway, moves to the order service, calls the payment service, and triggers a notification. Four services, four sets of logs, four timestamps that may or may not agree.
+
+Before traces, you would search each service's logs for a correlation ID and mentally reconstruct the journey. If the payment took too long, you had to find the right log entry, compare timestamps across services, and hope the clocks were in sync. It worked, but it was slow and brittle.
+
+A trace connects the entire journey into a single, visible path. It is made up of spans, where each span represents one unit of work: the gateway receiving the request, the order service validating the cart, the payment service charging the card, the notification service sending the confirmation. Spans have parent-child relationships, so you can see not just what happened, but what caused what.
+
+This works through three identifiers. A trace ID, created at the entry point and propagated to every service downstream, tells you all these spans belong to the same request. Each span carries its own span ID and a reference to its parent span ID, which tells you what caused what. These identifiers travel with the request through headers or message metadata, so every service contributes to the same trace without a central coordinator.
+
+The result renders as a Gantt chart. You can see at a glance that the payment service took 800 milliseconds while everything else took 50. No timestamp correlation, no guesswork.
+
+Where traces fall short: they show you the path of individual requests, but they do not tell you whether the system as a whole is healthy. A single slow trace might be an outlier or the start of a trend. You need metrics for that.
+
+## Metrics
+
+Traces showed us that one banana purchase took 800 milliseconds at the payment service. But is that normal? Is it getting worse? How many banana purchases are failing right now?
+
+Metrics answer these questions. They are numerical measurements captured over time: counters, gauges, and histograms. A counter tracks how many banana purchases happened today. A gauge tracks how many orders are currently in the queue. A histogram tracks the distribution of payment response times, so you can see that the 99th percentile has drifted from 200 milliseconds to 900 over the past hour.
+
+Where traces show you the journey of one request, metrics show you the health of the whole system. They are cheap to store, fast to aggregate, and natural for alerting. You set a threshold, and when the payment error rate crosses five percent, someone gets paged.
+
+Metrics are also the most mature signal in OpenTelemetry. Time-series databases like Prometheus have existed for years, and the visualisation language is universal: line graphs, bar charts, percentile distributions. If you have ever looked at a dashboard, you were looking at metrics.
+
+Where metrics fall short: they tell you that something is wrong, but not why. The payment error rate spiked, but which requests failed? What did those requests have in common? For that, you need to go back to traces, or dig into the logs.
+
+## Logs
+
+I have covered the [evolution of logs](/en/articles/the-death-ish-of-logs) in detail elsewhere. The short version: logs started as print statements and grew into massive structured JSON objects trying to do everything at once. In OpenTelemetry, they no longer have to.
+
+When traces handle the request journey and metrics handle aggregate health, logs get a narrower, more focused role: recording what happened at a specific moment. A payment failed because the card was declined. A user tried to buy more bananas than the inventory allows. A configuration change was applied at startup.
+
+The important shift is correlation. An OTel log entry carries the trace ID and span ID of the context it belongs to. When the payment service logs a card declined error, you can jump from that log to the full trace, or from a failed span to the log that explains it. The log no longer needs to carry all the context by itself, which means it can get smaller again. Log what is unique to that moment, and let the trace carry the rest.
+
+Where logs fall short: they are the most expensive signal to store and the hardest to sample. You can pre-aggregate metrics and sample traces, but dropping a log that says "card declined" means losing the explanation. Balancing detail against cost is still the hardest part of log management.
+
+## Baggage
+
+Traces, metrics, and logs each capture different aspects of what happened. Baggage is different. It is not a telemetry signal — it is a context propagation mechanism that makes the other signals more useful.
+
+Baggage carries key-value pairs alongside the request as it moves through services. When our banana purchase enters the API gateway, the gateway knows things that downstream services do not: the user tier, the session region, the experiment group. Without baggage, each downstream service would need to look this up independently or the information would simply be missing from its telemetry.
+
+With baggage, the gateway attaches `user.tier=premium` to the request context. Every service downstream can read it and add it as an attribute to its own spans, metrics, and logs. Now you can filter traces by user tier, alert on error rates for premium customers specifically, or spot that a particular experiment group is experiencing higher latency.
+
+Baggage travels in request headers, which means two things. First, it crosses service boundaries automatically through the same context propagation that carries trace IDs. Second, it adds overhead to every request, so it should stay small. It is also visible in transit, so it should never carry sensitive data like tokens or personal information.
+
+## What Is Coming: Events and Profiles
+
+OpenTelemetry is not standing still. Two new signal types are maturing and worth keeping an eye on.
+
+Events are structured records of something that happened at a specific moment. That sounds a lot like a log, and the overlap is intentional. The difference is that events carry a defined schema and semantic meaning. Where a log might say "user bought 7 bananas" in whatever format the developer chose, an event would follow a standardised structure that tools can parse, route, and aggregate without custom configuration. If you have read the [Death(ish) of Logs](/en/articles/the-death-ish-of-logs), this is where the story might be heading: logs narrowing to free-form debugging context while events handle the structured, business-meaningful occurrences.
+
+Profiles are continuous profiling data: CPU usage, memory allocation, and wall clock time at the code level. Where a trace tells you the payment service took 800 milliseconds, a profile tells you which function inside that service was responsible. This is the signal that bridges the gap between architectural observability and code-level debugging. Instead of asking the developer to reproduce the issue locally and attach a profiler, the data is already there.
+
+Both signals are still being stabilised in the OpenTelemetry specification. But the direction is clear: observability is moving from "which service is slow" towards "which line of code is slow" and from "something happened" towards "this specific business event happened." These are worth watching.
+
+## How Signals Connect
+
+Signals are designed to work together, and the trace ID is the thread that connects them.
+
+A metric tells you the payment error rate spiked. Traces filtered by that time window show you which requests failed and where. Logs attached to the failing spans explain why. Baggage attributes let you slice all of this by user tier, region, or experiment group to understand who is affected.
+
+Each signal answers a different question. Metrics answer "is something wrong?" Traces answer "where does it break?" Logs answer "why did it break?" Baggage answers "who is affected?" Individually, each gives you a partial view. Connected through shared context, they give you the full picture.
+
+This is what makes the split into multiple signals worth the complexity. You are not maintaining six different systems for the sake of it. You are building a system where each signal does one job well and the connections between them replace the context that a single monolithic log used to carry by itself.
+
+## What Comes Next
+
+OpenTelemetry has given us a shared language for observability. Traces, metrics, logs, and baggage each solve a specific problem, and together they provide a level of visibility that no single log file could match. Events and profiles will push this further.
+
+But there is an assumption baked into all of these signals: the system being observed is deterministic. Given the same inputs, it produces the same outputs. Traces expect repeatable paths. Metrics expect stable baselines. Logs expect explainable outcomes.
+
+When the system making decisions is probabilistic — when an AI agent can produce a different answer for the same input depending on the model, the prompt, or the time of day — these assumptions start to break. Cost becomes a signal. Confidence becomes a signal. Decision stability becomes something you need to track over time.
+
+That is where I will pick up in the next article: what observability looks like when the services on the bus are no longer deterministic.

@@ -66,7 +66,7 @@ const articleJsonLd = {
 
 // Related articles: find articles sharing tags, fall back to most recent
 const sameLocaleArticles = allArticles
-  .filter(a => a.slug.startsWith(`${lang}/`) && a.slug !== slug && (import.meta.env.DEV || !a.data.draft));
+  .filter(a => a.slug.startsWith(`${lang}/`) && a.slug !== slug && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !a.data.draft));
 
 const scoredArticles = sameLocaleArticles.map(a => ({
   article: a,

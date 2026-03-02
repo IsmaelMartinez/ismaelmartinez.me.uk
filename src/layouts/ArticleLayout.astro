@@ -125,10 +125,12 @@ const relatedArticles = scoredArticles
         )}
       </header>
 
-      <TableOfContents tocTitle={t('toc.title')} />
+      <div class="article-body">
+        <TableOfContents tocTitle={t('toc.title')} />
 
-      <div class="article-content">
-        <slot />
+        <div class="article-content">
+          <slot />
+        </div>
       </div>
 
       {relatedArticles.length > 0 && (
@@ -290,9 +292,23 @@ const relatedArticles = scoredArticles
     color: white;
   }
 
+  .article-body {
+    display: block;
+  }
+
+  @media (min-width: 1100px) {
+    .article-body {
+      display: flex;
+      flex-direction: row-reverse;
+      gap: var(--space-xl);
+    }
+  }
+
   .article-content {
     font-size: 1.125rem;
     line-height: 1.8;
+    min-width: 0;
+    flex: 1;
   }
 
   .article-content :global(h2) {

@@ -1,0 +1,111 @@
+---
+title: "Senyals d'OpenTelemetry"
+description: "Per a què serveix cada senyal d'OpenTelemetry, com es connecten traces, mètriques, logs i baggage, i per què dividir un gran log en senyals especialitzats val la complexitat."
+publishedDate: 2026-02-27
+originalUrl: "https://medium.com/@ismaelmartinez/opentelemetry-signals-a2093dc16dc6"
+originalPlatform: "medium"
+tags: ["Observabilitat", "OpenTelemetry", "Senyals", "SRE"]
+draft: false
+---
+
+OpenTelemetry ens dona traces, mètriques, logs, baggage, i aviat events i profiles. Són molts senyals, tot i que no tots són telemetria en el sentit tradicional. Si has seguit el camí des dels [fonaments d'observabilitat](/cat/articles/observability-with-opentelemetry) fins a l'[evolució dels logs](/cat/articles/the-death-ish-of-logs), la següent pregunta natural és: per a què serveix realment cada senyal i com encaixen entre si?
+
+En aquest article recorreré cadascun d'ells, com es complementen i què significa a la pràctica passar d'un únic log a múltiples senyals especialitzats.
+
+## Per què importen els senyals
+
+Quan tot és un log, obliges un únic motor d'emmagatzematge, un únic llenguatge de consulta i una única visualització a gestionar treballs molt diferents. Un sol sistema no pot fer-los tots bé.
+
+En dividir la telemetria en senyals diferents, cadascun obté l'emmagatzematge, la retenció i les eines que realment necessita. El resultat són consultes més ràpides, emmagatzematge més barat i visualitzacions estandarditzades que els enginyers poden llegir en qualsevol eina sense aprendre un nou llenguatge visual. També permet diferents estratègies de retenció i mostreig per senyal, de manera que pots conservar el que importa i descartar el que no sense perdre context.
+
+## Traces
+
+En un sistema distribuït, una única acció d'usuari pot desplegar-se en desenes de crides entre serveis. Algunes s'executen en paral·lel, algunes són asíncrones, algunes creuen límits d'equip. Cap equip individual veu el panorama complet, i cap quantitat de cerca en logs reconstruirà de forma fiable el camí que una petició va prendre a través del sistema.
+
+Un trace sí que ho fa. Connecta tot el recorregut d'una petició en un únic camí compost de spans, on cada span representa una unitat de treball. Això funciona a través de tres identificadors: un trace ID creat al punt d'entrada i propagat cap avall indica que tots els spans pertanyen a la mateixa petició, mentre que el span ID propi de cada span i la referència al seu parent span ID indiquen què va causar què. Aquests identificadors viatgen amb la petició a través de capçaleres o metadades de missatges, de manera que cada servei contribueix al mateix trace sense un coordinador central.
+
+Així és com es veu un trace per a una compra de plàtans que es desplega entre serveis:
+
+```
+[API Gateway]─────────────────────────────────────────── 120ms
+  ├─[Order Service]────────────────────────────────────── 95ms
+  │   ├─[Inventory Service]──────────── 30ms
+  │   ├─[Payment Service]────────────────────── 60ms
+  │   │   └─[Fraud Detection]──────────── 45ms
+  │   │       └─[External Risk API]──── 40ms
+  │   └─[Analytics Event]── 5ms (async)
+  └─[Notification Service]── 10ms
+```
+
+Pots veure d'un cop d'ull que la ruta de detecció de frau és el coll d'ampolla, amb l'API de risc externa consumint la major part d'aquest temps. Sense un trace, estaries buscant en logs de sis serveis intentant reconstruir això a partir de timestamps.
+
+> Instrumenta primer als límits dels serveis. Allà és on viuen els spans més útils i on s'amaga la latència.
+
+## Mètriques
+
+Mentre que els traces et mostren el camí de les peticions individuals, no et diuen si el sistema en conjunt està sa. Un únic trace lent podria ser un cas atípic o l'inici d'una tendència. És normal aquest coll d'ampolla en la detecció de frau? Està empitjorant? Quantes peticions estan fallant ara mateix?
+
+Les mètriques responen a aquestes preguntes. Són mesuraments numèrics capturats al llarg del temps: comptadors, gauges i histogrames. Un comptador rastreja quantes compres de plàtans hi ha hagut avui. Un gauge rastreja quantes comandes hi ha actualment a la cua. Un histograma rastreja la distribució dels temps de resposta de pagaments, perquè puguis veure que el percentil 99 ha passat de 200 mil·lisegons a 900 en l'última hora.
+
+Les mètriques et mostren la salut de tot el sistema. Són barates d'emmagatzemar, ràpides d'agregar i naturals per a alertes. Estableixes un llindar, i quan la taxa d'error de pagaments supera el cinc per cent, algú rep una alerta.
+
+Les mètriques són també el senyal més madur a OpenTelemetry. Les bases de dades de sèries temporals com Prometheus existeixen des de fa anys, i el llenguatge de visualització és universal: gràfics de línies, gràfics de barres, distribucions de percentils. Si alguna vegada has mirat un dashboard, estaves mirant mètriques.
+
+> Alerta sobre taxes i burn en lloc de comptatges bruts. Un comptatge de 500 errors no significa res sense saber si això és l'u per cent o el cinquanta.
+
+## Logs
+
+Mentre que les mètriques et diuen que alguna cosa va malament, no et diuen per què. La taxa d'error de pagaments es va disparar, però quines peticions van fallar? Què tenien en comú?
+
+Els logs van començar com a sentències print i van créixer fins a convertir-se en objectes JSON estructurats massius que intentaven fer-ho tot alhora. A OpenTelemetry, ja no han de fer-ho. Amb els traces gestionant el recorregut de la petició i les mètriques gestionant la salut agregada, els logs obtenen un rol més estret i enfocat: registrar el que va passar en un moment específic. Un pagament va fallar perquè la targeta va ser rebutjada. Un usuari va intentar comprar més plàtans dels que permet l'inventari. Un canvi de configuració es va aplicar a l'inici.
+
+El canvi important és la correlació. Una entrada de log d'OTel porta el trace ID i l'span ID del context al qual pertany. Quan el servei de pagaments registra un error de targeta rebutjada, pots saltar d'aquest log al trace complet, o d'un span fallit al log que l'explica. El log ja no necessita portar tot el context per si sol, cosa que significa que pot tornar a ser més petit. Registra el que és únic d'aquell moment, i deixa que el trace porti la resta.
+
+Els logs són el senyal més car d'emmagatzemar i el més difícil de mostrejar. Pots pre-agregar mètriques i mostrejar traces, però descartar un log que diu "targeta rebutjada" significa perdre l'explicació. Equilibrar el detall contra el cost segueix sent la part més difícil de la gestió de logs.
+
+> Registra decisions i fallades, no el flux rutinari. "Va entrar a la funció X" és soroll. "Targeta rebutjada: fons insuficients" és senyal.
+
+## Baggage
+
+Mentre que traces, mètriques i logs capturen diferents aspectes del que va passar, cap d'ells porta context entre serveis per si sol. Baggage omple aquest buit. En lloc de capturar telemetria, és un mecanisme de propagació de context que fa que els altres senyals siguin més útils.
+
+Baggage porta parells clau-valor juntament amb la petició mentre es mou entre serveis. Quan la nostra compra de plàtans entra a l'API gateway, el gateway sap coses que els serveis downstream no saben: el nivell de l'usuari, la regió de la sessió, el grup d'experiment. Sense baggage, cada servei downstream hauria de buscar això independentment o la informació simplement faltaria a la seva telemetria.
+
+Amb baggage, el gateway adjunta `user.tier=premium` al context de la petició. Cada servei downstream pot llegir-lo i afegir-lo com a atribut als seus propis spans, mètriques i logs. Ara pots filtrar traces per nivell d'usuari, alertar sobre taxes d'error per a clients premium específicament, o detectar que un grup d'experiment particular està experimentant major latència.
+
+Baggage viatja a les capçaleres de les peticions, cosa que significa dues coses. Primer, creua els límits dels serveis automàticament a través de la mateixa propagació de context que porta els trace IDs. Segon, afegeix sobrecàrrega a cada petició, així que hauria de mantenir-se petit. També és visible en trànsit, per la qual cosa mai hauria de portar dades sensibles com tokens o informació personal.
+
+> Mantén el baggage de baixa cardinalitat i mai incloguis PII. Un nivell d'usuari està bé. Un email d'usuari no.
+
+## El que ve: Events i Profiles
+
+OpenTelemetry no s'atura. Dos nous tipus de senyal estan madurant i val la pena seguir-los de prop.
+
+Els events són registres estructurats d'alguna cosa que va passar en un moment específic. Això sona molt a un log, i la superposició és intencionada. La diferència és que els events porten un esquema definit i significat semàntic. On un log podria dir "l'usuari va comprar 7 plàtans" en el format que el desenvolupador va triar, un event seguiria una estructura estandarditzada que les eines poden parsejar, enrutar i agregar sense configuració personalitzada. Si has llegit [La mort(ish) dels logs](/cat/articles/the-death-ish-of-logs), aquí és on la història podria dirigir-se: els logs estrenyent-se a context de depuració en format lliure mentre els events gestionen les ocurrències estructurades amb significat de negoci.
+
+Els profiles són dades de perfilat continu: ús de CPU, assignació de memòria i temps de rellotge a nivell de codi. On un trace et diu que el servei de pagaments va trigar 800 mil·lisegons, un profile et diu quina funció dins d'aquest servei va ser la responsable. Aquest és el senyal que fa de pont entre l'observabilitat arquitectònica i la depuració a nivell de codi. En lloc de demanar al desenvolupador que reprodueixi el problema localment i adjunti un profiler, les dades ja hi són.
+
+Ambdós senyals encara s'estan estabilitzant a l'especificació d'OpenTelemetry. Però la direcció és clara: l'observabilitat s'està movent de "quin servei és lent" cap a "quina línia de codi és lenta" i de "alguna cosa va passar" cap a "aquest event de negoci específic va passar". Val la pena seguir-los.
+
+## Com es connecten els senyals
+
+Els senyals estan dissenyats per treballar junts, i el trace ID és el fil que els connecta.
+
+*Taula resum que mostra com es connecta cada senyal d'OpenTelemetry, quina pregunta respon i a través de quin mecanisme.*
+
+| Senyal | Pregunta que respon | Es connecta mitjançant |
+|--------|--------------------|-----------------------|
+| Mètriques | Alguna cosa va malament? | Finestra temporal + atributs compartits |
+| Traces | On es trenca? | Trace ID, span ID |
+| Logs | Per què es va trencar? | Trace ID, span ID |
+| Baggage | Qui es veu afectat? | Propagació de context de petició |
+| Events | Quina acció de negoci va passar? | Esquema estructurat |
+| Profiles | Quin codi és responsable? | Trace ID, span ID |
+
+Individualment, cada senyal et dona una vista parcial. Connectats a través de context compartit, et donen el panorama complet. No estàs mantenint múltiples sistemes pel mer fet de fer-ho.
+
+## Conclusió
+
+OpenTelemetry ens ha donat un llenguatge compartit per a l'observabilitat. Cada senyal resol un problema específic, i junts proporcionen un nivell de visibilitat que cap arxiu de log únic podria igualar.
+
+Tots aquests senyals comparteixen una suposició: el sistema observat és determinista. A mesura que els [sistemes agèntics s'uneixen al bus d'esdeveniments](/cat/articles/integrating-agentic-systems-into-event-driven-architectures), aquesta suposició necessitarà ser revisada. Quan un servei pot produir una decisió diferent per al mateix input, el cost per invocació es converteix en una mètrica que val la pena rastrejar juntament amb la latència i la taxa d'error… però això és tema per a un altre dia.

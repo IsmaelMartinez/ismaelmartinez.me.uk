@@ -1,0 +1,111 @@
+---
+title: "Señales de OpenTelemetry"
+description: "Para qué sirve cada señal de OpenTelemetry, cómo se conectan traces, métricas, logs y baggage, y por qué dividir un gran log en señales especializadas merece la complejidad."
+publishedDate: 2026-02-27
+originalUrl: "https://medium.com/@ismaelmartinez/opentelemetry-signals-a2093dc16dc6"
+originalPlatform: "medium"
+tags: ["Observabilidad", "OpenTelemetry", "Señales", "SRE"]
+draft: false
+---
+
+OpenTelemetry nos da traces, métricas, logs, baggage, y pronto eventos y perfiles. Son muchas señales, aunque no todas son telemetría en el sentido tradicional. Si has seguido el camino desde los [fundamentos de observabilidad](/es/articles/observability-with-opentelemetry) hasta la [evolución de los logs](/es/articles/the-death-ish-of-logs), la siguiente pregunta natural es: ¿para qué sirve realmente cada señal y cómo encajan entre sí?
+
+En este artículo recorreré cada una de ellas, cómo se complementan y qué significa en la práctica pasar de un único log a múltiples señales especializadas.
+
+## Por qué importan las señales
+
+Cuando todo es un log, obligas a un único motor de almacenamiento, un único lenguaje de consulta y una única visualización a manejar trabajos muy diferentes. Un solo sistema no puede hacerlos todos bien.
+
+Al dividir la telemetría en señales distintas, cada una obtiene el almacenamiento, la retención y las herramientas que realmente necesita. El resultado son consultas más rápidas, almacenamiento más barato y visualizaciones estandarizadas que los ingenieros pueden leer en cualquier herramienta sin aprender un nuevo lenguaje visual. También permite diferentes estrategias de retención y muestreo por señal, para que puedas conservar lo que importa y descartar lo que no sin perder contexto.
+
+## Traces
+
+En un sistema distribuido, una única acción de usuario puede desplegarse en docenas de llamadas entre servicios. Algunas se ejecutan en paralelo, algunas son asíncronas, algunas cruzan límites de equipo. Ningún equipo individual ve el panorama completo, y ninguna cantidad de búsqueda en logs reconstruirá de forma fiable el camino que una petición tomó a través del sistema.
+
+Un trace sí lo hace. Conecta todo el recorrido de una petición en un único camino compuesto de spans, donde cada span representa una unidad de trabajo. Esto funciona a través de tres identificadores: un trace ID creado en el punto de entrada y propagado hacia abajo indica que todos los spans pertenecen a la misma petición, mientras que el span ID propio de cada span y la referencia a su parent span ID indican qué causó qué. Estos identificadores viajan con la petición a través de cabeceras o metadatos de mensajes, de modo que cada servicio contribuye al mismo trace sin un coordinador central.
+
+Así es como se ve un trace para una compra de plátanos que se despliega entre servicios:
+
+```
+[API Gateway]─────────────────────────────────────────── 120ms
+  ├─[Order Service]────────────────────────────────────── 95ms
+  │   ├─[Inventory Service]──────────── 30ms
+  │   ├─[Payment Service]────────────────────── 60ms
+  │   │   └─[Fraud Detection]──────────── 45ms
+  │   │       └─[External Risk API]──── 40ms
+  │   └─[Analytics Event]── 5ms (async)
+  └─[Notification Service]── 10ms
+```
+
+Puedes ver de un vistazo que la ruta de detección de fraude es el cuello de botella, con la API de riesgo externa consumiendo la mayor parte de ese tiempo. Sin un trace, estarías buscando en logs de seis servicios intentando reconstruir esto a partir de timestamps.
+
+> Instrumenta primero en los límites de los servicios. Ahí es donde viven los spans más útiles y donde se esconde la latencia.
+
+## Métricas
+
+Mientras que los traces te muestran el camino de las peticiones individuales, no te dicen si el sistema en su conjunto está sano. Un único trace lento podría ser un caso atípico o el inicio de una tendencia. ¿Es normal ese cuello de botella en la detección de fraude? ¿Está empeorando? ¿Cuántas peticiones están fallando ahora mismo?
+
+Las métricas responden a estas preguntas. Son mediciones numéricas capturadas a lo largo del tiempo: contadores, gauges e histogramas. Un contador rastrea cuántas compras de plátanos hubo hoy. Un gauge rastrea cuántos pedidos hay actualmente en la cola. Un histograma rastrea la distribución de los tiempos de respuesta de pagos, para que puedas ver que el percentil 99 ha pasado de 200 milisegundos a 900 en la última hora.
+
+Las métricas te muestran la salud de todo el sistema. Son baratas de almacenar, rápidas de agregar y naturales para alertas. Estableces un umbral, y cuando la tasa de error de pagos supera el cinco por ciento, alguien recibe una alerta.
+
+Las métricas son también la señal más madura en OpenTelemetry. Las bases de datos de series temporales como Prometheus existen desde hace años, y el lenguaje de visualización es universal: gráficos de líneas, gráficos de barras, distribuciones de percentiles. Si alguna vez has mirado un dashboard, estabas mirando métricas.
+
+> Alerta sobre tasas y burn en lugar de conteos brutos. Un conteo de 500 errores no significa nada sin saber si eso es el uno por ciento o el cincuenta.
+
+## Logs
+
+Mientras que las métricas te dicen que algo va mal, no te dicen por qué. La tasa de error de pagos se disparó, pero ¿qué peticiones fallaron? ¿Qué tenían en común?
+
+Los logs empezaron como sentencias print y crecieron hasta convertirse en objetos JSON estructurados masivos que intentaban hacerlo todo a la vez. En OpenTelemetry, ya no tienen que hacerlo. Con los traces manejando el recorrido de la petición y las métricas manejando la salud agregada, los logs obtienen un rol más estrecho y enfocado: registrar lo que pasó en un momento específico. Un pago falló porque la tarjeta fue rechazada. Un usuario intentó comprar más plátanos de los que permite el inventario. Un cambio de configuración se aplicó al inicio.
+
+El cambio importante es la correlación. Una entrada de log de OTel lleva el trace ID y el span ID del contexto al que pertenece. Cuando el servicio de pagos registra un error de tarjeta rechazada, puedes saltar de ese log al trace completo, o de un span fallido al log que lo explica. El log ya no necesita llevar todo el contexto por sí mismo, lo que significa que puede volver a ser más pequeño. Registra lo que es único de ese momento, y deja que el trace lleve el resto.
+
+Los logs son la señal más cara de almacenar y la más difícil de muestrear. Puedes pre-agregar métricas y muestrear traces, pero descartar un log que dice "tarjeta rechazada" significa perder la explicación. Equilibrar el detalle contra el coste sigue siendo la parte más difícil de la gestión de logs.
+
+> Registra decisiones y fallos, no el flujo rutinario. "Entró en la función X" es ruido. "Tarjeta rechazada: fondos insuficientes" es señal.
+
+## Baggage
+
+Mientras que traces, métricas y logs capturan diferentes aspectos de lo que ocurrió, ninguno de ellos lleva contexto entre servicios por sí solo. Baggage llena ese hueco. En lugar de capturar telemetría, es un mecanismo de propagación de contexto que hace que las otras señales sean más útiles.
+
+Baggage lleva pares clave-valor junto con la petición mientras se mueve entre servicios. Cuando nuestra compra de plátanos entra en el API gateway, el gateway sabe cosas que los servicios downstream no saben: el nivel del usuario, la región de la sesión, el grupo de experimento. Sin baggage, cada servicio downstream tendría que buscar esto independientemente o la información simplemente faltaría en su telemetría.
+
+Con baggage, el gateway adjunta `user.tier=premium` al contexto de la petición. Cada servicio downstream puede leerlo y añadirlo como atributo a sus propios spans, métricas y logs. Ahora puedes filtrar traces por nivel de usuario, alertar sobre tasas de error para clientes premium específicamente, o detectar que un grupo de experimento particular está experimentando mayor latencia.
+
+Baggage viaja en las cabeceras de las peticiones, lo que significa dos cosas. Primero, cruza los límites de los servicios automáticamente a través de la misma propagación de contexto que lleva los trace IDs. Segundo, añade sobrecarga a cada petición, así que debería mantenerse pequeño. También es visible en tránsito, por lo que nunca debería llevar datos sensibles como tokens o información personal.
+
+> Mantén el baggage de baja cardinalidad y nunca incluyas PII. Un nivel de usuario está bien. Un email de usuario no.
+
+## Lo que viene: Events y Profiles
+
+OpenTelemetry no se detiene. Dos nuevos tipos de señal están madurando y vale la pena seguirlos de cerca.
+
+Los events son registros estructurados de algo que ocurrió en un momento específico. Eso suena mucho a un log, y la superposición es intencionada. La diferencia es que los events llevan un esquema definido y significado semántico. Donde un log podría decir "el usuario compró 7 plátanos" en el formato que el desarrollador eligió, un event seguiría una estructura estandarizada que las herramientas pueden parsear, enrutar y agregar sin configuración personalizada. Si has leído [La muerte(ish) de los logs](/es/articles/the-death-ish-of-logs), aquí es donde la historia podría dirigirse: los logs estrechándose a contexto de depuración en formato libre mientras los events manejan las ocurrencias estructuradas con significado de negocio.
+
+Los profiles son datos de perfilado continuo: uso de CPU, asignación de memoria y tiempo de reloj a nivel de código. Donde un trace te dice que el servicio de pagos tardó 800 milisegundos, un profile te dice qué función dentro de ese servicio fue la responsable. Esta es la señal que tiende el puente entre la observabilidad arquitectónica y la depuración a nivel de código. En lugar de pedir al desarrollador que reproduzca el problema localmente y adjunte un profiler, los datos ya están ahí.
+
+Ambas señales aún se están estabilizando en la especificación de OpenTelemetry. Pero la dirección es clara: la observabilidad se está moviendo de "qué servicio es lento" hacia "qué línea de código es lenta" y de "algo pasó" hacia "este evento de negocio específico pasó". Vale la pena seguirlas.
+
+## Cómo se conectan las señales
+
+Las señales están diseñadas para trabajar juntas, y el trace ID es el hilo que las conecta.
+
+*Tabla resumen que muestra cómo se conecta cada señal de OpenTelemetry, qué pregunta responde y a través de qué mecanismo.*
+
+| Señal | Pregunta que responde | Se conecta mediante |
+|-------|----------------------|-------------------|
+| Métricas | ¿Algo va mal? | Ventana temporal + atributos compartidos |
+| Traces | ¿Dónde se rompe? | Trace ID, span ID |
+| Logs | ¿Por qué se rompió? | Trace ID, span ID |
+| Baggage | ¿Quién se ve afectado? | Propagación de contexto de petición |
+| Events | ¿Qué acción de negocio ocurrió? | Esquema estructurado |
+| Profiles | ¿Qué código es responsable? | Trace ID, span ID |
+
+Individualmente, cada señal te da una vista parcial. Conectadas a través de contexto compartido, te dan el panorama completo. No estás manteniendo múltiples sistemas por el mero hecho de hacerlo.
+
+## Conclusión
+
+OpenTelemetry nos ha dado un lenguaje compartido para la observabilidad. Cada señal resuelve un problema específico, y juntas proporcionan un nivel de visibilidad que ningún archivo de log único podría igualar.
+
+Todas estas señales comparten una suposición: el sistema observado es determinista. A medida que los [sistemas agénticos se unen al bus de eventos](/es/articles/integrating-agentic-systems-into-event-driven-architectures), esa suposición necesitará ser revisada. Cuando un servicio puede producir una decisión diferente para el mismo input, el coste por invocación se convierte en una métrica que vale la pena rastrear junto con la latencia y la tasa de error… pero eso es tema para otro día.

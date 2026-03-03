@@ -2,12 +2,11 @@
 title: "OpenTelemetry Signals"
 description: "What each OpenTelemetry signal is for, how traces, metrics, logs, and baggage connect, and why splitting one big log into specialised signals is worth the complexity."
 publishedDate: 2026-02-27
+originalUrl: "https://medium.com/@ismaelmartinez/opentelemetry-signals-a2093dc16dc6"
 originalPlatform: "medium"
 tags: ["Observability", "OpenTelemetry", "Signals", "SRE"]
-draft: true
+draft: false
 ---
-
-![Colourful signal lights representing OpenTelemetry signals](https://cdn-images-1.medium.com/max/800/0*vuvdRkFUbNdCWl_0)
 
 OpenTelemetry gives us traces, metrics, logs, baggage, and soon events and profiles. That is a lot of signals, though not all of them are telemetry in the traditional sense. If you have followed the journey from [observability fundamentals](/en/articles/observability-with-opentelemetry) to the [evolution of logs](/en/articles/the-death-ish-of-logs), the natural next question is: what is each signal actually for, and how do they fit together?
 
@@ -58,7 +57,7 @@ Metrics are also the most mature signal in OpenTelemetry. Time-series databases 
 
 While metrics tell you that something is wrong, they do not tell you why. The payment error rate spiked, but which requests failed? What did they have in common?
 
-I have covered the [evolution of logs](/en/articles/the-death-ish-of-logs) in detail elsewhere. The short version: logs started as print statements and grew into massive structured JSON objects trying to do everything at once. In OpenTelemetry, they no longer have to. With traces handling the request journey and metrics handling aggregate health, logs get a narrower, more focused role: recording what happened at a specific moment. A payment failed because the card was declined. A user tried to buy more bananas than the inventory allows. A configuration change was applied at startup.
+Logs started as print statements and grew into massive structured JSON objects trying to do everything at once. In OpenTelemetry, they no longer have to. With traces handling the request journey and metrics handling aggregate health, logs get a narrower, more focused role: recording what happened at a specific moment. A payment failed because the card was declined. A user tried to buy more bananas than the inventory allows. A configuration change was applied at startup.
 
 The important shift is correlation. An OTel log entry carries the trace ID and span ID of the context it belongs to. When the payment service logs a card declined error, you can jump from that log to the full trace, or from a failed span to the log that explains it. The log no longer needs to carry all the context by itself, which means it can get smaller again. Log what is unique to that moment, and let the trace carry the rest.
 
@@ -92,6 +91,8 @@ Both signals are still being stabilised in the OpenTelemetry specification. But 
 
 Signals are designed to work together, and the trace ID is the thread that connects them.
 
+*Summary table showing how each OpenTelemetry signal connects, what question it answers, and through which mechanism.*
+
 | Signal | Question it answers | Connects through |
 |--------|-------------------|-----------------|
 | Metrics | Is something wrong? | Time window + shared attributes |
@@ -101,10 +102,10 @@ Signals are designed to work together, and the trace ID is the thread that conne
 | Events | What business action happened? | Structured schema |
 | Profiles | Which code is responsible? | Trace ID, span ID |
 
-Individually, each gives you a partial view. Connected through shared context, they give you the full picture. You are not maintaining multiple systems for the sake of it. Each signal does one job well, and the connections between them replace the context that a single monolithic log used to carry by itself.
+Individually, each signal gives you a partial view. Connected through shared context, they give you the full picture. You are not maintaining multiple systems for the sake of it.
 
 ## Conclusion
 
 OpenTelemetry has given us a shared language for observability. Each signal solves a specific problem, and together they provide a level of visibility that no single log file could match.
 
-All of these signals share one assumption: the system being observed is deterministic. As [agentic systems join the event bus](/en/articles/integrating-agentic-systems-into-event-driven-architectures), that assumption will need revisiting. When a service can produce a different decision for the same input, cost per invocation becomes a metric worth tracking alongside latency and error rate.
+All of these signals share one assumption: the system being observed is deterministic. As [agentic systems join the event bus](/en/articles/integrating-agentic-systems-into-event-driven-architectures), that assumption will need revisiting. When a service can produce a different decision for the same input, cost per invocation becomes a metric worth tracking alongside latency and error rate… but that is a topic for another day.

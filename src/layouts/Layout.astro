@@ -13,7 +13,7 @@ interface Props {
   canonical?: string;
 }
 
-const { title, description = "Ismael Martinez - Software Engineer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical } = Astro.props;
+const { title, description = "Ismael Martinez - Principal Software Developer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical } = Astro.props;
 const t = useTranslations(lang);
 const rawPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
 // Tag names are locale-specific with no cross-locale mapping, so the language

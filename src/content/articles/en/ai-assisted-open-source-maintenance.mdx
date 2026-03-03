@@ -6,72 +6,72 @@ tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
 draft: true
 ---
 
-{/*
-DRAFT - Outline with pointers. Flesh out with real examples from teams-for-linux.
-Complements "The AI Automation Trap" — that one covers philosophy, this one covers practice.
-*/}
-
 ## The Project Predates the Tools
 
-- teams-for-linux started in 2018, 5+ years before any AI coding tools existed
-- Built an Electron wrapper for MS Teams when Microsoft dropped official Linux support
-- Grew to 4,400+ stars, 315 forks, 30 contributors organically
-- AI adoption is recent — a tool choice, not a project origin story
+teams-for-linux started in 2018. That's more than five years before any AI coding tool existed. I built an Electron wrapper for Microsoft Teams because Microsoft dropped official Linux support and thousands of developers needed a working client. The project grew organically to over 4,400 stars, 315 forks, and 30 contributors over the years.
 
-{/* Point: counter the "this is an AI-generated project" narrative with timeline */}
+AI adoption came much later. It's a tool choice I made to keep up with the demands of maintaining a project this size, not the origin story. The timeline matters because people sometimes look at a repository, see signs of AI tooling, and assume the whole thing was generated. It wasn't. The project has seven years of history, community, and hard-won architectural decisions behind it.
 
 ## What CLAUDE.md Actually Is
 
-- It's a configuration file, like .editorconfig or tsconfig — tells the tool how to behave in this codebase
-- Documents architectural decisions, module boundaries, critical invariants (the trayIconRenderer/mqttStatusMonitor init requirement that's been accidentally broken multiple times)
-- Encodes project-specific knowledge so the tool respects existing patterns instead of inventing new ones
-- Not a sign of AI authorship — a sign of AI discipline
+When people spotted the CLAUDE.md file in the repository, some assumed it meant the project was AI-authored. That's a misunderstanding of what the file does.
 
-{/* Point: people saw the file and assumed the worst. Explain what it does and why it matters. */}
+CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, module boundaries, and critical invariants — like the `trayIconRenderer`/`mqttStatusMonitor` initialisation requirement that has been accidentally broken multiple times by contributors who didn't know about the dependency.
+
+The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. CLAUDE.md makes them explicit. It's not a sign of AI authorship. It's a sign of AI discipline.
 
 ## What AI Actually Accelerates
 
-- Implementation of well-understood features (the code part of coding)
-- Boilerplate, test scaffolding, documentation updates
-- Dependency upgrades and security patch responses (npm ecosystem pushes security issues multiple times a week)
-- Exploring unfamiliar APIs (Electron, Wayland quirks, Trusted Types)
-- Issue triage at scale (the Gemini-powered triage bot for GitHub issues)
+The tasks AI handles well are the ones that would otherwise burn out a solo maintainer.
 
-{/* Point: these are the tasks that would otherwise burn out a solo maintainer */}
+Implementation of well-understood features is the obvious one. Once I've decided what to build and how it should work, the actual coding — the mechanical translation of intent into code — goes faster with AI assistance. Boilerplate, test scaffolding, and documentation updates fall into the same category. They're necessary work, but they don't require creative judgement.
+
+Dependency upgrades and security patch responses are where the time savings really add up. The npm ecosystem pushes security advisories multiple times a week. Each one needs evaluation, patching, testing, and release. Without tooling, that alone can consume most of a maintainer's available hours.
+
+Exploring unfamiliar APIs is another area where AI shines. Electron's API surface is vast, Wayland has its own quirks, and Trusted Types introduced a whole new set of constraints. Having a tool that can quickly surface relevant documentation and usage patterns cuts the exploration time significantly.
+
+I also built a Gemini-powered triage bot for GitHub issues. When a project gets hundreds of issues, sorting signal from noise manually isn't sustainable. The bot handles initial categorisation so I can focus on the issues that actually need human attention.
 
 ## What AI Cannot Replace
 
-- Deciding what to build and what not to build
-- Community management — the "chill with updates" conversation required empathy and judgement, not code
-- Architectural decisions — when to refactor vs patch, module boundaries, backwards compatibility trade-offs
-- Release judgement — is this ready? should we batch more fixes? is the Wayland fix stable enough?
-- Understanding upstream changes — Teams web app changes without notice, defensive coding requires domain knowledge
-- Saying no to feature requests
+The hard work of maintaining an open-source project is not writing code. It never was.
 
-{/* Point: the human work is the hard work. AI handles the mechanical parts. */}
+Deciding what to build and what not to build requires understanding the project's direction, the community's needs, and the trade-offs of every addition. AI has no opinion on this. It will happily build whatever you ask for, whether the project needs it or not.
+
+Community management is entirely human work. When users started pushing back on update frequency — the "chill with updates" conversation — that required empathy, reading the room, and making a judgement call about release cadence. No AI tool can navigate that.
+
+Architectural decisions sit in the same category. When to refactor versus when to patch. Where to draw module boundaries. How much backwards compatibility to maintain and when to break it. These choices shape the project for years and can't be delegated to a tool that optimises for the immediate task.
+
+Release judgement is more nuanced than it sounds. Is this build ready? Should I batch more fixes first? Is the Wayland fix stable enough to ship, or does it need another week of testing? These decisions require context that no tool has access to.
+
+Understanding upstream changes is a constant challenge. The Teams web app changes without notice, and defensive coding against those changes requires deep domain knowledge about what Microsoft is likely to do and how their platform evolves. AI doesn't know what Microsoft shipped last Tuesday.
+
+And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a popular project, and it's entirely a human skill.
 
 ## Solo Maintainer Reality
 
-- Single-maintainer project with thousands of active users
-- Without AI tooling: respond slower, release less, burn out faster
-- With AI tooling: keep up with security patches, Electron upgrades, user reports, and still ship features
-- The alternative isn't "write it all by hand" — it's "let issues pile up and eventually abandon the project"
+teams-for-linux is a single-maintainer project with thousands of active users. That ratio is the core challenge.
 
-{/* Point: for solo OSS maintainers, AI is a sustainability tool, not a shortcut */}
+Without AI tooling, the maths doesn't work. Responding to issues takes longer. Releases happen less frequently. Security patches sit in the queue. Eventually the backlog grows faster than one person can address it, and the project gets abandoned. That's not hypothetical — it's the default outcome for popular single-maintainer projects.
+
+With AI tooling, I can keep up with security patches, Electron upgrades, user reports, and still ship new features. The tool handles the mechanical work so I can spend my limited time on the decisions and community interactions that actually require a human.
+
+The alternative to AI-assisted maintenance isn't "write everything by hand." It's "let issues pile up and eventually walk away." For solo open-source maintainers, AI is a sustainability tool, not a shortcut.
 
 ## The Visible Markers
 
-- Co-authored-by tags in commits — transparency, not confession
-- CLAUDE.md checked into the repo — open about the tooling
-- Could hide all of this easily. Chose not to.
-- Transparency about AI usage should be normalised, not penalised
+Every AI-assisted commit in the repository carries a `Co-authored-by` tag. That's transparency, not confession.
 
-{/* Point: being open about it is the right thing to do. The alternative is hiding it, which everyone else already does. */}
+The CLAUDE.md file is checked into the repo where anyone can read it. I could hide all of this easily. Strip the co-author tags, remove the configuration file, and nobody would know. I chose not to because being open about tooling is the right thing to do.
+
+The irony is that hiding AI usage is trivially easy and almost certainly widespread. The projects that are transparent about it are the ones getting scrutinised, while projects that hide it face no questions at all. That incentive structure is backwards.
+
+Transparency about AI usage should be normalised, not penalised. The conversation should be about outcomes — does the software work, is it maintained, are users served well — not about which tools the maintainer used to get there.
 
 ## Closing Thought
 
-- The interesting question isn't "did AI write this code"
-- It's "does the project work, is it maintained, are users served well"
-- By those measures, AI tooling is doing exactly what it should — keeping a useful project alive and responsive
+The interesting question isn't "did AI write this code?"
 
-{/* Tie back to "The AI Automation Trap" — AI removed the building constraint, but the deciding, maintaining, and caring about users is still entirely human */}
+It's whether the project works, whether it's maintained, and whether users are served well. By those measures, AI tooling is doing exactly what it should — keeping a useful project alive and responsive when the alternative is slow decay.
+
+In [The AI Automation Trap](/en/articles/the-ai-automation-trap), I wrote about how AI removed the building constraint but didn't remove the deciding constraint. This project is the lived example. AI handles the building. The deciding, the maintaining, and the caring about users — that's still entirely human. And it always will be.

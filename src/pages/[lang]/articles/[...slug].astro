@@ -10,7 +10,7 @@ export async function getStaticPaths() {
 
   return locales.flatMap(lang =>
     articles
-      .filter(article => article.slug.startsWith(`${lang}/`))
+      .filter(({ slug, data }) => slug.startsWith(`${lang}/`) && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft))
       .map(article => ({
         params: { lang, slug: article.slug.replace(`${lang}/`, '') },
         props: { article },

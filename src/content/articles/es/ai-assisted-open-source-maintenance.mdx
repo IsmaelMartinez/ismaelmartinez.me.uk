@@ -1,0 +1,77 @@
+---
+title: "Código abierto asistido por IA: qué cambia y qué no"
+description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto open source de 7 años — qué acelera, qué no puede reemplazar y por qué existe el archivo CLAUDE.md."
+publishedDate: 2026-03-03
+tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
+draft: false
+---
+
+{/*
+BORRADOR - Esquema con apuntes. Desarrollar con ejemplos reales de teams-for-linux.
+Complementa "La trampa de la automatización con IA" — ese cubre la filosofía, este cubre la práctica.
+*/}
+
+## El proyecto es anterior a las herramientas
+
+- teams-for-linux empezó en 2018, más de 5 años antes de que existiera cualquier herramienta de programación con IA
+- Se construyó un wrapper Electron para MS Teams cuando Microsoft dejó de dar soporte oficial a Linux
+- Creció orgánicamente hasta más de 4.400 estrellas, 315 forks y 30 contribuidores
+- La adopción de IA es reciente — una elección de herramientas, no la historia de origen del proyecto
+
+{/* Punto: contrarrestar la narrativa de "este es un proyecto generado por IA" con la cronología */}
+
+## Qué es realmente CLAUDE.md
+
+- Es un archivo de configuración, como .editorconfig o tsconfig — le dice a la herramienta cómo comportarse en este código
+- Documenta decisiones arquitectónicas, límites de módulos e invariantes críticos (el requisito de inicialización de trayIconRenderer/mqttStatusMonitor que se ha roto accidentalmente varias veces)
+- Codifica conocimiento específico del proyecto para que la herramienta respete los patrones existentes en lugar de inventar nuevos
+- No es una señal de autoría por IA — es una señal de disciplina con la IA
+
+{/* Punto: la gente vio el archivo y asumió lo peor. Explicar qué hace y por qué importa. */}
+
+## Qué acelera realmente la IA
+
+- Implementación de funcionalidades bien entendidas (la parte de código del programar)
+- Boilerplate, scaffolding de tests, actualizaciones de documentación
+- Actualizaciones de dependencias y respuestas a parches de seguridad (el ecosistema npm envía problemas de seguridad varias veces por semana)
+- Explorar APIs poco familiares (Electron, peculiaridades de Wayland, Trusted Types)
+- Triaje de issues a escala (el bot de triaje con Gemini para issues de GitHub)
+
+{/* Punto: estas son las tareas que de otro modo agotarían a un mantenedor en solitario */}
+
+## Qué no puede reemplazar la IA
+
+- Decidir qué construir y qué no construir
+- Gestión de la comunidad — la conversación de "calma con las actualizaciones" requería empatía y criterio, no código
+- Decisiones arquitectónicas — cuándo refactorizar vs parchear, límites de módulos, compromisos de compatibilidad hacia atrás
+- Criterio de lanzamiento — ¿está listo? ¿deberíamos acumular más correcciones? ¿es estable la corrección de Wayland?
+- Entender cambios upstream — la webapp de Teams cambia sin aviso, la programación defensiva requiere conocimiento del dominio
+- Decir no a peticiones de funcionalidades
+
+{/* Punto: el trabajo humano es el trabajo difícil. La IA se encarga de las partes mecánicas. */}
+
+## La realidad del mantenedor en solitario
+
+- Proyecto de un solo mantenedor con miles de usuarios activos
+- Sin herramientas de IA: responder más lento, lanzar menos, quemarse más rápido
+- Con herramientas de IA: mantener el ritmo con parches de seguridad, actualizaciones de Electron, reportes de usuarios y seguir sacando funcionalidades
+- La alternativa no es "escribirlo todo a mano" — es "dejar que los issues se acumulen y eventualmente abandonar el proyecto"
+
+{/* Punto: para mantenedores de OSS en solitario, la IA es una herramienta de sostenibilidad, no un atajo */}
+
+## Los marcadores visibles
+
+- Etiquetas Co-authored-by en los commits — transparencia, no confesión
+- CLAUDE.md incluido en el repositorio — abiertos sobre las herramientas
+- Podría ocultar todo esto fácilmente. Elegí no hacerlo.
+- La transparencia sobre el uso de IA debería normalizarse, no penalizarse
+
+{/* Punto: ser abierto al respecto es lo correcto. La alternativa es ocultarlo, que es lo que ya hace todo el mundo. */}
+
+## Reflexión final
+
+- La pregunta interesante no es "¿escribió la IA este código?"
+- Es "¿funciona el proyecto, se mantiene, se atiende bien a los usuarios?"
+- Por esas medidas, las herramientas de IA están haciendo exactamente lo que deberían — mantener vivo y receptivo un proyecto útil
+
+{/* Conectar con "La trampa de la automatización con IA" — la IA eliminó la restricción de construir, pero decidir, mantener y preocuparse por los usuarios sigue siendo completamente humano */}

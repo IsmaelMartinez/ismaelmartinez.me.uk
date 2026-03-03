@@ -1,0 +1,77 @@
+---
+title: "Codi obert assistit per IA: què canvia i què no"
+description: "Com les eines d'IA encaixen en el manteniment d'un projecte open source de 7 anys — què accelera, què no pot reemplaçar i per què existeix l'arxiu CLAUDE.md."
+publishedDate: 2026-03-03
+tags: ["IA", "Codi Obert", "Desenvolupament de Software", "Teams for Linux"]
+draft: false
+---
+
+{/*
+ESBORRANY - Esquema amb apunts. Desenvolupar amb exemples reals de teams-for-linux.
+Complementa "La trampa de l'automatització amb IA" — aquell cobreix la filosofia, aquest cobreix la pràctica.
+*/}
+
+## El projecte és anterior a les eines
+
+- teams-for-linux va començar el 2018, més de 5 anys abans que existís qualsevol eina de programació amb IA
+- Es va construir un wrapper Electron per a MS Teams quan Microsoft va deixar de donar suport oficial a Linux
+- Va créixer orgànicament fins a més de 4.400 estrelles, 315 forks i 30 contribuïdors
+- L'adopció d'IA és recent — una elecció d'eines, no la història d'origen del projecte
+
+{/* Punt: contrarestar la narrativa de "aquest és un projecte generat per IA" amb la cronologia */}
+
+## Què és realment CLAUDE.md
+
+- És un arxiu de configuració, com .editorconfig o tsconfig — li diu a l'eina com comportar-se en aquest codi
+- Documenta decisions arquitectòniques, límits de mòduls i invariants crítics (el requisit d'inicialització de trayIconRenderer/mqttStatusMonitor que s'ha trencat accidentalment diverses vegades)
+- Codifica coneixement específic del projecte perquè l'eina respecti els patrons existents en lloc d'inventar-ne de nous
+- No és un senyal d'autoria per IA — és un senyal de disciplina amb la IA
+
+{/* Punt: la gent va veure l'arxiu i va assumir el pitjor. Explicar què fa i per què importa. */}
+
+## Què accelera realment la IA
+
+- Implementació de funcionalitats ben enteses (la part de codi del programar)
+- Boilerplate, scaffolding de tests, actualitzacions de documentació
+- Actualitzacions de dependències i respostes a pegats de seguretat (l'ecosistema npm envia problemes de seguretat diverses vegades per setmana)
+- Explorar APIs poc familiars (Electron, peculiaritats de Wayland, Trusted Types)
+- Triatge d'issues a escala (el bot de triatge amb Gemini per a issues de GitHub)
+
+{/* Punt: aquestes són les tasques que d'altra manera esgotarien un mantenidor en solitari */}
+
+## Què no pot reemplaçar la IA
+
+- Decidir què construir i què no construir
+- Gestió de la comunitat — la conversa de "calma amb les actualitzacions" requeria empatia i criteri, no codi
+- Decisions arquitectòniques — quan refactoritzar vs pegar un pegat, límits de mòduls, compromisos de compatibilitat cap enrere
+- Criteri de llançament — està llest? hauríem d'acumular més correccions? és estable la correcció de Wayland?
+- Entendre canvis upstream — la webapp de Teams canvia sense avís, la programació defensiva requereix coneixement del domini
+- Dir no a peticions de funcionalitats
+
+{/* Punt: el treball humà és el treball difícil. La IA s'encarrega de les parts mecàniques. */}
+
+## La realitat del mantenidor en solitari
+
+- Projecte d'un sol mantenidor amb milers d'usuaris actius
+- Sense eines d'IA: respondre més lent, llançar menys, cremar-se més ràpid
+- Amb eines d'IA: mantenir el ritme amb pegats de seguretat, actualitzacions d'Electron, informes d'usuaris i seguir traient funcionalitats
+- L'alternativa no és "escriure-ho tot a mà" — és "deixar que els issues s'acumulin i eventualment abandonar el projecte"
+
+{/* Punt: per a mantenidors d'OSS en solitari, la IA és una eina de sostenibilitat, no una drecera */}
+
+## Els marcadors visibles
+
+- Etiquetes Co-authored-by als commits — transparència, no confessió
+- CLAUDE.md inclòs al repositori — oberts sobre les eines
+- Podria amagar tot això fàcilment. Vaig triar no fer-ho.
+- La transparència sobre l'ús d'IA s'hauria de normalitzar, no penalitzar
+
+{/* Punt: ser obert al respecte és el correcte. L'alternativa és amagar-ho, que és el que ja fa tothom. */}
+
+## Reflexió final
+
+- La pregunta interessant no és "ha escrit la IA aquest codi?"
+- És "funciona el projecte, es manté, s'atén bé als usuaris?"
+- Per aquestes mesures, les eines d'IA estan fent exactament el que haurien — mantenir viu i receptiu un projecte útil
+
+{/* Connectar amb "La trampa de l'automatització amb IA" — la IA va eliminar la restricció de construir, però decidir, mantenir i preocupar-se pels usuaris segueix sent completament humà */}

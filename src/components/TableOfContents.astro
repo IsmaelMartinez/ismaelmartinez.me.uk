@@ -124,12 +124,12 @@ const { tocTitle } = Astro.props;
     .toc {
       position: sticky;
       top: calc(var(--nav-height) + var(--space-xl));
-      float: right;
       width: 240px;
-      margin-left: var(--space-xl);
+      flex-shrink: 0;
       margin-bottom: 0;
       max-height: calc(100vh - var(--nav-height) - var(--space-2xl));
       overflow-y: auto;
+      align-self: flex-start;
     }
   }
 

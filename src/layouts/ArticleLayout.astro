@@ -66,7 +66,7 @@ const articleJsonLd = {
 
 // Related articles: find articles sharing tags, fall back to most recent
 const sameLocaleArticles = allArticles
-  .filter(a => a.slug.startsWith(`${lang}/`) && a.slug !== slug && (import.meta.env.DEV || !a.data.draft));
+  .filter(a => a.slug.startsWith(`${lang}/`) && a.slug !== slug && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !a.data.draft));
 
 const scoredArticles = sameLocaleArticles.map(a => ({
   article: a,
@@ -125,10 +125,12 @@ const relatedArticles = scoredArticles
         )}
       </header>
 
-      <TableOfContents tocTitle={t('toc.title')} />
+      <div class="article-body">
+        <TableOfContents tocTitle={t('toc.title')} />
 
-      <div class="article-content">
-        <slot />
+        <div class="article-content">
+          <slot />
+        </div>
       </div>
 
       {relatedArticles.length > 0 && (
@@ -290,9 +292,23 @@ const relatedArticles = scoredArticles
     color: white;
   }
 
+  .article-body {
+    display: block;
+  }
+
+  @media (min-width: 1100px) {
+    .article-body {
+      display: flex;
+      flex-direction: row-reverse;
+      gap: var(--space-xl);
+    }
+  }
+
   .article-content {
     font-size: 1.125rem;
     line-height: 1.8;
+    min-width: 0;
+    flex: 1;
   }
 
   .article-content :global(h2) {
@@ -365,6 +381,29 @@ const relatedArticles = scoredArticles
     height: auto;
     border-radius: 0.5rem;
     margin: var(--space-lg) 0;
+  }
+
+  .article-content :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--space-lg) 0;
+    font-size: 0.95em;
+  }
+
+  .article-content :global(th) {
+    text-align: left;
+    font-weight: 600;
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  .article-content :global(td) {
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .article-content :global(tr:last-child td) {
+    border-bottom: none;
   }
 
   .article-footer {

@@ -7,6 +7,8 @@ tags: ["Observability", "OpenTelemetry", "Signals", "SRE"]
 draft: true
 ---
 
+![Colourful signal lights representing OpenTelemetry signals](https://cdn-images-1.medium.com/max/800/0*vuvdRkFUbNdCWl_0)
+
 OpenTelemetry gives us traces, metrics, logs, baggage, and soon events and profiles. That is a lot of signals, though not all of them are telemetry in the traditional sense. If you have followed the journey from [observability fundamentals](/en/articles/observability-with-opentelemetry) to the [evolution of logs](/en/articles/the-death-ish-of-logs), the natural next question is: what is each signal actually for, and how do they fit together?
 
 In this article, I will walk through each of them, how they complement each other, and what the move from a single log to multiple specialised signals means in practice.
@@ -38,7 +40,7 @@ Here is what a trace looks like for a banana purchase that fans out across servi
 
 You can see at a glance that the fraud detection path is the bottleneck, with the external risk API consuming most of that time. Without a trace, you would be searching logs across six services trying to piece this together from timestamps.
 
-In practice, instrument at service boundaries first. That is where the most useful spans live and where latency hides.
+> Instrument at service boundaries first. That is where the most useful spans live and where latency hides.
 
 ## Metrics
 
@@ -50,7 +52,7 @@ Metrics show you the health of the whole system. They are cheap to store, fast t
 
 Metrics are also the most mature signal in OpenTelemetry. Time-series databases like Prometheus have existed for years, and the visualisation language is universal: line graphs, bar charts, percentile distributions. If you have ever looked at a dashboard, you were looking at metrics.
 
-In practice, alert on rates and burn rather than raw counts. A count of 500 errors means nothing without knowing whether that is one percent or fifty.
+> Alert on rates and burn rather than raw counts. A count of 500 errors means nothing without knowing whether that is one percent or fifty.
 
 ## Logs
 
@@ -62,7 +64,7 @@ The important shift is correlation. An OTel log entry carries the trace ID and s
 
 Logs are the most expensive signal to store and the hardest to sample. You can pre-aggregate metrics and sample traces, but dropping a log that says "card declined" means losing the explanation. Balancing detail against cost is still the hardest part of log management.
 
-In practice, log decisions and failures, not routine flow. "Entered function X" is noise. "Card declined: insufficient funds" is signal.
+> Log decisions and failures, not routine flow. "Entered function X" is noise. "Card declined: insufficient funds" is signal.
 
 ## Baggage
 
@@ -74,7 +76,7 @@ With baggage, the gateway attaches `user.tier=premium` to the request context. E
 
 Baggage travels in request headers, which means two things. First, it crosses service boundaries automatically through the same context propagation that carries trace IDs. Second, it adds overhead to every request, so it should stay small. It is also visible in transit, so it should never carry sensitive data like tokens or personal information.
 
-In practice, keep baggage low-cardinality and never include PII. A user tier is fine. A user email is not.
+> Keep baggage low-cardinality and never include PII. A user tier is fine. A user email is not.
 
 ## What Is Coming: Events and Profiles
 

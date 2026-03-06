@@ -12,13 +12,14 @@ interface Props {
   updatedDate?: Date;
   originalUrl?: string;
   originalPlatform?: 'medium' | 'devto' | 'self';
+  heroImage?: string;
   tags: string[];
   lang: 'en' | 'es' | 'cat';
   slug: string;
   readingTime?: number;
 }
 
-const { title, description, publishedDate, updatedDate, originalUrl, originalPlatform, tags, lang, slug, readingTime } = Astro.props;
+const { title, description, publishedDate, updatedDate, originalUrl, originalPlatform, heroImage, tags, lang, slug, readingTime } = Astro.props;
 const t = useTranslations(lang);
 
 // Get available translations for this article
@@ -61,7 +62,8 @@ const articleJsonLd = {
     "@type": "WebPage",
     "@id": `https://ismaelmartinez.me.uk/${lang}/articles/${slug.split('/')[1]}`
   },
-  ...(tags.length > 0 && { "keywords": tags.join(', ') })
+  ...(tags.length > 0 && { "keywords": tags.join(', ') }),
+  ...(heroImage && { "image": new URL(heroImage, Astro.site).href })
 };
 
 // Related articles: find articles sharing tags, fall back to most recent
@@ -79,7 +81,7 @@ const relatedArticles = scoredArticles
   .map(s => s.article);
 ---
 
-<Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags} canonical={originalUrl}>
+<Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags} canonical={originalUrl} ogImage={heroImage}>
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(articleJsonLd).replace(/</g, '\\u003c')} />
 
   <div id="reading-progress" class="reading-progress" aria-hidden="true"></div>
@@ -101,6 +103,10 @@ const relatedArticles = scoredArticles
 
         <h1 class="article-title">{title}</h1>
         <p class="article-description">{description}</p>
+
+        {heroImage && (
+          <img src={heroImage} alt="" class="article-hero" loading="eager" />
+        )}
 
         {tags.length > 0 && (
           <div class="article-tags">
@@ -143,6 +149,7 @@ const relatedArticles = scoredArticles
                 description={article.data.description}
                 publishedDate={article.data.publishedDate}
                 slug={article.slug.replace(`${lang}/`, '')}
+                heroImage={article.data.heroImage}
                 tags={article.data.tags}
                 lang={lang}
                 originalPlatform={article.data.originalPlatform}
@@ -238,6 +245,14 @@ const relatedArticles = scoredArticles
   .article-description {
     font-size: 1.25rem;
     color: var(--color-text-muted);
+    margin-bottom: var(--space-lg);
+  }
+
+  .article-hero {
+    width: 100%;
+    max-height: 400px;
+    object-fit: cover;
+    border-radius: 0.75rem;
     margin-bottom: var(--space-lg);
   }
 

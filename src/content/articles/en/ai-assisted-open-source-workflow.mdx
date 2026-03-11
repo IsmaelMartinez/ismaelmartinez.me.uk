@@ -32,7 +32,9 @@ Forbidden patterns: things the AI should never do. Removing backwards compatibil
 
 Testing expectations: what needs tests, what patterns to follow.
 
-The file is living documentation. When a new invariant is discovered — usually through a bug — it gets added. When a pattern is retired, it gets removed. A concrete example: the time a specific invariant was broken, the bug that resulted, and the CLAUDE.md entry that prevents it from happening again. */}
+The file is living documentation. When a new invariant is discovered — usually through a bug — it gets added. When a pattern is retired, it gets removed. A concrete example: the time a specific invariant was broken, the bug that resulted, and the CLAUDE.md entry that prevents it from happening again.
+
+Keeping documentation relevant and up to date is not optional in this workflow — it's load-bearing. The triage bot uses a vector database seeded from the project's docs and issue history to surface solutions, identify duplicates, and provide context. If the docs are stale, the bot gives stale answers. CLAUDE.md constrains the AI agent; the broader documentation feeds it. Both need maintenance. */}
 
 ## The Dependency Upgrade Loop
 
@@ -48,19 +50,21 @@ This is also where "does Teams still load?" comes in as the ultimate integration
 
 ## Feature Implementation Flow
 
-{/* How a feature goes from idea to merged code.
+{/* How a feature or non-trivial issue goes from idea to merged code. The workflow has more AI involvement than just "write the code" — it starts with research.
 
-Decision: maintainer decides what to build based on issues, community feedback, and project direction. AI has no input here.
+Research phase: for anything beyond a trivial fix, the first step is asking an agent to research the problem. The agent investigates the codebase, the issue history, and the relevant docs to understand the scope. If the change isn't straightforward, the agent identifies potential approaches, validates them with spikes, and produces a plan. This is not blind delegation — the maintainer reads the plan and guides the agent around it, correcting direction and catching misunderstandings before any implementation starts.
 
-Design: maintainer sketches the approach — often in an issue comment or PR description. For complex features, writes an ADR.
+This research step matters because it surfaces problems early. The agent might discover that the proposed approach conflicts with an architectural invariant, or that a similar feature was attempted and abandoned, or that the change touches a part of the codebase with upstream dependencies that constrain the solution. Better to find that out in research than in implementation.
 
-Implementation: AI writes the code following CLAUDE.md constraints. This is iterative — maintainer reviews, requests changes, AI adjusts. Not a single pass.
+Decision: maintainer decides what to build based on the research output, community feedback, and project direction. The research informs the decision, but the decision is human.
 
-Testing: AI generates tests, maintainer reviews for meaningful coverage (not just line count — are these tests that would actually catch regressions?).
+Implementation: AI writes the code following CLAUDE.md constraints and the validated plan. This is iterative — maintainer reviews, requests changes, AI adjusts. Not a single pass.
 
-Review: final manual review of the full diff. Electron-specific gotchas, Wayland compatibility, Trusted Types compliance.
+Review: every code change is manually reviewed. All of it. CLAUDE.md compliance, Electron edge cases, behaviour preservation, meaningful tests, readability for future contributors. The Co-authored-by tag makes it clear which commits involved AI.
 
-The key insight: AI compresses implementation and testing from days to hours. But deciding, designing, and reviewing take the same time they always did. The total cycle is faster, but the human-time-to-machine-time ratio has flipped. */}
+The hardest part: knowing when the AI is trying to fix something unfixable. The project has inherent limitations — it wraps a web client that Microsoft controls, running inside Electron with its own constraints. AI doesn't understand "we can't fix this because Microsoft won't let us." It will keep proposing solutions to problems that have no solution within the project's boundaries. Recognising that and stopping the cycle is a human skill.
+
+The key insight: AI compresses research and implementation from days to hours. But deciding, guiding the research, and reviewing take the same time they always did. The human-time-to-machine-time ratio has flipped. */}
 
 ## Handling Upstream Changes
 

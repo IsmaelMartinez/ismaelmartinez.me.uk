@@ -85,9 +85,23 @@ A feature request: issue comes in for a capability that's partially on the roadm
 
 These should be based on real (or realistic) examples. */}
 
+## Where This Is Going
+
+{/* The current state is: the bot helps the maintainer triage faster. The future state is: the bot helps users directly.
+
+If AI can surface a known solution to a user's problem — a workaround, a troubleshooting step, a link to the right documentation — without the maintainer being involved at all, the user gets a faster response and a better experience. That's the goal: move the triage bot from "helps the maintainer" to "helps the user, with the maintainer overseeing."
+
+This is a meaningful shift. It means sharing more of what happens under the hood with users. If the bot can solve your problem, why wait for a human to relay the answer?
+
+But not everyone is comfortable with that. Some users don't want to interact with a bot. Some will distrust automated responses on principle. The transparency measures — the bot identifying itself as automated, the dashboard, the safety layers — are designed to build trust incrementally, but trust can't be forced.
+
+The vector database is the foundation for this. The bot's ability to surface useful answers depends entirely on the quality and currency of the documentation and issue history it's seeded with. Stale docs mean stale answers. Keeping the knowledge base current is not a nice-to-have — it's what makes the difference between a bot that helps and a bot that wastes people's time.
+
+The hardest constraint remains the same one from the [workflow article](/en/articles/ai-assisted-open-source-workflow): knowing when AI is trying to fix something unfixable. The project wraps a web client controlled by Microsoft, inside Electron. Some problems have no solution within those boundaries. A bot that keeps suggesting workarounds for an upstream limitation erodes trust faster than one that says "this is a known limitation, here's the context." Teaching the system to recognise its own boundaries is the ongoing challenge. */}
+
 ## Closing
 
-{/* The triage bot is not about replacing the maintainer's judgement. It is about giving the maintainer better information, faster.
+{/* The triage bot is not about replacing the maintainer's judgement. It is about giving the maintainer — and increasingly the users — better information, faster.
 
 Every design decision — silent mode, safety layers, the 4-round-trip boundary, the dashboard, the single consolidated comment — exists to keep the human in control while letting AI handle the searching, comparing, and summarising.
 

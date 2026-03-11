@@ -40,7 +40,7 @@ Architectural decisions sit in the same category. When to refactor versus when t
 
 Release judgement is more nuanced than it sounds. Is this build ready? Should I batch more fixes first? Is the Wayland fix stable enough to ship, or does it need another week of testing? These decisions require context that no tool has access to.
 
-Understanding upstream changes is a constant challenge. The Teams web app changes without notice, and defensive coding against those changes requires deep domain knowledge about what Microsoft is likely to do and how their platform evolves. AI doesn't know what Microsoft shipped last Tuesday.
+Understanding upstream changes is a constant challenge. The Teams web app changes without notice, and defensive coding against those changes requires deep domain knowledge about what Microsoft is likely to do and how their platform evolves. AI doesn't know what Microsoft shipped last Tuesday. Worse, it doesn't know when a problem is unsolvable within the project's constraints — it will keep proposing fixes for things that can't be fixed because Microsoft controls the upstream. Recognising those boundaries and stopping the cycle is a human skill.
 
 And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a popular project, and it's entirely a human skill.
 

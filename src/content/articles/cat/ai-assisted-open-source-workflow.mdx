@@ -32,7 +32,7 @@ L'arxiu és un document viu. Quan descobreixo un nou invariant o un nou perill, 
 
 ## La fase d'investigació
 
-La majoria de canvis no trivials comencen amb investigació, no amb codi. El flux és així:
+La majoria de canvis no trivials comencen amb investigació, no amb codi. El flux complet és així:
 
 **Descric el problema.** "Els usuaris reporten que la pantalla compartida falla a Wayland amb la darrera actualització d'Electron." O "Necessitem suportar Trusted Types per complir amb els nous requisits de CSP."
 
@@ -42,7 +42,9 @@ La majoria de canvis no trivials comencen amb investigació, no amb codi. El flu
 
 **L'agent produeix un pla.** Un cop entenem el problema i hem validat un enfocament a través de spikes, l'agent escriu un pla estructurat: quins canvis es necessiten, quins arxius es veuen afectats, quins són els riscos i què s'hauria de provar.
 
-**Jo guio, després l'agent executa.** Reviso el pla, ajusto prioritats, assenyalo riscos que l'agent va passar per alt i dono el vistiplau. Només llavors comença la implementació real. Aquesta seqüència — investigar, spike, planificar, guiar — no és negociable. Saltar-se directament a la implementació és com s'acaba escrivint codi que resol el problema equivocat.
+**Jo guio, després l'agent executa.** Reviso el pla, ajusto prioritats, assenyalo riscos que l'agent va passar per alt i dono el vistiplau. Només llavors comença la implementació real.
+
+No tots els canvis necessiten la seqüència completa. Una correcció de bug directa pot saltar-se l'spike i anar directament de la investigació a la implementació. Una actualització complexa d'Electron pot necessitar múltiples rondes de spikes al llarg de diverses sessions. El procés s'adapta al problema. El que no canvia és que entenc el que està passant abans de comprometre'm amb un enfocament.
 
 ## Actualitzacions de dependències
 
@@ -69,6 +71,30 @@ Quan una funcionalitat rep llum verda, el flux d'implementació segueix un patr�
 **Tests juntament amb el codi.** L'agent escriu tests com a part de la implementació, no com a idea tardana. L'arxiu CLAUDE.md especifica les convencions de testing, així que els tests segueixen els patrons existents del projecte.
 
 **Revisar tot.** Cada peça de codi generat per IA es llegeix. No s'ulleja — es llegeix. Busco problemes subtils: respecta els límits de mòduls? Gestiona els casos extrems d'Electron? Manté la compatibilitat cap enrere on cal? La IA produeix bon codi la major part del temps, però "la major part del temps" no és suficient per a un projecte amb milers d'usuaris.
+
+## Mantenir el context net
+
+Quan una implementació està acabada, segueixo una pràctica tradicional: el resultat s'emmagatzema com un ADR (Architecture Decision Record). El document d'investigació que hi va portar s'elimina.
+
+Pot sonar malbaratador — per què llençar la investigació? — però és deliberat. La investigació sempre és recuperable de l'historial de git si la necessito. El que importa és mantenir net el context actual. Si els documents d'investigació vells s'acumulen al repositori, la IA els llegeix i es confon sobre què és actual versus què és històric. Comença a referenciar resultats de spikes obsolets o plans superats.
+
+L'ADR captura la decisió i la seva justificació. Això és el que les sessions futures necessiten. El camí desordenat que hi va portar — els carrerons sense sortida, els spikes descartats, els enfocaments abandonats — és soroll un cop la decisió està presa. Git ho recorda. El directori de treball no necessita fer-ho.
+
+## Tipus de sessió
+
+El flux d'investigació-a-implementació no és l'únic tipus de sessió que executo. El manteniment implica diversos tipus de sessions recurrents, cadascun amb el seu propi focus:
+
+**Sessions de seguretat.** Revisar resultats de npm audit, avaluar avisos, pegar vulnerabilitats. S'executen freqüentment perquè l'ecosistema npm mai deixa de produir avisos.
+
+**Neteja de documentació.** Actualitzar seccions del README, netejar comentaris inline que s'han desviat del codi, refrescar CLAUDE.md amb nous invariants descoberts des de la darrera passada.
+
+**Mètriques i revisions de salut.** Revisar tendències d'issues, activitat de contribuïdors, temps de build, canvis en cobertura de tests. Entendre la trajectòria del projecte, no només l'estat actual.
+
+**Actualitzacions de dependències.** El cicle descrit més amunt — detecció, avaluació, actualització, prova, decisió de llançament.
+
+Cada tipus de sessió segueix el mateix patró central: jo estableixo l'abast, la IA executa dins d'ell, jo reviso els resultats. La diferència és a què estem mirant, no com treballem.
+
+Ara mateix aquestes sessions s'executen quan hi arribo. M'agradaria semi-automatitzar les recurrents — tenir un informe mensual generat que mostri tendències, assenyali coses que necessiten atenció i em doni una foto sense haver de recordar-me de mirar. El bot de triatge ja fa una versió d'això per als issues. Estendre aquest patró a la postura de seguretat, la frescor de dependències i la deriva de documentació és el següent pas natural.
 
 ## Gestió de canvis upstream
 

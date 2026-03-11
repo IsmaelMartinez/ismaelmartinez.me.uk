@@ -3,7 +3,7 @@ title: "Código abierto asistido por IA: qué cambia y qué no"
 description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto open source de 7 años — qué acelera, qué no puede reemplazar y por qué existe el archivo CLAUDE.md."
 publishedDate: 2026-03-03
 tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
-draft: true
+draft: false
 ---
 
 ## El proyecto es anterior a las herramientas
@@ -19,6 +19,8 @@ Cuando la gente vio el archivo CLAUDE.md en el repositorio, algunos asumieron qu
 CLAUDE.md es un archivo de configuración, parecido a `.editorconfig` o `tsconfig.json`. Le dice a la herramienta de IA cómo comportarse en este código específico. Documenta decisiones arquitectónicas, límites de módulos e invariantes críticos — como el requisito de inicialización de `trayIconRenderer`/`mqttStatusMonitor` que se ha roto accidentalmente varias veces por contribuidores que no conocían la dependencia.
 
 El archivo codifica conocimiento específico del proyecto para que la herramienta de IA respete los patrones existentes en lugar de inventar nuevos. Cada código tiene reglas no escritas. CLAUDE.md las hace explícitas. No es una señal de autoría por IA. Es una señal de disciplina con la IA.
+
+En el [artículo complementario sobre el flujo de trabajo real](/es/articles/ai-assisted-open-source-workflow) profundizo en cómo este archivo da forma a cada interacción — desde investigaciones hasta actualizaciones de dependencias e implementación de funcionalidades.
 
 ## Qué acelera realmente la IA
 
@@ -45,6 +47,8 @@ Las decisiones arquitectónicas están en la misma categoría. Cuándo refactori
 El criterio de lanzamiento es más matizado de lo que parece. ¿Está lista esta build? ¿Debería acumular más correcciones primero? ¿Es la corrección de Wayland lo suficientemente estable para publicar, o necesita otra semana de pruebas? Estas decisiones requieren contexto al que ninguna herramienta tiene acceso.
 
 Entender los cambios upstream es un desafío constante. La webapp de Teams cambia sin aviso, y la programación defensiva contra esos cambios requiere un conocimiento profundo del dominio sobre lo que Microsoft probablemente hará y cómo evoluciona su plataforma. La IA no sabe qué publicó Microsoft el martes pasado.
+
+Algunos problemas simplemente no tienen solución, independientemente de las herramientas. Cuando Microsoft cambia su webapp de formas que rompen clientes de terceros, ninguna cantidad de programación asistida por IA puede producir una solución alternativa que no existe. El mantenedor tiene que reconocer cuándo un problema no tiene buena solución, comunicarlo honestamente a los usuarios y seguir adelante. La IA seguirá intentando generar correcciones para cosas que no se pueden corregir.
 
 Y luego está decir no a las peticiones de funcionalidades. Eso es quizás la parte más difícil de mantener un proyecto popular, y es enteramente una habilidad humana.
 
@@ -75,3 +79,5 @@ La pregunta interesante no es "¿escribió la IA este código?"
 Es si el proyecto funciona, si se mantiene y si los usuarios están bien atendidos. Por esas medidas, las herramientas de IA están haciendo exactamente lo que deberían — mantener vivo y receptivo un proyecto útil cuando la alternativa es la decadencia lenta.
 
 En [La trampa de la automatización con IA](/es/articles/the-ai-automation-trap) escribí sobre cómo la IA eliminó la restricción de construir pero no eliminó la restricción de decidir. Este proyecto es el ejemplo vivido. La IA se encarga de construir. El decidir, el mantener y el preocuparse por los usuarios — eso sigue siendo completamente humano. Y siempre lo será.
+
+Si quieres ver cómo funciona esto en el día a día — el flujo de trabajo específico, las herramientas, los controles de calidad — lee [Código abierto asistido por IA: el flujo de trabajo](/es/articles/ai-assisted-open-source-workflow).

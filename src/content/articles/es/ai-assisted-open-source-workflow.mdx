@@ -1,0 +1,117 @@
+---
+title: "Código abierto asistido por IA: el flujo de trabajo"
+description: "El flujo de trabajo práctico detrás del mantenimiento de teams-for-linux con IA — desde CLAUDE.md hasta investigación, actualizaciones de dependencias, implementación de funcionalidades y controles de calidad."
+publishedDate: 2026-03-11
+tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
+draft: true
+---
+
+## De los principios a la práctica
+
+En [el artículo complementario](/es/articles/ai-assisted-open-source-maintenance) cubrí qué cambia la IA y qué no cuando mantienes un proyecto de código abierto. Este artículo es la continuación práctica: el flujo de trabajo real que uso día a día en teams-for-linux.
+
+Nada de esto es teórico. Es lo que he ido asentando después de meses de iteración, y sigue evolucionando. El patrón central es siempre el mismo: yo decido, la IA ejecuta, y yo reviso todo antes de que se publique.
+
+## CLAUDE.md: el archivo de restricciones
+
+Toda interacción con la herramienta de IA empieza con CLAUDE.md. Es lo primero que el agente lee al abrir el repositorio, y da forma a todo lo que sigue.
+
+El archivo no es largo, pero es denso. Cubre:
+
+**Invariantes arquitectónicos.** El `trayIconRenderer` debe inicializarse antes que `mqttStatusMonitor`. Esta dependencia se ha roto por contribuidores varias veces. Sin CLAUDE.md documentándolo, la IA refactorizaría uno sin considerar al otro sin problemas.
+
+**Límites de módulos.** Qué archivos son responsables de qué. La IA no debería mover funcionalidad entre módulos sin dirección explícita, y el archivo deja claros esos límites.
+
+**Comandos de build y tests.** Cómo ejecutar el proyecto, cómo correr los tests, qué espera el pipeline de CI. Suena básico, pero sin esto la IA adivina — y adivina mal con suficiente frecuencia como para perder tiempo.
+
+**Convenciones de commits.** Etiquetas Co-authored-by, formato de mensajes de commit, nomenclatura de ramas. La IA las sigue automáticamente porque están documentadas.
+
+**Restricciones conocidas.** Peculiaridades de Electron, comportamiento específico de Wayland, restricciones de Trusted Types. Son las minas que atrapan a quien no conoce el código. CLAUDE.md las señaliza.
+
+El archivo es un documento vivo. Cuando descubro un nuevo invariante o un nuevo peligro, va a CLAUDE.md antes que a cualquier otro sitio. La inversión se paga en cada interacción posterior.
+
+## La fase de investigación
+
+La mayoría de cambios no triviales empiezan con investigación, no con código. El flujo es así:
+
+**Describo el problema.** "Los usuarios reportan que la pantalla compartida falla en Wayland con la última actualización de Electron." O "Necesitamos soportar Trusted Types para cumplir con los nuevos requisitos de CSP."
+
+**El agente investiga.** Lee los archivos fuente relevantes, revisa el changelog de Electron, consulta issues upstream y presenta lo que encuentra. Esto es exploración, no implementación. El objetivo es entender.
+
+**Spikes, no soluciones.** Para cualquier cosa no obvia, pido un spike — un prototipo desechable que prueba una hipótesis específica. "¿Podemos interceptar la llamada a desktopCapturer antes de que llegue al path de Wayland?" El spike me dice si un enfoque es viable sin comprometerme con él.
+
+**El agente produce un plan.** Una vez que entendemos el problema y hemos validado un enfoque a través de spikes, el agente escribe un plan estructurado: qué cambios se necesitan, qué archivos se ven afectados, cuáles son los riesgos y qué debería probarse.
+
+**Yo guío, luego el agente ejecuta.** Reviso el plan, ajusto prioridades, señalo riesgos que el agente pasó por alto y doy el visto bueno. Solo entonces empieza la implementación real. Esta secuencia — investigar, spike, planificar, guiar — no es negociable. Saltarse directamente a la implementación es como se acaba escribiendo código que resuelve el problema equivocado.
+
+## Actualizaciones de dependencias
+
+Aquí es donde la asistencia de IA ahorra más tiempo en términos absolutos. El ciclo de actualización de dependencias en teams-for-linux funciona más o menos así:
+
+**Detección.** Dependabot o npm audit señalan una vulnerabilidad o dependencia desactualizada. Esto pasa varias veces por semana.
+
+**Evaluación.** El agente lee el aviso, revisa qué cambió en la dependencia y evalúa si nos afecta. Muchos avisos son para paths de código que no usamos — el agente puede identificarlos rápidamente.
+
+**Actualizar y probar.** El agente sube la versión, ejecuta la suite de tests y comprueba si hay cambios que rompen algo. Para versiones minor y patch, esto suele ser directo. Para versiones major, a menudo desencadena una fase de investigación.
+
+**Las actualizaciones de Electron son especiales.** Las versiones major de Electron rompen cosas regularmente. La actualización implica leer la lista de cambios que rompen compatibilidad, identificar cuáles afectan a nuestro código, hacer spikes de soluciones alternativas para cada uno, y luego implementarlas sistemáticamente. Una sola actualización major de Electron puede tocar docenas de archivos. Sin asistencia de IA, reservaría un fin de semana entero para cada una.
+
+**El criterio de lanzamiento es mío.** El agente puede actualizar, probar y preparar un lanzamiento. Pero la decisión de publicar — si agrupar más correcciones, si el momento es el adecuado, si los usuarios necesitan un aviso previo — esa es mía.
+
+## Implementación de funcionalidades
+
+Cuando una funcionalidad recibe luz verde, el flujo de implementación sigue un patrón consistente:
+
+**Especificación clara primero.** Describo qué debería hacer la funcionalidad, cómo debería comportarse y — igual de importante — qué *no* debería hacer. Los límites de alcance importan. La IA sobreingenierará con gusto si se lo permites.
+
+**Implementación incremental.** Las funcionalidades grandes se dividen en trozos pequeños y revisables. Cada trozo se implementa, prueba y revisa antes de pasar al siguiente. No es solo buena práctica — es esencial cuando trabajas con IA, porque detectar una dirección equivocada pronto cuesta minutos, mientras que detectarla tarde cuesta horas de trabajo desechable.
+
+**Tests junto al código.** El agente escribe tests como parte de la implementación, no como idea tardía. El archivo CLAUDE.md especifica las convenciones de testing, así que los tests siguen los patrones existentes del proyecto.
+
+**Revisar todo.** Cada pieza de código generado por IA se lee. No se ojea — se lee. Busco problemas sutiles: ¿respeta los límites de módulos? ¿Maneja los casos extremos de Electron? ¿Mantiene la compatibilidad hacia atrás donde es necesario? La IA produce buen código la mayor parte del tiempo, pero "la mayor parte del tiempo" no es suficiente para un proyecto con miles de usuarios.
+
+## Gestión de cambios upstream
+
+La webapp de Teams cambia sin aviso. Microsoft no publica un changelog de su cliente web, y la programación defensiva contra esos cambios es una de las partes más difíciles de mantener teams-for-linux.
+
+Cuando algo se rompe, el flujo es:
+
+**Triaje.** Llegan informes de usuarios. El agente ayuda a categorizarlos: ¿es una regresión en nuestro código o Microsoft cambió algo upstream?
+
+**Investigación.** Si es upstream, el agente examina qué cambió — comparando estructuras DOM, peticiones de red o respuestas de API contra lo que esperamos. Este trabajo detectivesco es tedioso y repetitivo, exactamente el tipo de tarea que la IA maneja bien.
+
+**Evaluación.** No todos los cambios upstream se pueden sortear. A veces Microsoft elimina o restringe algo de lo que dependíamos, y ninguna cantidad de código inteligente puede restaurar la funcionalidad. Reconocer cuándo un problema no tiene solución es un juicio humano.
+
+**Solución alternativa o aceptar.** Si existe un workaround, lo implementamos. Si no, lo comunico a los usuarios honestamente. El agente ayuda a redactar la respuesta, pero la decisión y el tono son míos.
+
+## Controles de calidad
+
+Nada se publica sin pasar por un conjunto de controles de calidad. No son aspiracionales — se aplican.
+
+**CI debe pasar.** El pipeline de GitHub Actions ejecuta linting, comprobación de tipos y la suite de tests. Sin excepciones.
+
+**Etiquetas Co-authored-by en cada commit asistido por IA.** Esto es transparencia no negociable. Si la IA ayudó a escribirlo, el commit lo dice.
+
+**Revisión manual de cada cambio.** Leo cada diff antes de que se haga commit. La IA puede proponer cambios, pero yo decido qué entra realmente al código.
+
+**Notas de lanzamiento que explican el "por qué."** El agente redacta las notas de lanzamiento, pero yo las edito para asegurarme de que son útiles para los usuarios — no solo una lista de archivos cambiados, sino una explicación de qué mejoró y por qué importa.
+
+## Lo que he aprendido
+
+Después de meses trabajando así, algunas cosas destacan.
+
+**El flujo de trabajo es el producto.** La herramienta de IA específica importa menos que el proceso que la rodea. Investigar antes de implementar. Spikes antes de comprometerse. Revisar antes de fusionar. Estas prácticas hacen que la asistencia de IA sea efectiva; sin ellas, solo estás generando código más rápido sin generar mejores resultados.
+
+**CLAUDE.md es la inversión de mayor apalancamiento.** Cada hora invertida documentando invariantes, límites y convenciones ahorra muchas horas corrigiendo a la IA después. Es el equivalente a la documentación de onboarding — excepto que la IA realmente la lee cada vez.
+
+**El trabajo del mantenedor cambia, pero no se reduce.** Paso menos tiempo escribiendo boilerplate y más tiempo revisando, decidiendo y comunicando. Las horas totales no han disminuido mucho. Lo que cambió es que esas horas producen más valor.
+
+**La transparencia no cuesta nada.** Ser abierto sobre el uso de IA no ha perjudicado al proyecto. Las etiquetas Co-authored-by y el archivo CLAUDE.md están ahí para que cualquiera los vea. Los usuarios que se preocupan por los resultados — ¿funciona la app, se mantiene, se atienden los issues? — juzgan el proyecto por esos méritos, no por las herramientas usadas.
+
+## Reflexión final
+
+Este flujo de trabajo no es una plantilla. Es lo que funciona para un proyecto específico con un mantenedor específico. Tu versión será diferente — distintas herramientas, distintas restricciones, distintas prioridades.
+
+Pero el patrón subyacente aplica ampliamente: los humanos deciden, la IA ejecuta, los humanos revisan. Sáltate cualquiera de esos pasos y o no estás aprovechando la IA efectivamente o no estás manteniendo la calidad que tus usuarios merecen.
+
+El [artículo de principios](/es/articles/ai-assisted-open-source-maintenance) cubre el porqué. Este artículo cubrió el cómo. Juntos, son la imagen completa de cómo se ve realmente el mantenimiento de código abierto asistido por IA en la práctica.

@@ -1,0 +1,91 @@
+---
+title: "AI-Assisted Open Source: The Actual Workflow"
+description: "A detailed walkthrough of how AI tooling fits into the day-to-day maintenance of teams-for-linux — from CLAUDE.md to dependency upgrades to release decisions."
+publishedDate: 2026-03-10
+tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
+draft: true
+---
+
+{/* Series context: second article in the t4l series. Article 1 ("What Changes and What Doesn't") covers principles. This one covers the how. Article 3 covers the triage bot. */}
+
+{/* Tone: practical, specific, first-person. Show-don't-tell. Needs anecdotes and moments of frustration, not just process steps. The reader should finish knowing exactly how AI fits into the maintenance loop AND find it engaging to read. */}
+
+## From Principles to Practice
+
+{/* Brief bridge from Article 1, but lead with the surprising insight rather than burying it.
+
+The biggest change isn't that coding is faster. It's where the time goes. Before AI, most of my maintenance hours went to writing code. Now most go to triaging issues, talking to the community, and making decisions about what to build. The actual coding takes the least time of anything I do in a week.
+
+That inversion is the story this article tells. The workflow is not "ask AI to do everything." It is a structured loop — decide, constrain, execute, review — where the constraints are what make it work. */}
+
+## CLAUDE.md as the Rulebook
+
+{/* Article 1 introduced CLAUDE.md as a concept — a configuration file that makes unwritten rules explicit. This section goes inside the file and shows what's actually in it.
+
+Focus on the contents and how they evolve, not the "what is it" explanation (Article 1 already did that).
+
+The specific invariants: the trayIconRenderer/mqttStatusMonitor initialisation order. Why that's in the file — because contributors (and AI) have broken it multiple times, and the dependency is not obvious from the code.
+
+Module boundaries: where code should live, what depends on what. The AI will invent new patterns if you don't tell it which patterns already exist.
+
+Forbidden patterns: things the AI should never do. Removing backwards compatibility without explicit instruction. Changing Electron configuration defaults. These are the guardrails that prevent AI from being "helpfully destructive."
+
+Testing expectations: what needs tests, what patterns to follow.
+
+The file is living documentation. When a new invariant is discovered — usually through a bug — it gets added. When a pattern is retired, it gets removed. A concrete example: the time a specific invariant was broken, the bug that resulted, and the CLAUDE.md entry that prevents it from happening again. */}
+
+## The Dependency Upgrade Loop
+
+{/* The most common workflow, and the one where AI saves the most cumulative time.
+
+Walk through a real example — a recent Electron major upgrade or a security advisory response.
+
+The flow: advisory arrives → maintainer evaluates severity and relevance (is this a real risk for an Electron app, or a transitive dependency that doesn't apply?) → if action needed, AI handles the upgrade (bumps version, runs tests, checks changelog for breaking changes) → maintainer reviews the diff and manually tests the Electron app (no automated test covers "does Teams still load after this Electron bump?") → commit with Co-authored-by tag → release decision is separate.
+
+The human parts are steps 1 (evaluate), 3 (review), and 4 (release). The AI part is step 2 (execute). The loop is fast because the mechanical part is fast, not because the decisions are skipped.
+
+This is also where "does Teams still load?" comes in as the ultimate integration test that no AI can perform — it requires launching the app, logging in, and checking that the web client renders correctly. */}
+
+## Feature Implementation Flow
+
+{/* How a feature goes from idea to merged code.
+
+Decision: maintainer decides what to build based on issues, community feedback, and project direction. AI has no input here.
+
+Design: maintainer sketches the approach — often in an issue comment or PR description. For complex features, writes an ADR.
+
+Implementation: AI writes the code following CLAUDE.md constraints. This is iterative — maintainer reviews, requests changes, AI adjusts. Not a single pass.
+
+Testing: AI generates tests, maintainer reviews for meaningful coverage (not just line count — are these tests that would actually catch regressions?).
+
+Review: final manual review of the full diff. Electron-specific gotchas, Wayland compatibility, Trusted Types compliance.
+
+The key insight: AI compresses implementation and testing from days to hours. But deciding, designing, and reviewing take the same time they always did. The total cycle is faster, but the human-time-to-machine-time ratio has flipped. */}
+
+## Handling Upstream Changes
+
+{/* This is where AI is least helpful and where the section should have the most voice.
+
+Microsoft doesn't publish changelogs for the Teams web client. When something breaks — and it breaks regularly — the workflow is reproduce, diagnose, fix. AI can help with the fix, but diagnosing what Microsoft changed requires domain knowledge and years of experience with the platform's quirks.
+
+Concrete example: a recent upstream breakage. What broke, how the maintainer figured out what changed, and how the fix was implemented. This should read as a war story, not a process description.
+
+The honest admission: this is the part of maintenance that still takes as long as it ever did. AI doesn't help when the problem is "what did Microsoft change on their end this week?" */}
+
+## Quality Gates and Release Judgement
+
+{/* Merged from the previous "Review Discipline" and "Release Cadence" sections — they're both about quality gates at different stages.
+
+Review discipline: every AI-generated change goes through the same review as a human contribution. The Co-authored-by tag makes it clear which commits involved AI. What the maintainer looks for: CLAUDE.md compliance, Electron edge cases, behaviour preservation, meaningful tests, and readability for future contributors. That last point matters — AI can write code that works but is hard for humans to follow.
+
+Release cadence: the "chill with updates" story. Users pushed back on too-frequent releases. The maintainer had to read the room, understand the frustration, and adjust. AI makes it easier to batch changes (individual changes are faster), but the release decision — is this ready? should I wait for more fixes? — is entirely human.
+
+This is pure community management. No AI tool can tell you when your users are fatigued. */}
+
+## Closing
+
+{/* This workflow is not about using AI to write code faster. It is about using AI to make solo maintenance sustainable. The time inversion — from coding being the bottleneck to deciding being the bottleneck — is the real shift.
+
+The next article in this series applies these same principles to a different problem: [standardising the issue triage process with AI](/en/articles/standardising-issue-triage-with-ai).
+
+For the principles behind these workflow choices, see [the companion article](/en/articles/ai-assisted-open-source-maintenance). */}

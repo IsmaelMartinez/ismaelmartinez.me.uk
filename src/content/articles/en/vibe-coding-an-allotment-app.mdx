@@ -1,0 +1,55 @@
+---
+title: "Vibe Coding an Allotment App"
+description: "What happens when you let AI write an entire app from scratch — learnings from building Bonnie Wee Plot, a gardening tool for Scottish weather."
+publishedDate: 2026-03-10
+tags: ["AI", "Software Development", "Vibe Coding"]
+draft: true
+---
+
+{/* Standalone article, no series. Contrasts with the disciplined AI usage in the t4l series — this is the other end of the spectrum. */}
+
+{/* Tone: personal, honest, slightly humorous (the project has that tone — "growing anything in Scottish weather is already a form of extreme sport"). Not a tutorial, not a pitch. A reflection on the experience. */}
+
+## Why This Exists
+
+{/* The origin story, but lead with the gap between the original need and what got built — tease the "different skill required" insight.
+
+I wanted to track when to plant potatoes. What I ended up with is a Next.js 16 app with React 19, TypeScript, Tailwind, Supabase cloud sync, Clerk authentication, a PWA with offline support, an AI garden advisor called Aitor, a compost tracker, QR code data sharing, 192 plants in the database, and deployment to both Vercel and GitHub Pages.
+
+For an allotment app. Built because I needed to remember which bed had the broad beans last year.
+
+The entire thing was vibe-coded: every line written by Claude through VS Code agent mode and Claude Code CLI. I steered, corrected course, and decided what features mattered. The AI did the building. That's vibe coding as I define it here — letting AI do the heavy lifting on implementation while the human steers direction.
+
+This is the opposite end of the spectrum from how I use AI in teams-for-linux, where strict guardrails and review discipline keep everything controlled. Here, the guardrails were loose because the stakes were low: make it work, make it useful, and if it breaks, I'm the only user who cares. But loose guardrails taught me things that strict guardrails don't. */}
+
+## Where It Worked
+
+{/* Interleave wins and their limits for each area rather than separating "what worked" from "what didn't."
+
+Speed and scope creep: from idea to deployed app in a fraction of the time it would take to build manually. For a personal project where "good enough" is the bar, this is the biggest win. But AI will happily build whatever you ask for, and it will suggest more. The feature list kept growing because saying yes was free. 192 plants, multiple deployment targets, cloud sync, PWA, QR sharing — for a tool to track my broad beans. The AI Automation Trap in microcosm: the cost of building dropped to zero, but the cost of maintaining didn't.
+
+Exploration and over-engineering: AI is genuinely good at suggesting features and approaches you might not think of. The compost tracker, the seasonal phase detection, the QR code sharing — these emerged from the conversation rather than being planned. Some of them are useful. Some of them are engineering for the sake of engineering. The line between "creative exploration" and "unnecessary complexity" is hard to see when building is free.
+
+Boring plumbing and consistency: authentication, cloud sync, responsive layouts, PWA configuration — this is the work that kills motivation on personal projects, and AI handles it without complaint. But across a large codebase, AI drifts in patterns and conventions. Without a CLAUDE.md equivalent to enforce consistency, the code has areas where the style shifts noticeably. The plumbing works, but the seams show.
+
+Testing: AI generates tests quickly, but they tend to test the implementation rather than the behaviour. Getting meaningful coverage — tests that would actually catch regressions — requires active steering. Left to its own devices, the AI writes tests that pass but wouldn't catch the bugs you care about. */}
+
+## The "Too Creative / Too Lazy" Spectrum
+
+{/* This deserves its own short section because it captures something real about working with AI.
+
+Sometimes the AI over-architects a solution when a simple approach would do — three layers of abstraction for something that should be a function. Other times it takes shortcuts that create technical debt — hardcoded values, skipped edge cases, patterns that work now but won't scale.
+
+Guiding it requires knowing what good looks like. You need to recognise when the AI is being too clever and when it's being too lazy. That means vibe coding is not "no coding skill required." It's "different coding skill required." The skill shifts from writing code to evaluating code, from implementation to judgement.
+
+This is the same insight from the t4l articles, arrived at from the opposite direction. Whether you're maintaining a serious open-source project with strict guardrails or building a personal tool with loose ones, the human value is in the deciding, not the building. */}
+
+## Would I Do It Again?
+
+{/* Yes, for personal projects where "useful enough" is the bar.
+
+The app works. It's deployed at bonnie-wee-plot.vercel.app. It helps with allotment management. It took a fraction of the time it would have taken to build by hand. For a project that might have never existed otherwise, that's a clear win.
+
+The learnings about scope discipline, consistency drift, and the judgement skill translate to any AI-assisted development. The vibe coding experience reinforced the principles I follow in more disciplined contexts — just from the other end of the spectrum. With teams-for-linux, the guardrails exist because thousands of users depend on it. With Bonnie Wee Plot, the guardrails were loose because the stakes were low. Both approaches are valid. The difference is risk tolerance, and risk tolerance should drive how much structure you put around AI usage.
+
+If others find the app useful — good, that's why it's open source and deployed. But the primary audience was always me, and for that purpose, vibe coding delivered. */}

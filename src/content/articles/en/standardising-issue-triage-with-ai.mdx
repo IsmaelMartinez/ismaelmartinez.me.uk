@@ -1,0 +1,94 @@
+---
+title: "AI-Assisted Open Source: Standardising Issue Triage"
+description: "How the GitHub Issue Triage Bot brings structure to open source issue management — multi-phase pipelines, safety layers, and human oversight by design."
+publishedDate: 2026-03-10
+tags: ["AI", "Open Source", "Software Development", "Teams for Linux", "Agentic AI"]
+draft: true
+---
+
+{/* Series context: third article in the t4l series. Article 1 covers principles, Article 2 covers the day-to-day workflow. This one applies those principles to issue management. */}
+
+{/* Tone: practical with architectural detail, but needs the same first-person voice as Articles 1 and 2. Include "I tried X and it didn't work" moments. Not a design doc. */}
+
+## The Problem: Issue Overload
+
+{/* A project with 4,400+ stars and active users generates a constant stream of issues. Bug reports missing reproduction steps, feature requests that duplicate existing roadmap items, questions mislabelled as bugs, genuine duplicates of known issues.
+
+For a solo maintainer, manually triaging every issue is not sustainable. But automated triage that gets it wrong — miscategorising, missing duplicates, posting unhelpful comments — is worse than no triage at all.
+
+Weave the design principles into the problem statement rather than separating them. The challenge demanded a specific approach: the bot proposes, never acts (it never closes issues, changes labels, or does anything irreversible). It identifies itself as automated. And it started in silent mode — storing results in a database for dashboard review before it was ever allowed to post publicly. Trust earned through observation, not assumed.
+
+This is the same "AI proposes, human decides" principle from the [companion article](/en/articles/ai-assisted-open-source-maintenance), applied to a new domain. That's what led to the github-issue-triage-bot. */}
+
+## The Triage Pipeline
+
+{/* Walk through the phases, but vary the treatment. Not equal weight on each.
+
+Phase 1 — Template Completeness: deterministic, no LLM. Parses the issue body against the bug report form template and checks for missing reproduction steps, debug logs, expected behaviour. One or two sentences. The point: not everything needs an LLM.
+
+Phases 2 and 3 — Known Solutions and Duplicate Detection: these share a pattern (pgvector similarity search followed by Gemini analysis). Phase 2 searches troubleshooting docs for known solutions. Phase 3 searches past issues for duplicates. In both cases, the bot suggests — it never declares something solved or duplicate. That's a maintainer call. Discuss them together to avoid repetition of the vector-search-plus-LLM pattern.
+
+Phase 4a — Enhancement Context: this is the most interesting phase and deserves the most space. For feature requests, it searches roadmap items, ADRs, and research documents. If someone requests something that's already on the roadmap, the bot surfaces that context. If a similar request was previously rejected with reasoning, the bot surfaces the reasoning. This saves the maintainer from re-explaining decisions and gives the reporter immediate context they wouldn't otherwise have.
+
+Phase 4b — Miscategorisation: quick. Checks whether the issue is mislabelled (a question as a bug, a bug as a feature request). Suggests recategorisation.
+
+All phases consolidate into a single markdown comment. One comment, not five. This was a deliberate design choice — multiple bot comments would create noise rather than reduce it. */}
+
+## The Enhancement Researcher Agent
+
+{/* This is the most novel part of the system and should get the most space.
+
+For enhancement issues with a configured shadow repo, the bot creates a mirror issue in a private shadow repository and posts a context brief: a summary of the enhancement request plus relevant ADRs, roadmap items, and similar past issues from vector search.
+
+The maintainer controls what happens next through explicit signals:
+- "research" triggers full Gemini-powered research synthesis with multiple approaches, trade-offs, and recommendations.
+- "use as context" acknowledges the brief without triggering full research.
+- "reject" discards.
+
+The full research pipeline supports revision cycles, PR creation, and promotion back to the public issue. Every step requires an explicit human signal.
+
+This is the ["agent as decision emitter" pattern](/en/articles/integrating-agentic-systems-into-event-driven-architectures) applied concretely. The agent proposes, the maintainer signals, the agent executes within the signalled scope.
+
+Include a personal moment here: what prompted building the shadow repo approach? Was there a bad experience with an earlier version? What problem did it solve that the simpler pipeline didn't? */}
+
+## Safety Layers and Escalation
+
+{/* Two safety layers before any output is posted.
+
+Structural validator: deterministic and fast. Length limits, URL allowlists, mention blocking (the bot must never @-mention a user — that would be a terrible experience), control character detection.
+
+LLM reviewer: a second LLM evaluating the first LLM's output for relevance, tone, and prompt injection detection. If either layer rejects, the output is not posted and the rejection is logged.
+
+The 4-round-trip boundary: if the agent reaches 4 round-trips in a research session without progressing to review, it escalates to the maintainer. This prevents token-burning loops and forces the system to admit when it's stuck.
+
+Personal note: what prompted the 4-round-trip boundary? Was there an early research session that spiralled? How was the number chosen? */}
+
+## The Dashboard: Observability as Governance
+
+{/* A daily-generated dashboard shows triage activity, phase hit rates, reaction metrics, and agent session status.
+
+Before the bot was allowed to post publicly, the dashboard was the only way to evaluate its behaviour. This is observability applied to the bot itself — not just "is it running?" but "is it helpful?"
+
+How often does each phase fire? What's the hit rate for known solutions vs duplicates? How are users reacting to the bot's comments? Are agent sessions completing, escalating, or timing out?
+
+Silent mode + dashboard = the bot earns trust through demonstrated performance. This is the same incremental-trust approach from the design principles, made concrete through tooling.
+
+The infrastructure behind this (Go on Cloud Run, Neon PostgreSQL with pgvector, GitHub App auth, Workload Identity Federation, Terraform) matters for reproducibility but isn't the interesting part of the story. Mention it in a sentence or two here rather than giving it its own section. */}
+
+## What This Looks Like in Practice
+
+{/* Two concrete walkthroughs, kept brief but specific.
+
+A bug report: issue comes in missing debug logs. Phase 1 catches it and prompts the reporter. Phase 2 finds a relevant troubleshooting doc. Phase 3 flags a potential duplicate from two months ago. The bot posts one comment with all three pieces of information. The maintainer reviews, confirms the duplicate, and closes with a link.
+
+A feature request: issue comes in for a capability that's partially on the roadmap. Phase 4a surfaces the roadmap item and a related ADR. The Enhancement Researcher creates a shadow issue and posts a context brief. The maintainer replies "research." The agent produces a synthesis with three approaches and trade-offs. The maintainer picks one and uses it to respond to the original issue.
+
+These should be based on real (or realistic) examples. */}
+
+## Closing
+
+{/* The triage bot is not about replacing the maintainer's judgement. It is about giving the maintainer better information, faster.
+
+Every design decision — silent mode, safety layers, the 4-round-trip boundary, the dashboard, the single consolidated comment — exists to keep the human in control while letting AI handle the searching, comparing, and summarising.
+
+Back-link to [Article 1](/en/articles/ai-assisted-open-source-maintenance) (principles) and [Article 2](/en/articles/ai-assisted-open-source-workflow) (workflow). Note that the triage bot's safety layers and escalation model are also concrete examples of observability for agentic systems — forward-link to the observability article when published. */}

@@ -32,7 +32,7 @@ El archivo es un documento vivo. Cuando descubro un nuevo invariante o un nuevo 
 
 ## La fase de investigación
 
-La mayoría de cambios no triviales empiezan con investigación, no con código. El flujo es así:
+La mayoría de cambios no triviales empiezan con investigación, no con código. El flujo completo es así:
 
 **Describo el problema.** "Los usuarios reportan que la pantalla compartida falla en Wayland con la última actualización de Electron." O "Necesitamos soportar Trusted Types para cumplir con los nuevos requisitos de CSP."
 
@@ -42,7 +42,9 @@ La mayoría de cambios no triviales empiezan con investigación, no con código.
 
 **El agente produce un plan.** Una vez que entendemos el problema y hemos validado un enfoque a través de spikes, el agente escribe un plan estructurado: qué cambios se necesitan, qué archivos se ven afectados, cuáles son los riesgos y qué debería probarse.
 
-**Yo guío, luego el agente ejecuta.** Reviso el plan, ajusto prioridades, señalo riesgos que el agente pasó por alto y doy el visto bueno. Solo entonces empieza la implementación real. Esta secuencia — investigar, spike, planificar, guiar — no es negociable. Saltarse directamente a la implementación es como se acaba escribiendo código que resuelve el problema equivocado.
+**Yo guío, luego el agente ejecuta.** Reviso el plan, ajusto prioridades, señalo riesgos que el agente pasó por alto y doy el visto bueno. Solo entonces empieza la implementación real.
+
+No todos los cambios necesitan la secuencia completa. Una corrección de bug directa puede saltarse el spike e ir directamente de la investigación a la implementación. Una actualización compleja de Electron puede necesitar múltiples rondas de spikes a lo largo de varias sesiones. El proceso se adapta al problema. Lo que no cambia es que entiendo lo que está pasando antes de comprometerme con un enfoque.
 
 ## Actualizaciones de dependencias
 
@@ -69,6 +71,30 @@ Cuando una funcionalidad recibe luz verde, el flujo de implementación sigue un 
 **Tests junto al código.** El agente escribe tests como parte de la implementación, no como idea tardía. El archivo CLAUDE.md especifica las convenciones de testing, así que los tests siguen los patrones existentes del proyecto.
 
 **Revisar todo.** Cada pieza de código generado por IA se lee. No se ojea — se lee. Busco problemas sutiles: ¿respeta los límites de módulos? ¿Maneja los casos extremos de Electron? ¿Mantiene la compatibilidad hacia atrás donde es necesario? La IA produce buen código la mayor parte del tiempo, pero "la mayor parte del tiempo" no es suficiente para un proyecto con miles de usuarios.
+
+## Mantener el contexto limpio
+
+Cuando una implementación está terminada, sigo una práctica tradicional: el resultado se almacena como un ADR (Architecture Decision Record). El documento de investigación que llevó a él se elimina.
+
+Puede sonar derrochador — ¿por qué tirar la investigación? — pero es deliberado. La investigación siempre es recuperable del historial de git si la necesito. Lo que importa es mantener limpio el contexto actual. Si los documentos de investigación viejos se acumulan en el repositorio, la IA los lee y se confunde sobre qué es actual versus qué es histórico. Empieza a referenciar resultados de spikes obsoletos o planes superados.
+
+El ADR captura la decisión y su justificación. Eso es lo que las sesiones futuras necesitan. El camino desordenado que llevó hasta ahí — los callejones sin salida, los spikes descartados, los enfoques abandonados — es ruido una vez que la decisión está tomada. Git lo recuerda. El directorio de trabajo no necesita hacerlo.
+
+## Tipos de sesión
+
+El flujo de investigación-a-implementación no es el único tipo de sesión que ejecuto. El mantenimiento implica varios tipos de sesiones recurrentes, cada uno con su propio foco:
+
+**Sesiones de seguridad.** Revisar resultados de npm audit, evaluar avisos, parchear vulnerabilidades. Se ejecutan frecuentemente porque el ecosistema npm nunca deja de producir avisos.
+
+**Limpieza de documentación.** Actualizar secciones del README, limpiar comentarios inline que se han desviado del código, refrescar CLAUDE.md con nuevos invariantes descubiertos desde la última pasada.
+
+**Métricas y revisiones de salud.** Revisar tendencias de issues, actividad de contribuidores, tiempos de build, cambios en cobertura de tests. Entender la trayectoria del proyecto, no solo el estado actual.
+
+**Actualizaciones de dependencias.** El ciclo descrito arriba — detección, evaluación, actualización, prueba, decisión de lanzamiento.
+
+Cada tipo de sesión sigue el mismo patrón central: yo establezco el alcance, la IA ejecuta dentro de él, yo reviso los resultados. La diferencia es a qué estamos mirando, no cómo trabajamos.
+
+Ahora mismo estas sesiones se ejecutan cuando llego a ellas. Me gustaría semi-automatizar las recurrentes — tener un informe mensual generado que muestre tendencias, señale cosas que necesitan atención y me dé una foto sin tener que acordarme de mirar. El bot de triaje ya hace una versión de esto para los issues. Extender ese patrón a la postura de seguridad, la frescura de dependencias y la deriva de documentación es el siguiente paso natural.
 
 ## Gestión de cambios upstream
 

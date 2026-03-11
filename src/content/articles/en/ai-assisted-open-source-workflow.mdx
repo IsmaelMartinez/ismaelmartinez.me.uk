@@ -32,7 +32,7 @@ The file is a living document. When I discover a new invariant or a new footgun,
 
 ## The Research Phase
 
-Most non-trivial changes start with research, not coding. The workflow looks like this:
+Most non-trivial changes start with research, not coding. The full workflow looks like this:
 
 **I describe the problem.** "Users are reporting that screen sharing breaks on Wayland with the latest Electron update." Or "We need to support Trusted Types to comply with the new CSP requirements."
 
@@ -42,7 +42,9 @@ Most non-trivial changes start with research, not coding. The workflow looks lik
 
 **The agent produces a plan.** Once we understand the problem and have validated an approach through spikes, the agent writes up a structured plan: what changes are needed, which files are affected, what the risks are, and what should be tested.
 
-**I guide, then the agent executes.** I review the plan, adjust priorities, flag risks the agent missed, and give the go-ahead. Only then does actual implementation begin. This sequence — research, spike, plan, guide — is non-negotiable. Skipping straight to implementation is how you get code that solves the wrong problem.
+**I guide, then the agent executes.** I review the plan, adjust priorities, flag risks the agent missed, and give the go-ahead. Only then does actual implementation begin.
+
+Not every change needs the full sequence. A straightforward bug fix might skip the spike entirely and go straight from investigation to implementation. A complex Electron upgrade might need multiple rounds of spikes across several sessions. The process adapts to the problem. What doesn't change is that I understand what's happening before committing to an approach.
 
 ## Dependency Upgrades
 
@@ -69,6 +71,30 @@ When a feature gets the green light, the implementation flow follows a consisten
 **Tests alongside code.** The agent writes tests as part of implementation, not as an afterthought. The CLAUDE.md file specifies the testing conventions, so the tests follow the project's existing patterns.
 
 **Review everything.** Every piece of AI-generated code gets read. Not skimmed — read. I'm looking for subtle issues: does this respect the module boundaries? Does it handle the Electron edge cases? Does it maintain backwards compatibility where needed? The AI produces good code most of the time, but "most of the time" isn't good enough for a project with thousands of users.
+
+## Keeping the Context Clean
+
+When an implementation is done, I follow a traditional practice: the outcome gets stored as an ADR (Architecture Decision Record). The research document that led to it gets deleted.
+
+This might sound wasteful — why throw away research? — but it's deliberate. The research is always recoverable from git history if I need it. What matters is keeping the current context clean. If old research documents pile up in the repository, the AI reads them and gets confused about what's current versus what's historical. It starts referencing outdated spike results or superseded plans.
+
+The ADR captures the decision and its rationale. That's what future sessions need. The messy path that got there — the dead ends, the discarded spikes, the abandoned approaches — is noise once the decision is made. Git remembers it. The working directory doesn't need to.
+
+## Session Types
+
+The research-to-implementation workflow isn't the only kind of session I run. Maintenance involves several recurring session types, each with its own focus:
+
+**Security sessions.** Review npm audit results, evaluate advisories, patch vulnerabilities. These run frequently because the npm ecosystem never stops producing advisories.
+
+**Documentation tidy.** Update README sections, clean up inline comments that have drifted from the code, refresh CLAUDE.md with new invariants discovered since the last pass.
+
+**Metrics and health checks.** Review issue trends, contributor activity, build times, test coverage changes. Understanding the trajectory of the project, not just the current state.
+
+**Dependency upgrades.** The loop described above — detection, assessment, upgrade, test, release decision.
+
+Each session type follows the same core pattern: I set the scope, the AI executes within it, I review the results. The difference is what we're looking at, not how we work.
+
+Right now these sessions run when I get to them. I'd like to semi-automate the recurring ones — have a monthly report generated that surfaces trends, flags things that need attention, and gives me a snapshot without having to remember to look. The triage bot already does a version of this for issues. Extending that pattern to security posture, dependency freshness, and documentation drift is the natural next step.
 
 ## Handling Upstream Changes
 

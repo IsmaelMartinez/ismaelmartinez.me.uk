@@ -3,7 +3,7 @@ title: "AI-Assisted Open Source: What Changes and What Doesn't"
 description: "How AI tooling fits into maintaining a 7-year open-source project — what it accelerates, what it can't replace, and why the CLAUDE.md file exists."
 publishedDate: 2026-03-03
 tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
-draft: true
+draft: false
 ---
 
 ## The Project Predates the Tools
@@ -19,6 +19,8 @@ When people spotted the CLAUDE.md file in the repository, some assumed it meant 
 CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, module boundaries, and critical invariants — like the `trayIconRenderer`/`mqttStatusMonitor` initialisation requirement that has been accidentally broken multiple times by contributors who didn't know about the dependency.
 
 The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. CLAUDE.md makes them explicit. It's not a sign of AI authorship. It's a sign of AI discipline.
+
+In the [companion article on the actual workflow](/en/articles/ai-assisted-open-source-workflow), I go deeper into how this file shapes every interaction — from research spikes to dependency upgrades to feature implementation.
 
 ## What AI Actually Accelerates
 
@@ -45,6 +47,8 @@ Architectural decisions sit in the same category. When to refactor versus when t
 Release judgement is more nuanced than it sounds. Is this build ready? Should I batch more fixes first? Is the Wayland fix stable enough to ship, or does it need another week of testing? These decisions require context that no tool has access to.
 
 Understanding upstream changes is a constant challenge. The Teams web app changes without notice, and defensive coding against those changes requires deep domain knowledge about what Microsoft is likely to do and how their platform evolves. AI doesn't know what Microsoft shipped last Tuesday.
+
+Some problems are simply unfixable, regardless of tooling. When Microsoft changes their web app in ways that break third-party clients, no amount of AI-assisted coding can produce a workaround that doesn't exist. The maintainer has to recognise when a problem has no good solution, communicate that honestly to users, and move on. AI will keep trying to generate fixes for things that can't be fixed.
 
 And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a popular project, and it's entirely a human skill.
 
@@ -75,3 +79,5 @@ The interesting question isn't "did AI write this code?"
 It's whether the project works, whether it's maintained, and whether users are served well. By those measures, AI tooling is doing exactly what it should — keeping a useful project alive and responsive when the alternative is slow decay.
 
 In [The AI Automation Trap](/en/articles/the-ai-automation-trap), I wrote about how AI removed the building constraint but didn't remove the deciding constraint. This project is the lived example. AI handles the building. The deciding, the maintaining, and the caring about users — that's still entirely human. And it always will be.
+
+If you want to see how this actually works day-to-day — the specific workflow, the tooling, the quality gates — read [AI-Assisted Open Source: The Workflow](/en/articles/ai-assisted-open-source-workflow).

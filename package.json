@@ -24,7 +24,7 @@
     "@eslint/js": "^9.18.0",
     "@lhci/cli": "^0.15.1",
     "@typescript-eslint/parser": "^8.56.1",
-    "eslint": "^9.18.0",
+    "eslint": "^10.2.0",
     "eslint-plugin-astro": "^1.6.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",

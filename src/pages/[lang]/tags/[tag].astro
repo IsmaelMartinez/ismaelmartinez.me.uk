@@ -51,6 +51,7 @@ const { tag, articles } = Astro.props;
             description={article.data.description}
             publishedDate={article.data.publishedDate}
             slug={article.slug.replace(`${lang}/`, '')}
+            heroImage={article.data.heroImage}
             tags={article.data.tags}
             lang={lang}
             originalPlatform={article.data.originalPlatform}

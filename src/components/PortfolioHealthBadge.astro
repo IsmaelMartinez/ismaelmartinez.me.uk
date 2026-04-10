@@ -1,11 +1,12 @@
 ---
 import type { PortfolioHealth } from '../data/health';
 import { getLocalizedPath } from '../i18n/translations';
+import type { TranslationKey } from '../i18n/translations';
 
 interface Props {
   health: PortfolioHealth;
   lang: 'en' | 'es' | 'cat';
-  t: (key: string) => string;
+  t: (key: TranslationKey) => string;
 }
 
 const { health, lang, t } = Astro.props;

@@ -184,7 +184,7 @@ function currentWeekKey(): string {
 
 function previousWeekKey(): string {
   const d = new Date();
-  d.setDate(d.getDate() - 7);
+  d.setUTCDate(d.getUTCDate() - 7);
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
@@ -196,7 +196,7 @@ const CONFIG_URL = 'https://raw.githubusercontent.com/IsmaelMartinez/repo-butler
 
 async function fetchReleaseExempt(): Promise<string[]> {
   try {
-    const res = await fetch(CONFIG_URL);
+    const res = await fetch(CONFIG_URL, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
     const text = await res.text();
     const match = text.match(/^release_exempt:\s*(.+)$/m);
@@ -216,7 +216,7 @@ export async function fetchPortfolioHealth(): Promise<PortfolioHealth> {
 
   for (const weekKey of [currentWeekKey(), previousWeekKey()]) {
     try {
-      const res = await fetch(`${BASE_URL}/${weekKey}.json`);
+      const res = await fetch(`${BASE_URL}/${weekKey}.json`, { signal: AbortSignal.timeout(10000) });
       if (!res.ok) continue;
       const data = await res.json();
       cached = parsePortfolioSnapshot(data, releaseExempt);

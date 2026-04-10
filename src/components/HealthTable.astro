@@ -1,10 +1,11 @@
 ---
 import type { RepoHealth } from '../data/health';
+import type { TranslationKey } from '../i18n/translations';
 import HealthCard from './HealthCard.astro';
 
 interface Props {
   repos: RepoHealth[];
-  t: (key: string) => string;
+  t: (key: TranslationKey) => string;
 }
 
 const { repos, t } = Astro.props;

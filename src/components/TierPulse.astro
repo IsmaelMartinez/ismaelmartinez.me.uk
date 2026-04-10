@@ -1,9 +1,10 @@
 ---
 import type { PortfolioHealth } from '../data/health';
+import type { TranslationKey } from '../i18n/translations';
 
 interface Props {
   health: PortfolioHealth;
-  t: (key: string) => string;
+  t: (key: TranslationKey) => string;
 }
 
 const { health, t } = Astro.props;

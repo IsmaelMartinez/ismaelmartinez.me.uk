@@ -1,0 +1,70 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import TierPulse from '../../components/TierPulse.astro';
+import HealthTable from '../../components/HealthTable.astro';
+import { useTranslations, locales } from '../../i18n/translations';
+import type { Locale } from '../../i18n/translations';
+import { fetchPortfolioHealth } from '../../data/health';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+const health = await fetchPortfolioHealth();
+---
+
+<Layout title={t('health.title')} description={t('health.description')} lang={lang}>
+  <section class="section">
+    <div class="container">
+      <header class="page-header">
+        <h1 class="page-title">{t('health.title')}</h1>
+        <p class="page-description">{t('health.description')}</p>
+      </header>
+
+      {health.available ? (
+        <>
+          <TierPulse health={health} t={t} />
+          <HealthTable repos={health.repos} t={t} />
+          <p class="attribution">{t('health.poweredBy')} <a href="https://ismaelmartinez.github.io/repo-butler/" target="_blank" rel="noopener noreferrer">Repo Butler</a></p>
+        </>
+      ) : (
+        <div class="unavailable card">
+          <p>{t('health.unavailable')} <a href="https://ismaelmartinez.github.io/repo-butler/" target="_blank" rel="noopener noreferrer">{t('health.unavailable.link')}</a>.</p>
+        </div>
+      )}
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-header {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: var(--space-md);
+  }
+
+  .page-description {
+    font-size: 1.125rem;
+    color: var(--color-text-muted);
+    max-width: 600px;
+  }
+
+  .attribution {
+    margin-top: var(--space-xl);
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  .unavailable {
+    text-align: center;
+    padding: var(--space-2xl);
+    color: var(--color-text-muted);
+  }
+</style>

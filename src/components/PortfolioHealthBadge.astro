@@ -1,0 +1,48 @@
+---
+import type { PortfolioHealth } from '../data/health';
+import { getLocalizedPath } from '../i18n/translations';
+import type { TranslationKey } from '../i18n/translations';
+
+interface Props {
+  health: PortfolioHealth;
+  lang: 'en' | 'es' | 'cat';
+  t: (key: TranslationKey) => string;
+}
+
+const { health, lang, t } = Astro.props;
+---
+
+{health.available && (
+  <a href={getLocalizedPath('/health', lang)} class="health-badge">
+    <span class="badge-label">{t('health.badge.label')}</span>
+    <span class="badge-value">{health.totalRepos} {t('health.pulse.repos')} · {health.goldPct}% {t('health.pulse.gold')}</span>
+  </a>
+)}
+
+<style>
+  .health-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    font-size: 0.8rem;
+    transition: border-color 0.2s ease;
+    text-decoration: none;
+  }
+
+  .health-badge:hover {
+    border-color: var(--color-accent);
+  }
+
+  .badge-label {
+    color: var(--color-text-muted);
+  }
+
+  .badge-value {
+    color: var(--color-tier-gold);
+    font-weight: 600;
+  }
+</style>

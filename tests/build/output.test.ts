@@ -11,7 +11,7 @@ describe('build output', () => {
   const locales = ['en', 'es', 'cat'];
 
   describe('locale pages exist', () => {
-    const pages = ['index.html', 'about/index.html', 'connect/index.html', 'projects/index.html', 'writing/index.html', 'uses/index.html', 'tags/index.html'];
+    const pages = ['index.html', 'about/index.html', 'connect/index.html', 'projects/index.html', 'writing/index.html', 'uses/index.html', 'tags/index.html', 'health/index.html'];
 
     for (const locale of locales) {
       for (const page of pages) {

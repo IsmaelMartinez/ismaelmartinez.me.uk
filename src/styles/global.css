@@ -10,6 +10,15 @@
   --color-accent-solid-hover: #1d4ed8;
   --color-border: #262626;
 
+  /* Health tier colours */
+  --color-tier-gold: #ffd700;
+  --color-tier-silver: #c0c0c0;
+  --color-tier-bronze: #cd7f32;
+  --color-tier-none: #525252;
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-danger: #ef4444;
+
   /* Spacing */
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;

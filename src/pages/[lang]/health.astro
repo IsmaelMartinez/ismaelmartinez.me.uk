@@ -27,6 +27,7 @@ const health = await fetchPortfolioHealth();
         <>
           <TierPulse health={health} t={t} />
           <HealthTable repos={health.repos} t={t} />
+          <p class="attribution">{t('health.poweredBy')} <a href="https://ismaelmartinez.github.io/repo-butler/" target="_blank" rel="noopener noreferrer">Repo Butler</a></p>
         </>
       ) : (
         <div class="unavailable card">
@@ -52,6 +53,13 @@ const health = await fetchPortfolioHealth();
     font-size: 1.125rem;
     color: var(--color-text-muted);
     max-width: 600px;
+  }
+
+  .attribution {
+    margin-top: var(--space-xl);
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
   }
 
   .unavailable {

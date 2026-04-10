@@ -38,7 +38,7 @@ function vulnColor(vulns: { count: number; max_severity: string | null } | null)
         <th>{t('health.table.issues')}</th>
         <th>{t('health.table.ci')}</th>
         <th>{t('health.table.vulns')}</th>
-        <th>{t('health.table.nextStep')}</th>
+        <th>{t('health.table.report')}</th>
       </tr>
     </thead>
     <tbody>
@@ -51,7 +51,7 @@ function vulnColor(vulns: { count: number; max_severity: string | null } | null)
           <td>{repo.openIssues}</td>
           <td style={`color: ${ciColor(repo.ciPassRate)}`}>{repo.ciPassRate != null ? `${Math.round(repo.ciPassRate * 100)}%` : '—'}</td>
           <td style={`color: ${vulnColor(repo.vulns)}`}>{repo.vulns ? repo.vulns.count : t('health.table.na')}</td>
-          <td class="next-step-cell">{repo.nextStep ?? t('health.table.allPass')}</td>
+          <td><a href={`https://ismaelmartinez.github.io/repo-butler/${repo.name}.html`} target="_blank" rel="noopener noreferrer" class="report-link">{t('health.table.viewReport')}</a></td>
         </tr>
       ))}
     </tbody>
@@ -126,8 +126,7 @@ function vulnColor(vulns: { count: number; max_severity: string | null } | null)
   .tier-bronze { background: var(--color-tier-bronze); color: #1a0a00; }
   .tier-none { background: var(--color-border); color: var(--color-text-muted); }
 
-  .next-step-cell {
-    color: var(--color-text-muted);
+  .report-link {
     font-size: 0.8rem;
   }
 </style>

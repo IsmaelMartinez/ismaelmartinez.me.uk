@@ -14,12 +14,7 @@ const { repo, t } = Astro.props;
     <a href={`https://github.com/IsmaelMartinez/${repo.name}`} target="_blank" rel="noopener noreferrer" class="repo-name">{repo.name}</a>
     <span class={`tier-badge tier-${repo.tier}`}>{t(`health.pulse.${repo.tier}`)}</span>
   </div>
-  {repo.nextStep && (
-    <p class="next-step">{repo.nextStep}</p>
-  )}
-  {!repo.nextStep && (
-    <p class="all-pass">{t('health.table.allPass')}</p>
-  )}
+  <a href={`https://ismaelmartinez.github.io/repo-butler/${repo.name}.html`} target="_blank" rel="noopener noreferrer" class="report-link">{t('health.table.viewReport')}</a>
 </article>
 
 <style>
@@ -53,15 +48,9 @@ const { repo, t } = Astro.props;
   .tier-bronze { background: var(--color-tier-bronze); color: #1a0a00; }
   .tier-none { background: var(--color-border); color: var(--color-text-muted); }
 
-  .next-step {
-    color: var(--color-text-muted);
+  .report-link {
     font-size: 0.8rem;
     margin-top: var(--space-xs);
-  }
-
-  .all-pass {
-    color: var(--color-success);
-    font-size: 0.8rem;
-    margin-top: var(--space-xs);
+    display: inline-block;
   }
 </style>

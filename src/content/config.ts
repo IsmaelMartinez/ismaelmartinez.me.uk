@@ -9,6 +9,7 @@ const articlesCollection = defineCollection({
     updatedDate: z.date().optional(),
     originalUrl: z.string().url().optional(),
     originalPlatform: z.enum(['medium', 'devto', 'self']).optional(),
+    heroImage: z.string().optional(),
     tags: z.array(z.string()).default([]),
     draft: z.boolean().default(false),
   }),

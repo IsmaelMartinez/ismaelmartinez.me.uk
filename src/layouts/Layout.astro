@@ -13,7 +13,7 @@ interface Props {
   canonical?: string;
 }
 
-const { title, description = "Ismael Martinez - Software Engineer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical } = Astro.props;
+const { title, description = "Ismael Martinez - Principal Software Developer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical } = Astro.props;
 const t = useTranslations(lang);
 const rawPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
 // Tag names are locale-specific with no cross-locale mapping, so the language
@@ -36,7 +36,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloud.umami.is; frame-ancestors 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev" />
 
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -335,7 +335,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     left: var(--space-md);
     z-index: 200;
     padding: var(--space-sm) var(--space-md);
-    background: var(--color-accent);
+    background: var(--color-accent-solid);
     color: #fff;
     border-radius: 0 0 0.25rem 0.25rem;
     font-weight: 600;
@@ -494,6 +494,14 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     text-align: center;
     color: var(--color-text-muted);
     font-size: 0.875rem;
+  }
+
+  .footer a {
+    text-decoration: underline;
+  }
+
+  .footer a:hover {
+    text-decoration: none;
   }
 
   .footer-links {

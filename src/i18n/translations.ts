@@ -30,7 +30,7 @@ export const translations = {
     // Hero
     'hero.greeting': "Hi, I'm",
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Software Engineer & Open Source Enthusiast',
+    'hero.tagline': 'Principal Software Developer & Open Source Enthusiast',
     'hero.description': 'I build things, write about technology, and contribute to open source. Welcome to my corner of the internet.',
 
     // Sections
@@ -141,11 +141,11 @@ export const translations = {
     // About
     'nav.about': 'About',
     'about.title': 'About',
-    'about.description': 'Software Engineer, open source enthusiast, and lifelong learner',
+    'about.description': 'Principal Software Developer, open source enthusiast, and lifelong learner',
     'about.bioTitle': 'Hello!',
-    'about.bio': "I'm Ismael Martinez, a software engineer based in the UK with a passion for building reliable, well-crafted software. I enjoy working across the full stack, contributing to open source, and writing about what I learn along the way.",
+    'about.bio': "I'm Ismael Martinez, a principal software developer based in the UK with a passion for building reliable, well-crafted software. I enjoy working across the full stack, contributing to open source, and writing about what I learn along the way.",
     'about.careerTitle': 'Career Highlights',
-    'about.career1': 'Over 15 years of experience in software engineering across multiple industries',
+    'about.career1': 'Over 15 years of experience in software development across multiple industries',
     'about.career2': 'Specialising in cloud-native architectures, DevOps practices, and platform engineering',
     'about.career3': 'Active open source contributor and community participant',
     'about.career4': 'Regular writer on Medium and Dev.to covering software development topics',
@@ -168,7 +168,7 @@ export const translations = {
     // Hero
     'hero.greeting': 'Hola, soy',
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Ingeniero de Software y Entusiasta del Open Source',
+    'hero.tagline': 'Desarrollador de Software Principal y Entusiasta del Open Source',
     'hero.description': 'Construyo cosas, escribo sobre tecnología y contribuyo al código abierto. Bienvenido a mi rincón de internet.',
 
     // Sections
@@ -279,11 +279,11 @@ export const translations = {
     // About
     'nav.about': 'Sobre mí',
     'about.title': 'Sobre mí',
-    'about.description': 'Ingeniero de Software, entusiasta del código abierto y aprendiz permanente',
+    'about.description': 'Desarrollador de Software Principal, entusiasta del código abierto y aprendiz permanente',
     'about.bioTitle': '¡Hola!',
-    'about.bio': 'Soy Ismael Martinez, ingeniero de software en Reino Unido con pasión por construir software fiable y bien diseñado. Me gusta trabajar en todo el stack, contribuir al código abierto y escribir sobre lo que aprendo.',
+    'about.bio': 'Soy Ismael Martinez, desarrollador de software principal en Reino Unido con pasión por construir software fiable y bien diseñado. Me gusta trabajar en todo el stack, contribuir al código abierto y escribir sobre lo que aprendo.',
     'about.careerTitle': 'Trayectoria',
-    'about.career1': 'Más de 15 años de experiencia en ingeniería de software en múltiples industrias',
+    'about.career1': 'Más de 15 años de experiencia en desarrollo de software en múltiples industrias',
     'about.career2': 'Especializado en arquitecturas cloud-native, prácticas DevOps e ingeniería de plataformas',
     'about.career3': 'Contribuidor activo de código abierto y participante de la comunidad',
     'about.career4': 'Escritor habitual en Medium y Dev.to sobre desarrollo de software',
@@ -306,7 +306,7 @@ export const translations = {
     // Hero
     'hero.greeting': 'Hola, sóc',
     'hero.name': 'Ismael Martinez',
-    'hero.tagline': 'Enginyer de Software i Entusiasta de l\'Open Source',
+    'hero.tagline': 'Desenvolupador de Software Principal i Entusiasta de l\'Open Source',
     'hero.description': 'Construeixo coses, escric sobre tecnologia i contribueixo al codi obert. Benvingut al meu racó d\'internet.',
 
     // Sections
@@ -417,11 +417,11 @@ export const translations = {
     // About
     'nav.about': 'Sobre mi',
     'about.title': 'Sobre mi',
-    'about.description': 'Enginyer de Software, entusiasta del codi obert i aprenent permanent',
+    'about.description': 'Desenvolupador de Software Principal, entusiasta del codi obert i aprenent permanent',
     'about.bioTitle': 'Hola!',
-    'about.bio': "Sóc Ismael Martinez, enginyer de software al Regne Unit amb passió per construir software fiable i ben dissenyat. M'agrada treballar en tot l'stack, contribuir al codi obert i escriure sobre el que aprenc.",
+    'about.bio': "Sóc Ismael Martinez, desenvolupador de software principal al Regne Unit amb passió per construir software fiable i ben dissenyat. M'agrada treballar en tot l'stack, contribuir al codi obert i escriure sobre el que aprenc.",
     'about.careerTitle': 'Trajectòria',
-    'about.career1': "Més de 15 anys d'experiència en enginyeria de software en múltiples indústries",
+    'about.career1': "Més de 15 anys d'experiència en desenvolupament de software en múltiples indústries",
     'about.career2': 'Especialitzat en arquitectures cloud-native, pràctiques DevOps i enginyeria de plataformes',
     'about.career3': 'Contribuïdor actiu de codi obert i participant de la comunitat',
     'about.career4': 'Escriptor habitual a Medium i Dev.to sobre desenvolupament de software',

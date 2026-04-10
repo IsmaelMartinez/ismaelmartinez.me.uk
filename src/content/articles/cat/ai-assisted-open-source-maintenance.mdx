@@ -6,72 +6,72 @@ tags: ["IA", "Codi Obert", "Desenvolupament de Software", "Teams for Linux"]
 draft: true
 ---
 
-{/*
-ESBORRANY - Esquema amb apunts. Desenvolupar amb exemples reals de teams-for-linux.
-Complementa "La trampa de l'automatització amb IA" — aquell cobreix la filosofia, aquest cobreix la pràctica.
-*/}
-
 ## El projecte és anterior a les eines
 
-- teams-for-linux va començar el 2018, més de 5 anys abans que existís qualsevol eina de programació amb IA
-- Es va construir un wrapper Electron per a MS Teams quan Microsoft va deixar de donar suport oficial a Linux
-- Va créixer orgànicament fins a més de 4.400 estrelles, 315 forks i 30 contribuïdors
-- L'adopció d'IA és recent — una elecció d'eines, no la història d'origen del projecte
+teams-for-linux va començar el 2018. Això és més de cinc anys abans que existís qualsevol eina de programació amb IA. Vaig construir un wrapper Electron per a Microsoft Teams perquè Microsoft va deixar de donar suport oficial a Linux i milers de desenvolupadors necessitaven un client que funcionés. El projecte va créixer orgànicament fins a superar les 4.400 estrelles, 315 forks i 30 contribuïdors al llarg dels anys.
 
-{/* Punt: contrarestar la narrativa de "aquest és un projecte generat per IA" amb la cronologia */}
+L'adopció d'IA va arribar molt després. És una elecció d'eines que vaig fer per mantenir el ritme amb les demandes de mantenir un projecte d'aquesta mida, no la història d'origen. La cronologia importa perquè a vegades la gent mira un repositori, veu senyals d'eines d'IA i assumeix que tot va ser generat. No va ser així. El projecte té set anys d'història, comunitat i decisions arquitectòniques guanyades amb esforç al darrere.
 
 ## Què és realment CLAUDE.md
 
-- És un arxiu de configuració, com .editorconfig o tsconfig — li diu a l'eina com comportar-se en aquest codi
-- Documenta decisions arquitectòniques, límits de mòduls i invariants crítics (el requisit d'inicialització de trayIconRenderer/mqttStatusMonitor que s'ha trencat accidentalment diverses vegades)
-- Codifica coneixement específic del projecte perquè l'eina respecti els patrons existents en lloc d'inventar-ne de nous
-- No és un senyal d'autoria per IA — és un senyal de disciplina amb la IA
+Quan la gent va veure l'arxiu CLAUDE.md al repositori, alguns van assumir que significava que el projecte estava escrit per IA. Això és un malentès del que fa l'arxiu.
 
-{/* Punt: la gent va veure l'arxiu i va assumir el pitjor. Explicar què fa i per què importa. */}
+CLAUDE.md és un arxiu de configuració, semblant a `.editorconfig` o `tsconfig.json`. Li diu a l'eina d'IA com comportar-se en aquest codi específic. Documenta decisions arquitectòniques, límits de mòduls i invariants crítics — com el requisit d'inicialització de `trayIconRenderer`/`mqttStatusMonitor` que s'ha trencat accidentalment diverses vegades per contribuïdors que no coneixien la dependència.
+
+L'arxiu codifica coneixement específic del projecte perquè l'eina d'IA respecti els patrons existents en lloc d'inventar-ne de nous. Cada codi té regles no escrites. CLAUDE.md les fa explícites. No és un senyal d'autoria per IA. És un senyal de disciplina amb la IA.
 
 ## Què accelera realment la IA
 
-- Implementació de funcionalitats ben enteses (la part de codi del programar)
-- Boilerplate, scaffolding de tests, actualitzacions de documentació
-- Actualitzacions de dependències i respostes a pegats de seguretat (l'ecosistema npm envia problemes de seguretat diverses vegades per setmana)
-- Explorar APIs poc familiars (Electron, peculiaritats de Wayland, Trusted Types)
-- Triatge d'issues a escala (el bot de triatge amb Gemini per a issues de GitHub)
+Les tasques que la IA gestiona bé són les que d'altra manera esgotarien un mantenidor en solitari.
 
-{/* Punt: aquestes són les tasques que d'altra manera esgotarien un mantenidor en solitari */}
+La implementació de funcionalitats ben enteses és el més obvi. Un cop he decidit què construir i com hauria de funcionar, la programació en si — la traducció mecànica d'intenció a codi — va més ràpid amb assistència d'IA. El boilerplate, l'scaffolding de tests i les actualitzacions de documentació cauen en la mateixa categoria. Són feina necessària, però no requereixen criteri creatiu.
+
+Les actualitzacions de dependències i les respostes a pegats de seguretat són on l'estalvi de temps realment s'acumula. L'ecosistema npm envia avisos de seguretat diverses vegades per setmana. Cadascun necessita avaluació, pegat, proves i llançament. Sense eines, això sol pot consumir la majoria de les hores disponibles d'un mantenidor.
+
+Explorar APIs poc familiars és una altra àrea on la IA destaca. La superfície d'API d'Electron és enorme, Wayland té les seves pròpies peculiaritats, i Trusted Types va introduir un conjunt completament nou de restriccions. Tenir una eina que pot mostrar ràpidament documentació rellevant i patrons d'ús redueix significativament el temps d'exploració.
+
+També vaig construir un bot de triatge amb Gemini per a issues de GitHub. Quan un projecte rep centenars d'issues, classificar el senyal del soroll manualment no és sostenible. El bot s'encarrega de la categorització inicial perquè jo pugui centrar-me en els issues que realment necessiten atenció humana.
 
 ## Què no pot reemplaçar la IA
 
-- Decidir què construir i què no construir
-- Gestió de la comunitat — la conversa de "calma amb les actualitzacions" requeria empatia i criteri, no codi
-- Decisions arquitectòniques — quan refactoritzar vs pegar un pegat, límits de mòduls, compromisos de compatibilitat cap enrere
-- Criteri de llançament — està llest? hauríem d'acumular més correccions? és estable la correcció de Wayland?
-- Entendre canvis upstream — la webapp de Teams canvia sense avís, la programació defensiva requereix coneixement del domini
-- Dir no a peticions de funcionalitats
+La feina difícil de mantenir un projecte de codi obert no és escriure codi. Mai ho va ser.
 
-{/* Punt: el treball humà és el treball difícil. La IA s'encarrega de les parts mecàniques. */}
+Decidir què construir i què no construir requereix entendre la direcció del projecte, les necessitats de la comunitat i les compensacions de cada addició. La IA no té opinió sobre això. Construirà feliçment el que li demanis, necessiti el projecte o no.
+
+La gestió de la comunitat és feina completament humana. Quan els usuaris van començar a queixar-se de la freqüència d'actualitzacions — la conversa de "calma amb les actualitzacions" — això requeria empatia, llegir l'ambient i fer un judici sobre la cadència de llançaments. Cap eina d'IA pot navegar això.
+
+Les decisions arquitectòniques estan en la mateixa categoria. Quan refactoritzar versus quan pegar un pegat. On traçar els límits dels mòduls. Quanta compatibilitat cap enrere mantenir i quan trencar-la. Aquestes decisions donen forma al projecte durant anys i no es poden delegar a una eina que optimitza per a la tasca immediata.
+
+El criteri de llançament és més matisat del que sembla. Està llesta aquesta build? Hauria d'acumular més correccions primer? És la correcció de Wayland prou estable per publicar, o necessita una altra setmana de proves? Aquestes decisions requereixen context al qual cap eina té accés.
+
+Entendre els canvis upstream és un desafiament constant. La webapp de Teams canvia sense avís, i la programació defensiva contra aquests canvis requereix un coneixement profund del domini sobre el que Microsoft probablement farà i com evoluciona la seva plataforma. La IA no sap què va publicar Microsoft dimarts passat.
+
+I després hi ha dir no a les peticions de funcionalitats. Això és potser la part més difícil de mantenir un projecte popular, i és completament una habilitat humana.
 
 ## La realitat del mantenidor en solitari
 
-- Projecte d'un sol mantenidor amb milers d'usuaris actius
-- Sense eines d'IA: respondre més lent, llançar menys, cremar-se més ràpid
-- Amb eines d'IA: mantenir el ritme amb pegats de seguretat, actualitzacions d'Electron, informes d'usuaris i seguir traient funcionalitats
-- L'alternativa no és "escriure-ho tot a mà" — és "deixar que els issues s'acumulin i eventualment abandonar el projecte"
+teams-for-linux és un projecte d'un sol mantenidor amb milers d'usuaris actius. Aquesta proporció és el desafiament fonamental.
 
-{/* Punt: per a mantenidors d'OSS en solitari, la IA és una eina de sostenibilitat, no una drecera */}
+Sense eines d'IA, les matemàtiques no quadren. Respondre als issues porta més temps. Els llançaments passen amb menys freqüència. Els pegats de seguretat es queden a la cua. Eventualment el backlog creix més ràpid del que una persona pot abordar, i el projecte s'abandona. Això no és hipotètic — és el resultat per defecte per a projectes populars d'un sol mantenidor.
+
+Amb eines d'IA, puc mantenir el ritme amb pegats de seguretat, actualitzacions d'Electron, informes d'usuaris i seguir traient funcionalitats noves. L'eina s'encarrega de la feina mecànica perquè pugui dedicar el meu temps limitat a les decisions i interaccions amb la comunitat que realment requereixen un humà.
+
+L'alternativa al manteniment assistit per IA no és "escriure-ho tot a mà." És "deixar que els issues s'acumulin i eventualment abandonar el projecte." Per a mantenidors de codi obert en solitari, la IA és una eina de sostenibilitat, no una drecera.
 
 ## Els marcadors visibles
 
-- Etiquetes Co-authored-by als commits — transparència, no confessió
-- CLAUDE.md inclòs al repositori — oberts sobre les eines
-- Podria amagar tot això fàcilment. Vaig triar no fer-ho.
-- La transparència sobre l'ús d'IA s'hauria de normalitzar, no penalitzar
+Cada commit assistit per IA al repositori porta una etiqueta `Co-authored-by`. Això és transparència, no confessió.
 
-{/* Punt: ser obert al respecte és el correcte. L'alternativa és amagar-ho, que és el que ja fa tothom. */}
+L'arxiu CLAUDE.md està inclòs al repositori on qualsevol pot llegir-lo. Podria amagar tot això fàcilment. Treure les etiquetes de coautoria, eliminar l'arxiu de configuració, i ningú ho sabria. Vaig triar no fer-ho perquè ser obert sobre les eines és el correcte.
+
+La ironia és que amagar l'ús d'IA és trivialment fàcil i gairebé segur que està generalitzat. Els projectes que són transparents al respecte són els que reben escrutini, mentre que els projectes que ho amaguen no afronten cap pregunta. Aquesta estructura d'incentius està al revés.
+
+La transparència sobre l'ús d'IA s'hauria de normalitzar, no penalitzar. La conversa hauria de ser sobre resultats — funciona el programari, es manté, s'atén bé als usuaris? — no sobre quines eines va fer servir el mantenidor per arribar-hi.
 
 ## Reflexió final
 
-- La pregunta interessant no és "ha escrit la IA aquest codi?"
-- És "funciona el projecte, es manté, s'atén bé als usuaris?"
-- Per aquestes mesures, les eines d'IA estan fent exactament el que haurien — mantenir viu i receptiu un projecte útil
+La pregunta interessant no és "ha escrit la IA aquest codi?"
 
-{/* Connectar amb "La trampa de l'automatització amb IA" — la IA va eliminar la restricció de construir, però decidir, mantenir i preocupar-se pels usuaris segueix sent completament humà */}
+És si el projecte funciona, si es manté i si els usuaris estan ben atesos. Per aquestes mesures, les eines d'IA estan fent exactament el que haurien — mantenir viu i receptiu un projecte útil quan l'alternativa és la decadència lenta.
+
+A [La trampa de l'automatització amb IA](/cat/articles/the-ai-automation-trap) vaig escriure sobre com la IA va eliminar la restricció de construir però no va eliminar la restricció de decidir. Aquest projecte és l'exemple viscut. La IA s'encarrega de construir. El decidir, el mantenir i el preocupar-se pels usuaris — això segueix sent completament humà. I sempre ho serà.

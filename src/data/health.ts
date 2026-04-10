@@ -69,7 +69,7 @@ const FALLBACK: PortfolioHealth = {
 };
 
 // Ported from repo-butler src/report-shared.js — computeHealthTier()
-function computeHealthTier(r: z.infer<typeof RepoHealthSchema>): { tier: 'gold' | 'silver' | 'bronze' | 'none'; nextStep: string | null } {
+function computeHealthTier(r: z.infer<typeof RepoHealthSchema>, options: { releaseExempt?: boolean } = {}): { tier: 'gold' | 'silver' | 'bronze' | 'none'; nextStep: string | null } {
   const now = Date.now();
   const pushedAt = r.pushed_at ? new Date(r.pushed_at).getTime() : 0;
   const daysSincePush = pushedAt ? Math.floor((now - pushedAt) / 86400000) : Infinity;
@@ -90,7 +90,7 @@ function computeHealthTier(r: z.infer<typeof RepoHealthSchema>): { tier: 'gold' 
     { name: 'Has CI workflows (2+)', passed: (r.ci || 0) >= 2, required_for: 'gold' as const },
     { name: 'Has a license', passed: !!(r.license && r.license !== 'None'), required_for: 'silver' as const },
     { name: r.open_bugs != null ? 'Fewer than 10 open bugs' : 'Fewer than 20 open issues', passed: r.open_bugs != null ? r.open_bugs < 10 : (r.open_issues ?? 0) < 20, required_for: 'gold' as const },
-    { name: 'Release in the last 90 days', passed: daysSinceRelease <= 90, required_for: 'gold' as const },
+    { name: 'Release in the last 90 days', passed: options.releaseExempt || daysSinceRelease <= 90, required_for: 'gold' as const },
     { name: 'Community health above 80%', passed: (r.communityHealth ?? -1) >= 80, required_for: 'gold' as const },
     { name: 'Security scanning configured', passed: anyScannerConfigured, required_for: 'gold' as const },
     { name: 'Zero critical/high security findings', passed: noSecurityFindings, required_for: 'gold' as const },
@@ -124,7 +124,7 @@ function computeHealthTier(r: z.infer<typeof RepoHealthSchema>): { tier: 'gold' 
   return { tier, nextStep };
 }
 
-export function parsePortfolioSnapshot(data: unknown): PortfolioHealth {
+export function parsePortfolioSnapshot(data: unknown, releaseExempt: string[] = []): PortfolioHealth {
   if (!data || typeof data !== 'object') return FALLBACK;
 
   // Try enriched format first (schema_version + repos wrapper)
@@ -143,7 +143,7 @@ export function parsePortfolioSnapshot(data: unknown): PortfolioHealth {
 
   const repoList: RepoHealth[] = Object.entries(repos)
     .map(([name, r]) => {
-      const computed = r.computed ?? computeHealthTier(r);
+      const computed = r.computed ?? computeHealthTier(r, { releaseExempt: releaseExempt.includes(name) });
       const tier = computed.tier;
       tierCounts[tier]++;
       return {
@@ -192,18 +192,34 @@ function previousWeekKey(): string {
 }
 
 const BASE_URL = 'https://raw.githubusercontent.com/IsmaelMartinez/repo-butler/repo-butler-data/snapshots/portfolio-weekly';
+const CONFIG_URL = 'https://raw.githubusercontent.com/IsmaelMartinez/repo-butler/main/.github/roadmap.yml';
+
+async function fetchReleaseExempt(): Promise<string[]> {
+  try {
+    const res = await fetch(CONFIG_URL);
+    if (!res.ok) return [];
+    const text = await res.text();
+    const match = text.match(/^release_exempt:\s*(.+)$/m);
+    if (!match) return [];
+    return match[1].split(',').map(s => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 let cached: PortfolioHealth | null = null;
 
 export async function fetchPortfolioHealth(): Promise<PortfolioHealth> {
   if (cached) return cached;
 
+  const releaseExempt = await fetchReleaseExempt();
+
   for (const weekKey of [currentWeekKey(), previousWeekKey()]) {
     try {
       const res = await fetch(`${BASE_URL}/${weekKey}.json`);
       if (!res.ok) continue;
       const data = await res.json();
-      cached = parsePortfolioSnapshot(data);
+      cached = parsePortfolioSnapshot(data, releaseExempt);
       return cached;
     } catch {
       continue;

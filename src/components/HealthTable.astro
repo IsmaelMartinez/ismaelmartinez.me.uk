@@ -50,7 +50,7 @@ function vulnColor(vulns: { count: number; max_severity: string | null } | null)
           <td><span class={`tier-badge tier-${repo.tier}`}>{t(`health.pulse.${repo.tier}`)}</span></td>
           <td>{repo.openIssues}</td>
           <td style={`color: ${ciColor(repo.ciPassRate)}`}>{repo.ciPassRate != null ? `${Math.round(repo.ciPassRate * 100)}%` : '—'}</td>
-          <td style={`color: ${vulnColor(repo.vulns)}`}>{repo.vulns ? repo.vulns.count : 'n/a'}</td>
+          <td style={`color: ${vulnColor(repo.vulns)}`}>{repo.vulns ? repo.vulns.count : t('health.table.na')}</td>
           <td class="next-step-cell">{repo.nextStep ?? t('health.table.allPass')}</td>
         </tr>
       ))}

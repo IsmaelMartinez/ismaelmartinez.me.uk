@@ -14,7 +14,7 @@ const { health, lang, t } = Astro.props;
 {health.available && (
   <a href={getLocalizedPath('/health', lang)} class="health-badge">
     <span class="badge-label">{t('health.badge.label')}</span>
-    <span class="badge-value">{health.totalRepos} repos · {health.goldPct}% {t('health.pulse.gold')}</span>
+    <span class="badge-value">{health.totalRepos} {t('health.pulse.repos')} · {health.goldPct}% {t('health.pulse.gold')}</span>
   </a>
 )}
 

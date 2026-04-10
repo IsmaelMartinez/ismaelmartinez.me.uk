@@ -120,16 +120,22 @@ function previousWeekKey(): string {
 
 const BASE_URL = 'https://raw.githubusercontent.com/IsmaelMartinez/repo-butler/repo-butler-data/snapshots/portfolio-weekly';
 
+let cached: PortfolioHealth | null = null;
+
 export async function fetchPortfolioHealth(): Promise<PortfolioHealth> {
+  if (cached) return cached;
+
   for (const weekKey of [currentWeekKey(), previousWeekKey()]) {
     try {
       const res = await fetch(`${BASE_URL}/${weekKey}.json`);
       if (!res.ok) continue;
       const data = await res.json();
-      return parsePortfolioSnapshot(data);
+      cached = parsePortfolioSnapshot(data);
+      return cached;
     } catch {
       continue;
     }
   }
-  return FALLBACK;
+  cached = FALLBACK;
+  return cached;
 }

@@ -1,0 +1,133 @@
+---
+import type { RepoHealth } from '../data/health';
+import type { TranslationKey } from '../i18n/translations';
+import HealthCard from './HealthCard.astro';
+
+interface Props {
+  repos: RepoHealth[];
+  t: (key: TranslationKey) => string;
+}
+
+const { repos, t } = Astro.props;
+
+function ciColor(rate: number | null): string {
+  if (rate == null) return 'var(--color-text-muted)';
+  return rate >= 0.9 ? 'var(--color-success)' : rate >= 0.7 ? 'var(--color-warning)' : 'var(--color-danger)';
+}
+
+function vulnColor(vulns: { count: number; max_severity: string | null } | null): string {
+  if (!vulns) return 'var(--color-text-muted)';
+  if (vulns.count === 0) return 'var(--color-success)';
+  return vulns.max_severity === 'critical' || vulns.max_severity === 'high' ? 'var(--color-danger)' : 'var(--color-warning)';
+}
+---
+
+<!-- Mobile: card layout -->
+<div class="health-cards">
+  {repos.map(repo => (
+    <HealthCard repo={repo} t={t} />
+  ))}
+</div>
+
+<!-- Desktop: table layout -->
+<div class="health-table-wrap">
+  <table class="health-table">
+    <thead>
+      <tr>
+        <th>{t('health.table.repo')}</th>
+        <th>{t('health.table.tier')}</th>
+        <th>{t('health.table.issues')}</th>
+        <th>{t('health.table.ci')}</th>
+        <th>{t('health.table.vulns')}</th>
+        <th>{t('health.table.report')}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {repos.map(repo => (
+        <tr>
+          <td>
+            <a href={`https://github.com/IsmaelMartinez/${repo.name}`} target="_blank" rel="noopener noreferrer">{repo.name}</a>
+          </td>
+          <td><span class={`tier-badge tier-${repo.tier}`}>{t(`health.pulse.${repo.tier}`)}</span></td>
+          <td>{repo.openIssues}</td>
+          <td style={`color: ${ciColor(repo.ciPassRate)}`}>{repo.ciPassRate != null ? `${Math.round(repo.ciPassRate * 100)}%` : '—'}</td>
+          <td style={`color: ${vulnColor(repo.vulns)}`}>{repo.vulns ? repo.vulns.count : t('health.table.na')}</td>
+          <td><a href={`https://ismaelmartinez.github.io/repo-butler/${repo.name}.html`} target="_blank" rel="noopener noreferrer" class="report-link">{t('health.table.viewReport')}</a></td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .health-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+
+  .health-table-wrap {
+    display: none;
+  }
+
+  @media (min-width: 768px) {
+    .health-cards {
+      display: none;
+    }
+
+    .health-table-wrap {
+      display: block;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+  }
+
+  .health-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .health-table th {
+    text-align: left;
+    color: var(--color-text-muted);
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--color-border);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .health-table td {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .health-table tr:hover {
+    background: var(--color-bg);
+  }
+
+  .health-table a {
+    font-weight: 500;
+  }
+
+  .tier-badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .tier-gold { background: var(--color-tier-gold); color: #1a1a00; }
+  .tier-silver { background: var(--color-tier-silver); color: #1a1a1a; }
+  .tier-bronze { background: var(--color-tier-bronze); color: #1a0a00; }
+  .tier-none { background: var(--color-border); color: var(--color-text-muted); }
+
+  .report-link {
+    font-size: 0.8rem;
+  }
+</style>

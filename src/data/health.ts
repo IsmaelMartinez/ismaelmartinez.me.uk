@@ -24,10 +24,12 @@ const RepoHealthSchema = z.object({
   computed: ComputedSchema,
 }).passthrough();
 
-const SnapshotSchema = z.object({
+const EnrichedSnapshotSchema = z.object({
   schema_version: z.literal('v1'),
   repos: z.record(RepoHealthSchema),
 }).passthrough();
+
+const LegacySnapshotSchema = z.record(RepoHealthSchema);
 
 export interface RepoHealth {
   name: string;
@@ -61,12 +63,20 @@ const FALLBACK: PortfolioHealth = {
 };
 
 export function parsePortfolioSnapshot(data: unknown): PortfolioHealth {
-  if (!data) return FALLBACK;
+  if (!data || typeof data !== 'object') return FALLBACK;
 
-  const parsed = SnapshotSchema.safeParse(data);
-  if (!parsed.success) return FALLBACK;
+  // Try enriched format first (schema_version + repos wrapper)
+  const enriched = EnrichedSnapshotSchema.safeParse(data);
+  let repos: Record<string, z.infer<typeof RepoHealthSchema>>;
 
-  const { repos } = parsed.data;
+  if (enriched.success) {
+    repos = enriched.data.repos;
+  } else {
+    // Fall back to legacy flat format (repos at top level)
+    const legacy = LegacySnapshotSchema.safeParse(data);
+    if (!legacy.success) return FALLBACK;
+    repos = legacy.data;
+  }
   const tierCounts = { gold: 0, silver: 0, bronze: 0, none: 0 };
 
   const repoList: RepoHealth[] = Object.entries(repos)

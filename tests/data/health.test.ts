@@ -43,9 +43,35 @@ describe('parsePortfolioSnapshot', () => {
     expect(result.repos).toHaveLength(0);
   });
 
-  it('returns fallback for invalid schema_version', () => {
-    const result = parsePortfolioSnapshot({ schema_version: 'v99', repos: {} });
+  it('returns fallback for completely invalid data', () => {
+    const result = parsePortfolioSnapshot('not an object');
     expect(result.available).toBe(false);
+  });
+
+  it('parses legacy flat format (no schema_version wrapper)', () => {
+    const legacySnapshot = {
+      'my-repo': {
+        open_issues: 2,
+        open_bugs: 0,
+        commits_6mo: 30,
+        stars: 5,
+        license: 'MIT',
+        communityHealth: 70,
+        ciPassRate: 0.8,
+        vulns: { count: 1, max_severity: 'low' },
+        codeScanning: null,
+        secretScanning: { count: 0 },
+        ci: 3,
+        released_at: '2026-03-01T00:00:00Z',
+        pushed_at: '2026-04-01T00:00:00Z',
+      },
+    };
+    const result = parsePortfolioSnapshot(legacySnapshot);
+    expect(result.available).toBe(true);
+    expect(result.repos).toHaveLength(1);
+    expect(result.repos[0].name).toBe('my-repo');
+    expect(result.repos[0].tier).toBe('none');
+    expect(result.repos[0].openIssues).toBe(2);
   });
 
   it('returns fallback for missing computed field', () => {

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { parsePortfolioSnapshot, type PortfolioHealth } from '../../src/data/health';
+import { describe, it, expect } from 'vitest';
+import { parsePortfolioSnapshot } from '../../src/data/health';
 
 const validSnapshot = {
   schema_version: 'v1' as const,

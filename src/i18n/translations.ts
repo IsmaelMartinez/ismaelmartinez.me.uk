@@ -150,7 +150,30 @@ export const translations = {
     'about.career3': 'Active open source contributor and community participant',
     'about.career4': 'Regular writer on Medium and Dev.to covering software development topics',
     'about.interestsTitle': 'Interests',
-    'about.interests': 'Outside of coding, I enjoy exploring new technologies, reading about software architecture, and spending time with my family. I believe in continuous learning and sharing knowledge with the community.'
+    'about.interests': 'Outside of coding, I enjoy exploring new technologies, reading about software architecture, and spending time with my family. I believe in continuous learning and sharing knowledge with the community.',
+
+    // Health
+    'nav.health': 'Health',
+    'health.title': 'Portfolio Health',
+    'health.description': 'Health status across all open source repositories, powered by Repo Butler',
+    'health.pulse.gold': 'Gold',
+    'health.pulse.silver': 'Silver',
+    'health.pulse.bronze': 'Bronze',
+    'health.pulse.none': 'None',
+    'health.pulse.repos': 'repos',
+    'health.pulse.active': 'active',
+    'health.pulse.dormant': 'dormant/archive',
+    'health.table.repo': 'Repo',
+    'health.table.tier': 'Tier',
+    'health.table.issues': 'Issues',
+    'health.table.ci': 'CI%',
+    'health.table.vulns': 'Vulns',
+    'health.table.nextStep': 'Next Step',
+    'health.table.allPass': 'All checks pass',
+    'health.table.showAll': 'Show all metrics',
+    'health.unavailable': 'Health data is currently unavailable. Visit the',
+    'health.unavailable.link': 'standalone dashboard',
+    'health.badge.label': 'Portfolio Health',
   },
   es: {
     // Navigation
@@ -288,7 +311,30 @@ export const translations = {
     'about.career3': 'Contribuidor activo de código abierto y participante de la comunidad',
     'about.career4': 'Escritor habitual en Medium y Dev.to sobre desarrollo de software',
     'about.interestsTitle': 'Intereses',
-    'about.interests': 'Fuera del código, me gusta explorar nuevas tecnologías, leer sobre arquitectura de software y pasar tiempo con mi familia. Creo en el aprendizaje continuo y en compartir conocimiento con la comunidad.'
+    'about.interests': 'Fuera del código, me gusta explorar nuevas tecnologías, leer sobre arquitectura de software y pasar tiempo con mi familia. Creo en el aprendizaje continuo y en compartir conocimiento con la comunidad.',
+
+    // Health
+    'nav.health': 'Salud',
+    'health.title': 'Salud del Portfolio',
+    'health.description': 'Estado de salud de todos los repositorios de código abierto, con Repo Butler',
+    'health.pulse.gold': 'Oro',
+    'health.pulse.silver': 'Plata',
+    'health.pulse.bronze': 'Bronce',
+    'health.pulse.none': 'Ninguno',
+    'health.pulse.repos': 'repos',
+    'health.pulse.active': 'activos',
+    'health.pulse.dormant': 'inactivos/archivo',
+    'health.table.repo': 'Repo',
+    'health.table.tier': 'Nivel',
+    'health.table.issues': 'Issues',
+    'health.table.ci': 'CI%',
+    'health.table.vulns': 'Vulns',
+    'health.table.nextStep': 'Siguiente Paso',
+    'health.table.allPass': 'Todos los checks pasan',
+    'health.table.showAll': 'Mostrar todas las métricas',
+    'health.unavailable': 'Los datos de salud no están disponibles. Visita el',
+    'health.unavailable.link': 'dashboard independiente',
+    'health.badge.label': 'Salud del Portfolio',
   },
   cat: {
     // Navigation
@@ -426,7 +472,30 @@ export const translations = {
     'about.career3': 'Contribuïdor actiu de codi obert i participant de la comunitat',
     'about.career4': 'Escriptor habitual a Medium i Dev.to sobre desenvolupament de software',
     'about.interestsTitle': 'Interessos',
-    'about.interests': "Fora del codi, m'agrada explorar noves tecnologies, llegir sobre arquitectura de software i passar temps amb la meva família. Crec en l'aprenentatge continu i en compartir coneixement amb la comunitat."
+    'about.interests': "Fora del codi, m'agrada explorar noves tecnologies, llegir sobre arquitectura de software i passar temps amb la meva família. Crec en l'aprenentatge continu i en compartir coneixement amb la comunitat.",
+
+    // Health
+    'nav.health': 'Salut',
+    'health.title': 'Salut del Portfolio',
+    'health.description': 'Estat de salut de tots els repositoris de codi obert, amb Repo Butler',
+    'health.pulse.gold': 'Or',
+    'health.pulse.silver': 'Plata',
+    'health.pulse.bronze': 'Bronze',
+    'health.pulse.none': 'Cap',
+    'health.pulse.repos': 'repos',
+    'health.pulse.active': 'actius',
+    'health.pulse.dormant': 'inactius/arxiu',
+    'health.table.repo': 'Repo',
+    'health.table.tier': 'Nivell',
+    'health.table.issues': 'Issues',
+    'health.table.ci': 'CI%',
+    'health.table.vulns': 'Vulns',
+    'health.table.nextStep': 'Proper Pas',
+    'health.table.allPass': 'Tots els checks passen',
+    'health.table.showAll': 'Mostrar totes les mètriques',
+    'health.unavailable': 'Les dades de salut no estan disponibles. Visita el',
+    'health.unavailable.link': 'dashboard independent',
+    'health.badge.label': 'Salut del Portfolio',
   }
 } as const;
 

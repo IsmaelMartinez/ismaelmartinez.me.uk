@@ -70,18 +70,20 @@ describe('parsePortfolioSnapshot', () => {
     expect(result.available).toBe(true);
     expect(result.repos).toHaveLength(1);
     expect(result.repos[0].name).toBe('my-repo');
-    expect(result.repos[0].tier).toBe('none');
+    // Tier computed locally: all silver checks pass, community health 70 < 80 blocks gold
+    expect(result.repos[0].tier).toBe('silver');
     expect(result.repos[0].openIssues).toBe(2);
   });
 
-  it('returns fallback for missing computed field', () => {
+  it('computes tier locally when computed field is missing', () => {
     const snapshot = {
       schema_version: 'v1' as const,
       repos: { 'a': { ...validSnapshot.repos['test-repo'], computed: undefined } },
     };
     const result = parsePortfolioSnapshot(snapshot);
     expect(result.available).toBe(true);
-    expect(result.repos[0].tier).toBe('none');
+    // All gold+silver checks pass for this test data → gold
+    expect(result.repos[0].tier).toBe('gold');
   });
 
   it('computes tier distribution correctly', () => {

@@ -4,6 +4,7 @@ import TableOfContents from '../components/TableOfContents.astro';
 import ArticleCard from '../components/ArticleCard.astro';
 import { useTranslations, getLocalizedPath } from '../i18n/translations';
 import { getCollection } from 'astro:content';
+import { getArticleGradient } from '../utils/article-gradient';
 
 interface Props {
   title: string;
@@ -21,6 +22,7 @@ interface Props {
 
 const { title, description, publishedDate, updatedDate, originalUrl, originalPlatform, heroImage, tags, lang, slug, readingTime } = Astro.props;
 const t = useTranslations(lang);
+const gradientBackground = getArticleGradient(slug);
 
 // Get available translations for this article
 const allArticles = await getCollection('articles');
@@ -104,8 +106,10 @@ const relatedArticles = scoredArticles
         <h1 class="article-title">{title}</h1>
         <p class="article-description">{description}</p>
 
-        {heroImage && (
+        {heroImage ? (
           <img src={heroImage} alt="" class="article-hero" loading="eager" />
+        ) : (
+          <div class="article-hero article-hero-gradient" style={`background: ${gradientBackground}`} aria-hidden="true"></div>
         )}
 
         {tags.length > 0 && (
@@ -254,6 +258,10 @@ const relatedArticles = scoredArticles
     object-fit: cover;
     border-radius: 0.75rem;
     margin-bottom: var(--space-lg);
+  }
+
+  .article-hero-gradient {
+    height: 200px;
   }
 
   .article-tags {

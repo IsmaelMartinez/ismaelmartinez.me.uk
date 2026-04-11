@@ -1,5 +1,6 @@
 ---
 import { getLocalizedPath } from '../i18n/translations';
+import { getArticleGradient } from '../utils/article-gradient';
 
 interface Props {
   title: string;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 const { title, description, publishedDate, slug, heroImage, tags, lang, originalPlatform } = Astro.props;
+const gradientBackground = getArticleGradient(slug);
 
 const formatDate = (date: Date) => {
   return date.toLocaleDateString(lang === 'cat' ? 'ca-ES' : lang === 'es' ? 'es-ES' : 'en-GB', {
@@ -31,8 +33,10 @@ const platformIcon = {
 
 <article class="article-card">
   <a href={getLocalizedPath(`/articles/${slug}`, lang)} class="article-link">
-    {heroImage && (
+    {heroImage ? (
       <img src={heroImage} alt="" class="article-card-thumbnail" loading="lazy" />
+    ) : (
+      <div class="article-card-thumbnail article-card-thumbnail-gradient" style={`background: ${gradientBackground}`} aria-hidden="true"></div>
     )}
     <div class="article-card-header">
       <time datetime={publishedDate.toISOString()}>{formatDate(publishedDate)}</time>

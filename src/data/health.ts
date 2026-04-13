@@ -32,10 +32,10 @@ const RepoHealthSchema = z.object({
 
 const EnrichedSnapshotSchema = z.object({
   schema_version: z.literal('v1'),
-  repos: z.record(RepoHealthSchema),
+  repos: z.record(z.string(), RepoHealthSchema),
 }).passthrough();
 
-const LegacySnapshotSchema = z.record(RepoHealthSchema);
+const LegacySnapshotSchema = z.record(z.string(), RepoHealthSchema);
 
 export interface RepoHealth {
   name: string;

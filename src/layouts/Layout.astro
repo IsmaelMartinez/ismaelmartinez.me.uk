@@ -1,5 +1,5 @@
 ---
-import { ViewTransitions } from 'astro:transitions';
+import { ClientRouter } from 'astro:transitions';
 import { languages, useTranslations, getLocalizedPath } from '../i18n/translations';
 import '../styles/global.css';
 
@@ -81,7 +81,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       })();
     </script>
 
-    <ViewTransitions />
+    <ClientRouter />
 
     <!-- Umami Analytics -->
     <!-- SRI pins a specific script version. If Umami updates the script and the hash breaks, it's acceptable to remove the integrity attribute and rely on CSP alone. -->

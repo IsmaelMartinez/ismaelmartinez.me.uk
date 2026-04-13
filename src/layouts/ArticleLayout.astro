@@ -25,8 +25,8 @@ const t = useTranslations(lang);
 // Get available translations for this article
 const allArticles = await getCollection('articles');
 const availableTranslations = allArticles
-  .filter(article => article.slug.split('/')[1] === slug.split('/')[1])
-  .map(article => article.slug.split('/')[0]);
+  .filter(article => article.id.split('/')[1] === slug.split('/')[1])
+  .map(article => article.id.split('/')[0]);
 
 const formatDate = (date: Date) => {
   return date.toLocaleDateString({ en: 'en-GB', es: 'es-ES', cat: 'ca-ES' }[lang], {
@@ -68,7 +68,7 @@ const articleJsonLd = {
 
 // Related articles: find articles sharing tags, fall back to most recent
 const sameLocaleArticles = allArticles
-  .filter(a => a.slug.startsWith(`${lang}/`) && a.slug !== slug && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !a.data.draft));
+  .filter(a => a.id.startsWith(`${lang}/`) && a.id !== slug && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !a.data.draft));
 
 const scoredArticles = sameLocaleArticles.map(a => ({
   article: a,
@@ -148,7 +148,7 @@ const relatedArticles = scoredArticles
                 title={article.data.title}
                 description={article.data.description}
                 publishedDate={article.data.publishedDate}
-                slug={article.slug.replace(`${lang}/`, '')}
+                slug={article.id.replace(`${lang}/`, '')}
                 heroImage={article.data.heroImage}
                 tags={article.data.tags}
                 lang={lang}

@@ -9,8 +9,8 @@ export function getStaticPaths() {
 
 export async function GET(context: APIContext) {
   const lang = context.params.lang!;
-  const articles = await getCollection('articles', ({ slug, data }) => {
-    return slug.startsWith(`${lang}/`) && !data.draft;
+  const articles = await getCollection('articles', ({ id, data }) => {
+    return id.startsWith(`${lang}/`) && !data.draft;
   });
 
   const sortedArticles = articles.sort(
@@ -25,7 +25,7 @@ export async function GET(context: APIContext) {
       title: article.data.title,
       pubDate: article.data.publishedDate,
       description: article.data.description,
-      link: `/${lang}/articles/${article.slug.replace(`${lang}/`, '')}/`,
+      link: `/${lang}/articles/${article.id.replace(`${lang}/`, '')}/`,
       categories: article.data.tags,
     })),
     customData: `<language>${lang}</language>`,

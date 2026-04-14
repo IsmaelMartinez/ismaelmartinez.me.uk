@@ -130,11 +130,11 @@ Workflow:
 
 The following components were created:
 
-- `src/content/config.ts` - Content collection schema
+- `src/content.config.ts` - Content collection schema (moved from `src/content/config.ts` in the Astro 6 upgrade)
 - `src/layouts/ArticleLayout.astro` - Article page layout with language switcher
 - `src/components/ArticleCard.astro` - Article list card component
-- `src/pages/[locale]/articles/[...slug].astro` - Dynamic article routes
-- Updated `src/pages/[locale]/writing.astro` - Shows local articles + external platform links
+- `src/pages/[lang]/articles/[...slug].astro` - Dynamic article routes
+- Updated `src/pages/[lang]/writing.astro` - Shows local articles + external platform links
 
 ## References
 

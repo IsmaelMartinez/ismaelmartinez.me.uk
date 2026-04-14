@@ -21,11 +21,15 @@ This site is built with [Astro](https://astro.build/). To run it locally:
 
 ## Available Commands
 
-| Command           | Action                                      |
-|-------------------|---------------------------------------------|
-| `npm run dev`     | Start development server                    |
-| `npm run build`   | Build for production (output in `./dist`)   |
-| `npm run preview` | Preview production build locally            |
+| Command               | Action                                                    |
+|-----------------------|-----------------------------------------------------------|
+| `npm run dev`         | Start development server                                  |
+| `npm run build`       | Build for production (output in `./dist`)                 |
+| `npm run preview`     | Preview production build locally                          |
+| `npm run lint`        | Run ESLint across the repo                                |
+| `npm run typecheck`   | Run Astro + TypeScript checks                             |
+| `npm test`            | Run Vitest suite (build tests require `./dist` to exist)  |
+| `npm run check-links` | Verify internal links in `./dist` (run after `build`)     |
 
 ## Adding Articles
 
@@ -57,13 +61,22 @@ Articles use Astro Content Collections with MDX format. To add a new article:
 
 ```
 src/
-├── pages/          # File-based routing with locale prefixes (/en/, /es/, /cat/)
-├── layouts/        # Layout.astro (base) and ArticleLayout.astro
-├── components/     # Shared components (Hero, ProjectCard, etc.)
-├── content/        # Content collections (articles in MDX)
-├── data/           # Static data (projects, links, fun quiz)
-├── i18n/           # Translation system
-└── styles/         # Global CSS design tokens
+├── pages/
+│   ├── [lang]/         # Dynamic locale routes (emit /en/, /es/, /cat/ via getStaticPaths)
+│   ├── 404.astro       # Shared 404 page
+│   └── index.astro     # Redirects to the default locale
+├── layouts/            # Layout.astro (base) and ArticleLayout.astro
+├── components/         # Shared components (Hero, ProjectCard, Health*, etc.)
+├── content/articles/   # MDX articles per locale (en/, es/, cat/)
+├── content.config.ts   # Astro content collection schema
+├── data/               # Static data (projects, links, uses, health, fun quiz)
+├── i18n/               # Translation system
+├── utils/              # Small helpers (reading-time, …)
+└── styles/             # Global CSS design tokens
+
+tests/                  # Vitest unit and build-output tests
+scripts/                # Build-time scripts (e.g. check-links.js)
+docs/                   # ADRs and design/implementation plans
 ```
 
 ## Multi-language Support

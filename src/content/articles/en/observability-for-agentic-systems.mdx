@@ -1,0 +1,92 @@
+---
+title: "Observability for Agentic Systems"
+description: "Traditional observability tells you whether your system is healthy. Agent-aware observability tells you whether decisions are stable, safe, and cost-effective."
+publishedDate: 2026-03-10
+tags: ["Observability", "Agentic AI", "OpenTelemetry", "AI"]
+draft: true
+---
+
+{/* Series context: third observability article, following "Observability with OpenTelemetry" (fundamentals) and "OpenTelemetry Signals" (traces, metrics, logs, baggage). Also builds on the "Observability Expands" section from the Agentic EDA article. */}
+
+{/* Tone: conceptual with concrete examples, same style as the signals article. No runnable code, but specific enough that a reader could implement the patterns. */}
+
+## The Assumption That Breaks
+
+{/* The Signals article ended with: "All of these signals share one assumption: the system being observed is deterministic." This article picks up from that line.
+
+OpenTelemetry signals assume same input, same output. Traces show the path, metrics show health, logs explain failures. All of this works because the system is predictable.
+
+Agents break that assumption. A service that uses an LLM can produce a different decision for the same input depending on model version, prompt version, retrieved context, temperature, and thinking time.
+
+The question is not whether we need new signals. The existing signals are fine. The question is what new dimensions we need to observe, and what patterns help us do it without drowning in data. */}
+
+## What Changes When Decisions Are Probabilistic
+
+{/* Walk through what happens to each existing signal when a service is non-deterministic. Keep this focused — it bridges from the Signals article to the new dimensions.
+
+Traces still show the path, but now the path can vary for identical inputs. A trace through an agent might include tool calls, retrieval steps, and reasoning loops that differ every time.
+
+Metrics still show aggregate health, but now you need new metrics: token usage, cost per decision, confidence distributions, escalation rates, policy rejection rates.
+
+Logs still explain what happened, but now "what happened" includes the reasoning chain, not just the outcome. Logging the full chain is expensive. Logging only the outcome loses the explanation. This is the tension that drives the new dimensions.
+
+Baggage becomes more important — propagating agent context (model version, prompt version, session ID) downstream so every service can attribute its telemetry to the right agent configuration. */}
+
+## New Observability Dimensions
+
+{/* Each dimension is a reusable pattern. Vary the treatment — give more space to the most important ones, not equal weight to all.
+
+Cost observability (most space): tokens consumed, cost per decision, cost per workflow. This is a first-class metric, not an afterthought. In deterministic systems, the cost of processing an event is predictable. In agent systems, a prompt change can silently double token usage. Cost must be attributed to the workflow, not buried in a cloud bill. Example: an enrichment agent that silently doubles token usage after a prompt change, and nobody notices because cost is treated as infrastructure rather than per-decision.
+
+Decision stability (significant space): are repeated invocations with the same input converging on the same output? Track decision variance over time. This is the observability dimension that has no equivalent in deterministic systems. Example: a triage bot classifying the same issue template differently across model updates — the input didn't change, but the output did.
+
+Escalation and rejection rates (moderate space): how often do decisions get rejected by policy gates or escalated to humans? Rising rejection rates mean the agent is drifting from acceptable behaviour. This is the bridge between observability and governance. Example: safety layers catching more outputs over time as a leading indicator of model drift.
+
+Confidence tracking (brief): if the agent reports confidence, track the distribution. Drops in confidence are leading indicators of upstream changes or context pollution.
+
+Tool usage patterns (brief): which tools does the agent call, how often, in what order? Drift signals prompt regression. Example: an agent that starts calling a fallback API on every request instead of the primary.
+
+Feedback loop detection (brief): correlation IDs, causation chains, and intent TTLs. Track chain depth and total reasoning cost per workflow. This connects back to the feedback loop section in the Agentic EDA article. */}
+
+## Antipatterns
+
+{/* Three antipatterns, kept punchy. These should feel like lessons learned, not a checklist.
+
+Observing outputs without observing reasoning: you know the agent said "duplicate issue" but not why. Without the reasoning chain, you cannot debug drift. The fix is not to log everything — it is to log decision-relevant context (what was retrieved, what the confidence was, which tools were called) without logging the full chain.
+
+Treating token cost as infrastructure cost: token cost varies per decision. Aggregating it into a monthly cloud bill hides the information you need. Attribution to the workflow is what makes cost observable.
+
+Sampling agent traces like deterministic traces: agent traces are high-variance. Uniform sampling loses the interesting cases — the expensive ones, the low-confidence ones, the escalated ones. Sample by confidence, cost, or escalation status instead. */}
+
+## The Four-Layer Model Revisited
+
+{/* Tie back to the four-layer model from the Agentic EDA article (semantics, transport, execution, governance). Show how each observability dimension maps to a layer:
+
+Semantics: decision stability, confidence tracking — is the agent making coherent decisions?
+Transport: feedback loop detection, correlation chains — are messages amplifying in unexpected ways?
+Execution: cost observability, tool usage patterns — what is the agent actually doing and at what cost?
+Governance: escalation rates, policy rejection rates — is the agent staying within acceptable bounds?
+
+Agent-aware observability is not a separate system. It extends the same architectural layers through new dimensions. The architecture doesn't change — the questions you ask of it do. */}
+
+## A Real Example: The Triage Bot
+
+{/* Brief walkthrough of the github-issue-triage-bot as a concrete case study. Keep it short — the triage bot gets [its own article](/en/articles/standardising-issue-triage-with-ai).
+
+The bot has a multi-phase pipeline where each phase is observable through standard traces and metrics. But the interesting observability is in the agent dimensions:
+
+Decision stability: does the bot classify the same issue type consistently across model updates?
+Cost: how many tokens does each triage consume? Does the Enhancement Researcher agent's multi-round research stay within budget?
+Governance: the structural validator and LLM reviewer act as observable policy gates. Their rejection rates are a metric.
+Escalation: the 4-round-trip boundary is an explicit observability threshold — if the agent can't converge in 4 rounds, it hands off to a human.
+Silent mode + dashboard: aggregate observability before the bot is allowed to act publicly. Observability as a governance gate.
+
+One or two paragraphs, not a full walkthrough. The point is to show the dimensions applied to something real, not to explain the triage bot. */}
+
+## Conclusion
+
+{/* Traditional observability answers "is the system healthy?" Agent-aware observability answers "are the decisions stable, safe, and cost-effective?"
+
+The signals are the same. The dimensions are new. And the architectures that get this right will be the ones where agents earn trust incrementally — observed every step of the way.
+
+Cross-link to [observability fundamentals](/en/articles/observability-with-opentelemetry), the [signals article](/en/articles/opentelemetry-signals), and the [agentic EDA article](/en/articles/integrating-agentic-systems-into-event-driven-architectures). */}

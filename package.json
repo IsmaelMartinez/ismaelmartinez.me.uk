@@ -17,16 +17,16 @@
     "@astrojs/mdx": "^5.0.3",
     "@astrojs/rss": "^4.0.18",
     "@astrojs/sitemap": "^3.7.2",
-    "astro": "^6.1.6"
+    "astro": "^6.1.7"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.6",
+    "@astrojs/check": "^0.9.8",
     "@eslint/js": "^10.0.1",
     "@lhci/cli": "^0.15.1",
     "@typescript-eslint/parser": "^8.58.2",
     "eslint": "^10.2.0",
     "eslint-plugin-astro": "^1.7.0",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.2",
     "vitest": "^4.1.4"
   }

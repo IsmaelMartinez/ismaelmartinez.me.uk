@@ -45,7 +45,7 @@ A prioritised list of improvements identified during a site review. Grouped by i
 ## Phase 5
 
 - [ ] TypeScript 6 — upgrade from TS 5.9 to 6.x once `@astrojs/check` adds TS 6 peer support (currently pinned to `^5.0.0`)
-- [ ] Zod 4 deprecation cleanup — replace `.passthrough()` with `$loose` or `z.looseObject()` in `src/data/health.ts` and `src/content.config.ts` schemas
+- [x] Zod 4 deprecation cleanup — replaced `.passthrough()` with `z.looseObject()` in `src/data/health.ts` (content.config.ts did not use it)
 - [ ] Replace or remove `@lhci/cli` — Lighthouse CI pulls vulnerable transitive deps (`tmp`, `inquirer`, `yaml`); evaluate lighter alternatives (e.g. `unlighthouse`, native Lighthouse CLI) to clear the remaining 9 low/moderate vulnerabilities
 - [ ] Publish draft articles — review and publish articles currently marked `draft: true` (e.g. AI-assisted open source maintenance)
 - [ ] Triage issue #8 — "Blog is down" report from July 2025; confirm resolved or investigate deployment

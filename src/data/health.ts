@@ -12,7 +12,7 @@ const ComputedSchema = z.object({
 
 const ScanningSchema = z.object({ count: z.number(), max_severity: z.string().nullable().optional() }).nullable().default(null);
 
-const RepoHealthSchema = z.object({
+const RepoHealthSchema = z.looseObject({
   open_issues: z.number().default(0),
   open_bugs: z.number().nullable().default(null),
   commits_6mo: z.number().default(0),
@@ -28,12 +28,12 @@ const RepoHealthSchema = z.object({
   released_at: z.string().nullable().default(null),
   pushed_at: z.string().nullable().default(null),
   computed: ComputedSchema,
-}).passthrough();
+});
 
-const EnrichedSnapshotSchema = z.object({
+const EnrichedSnapshotSchema = z.looseObject({
   schema_version: z.literal('v1'),
   repos: z.record(z.string(), RepoHealthSchema),
-}).passthrough();
+});
 
 const LegacySnapshotSchema = z.record(z.string(), RepoHealthSchema);
 

@@ -12,8 +12,8 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
-const articles = await getCollection('articles', ({ slug, data }) => {
-  return slug.startsWith(`${lang}/`) && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft);
+const articles = await getCollection('articles', ({ id, data }) => {
+  return id.startsWith(`${lang}/`) && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft);
 });
 
 const sortedArticles = articles.sort((a, b) =>
@@ -38,7 +38,8 @@ const sortedArticles = articles.sort((a, b) =>
                 title={article.data.title}
                 description={article.data.description}
                 publishedDate={article.data.publishedDate}
-                slug={article.slug.replace(`${lang}/`, '')}
+                slug={article.id.replace(`${lang}/`, '')}
+                heroImage={article.data.heroImage}
                 tags={article.data.tags}
                 lang={lang}
                 originalPlatform={article.data.originalPlatform}

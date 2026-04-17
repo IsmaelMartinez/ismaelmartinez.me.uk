@@ -11,7 +11,7 @@ export async function getStaticPaths() {
   });
 
   return locales.flatMap(lang => {
-    const localeArticles = allArticles.filter(a => a.slug.startsWith(`${lang}/`));
+    const localeArticles = allArticles.filter(a => a.id.startsWith(`${lang}/`));
     const tags = new Set<string>();
     for (const article of localeArticles) {
       for (const tag of article.data.tags) {
@@ -50,7 +50,8 @@ const { tag, articles } = Astro.props;
             title={article.data.title}
             description={article.data.description}
             publishedDate={article.data.publishedDate}
-            slug={article.slug.replace(`${lang}/`, '')}
+            slug={article.id.replace(`${lang}/`, '')}
+            heroImage={article.data.heroImage}
             tags={article.data.tags}
             lang={lang}
             originalPlatform={article.data.originalPlatform}

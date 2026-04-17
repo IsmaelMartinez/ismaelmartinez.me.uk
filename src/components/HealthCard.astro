@@ -1,0 +1,57 @@
+---
+import type { RepoHealth } from '../data/health';
+import type { TranslationKey } from '../i18n/translations';
+
+interface Props {
+  repo: RepoHealth;
+  t: (key: TranslationKey) => string;
+}
+
+const { repo, t } = Astro.props;
+---
+
+<article class="health-card card">
+  <div class="card-header">
+    <a href={`https://github.com/IsmaelMartinez/${repo.name}`} target="_blank" rel="noopener noreferrer" class="repo-name">{repo.name}</a>
+    <span class={`tier-badge tier-${repo.tier}`}>{t(`health.pulse.${repo.tier}`)}</span>
+  </div>
+  <a href={`https://ismaelmartinez.github.io/repo-butler/${repo.name}.html`} target="_blank" rel="noopener noreferrer" class="report-link">{t('health.table.viewReport')}</a>
+</article>
+
+<style>
+  .health-card {
+    padding: var(--space-md);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .repo-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .tier-badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .tier-gold { background: var(--color-tier-gold); color: #1a1a00; }
+  .tier-silver { background: var(--color-tier-silver); color: #1a1a1a; }
+  .tier-bronze { background: var(--color-tier-bronze); color: #1a0a00; }
+  .tier-none { background: var(--color-border); color: var(--color-text-muted); }
+
+  .report-link {
+    font-size: 0.8rem;
+    margin-top: var(--space-xs);
+    display: inline-block;
+  }
+</style>

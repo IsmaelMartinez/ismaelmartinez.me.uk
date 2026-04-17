@@ -55,10 +55,16 @@ draft: false
 
 Workflow:
 1. Write and publish English article on `ismaelmartinez.me.uk` first
-2. Wait 3-7 days for Google to index the original
-3. Syndicate to Dev.to with canonical URL pointing to our site
-4. Optionally syndicate to Medium (keeping articles free, not paywalled)
-5. Add Spanish and Catalan translations to our site
+2. Syndicate to Dev.to with canonical URL pointing to our site
+3. Optionally syndicate to Medium (keeping articles free, not paywalled)
+4. Add Spanish and Catalan translations to our site
+
+> **Note (updated 2026-03-06):** The original workflow included a 3-7 day wait
+> before syndicating to allow Google to index the original. This is unnecessary
+> because both Dev.to and Medium support setting a canonical URL on import, and
+> our `ArticleLayout.astro` also sets `<link rel="canonical">` pointing to the
+> original. Google uses canonical URLs — not publication date — to determine the
+> authoritative source, so syndication can happen immediately after publishing.
 
 ### 3. Hosting: GitHub Pages (Static)
 
@@ -113,7 +119,7 @@ Workflow:
 
 - **Manual syndication**: Must manually cross-post to external platforms (could automate with RSS in future)
 - **Rebuild required**: New articles require site rebuild and deployment
-- **Wait time**: Should wait 3-7 days before syndicating to ensure Google indexes original first
+- **~~Wait time~~**: ~~Should wait 3-7 days before syndicating to ensure Google indexes original first~~ No longer needed — canonical URLs handle duplicate content attribution regardless of timing
 
 ### Neutral
 
@@ -124,11 +130,11 @@ Workflow:
 
 The following components were created:
 
-- `src/content/config.ts` - Content collection schema
+- `src/content.config.ts` - Content collection schema (moved from `src/content/config.ts` in the Astro 6 upgrade)
 - `src/layouts/ArticleLayout.astro` - Article page layout with language switcher
 - `src/components/ArticleCard.astro` - Article list card component
-- `src/pages/[locale]/articles/[...slug].astro` - Dynamic article routes
-- Updated `src/pages/[locale]/writing.astro` - Shows local articles + external platform links
+- `src/pages/[lang]/articles/[...slug].astro` - Dynamic article routes
+- Updated `src/pages/[lang]/writing.astro` - Shows local articles + external platform links
 
 ## References
 

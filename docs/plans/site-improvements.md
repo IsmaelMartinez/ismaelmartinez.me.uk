@@ -40,3 +40,12 @@ A prioritised list of improvements identified during a site review. Grouped by i
 - [x] Test Foundation — vitest 4, unit tests for reading-time and translations, build output integration tests
 - [x] Improved Link Checker — verifies internal links resolve to actual files in dist/
 - [x] Lighthouse CI — automated performance, accessibility, and best-practices audits in CI pipeline
+- [x] Astro 6 + MDX 5 — migrated content collections to glob() loader, ViewTransitions → ClientRouter, Zod 4 compatibility, i18n redirectToDefaultLocale fix
+
+## Phase 5
+
+- [ ] TypeScript 6 — upgrade from TS 5.9 to 6.x once `@astrojs/check` adds TS 6 peer support (currently pinned to `^5.0.0`)
+- [x] Zod 4 deprecation cleanup — replaced `.passthrough()` with `z.looseObject()` in `src/data/health.ts` (content.config.ts did not use it)
+- [x] Removed `@lhci/cli` — the Lighthouse CI step had all assertions set to `warn`/`off` and never gated CI; dropping it cleared 5 vulns and removes 234 transitive packages. If perf monitoring is wanted again, add it back deliberately (e.g. via `treosh/lighthouse-ci-action` or Unlighthouse). Remaining 5 vulns trace to `yaml` via `@astrojs/check` — upstream Astro tooling.
+- [ ] Publish draft articles — review and publish articles currently marked `draft: true` (e.g. AI-assisted open source maintenance)
+- [ ] Triage issue #8 — "Blog is down" report from July 2025; confirm resolved or investigate deployment

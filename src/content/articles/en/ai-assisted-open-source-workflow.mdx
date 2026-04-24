@@ -1,0 +1,143 @@
+---
+title: "AI-Assisted Open Source: The Workflow"
+description: "The practical workflow behind maintaining teams-for-linux with AI — from CLAUDE.md to research spikes, dependency upgrades, feature implementation, and quality gates."
+publishedDate: 2026-03-11
+tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
+draft: true
+---
+
+## From Principles to Practice
+
+In [the companion article](/en/articles/ai-assisted-open-source-maintenance), I covered what AI changes and what it doesn't when maintaining an open-source project. This article is the practical follow-up: the actual workflow I use day-to-day on teams-for-linux.
+
+None of this is theoretical. It's what I've settled into after months of iteration, and it keeps evolving. The core pattern is always the same: I decide, the AI executes, and I review everything before it ships.
+
+## CLAUDE.md: The Guardrails File
+
+Every interaction with the AI tool starts with CLAUDE.md. It's the first thing the agent reads when it opens the repository, and it shapes everything that follows.
+
+The file isn't long, but it's dense. It covers:
+
+**Architectural invariants.** The `trayIconRenderer` must initialise before `mqttStatusMonitor`. This dependency has been broken by contributors multiple times. Without CLAUDE.md documenting it, the AI would happily refactor one without considering the other.
+
+**Module boundaries.** Which files own which responsibilities. The AI shouldn't move functionality between modules without explicit direction, and the file makes those boundaries clear.
+
+**Build and test commands.** How to run the project, how to run tests, what the CI pipeline expects. This sounds basic, but without it the AI guesses — and guesses wrong often enough to waste time.
+
+**Commit conventions.** Co-authored-by tags, commit message format, branch naming. The AI follows these automatically because they're documented.
+
+**Known constraints.** Electron quirks, Wayland-specific behaviour, Trusted Types restrictions. These are the landmines that catch people who don't know the codebase. CLAUDE.md maps them.
+
+The file is a living document. When I discover a new invariant or a new footgun, it goes into CLAUDE.md before anything else. The investment pays off on every subsequent interaction.
+
+## The Research Phase
+
+Most non-trivial changes start with research, not coding. The full workflow looks like this:
+
+**I describe the problem.** "Users are reporting that screen sharing breaks on Wayland with the latest Electron update." Or "We need to support Trusted Types to comply with the new CSP requirements."
+
+**The agent investigates.** It reads the relevant source files, checks Electron's changelog, looks at upstream issues, and surfaces what it finds. This is exploration, not implementation. The goal is understanding.
+
+**Spikes, not solutions.** For anything non-obvious, I ask for a spike — a throwaway prototype that tests a specific hypothesis. "Can we intercept the desktopCapturer call before it hits the Wayland path?" The spike tells me whether an approach is viable without committing to it.
+
+**The agent produces a plan.** Once we understand the problem and have validated an approach through spikes, the agent writes up a structured plan: what changes are needed, which files are affected, what the risks are, and what should be tested.
+
+**I guide, then the agent executes.** I review the plan, adjust priorities, flag risks the agent missed, and give the go-ahead. Only then does actual implementation begin.
+
+Not every change needs the full sequence. A straightforward bug fix might skip the spike entirely and go straight from investigation to implementation. A complex Electron upgrade might need multiple rounds of spikes across several sessions. The process adapts to the problem. What doesn't change is that I understand what's happening before committing to an approach.
+
+## Dependency Upgrades
+
+This is where AI assistance saves the most time in absolute terms. The teams-for-linux dependency upgrade loop runs roughly like this:
+
+**Detection.** Dependabot or npm audit flags a vulnerability or outdated dependency. This happens multiple times a week.
+
+**Assessment.** The agent reads the advisory, checks what changed in the dependency, and evaluates whether it affects us. Many advisories are for code paths we don't use — the agent can identify those quickly.
+
+**Upgrade and test.** The agent bumps the version, runs the test suite, and checks for breaking changes. For minor and patch versions, this is usually straightforward. For major versions, it often triggers a research phase.
+
+**Electron upgrades are special.** Electron major versions regularly break things. The upgrade involves reading the breaking changes list, identifying which ones affect our codebase, spiking workarounds for each, and then implementing them systematically. A single Electron major upgrade can touch dozens of files. Without AI assistance, I'd budget a full weekend for each one.
+
+**Release judgement stays with me.** The agent can upgrade, test, and prepare a release. But the decision to actually ship — whether to batch more fixes, whether the timing is right, whether users need a heads-up — that's mine.
+
+## Feature Implementation
+
+When a feature gets the green light, the implementation flow follows a consistent pattern:
+
+**Clear specification first.** I describe what the feature should do, how it should behave, and — just as importantly — what it should *not* do. Scope boundaries matter. The AI will happily over-engineer if you let it.
+
+**Incremental implementation.** Large features get broken into small, reviewable chunks. Each chunk gets implemented, tested, and reviewed before moving to the next. This isn't just good practice — it's essential when working with AI, because catching a wrong direction early costs minutes, while catching it late costs hours of throwaway work.
+
+**Tests alongside code.** The agent writes tests as part of implementation, not as an afterthought. The CLAUDE.md file specifies the testing conventions, so the tests follow the project's existing patterns.
+
+**Review everything.** Every piece of AI-generated code gets read. Not skimmed — read. I'm looking for subtle issues: does this respect the module boundaries? Does it handle the Electron edge cases? Does it maintain backwards compatibility where needed? The AI produces good code most of the time, but "most of the time" isn't good enough for a project with thousands of users.
+
+## Keeping the Context Clean
+
+When an implementation is done, I follow a traditional practice: the outcome gets stored as an ADR (Architecture Decision Record). The research document that led to it gets deleted.
+
+This might sound wasteful — why throw away research? — but it's deliberate. The research is always recoverable from git history if I need it. What matters is keeping the current context clean. If old research documents pile up in the repository, the AI reads them and gets confused about what's current versus what's historical. It starts referencing outdated spike results or superseded plans.
+
+The ADR captures the decision and its rationale. That's what future sessions need. The messy path that got there — the dead ends, the discarded spikes, the abandoned approaches — is noise once the decision is made. Git remembers it. The working directory doesn't need to.
+
+## Session Types
+
+The research-to-implementation workflow isn't the only kind of session I run. Maintenance involves several recurring session types, each with its own focus:
+
+**Security sessions.** Review npm audit results, evaluate advisories, patch vulnerabilities. These run frequently because the npm ecosystem never stops producing advisories.
+
+**Documentation tidy.** Update README sections, clean up inline comments that have drifted from the code, refresh CLAUDE.md with new invariants discovered since the last pass.
+
+**Metrics and health checks.** Review issue trends, contributor activity, build times, test coverage changes. Understanding the trajectory of the project, not just the current state.
+
+**Dependency upgrades.** The loop described above — detection, assessment, upgrade, test, release decision.
+
+Each session type follows the same core pattern: I set the scope, the AI executes within it, I review the results. The difference is what we're looking at, not how we work.
+
+Right now these sessions run when I get to them. I'd like to semi-automate the recurring ones — have a monthly report generated that surfaces trends, flags things that need attention, and gives me a snapshot without having to remember to look. The triage bot already does a version of this for issues. Extending that pattern to security posture, dependency freshness, and documentation drift is the natural next step.
+
+## Handling Upstream Changes
+
+The Teams web app changes without notice. Microsoft doesn't publish a changelog for their web client, and defensive coding against those changes is one of the hardest parts of maintaining teams-for-linux.
+
+When something breaks, the workflow is:
+
+**Triage.** User reports come in. The agent helps categorise them: is this a regression in our code, or did Microsoft change something upstream?
+
+**Investigation.** If it's upstream, the agent examines what changed — comparing DOM structures, network requests, or API responses against what we expect. This detective work is tedious and repetitive, exactly the kind of task AI handles well.
+
+**Assessment.** Not all upstream changes can be worked around. Sometimes Microsoft removes or restricts something that we depended on, and no amount of clever coding can restore the functionality. Recognising when a problem is unfixable is a human judgement call.
+
+**Workaround or accept.** If a workaround exists, we implement it. If it doesn't, I communicate that to users honestly. The agent helps draft the response, but the decision and the tone are mine.
+
+## Quality Gates
+
+Nothing ships without passing through a set of quality gates. These aren't aspirational — they're enforced.
+
+**CI must pass.** The GitHub Actions pipeline runs linting, type checking, and the test suite. No exceptions.
+
+**Co-authored-by tags on every AI-assisted commit.** This is non-negotiable transparency. If the AI helped write it, the commit says so.
+
+**Manual review of every change.** I read every diff before it gets committed. The AI can propose changes, but I decide what actually goes into the codebase.
+
+**Release notes that explain the "why."** The agent drafts release notes, but I edit them to make sure they're useful to users — not just a list of file changes, but an explanation of what improved and why it matters.
+
+## What I've Learned
+
+After months of working this way, a few things stand out.
+
+**The workflow is the product.** The specific AI tool matters less than the process around it. Research before implementation. Spikes before commitment. Review before merge. These practices make AI assistance effective; without them, you're just generating code faster without generating better outcomes.
+
+**CLAUDE.md is the highest-leverage investment.** Every hour spent documenting invariants, boundaries, and conventions saves many hours of correcting the AI later. It's the equivalent of onboarding documentation — except the AI actually reads it every time.
+
+**The maintainer's job shifts, but doesn't shrink.** I spend less time writing boilerplate and more time reviewing, deciding, and communicating. The total hours haven't decreased much. What changed is that those hours produce more value.
+
+**Working in the open teaches you things.** The co-authored-by tags and the CLAUDE.md file are there for anyone to see. That visibility turns the project into a learning experiment — which AI-assisted changes land well, which ones generate friction, what the community actually cares about. You can't learn any of that if you hide the process.
+
+## Closing Thought
+
+This workflow isn't a template. It's what works for a specific project with a specific maintainer. Your version will look different — different tools, different constraints, different priorities.
+
+But the underlying pattern applies broadly: humans decide, AI executes, humans review. Skip any of those steps and you're either not leveraging AI effectively or not maintaining the quality your users deserve.
+
+The [principles article](/en/articles/ai-assisted-open-source-maintenance) covers the why. This article covered the how. Together, they're the full picture of what AI-assisted open source maintenance actually looks like in practice.

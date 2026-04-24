@@ -8,7 +8,7 @@ draft: true
 
 ## The Project Predates the Tools
 
-teams-for-linux started in 2018. That's more than five years before any AI coding tool existed. I built an Electron wrapper for Microsoft Teams because Microsoft dropped official Linux support and thousands of developers needed a working client. The project grew organically to over 4,400 stars, 315 forks, and 30 contributors over the years.
+teams-for-linux started in 2018, years before AI coding tools entered the mainstream. I built an Electron wrapper for Microsoft Teams because there was no official Linux client at the time — Microsoft wouldn't ship one until late 2019, and when they eventually retired it in 2023, teams-for-linux became the de facto option. The project grew organically to over 4,500 stars, 320 forks, and dozens of contributors over the years.
 
 AI adoption came much later. It's a tool choice I made to keep up with the demands of maintaining a project this size, not the origin story. The timeline matters because people sometimes look at a repository, see signs of AI tooling, and assume the whole thing was generated. It wasn't. The project has seven years of history, community, and hard-won architectural decisions behind it.
 
@@ -19,6 +19,8 @@ When people spotted the CLAUDE.md file in the repository, some assumed it meant 
 CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, module boundaries, and critical invariants — like the `trayIconRenderer`/`mqttStatusMonitor` initialisation requirement that has been accidentally broken multiple times by contributors who didn't know about the dependency.
 
 The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. CLAUDE.md makes them explicit. It's not a sign of AI authorship. It's a sign of AI discipline.
+
+In the [companion article on the actual workflow](/en/articles/ai-assisted-open-source-workflow), I go deeper into how this file shapes every interaction — from research spikes to dependency upgrades to feature implementation.
 
 ## What AI Actually Accelerates
 
@@ -46,6 +48,8 @@ Release judgement is more nuanced than it sounds. Is this build ready? Should I 
 
 Understanding upstream changes is a constant challenge. The Teams web app changes without notice, and defensive coding against those changes requires deep domain knowledge about what Microsoft is likely to do and how their platform evolves. AI doesn't know what Microsoft shipped last Tuesday.
 
+Some problems are simply unfixable, regardless of tooling. When Microsoft changes their web app in ways that break third-party clients, no amount of AI-assisted coding can produce a workaround that doesn't exist. The maintainer has to recognise when a problem has no good solution, communicate that honestly to users, and move on. AI will keep trying to generate fixes for things that can't be fixed.
+
 And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a popular project, and it's entirely a human skill.
 
 ## Solo Maintainer Reality
@@ -58,15 +62,13 @@ With AI tooling, I can keep up with security patches, Electron upgrades, user re
 
 The alternative to AI-assisted maintenance isn't "write everything by hand." It's "let issues pile up and eventually walk away." For solo open-source maintainers, AI is a sustainability tool, not a shortcut.
 
-## The Visible Markers
+## Working in the Open
 
-Every AI-assisted commit in the repository carries a `Co-authored-by` tag. That's transparency, not confession.
+Every AI-assisted commit in the repository carries a `Co-authored-by` tag. The CLAUDE.md file is checked into the repo where anyone can read it. This isn't about making a statement — it's about learning.
 
-The CLAUDE.md file is checked into the repo where anyone can read it. I could hide all of this easily. Strip the co-author tags, remove the configuration file, and nobody would know. I chose not to because being open about tooling is the right thing to do.
+I want to understand what works. Which kinds of AI-assisted changes get accepted smoothly by the community? Which ones generate friction? Does visible AI involvement change how people engage with the project? These are open questions, and the only way to answer them is to be open about the process.
 
-The irony is that hiding AI usage is trivially easy and almost certainly widespread. The projects that are transparent about it are the ones getting scrutinised, while projects that hide it face no questions at all. That incentive structure is backwards.
-
-Transparency about AI usage should be normalised, not penalised. The conversation should be about outcomes — does the software work, is it maintained, are users served well — not about which tools the maintainer used to get there.
+Whether other maintainers choose to show or hide their AI usage is their business. I'm not interested in that debate. What I'm interested in is running an honest experiment: maintain a project openly with AI tooling, see what the community response actually is, and share what I learn.
 
 ## Closing Thought
 
@@ -75,3 +77,5 @@ The interesting question isn't "did AI write this code?"
 It's whether the project works, whether it's maintained, and whether users are served well. By those measures, AI tooling is doing exactly what it should — keeping a useful project alive and responsive when the alternative is slow decay.
 
 In [The AI Automation Trap](/en/articles/the-ai-automation-trap), I wrote about how AI removed the building constraint but didn't remove the deciding constraint. This project is the lived example. AI handles the building. The deciding, the maintaining, and the caring about users — that's still entirely human. And it always will be.
+
+If you want to see how this actually works day-to-day — the specific workflow, the tooling, the quality gates — read [AI-Assisted Open Source: The Workflow](/en/articles/ai-assisted-open-source-workflow).

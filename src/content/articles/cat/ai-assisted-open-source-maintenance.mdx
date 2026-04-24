@@ -8,7 +8,7 @@ draft: true
 
 ## El projecte és anterior a les eines
 
-teams-for-linux va començar el 2018. Això és més de cinc anys abans que existís qualsevol eina de programació amb IA. Vaig construir un wrapper Electron per a Microsoft Teams perquè Microsoft va deixar de donar suport oficial a Linux i milers de desenvolupadors necessitaven un client que funcionés. El projecte va créixer orgànicament fins a superar les 4.400 estrelles, 315 forks i 30 contribuïdors al llarg dels anys.
+teams-for-linux va començar el 2018, anys abans que les eines de programació amb IA es generalitzessin. Vaig construir un wrapper Electron per a Microsoft Teams perquè no existia un client oficial per a Linux en aquell moment — Microsoft no en llançaria un fins a finals de 2019, i quan finalment el van retirar el 2023, teams-for-linux es va convertir en l'opció de facto. El projecte va créixer orgànicament fins a superar les 4.500 estrelles, 320 forks i desenes de contribuïdors al llarg dels anys.
 
 L'adopció d'IA va arribar molt després. És una elecció d'eines que vaig fer per mantenir el ritme amb les demandes de mantenir un projecte d'aquesta mida, no la història d'origen. La cronologia importa perquè a vegades la gent mira un repositori, veu senyals d'eines d'IA i assumeix que tot va ser generat. No va ser així. El projecte té set anys d'història, comunitat i decisions arquitectòniques guanyades amb esforç al darrere.
 
@@ -19,6 +19,8 @@ Quan la gent va veure l'arxiu CLAUDE.md al repositori, alguns van assumir que si
 CLAUDE.md és un arxiu de configuració, semblant a `.editorconfig` o `tsconfig.json`. Li diu a l'eina d'IA com comportar-se en aquest codi específic. Documenta decisions arquitectòniques, límits de mòduls i invariants crítics — com el requisit d'inicialització de `trayIconRenderer`/`mqttStatusMonitor` que s'ha trencat accidentalment diverses vegades per contribuïdors que no coneixien la dependència.
 
 L'arxiu codifica coneixement específic del projecte perquè l'eina d'IA respecti els patrons existents en lloc d'inventar-ne de nous. Cada codi té regles no escrites. CLAUDE.md les fa explícites. No és un senyal d'autoria per IA. És un senyal de disciplina amb la IA.
+
+A [l'article complementari sobre el flux de treball real](/cat/articles/ai-assisted-open-source-workflow) aprofundeixo en com aquest arxiu dona forma a cada interacció — des d'investigacions fins a actualitzacions de dependències i implementació de funcionalitats.
 
 ## Què accelera realment la IA
 
@@ -46,6 +48,8 @@ El criteri de llançament és més matisat del que sembla. Està llesta aquesta 
 
 Entendre els canvis upstream és un desafiament constant. La webapp de Teams canvia sense avís, i la programació defensiva contra aquests canvis requereix un coneixement profund del domini sobre el que Microsoft probablement farà i com evoluciona la seva plataforma. La IA no sap què va publicar Microsoft dimarts passat.
 
+Alguns problemes simplement no tenen solució, independentment de les eines. Quan Microsoft canvia la seva webapp de maneres que trenquen clients de tercers, cap quantitat de programació assistida per IA pot produir una solució alternativa que no existeix. El mantenidor ha de reconèixer quan un problema no té bona solució, comunicar-ho honestament als usuaris i seguir endavant. La IA seguirà intentant generar correccions per a coses que no es poden corregir.
+
 I després hi ha dir no a les peticions de funcionalitats. Això és potser la part més difícil de mantenir un projecte popular, i és completament una habilitat humana.
 
 ## La realitat del mantenidor en solitari
@@ -58,15 +62,13 @@ Amb eines d'IA, puc mantenir el ritme amb pegats de seguretat, actualitzacions d
 
 L'alternativa al manteniment assistit per IA no és "escriure-ho tot a mà." És "deixar que els issues s'acumulin i eventualment abandonar el projecte." Per a mantenidors de codi obert en solitari, la IA és una eina de sostenibilitat, no una drecera.
 
-## Els marcadors visibles
+## Treballar a la vista
 
-Cada commit assistit per IA al repositori porta una etiqueta `Co-authored-by`. Això és transparència, no confessió.
+Cada commit assistit per IA al repositori porta una etiqueta `Co-authored-by`. L'arxiu CLAUDE.md està inclòs al repositori on qualsevol pot llegir-lo. Això no és fer una declaració — és aprendre.
 
-L'arxiu CLAUDE.md està inclòs al repositori on qualsevol pot llegir-lo. Podria amagar tot això fàcilment. Treure les etiquetes de coautoria, eliminar l'arxiu de configuració, i ningú ho sabria. Vaig triar no fer-ho perquè ser obert sobre les eines és el correcte.
+Vull entendre què funciona. Quins tipus de canvis assistits per IA són acceptats sense problemes per la comunitat? Quins generen fricció? Canvia la participació visible de la IA com la gent interactua amb el projecte? Són preguntes obertes, i l'única forma de respondre-les és ser obert sobre el procés.
 
-La ironia és que amagar l'ús d'IA és trivialment fàcil i gairebé segur que està generalitzat. Els projectes que són transparents al respecte són els que reben escrutini, mentre que els projectes que ho amaguen no afronten cap pregunta. Aquesta estructura d'incentius està al revés.
-
-La transparència sobre l'ús d'IA s'hauria de normalitzar, no penalitzar. La conversa hauria de ser sobre resultats — funciona el programari, es manté, s'atén bé als usuaris? — no sobre quines eines va fer servir el mantenidor per arribar-hi.
+Si altres mantenidors trien mostrar o amagar el seu ús d'IA és assumpte seu. No m'interessa aquest debat. El que m'interessa és fer un experiment honest: mantenir un projecte obertament amb eines d'IA, veure quina és realment la resposta de la comunitat, i compartir el que aprengui.
 
 ## Reflexió final
 
@@ -75,3 +77,5 @@ La pregunta interessant no és "ha escrit la IA aquest codi?"
 És si el projecte funciona, si es manté i si els usuaris estan ben atesos. Per aquestes mesures, les eines d'IA estan fent exactament el que haurien — mantenir viu i receptiu un projecte útil quan l'alternativa és la decadència lenta.
 
 A [La trampa de l'automatització amb IA](/cat/articles/the-ai-automation-trap) vaig escriure sobre com la IA va eliminar la restricció de construir però no va eliminar la restricció de decidir. Aquest projecte és l'exemple viscut. La IA s'encarrega de construir. El decidir, el mantenir i el preocupar-se pels usuaris — això segueix sent completament humà. I sempre ho serà.
+
+Si vols veure com funciona això en el dia a dia — el flux de treball específic, les eines, els controls de qualitat — llegeix [Codi obert assistit per IA: el flux de treball](/cat/articles/ai-assisted-open-source-workflow).

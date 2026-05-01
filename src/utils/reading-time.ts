@@ -5,7 +5,7 @@ export function getReadingTime(content: string): number {
   let previous: string;
   do {
     previous = stripped;
-    stripped = stripped.replace(/<[^>]*>/g, '');
+    stripped = stripped.replace(/<[^>]*>/g, ' ');
   } while (stripped !== previous);
   const text = stripped.replace(/\s+/g, ' ').trim();
   const wordCount = text.split(' ').filter(Boolean).length;

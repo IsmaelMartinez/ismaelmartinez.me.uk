@@ -82,7 +82,7 @@ El ADR captura la decisión y su justificación. Eso es lo que las sesiones futu
 
 ## Tipos de sesión
 
-El flujo de investigación-a-implementación no es el único tipo de sesión que ejecuto. El mantenimiento implica varios tipos de sesiones recurrentes, cada uno con su propio foco:
+Las actualizaciones de dependencias son el tipo de sesión más frecuente, pero no el único. Más allá del ciclo descrito arriba, hay otros tipos recurrentes que componen la mayor parte del mantenimiento:
 
 **Sesiones de seguridad.** Revisar resultados de npm audit, evaluar avisos, parchear vulnerabilidades. Se ejecutan frecuentemente porque el ecosistema npm nunca deja de producir avisos.
 
@@ -90,9 +90,7 @@ El flujo de investigación-a-implementación no es el único tipo de sesión que
 
 **Métricas y revisiones de salud.** Revisar tendencias de issues, actividad de contribuidores, tiempos de build, cambios en cobertura de tests. Entender la trayectoria del proyecto, no solo el estado actual.
 
-**Actualizaciones de dependencias.** El ciclo descrito arriba — detección, evaluación, actualización, prueba, decisión de lanzamiento.
-
-Cada tipo de sesión sigue el mismo patrón central: yo establezco el alcance, la IA ejecuta dentro de él, yo reviso los resultados. La diferencia es a qué estamos mirando, no cómo trabajamos.
+Cada tipo de sesión — incluidas las actualizaciones de dependencias — sigue el mismo patrón central: yo establezco el alcance, la IA ejecuta dentro de él, yo reviso los resultados. La diferencia es a qué estamos mirando, no cómo trabajamos.
 
 Ahora mismo estas sesiones se ejecutan cuando llego a ellas. Me gustaría semi-automatizar las recurrentes — tener un informe mensual generado que muestre tendencias, señale cosas que necesitan atención y me dé una foto sin tener que acordarme de mirar. El bot de triaje ya hace una versión de esto para los issues. Extender ese patrón a la postura de seguridad, la frescura de dependencias y la deriva de documentación es el siguiente paso natural.
 

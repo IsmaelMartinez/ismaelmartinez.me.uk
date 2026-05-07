@@ -82,7 +82,7 @@ L'ADR captura la decisió i la seva justificació. Això és el que les sessions
 
 ## Tipus de sessió
 
-El flux d'investigació-a-implementació no és l'únic tipus de sessió que executo. El manteniment implica diversos tipus de sessions recurrents, cadascun amb el seu propi focus:
+Les actualitzacions de dependències són el tipus de sessió més freqüent, però no l'únic. Més enllà del cicle descrit més amunt, hi ha altres tipus recurrents que componen la major part del manteniment:
 
 **Sessions de seguretat.** Revisar resultats de npm audit, avaluar avisos, pegar vulnerabilitats. S'executen freqüentment perquè l'ecosistema npm mai deixa de produir avisos.
 
@@ -90,9 +90,7 @@ El flux d'investigació-a-implementació no és l'únic tipus de sessió que exe
 
 **Mètriques i revisions de salut.** Revisar tendències d'issues, activitat de contribuïdors, temps de build, canvis en cobertura de tests. Entendre la trajectòria del projecte, no només l'estat actual.
 
-**Actualitzacions de dependències.** El cicle descrit més amunt — detecció, avaluació, actualització, prova, decisió de llançament.
-
-Cada tipus de sessió segueix el mateix patró central: jo estableixo l'abast, la IA executa dins d'ell, jo reviso els resultats. La diferència és a què estem mirant, no com treballem.
+Cada tipus de sessió — incloses les actualitzacions de dependències — segueix el mateix patró central: jo estableixo l'abast, la IA executa dins d'ell, jo reviso els resultats. La diferència és a què estem mirant, no com treballem.
 
 Ara mateix aquestes sessions s'executen quan hi arribo. M'agradaria semi-automatitzar les recurrents — tenir un informe mensual generat que mostri tendències, assenyali coses que necessiten atenció i em doni una foto sense haver de recordar-me de mirar. El bot de triatge ja fa una versió d'això per als issues. Estendre aquest patró a la postura de seguretat, la frescor de dependències i la deriva de documentació és el següent pas natural.
 

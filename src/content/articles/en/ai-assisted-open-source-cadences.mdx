@@ -8,52 +8,30 @@ draft: true
 
 ## From One Project to Several
 
-The [first article in this series](/en/articles/ai-assisted-open-source-maintenance) asked what AI changes about maintaining an open-source project, and answered it through the lens of teams-for-linux — one codebase, seven years old, single maintainer. The [second article](/en/articles/ai-assisted-open-source-workflow) was the practical workflow that keeps it going. Both stayed inside the long-lived cadence.
+The [first article](/en/articles/ai-assisted-open-source-maintenance) asked what AI changes about maintaining an open-source project, through the lens of one 7-year codebase. The [second](/en/articles/ai-assisted-open-source-workflow) was the workflow that keeps it going. Both stayed inside a single long-lived cadence. This one steps out of that frame: AI assistance makes running several projects in parallel — at different speeds — actually feasible, and that changes what the workflow has to handle.
 
-This one steps out of that frame. AI assistance doesn't just make a single long-lived project more sustainable; it makes running several projects in parallel — at different speeds, with different lifecycles — actually feasible. That changes what the workflow has to handle.
+## Four Cadences
 
-## Four Cadences I Work In
+teams-for-linux is the long-lived one: seven years of history, thousands of users, the full harness.
 
-teams-for-linux is the long-lived one. Seven years of history, thousands of users, the full harness — CLAUDE.md, ADRs, QA gates, careful release judgement. Article 2 was about this cadence in detail.
+bonnie-wee-plot is seasonal — a Scottish allotment app where the features that matter in March (sowing windows) are different from the ones that matter in August (harvest, blight watch). The codebase grows in chapters, with the gardening year telling it what to build next.
 
-bonnie-wee-plot is seasonal. It's a Scottish allotment app — plot planning, seed tracking, compost monitoring, gardening advice from an AI that understands "full sun" means something different at 56°N. The cadence follows the gardening calendar: the features that matter in March (sowing windows) are different from the ones that matter in August (harvest, blight watch). The codebase grows in chapters, with the year telling it what to build next.
+votescot is ephemeral — an open-source vote compass built for the 2026 Scottish Parliament election. The relevance window is narrow; the code has to be solid for the duration, but the lifecycle has a built-in end.
 
-votescot is ephemeral. An open-source vote compass for the 2026 Scottish Parliament election: take a short quiz, see which parties and candidates align with your views. The relevance window is narrow — the election happens, the campaign matters for a few months, then the project's job is done. The code has to be solid for the duration, but the lifecycle has a built-in end.
-
-wifisentinel is reactive. I built it quickly because a specific situation needed it — a dodgy Amsterdam Airbnb where I wanted to know what was actually on the network. What started as a one-off scanner grew into a full toolkit: multi-persona analysis, compliance scoring, RF intelligence, external reconnaissance. Reactive doesn't mean throwaway. It means the trigger was an immediate need rather than a long-term roadmap, and the project earned its continued existence after the original problem was solved.
+wifisentinel is reactive — built quickly because a specific situation needed it (a dodgy Amsterdam Airbnb where I wanted to know what was actually on the network). What started as a one-off grew into a real toolkit once the original problem was solved.
 
 ## Match the Harness to the Cadence
 
-The harness from Article 2 — CLAUDE.md, the research-then-spike loop, full QA gates, ADRs for every architectural decision — is the right shape for a 7-year project with thousands of users. It's the wrong shape for a 1-month vote compass. Applying maximum process to an ephemeral codebase is overhead masquerading as rigour.
-
-But "less harness" doesn't mean "no harness." votescot still has CI, still has linting, still gets manual review on every diff. The shape is right-sized: the standards that protect a long-lived codebase against future-self confusion don't apply when the codebase has no future-self to confuse. The standards that protect users from broken behaviour apply at every cadence, because users don't care about your lifecycle.
-
-A seasonal app needs harness that survives the off-season — the project sits idle for months, the maintainer comes back fresh in March, the code has to make sense to someone who hasn't touched it since the previous October. An ephemeral app needs harness that doesn't slow you down during the only window that matters. A reactive build needs harness that can grow with the project if it turns out to have a life beyond its trigger. The discipline is sizing the harness to the lifecycle, not applying maximum ceremony everywhere.
+The full harness from Article 2 is right for a 7-year project and wrong for a 1-month vote compass — maximum process on an ephemeral codebase is overhead masquerading as rigour. But "less harness" isn't "no harness": votescot still has CI, linting, and manual review on every diff. The standards that protect users from broken behaviour apply at every cadence; the ones that protect a long-lived codebase against future-self confusion don't apply when there's no future-self to confuse. The discipline is sizing the harness to the lifecycle, not applying maximum ceremony everywhere.
 
 ## The Death Star Is Still Real
 
-The standing reminder in software is that bugs hide in complexity. Build something simpler than you think you need, because every line you add is a line that can go wrong. AI doesn't repeal that rule. It makes it more pressing.
+Bugs hide in complexity. AI doesn't repeal that rule — it makes it more pressing. When the cost of writing code drops, only the writing cost drops, not the reading, debugging, or retirement cost. The temptation to keep adding is greater than ever, which means saying "no, that's a Death Star" matters more, not less. Across cadences it shows up differently — "ten years of maintenance" on a long-lived project, "too clever for six weeks" on an ephemeral one — but it's the same reminder.
 
-When the cost of writing code drops, the cost of accumulating complexity drops too — but only the writing cost, not the reading cost, the debugging cost, or the cost of having to retire a feature later. AI lets you ship more, which means the temptation to keep adding is greater than it's ever been. The discipline of saying "no, that's a Death Star" matters more, not less.
+## Signals Are the Constraint
 
-Across cadences, the reminder shows up differently. On a long-lived project, it's "this feature would commit us to ten years of maintenance." On a seasonal one, it's "this complexity will be confusing when I come back in February." On an ephemeral one, it's "this is too clever for a codebase that has six weeks to live." On a reactive build, it's "the trigger was specific; don't gold-plate it because you can." Same reminder, different shapes.
-
-## Signals Are the Actual Constraint
-
-Once you have AI assistance and right-sized harness for each cadence, the bottleneck shifts. It's not how much code you can ship — that's solved. It's whether you can tell, in time, when something has gone wrong.
-
-Tests are signal. CI is signal. Manual review is signal. ADRs are signal about decisions. Logging, metrics, error tracking, user reports — all of them are signal about what the code is actually doing in the world. The harness exists to produce signal; the workflow exists to act on it. The journey of running any system is the same one any maintainer has always known: build trust with data, add hardness as you go, simplify or remove what stops earning its place. AI accelerates the cycles, which means signal quality has to keep up.
-
-Across cadences, signal needs differ. A long-lived project needs deep historical signal — trends, regression detection, alarm fatigue management. A seasonal app needs signal that catches up after dormancy — what changed in the ecosystem while you weren't looking. An ephemeral project needs signal that's loud and immediate, because there's no second chance. A reactive build needs signal that distinguishes "the trigger is still valid" from "this has become its own thing." The signal layer is what scales across all of them. Skimping on it is what turns AI-assisted productivity into AI-amplified mess.
-
-## What Dies Teaches You Too
-
-{/* PLACEHOLDER — needs specific failed-project examples and the lesson each one taught. The repo-butler portfolio currently shows zero archived repos, so these stories live in personal memory rather than the dashboard. */}
-
-Some projects don't make it past the first cadence. They're the ones I learned the most from — the ones where the harness was wrong, or the trigger faded, or I tried to apply long-lived discipline to something that wanted to be ephemeral.
+With AI assistance and right-sized harness, the bottleneck shifts. It's no longer how much code you can ship — that's solved. It's whether you can tell, in time, when something has gone wrong. Tests are signal. CI is signal. Manual review is signal. ADRs are signal about decisions. The harness exists to produce signal; the workflow exists to act on it. The journey is the same one any maintainer has always known: build trust with data, add hardness as you go, simplify or remove what stops earning its place. AI accelerates the cycles, so signal quality has to keep up. Skimping on it is what turns AI-assisted productivity into AI-amplified mess.
 
 ## Closing Thought
 
-Article 1 covered what AI changes about maintaining an open-source project. Article 2 was the practical workflow for one long-lived project. This one is about how the same discipline scales across very different lifecycles — long-lived, seasonal, ephemeral, reactive. The harness bends, the cadence dictates the shape, and signals become the thing you optimise for.
-
-The journey isn't finished. The harness is still evolving, the cadence taxonomy will probably need new categories as the portfolio grows, and the Death Star will keep being a temptation. None of that changes with AI assistance. What changes is how fast you can move through the cycles, and whether your signal quality keeps up with your speed.
+Same discipline, very different lifecycles. The harness bends, the cadence dictates the shape, and signals become the thing you optimise for. The journey isn't finished — the cadence taxonomy will need new categories, and the Death Star will keep being a temptation. What changes is how fast you can move through the cycles, and whether your signal quality keeps up with your speed.

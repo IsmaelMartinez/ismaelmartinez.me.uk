@@ -1,6 +1,6 @@
 ---
 title: "Código abierto asistido por IA: qué cambia y qué no"
-description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto open source de 7 años — qué acelera, qué no puede reemplazar y por qué existe el archivo CLAUDE.md."
+description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto open source de 7 años: qué acelera, qué no puede reemplazar y por qué existe el archivo CLAUDE.md."
 publishedDate: 2026-03-03
 tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
 draft: true
@@ -8,74 +8,30 @@ draft: true
 
 ## El proyecto es anterior a las herramientas
 
-teams-for-linux empezó en 2018, años antes de que las herramientas de programación con IA se generalizaran. Construí un wrapper Electron para Microsoft Teams porque no existía un cliente oficial para Linux en ese momento — Microsoft no lanzaría uno hasta finales de 2019, y cuando finalmente lo retiraron a finales de 2022, teams-for-linux se convirtió en la opción de facto. El proyecto ha crecido orgánicamente hasta superar las 4.600 estrellas, 330 forks y decenas de contribuidores a lo largo de los años (cifras en el momento de escribir).
+Cuando teams-for-linux empezó en 2018, las herramientas de programación con IA no estaban en la cabeza de nadie. Escribíamos el código, escribíamos los tests, revisábamos la cobertura. Lo de siempre. El proyecto nació por necesidad: Microsoft no tenía cliente para Linux, y su web app no entregaba notificaciones, lo que la hacía bastante inútil como app de chat.
 
-La adopción de IA llegó mucho después. Es una elección de herramientas que hice para mantener el ritmo con las demandas de mantener un proyecto de este tamaño, no la historia de origen. La cronología importa porque a veces la gente mira un repositorio, ve señales de herramientas de IA y asume que todo fue generado. No fue así. El proyecto tiene siete años de historia, comunidad y decisiones arquitectónicas ganadas con esfuerzo detrás.
+A finales de 2019 Microsoft finalmente lanzó una preview oficial para Linux, así que el proyecto pasó a segundo plano y aproveché para oler las rosas. Eso duró hasta finales de 2022, cuando Microsoft retiró el cliente y mucha gente volvió aquí. Ahora es 2026 y, en el momento de escribir, el repositorio tiene más de 4.000 estrellas y 300 forks.
 
-## Qué es realmente CLAUDE.md
+Para un mantenedor en solitario en un proyecto de este tamaño, la programación asistida por IA no es realmente una cuestión de *si*. Es una cuestión de *cómo hacerlo bien*. Este artículo expone los principios; el resto de la serie es donde lo trabajo en la práctica.
 
-Cuando la gente vio el archivo CLAUDE.md en el repositorio, algunos asumieron que significaba que el proyecto estaba escrito por IA. Eso es un malentendido de lo que hace el archivo.
+## Qué acelera la IA y qué no
 
-CLAUDE.md es un archivo de configuración, parecido a `.editorconfig` o `tsconfig.json`. Le dice a la herramienta de IA cómo comportarse en este código específico. Documenta decisiones arquitectónicas, límites de módulos e invariantes críticos — como el requisito de inicialización de `trayIconRenderer`/`mqttStatusMonitor` que se ha roto accidentalmente varias veces por contribuidores que no conocían la dependencia.
+La IA se encarga del trabajo que de otro modo quemaría a un mantenedor en solitario: implementación de funcionalidades bien definidas, actualizaciones de dependencias y parches de seguridad (que el ecosistema npm produce varias veces por semana), explorar APIs poco familiares y triar issues a escala. La forma exacta sigue evolucionando. Sigo experimentando con qué delegar y cómo, con herramientas como [repo-butler](https://github.com/IsmaelMartinez/repo-butler) vigilando la salud del portafolio junto al propio proyecto. El objetivo no es solo ahorrarme tiempo; es también ahorrar tiempo a quienes reportan, y mejorar la herramienta para todos.
 
-El archivo codifica conocimiento específico del proyecto para que la herramienta de IA respete los patrones existentes en lugar de inventar nuevos. Cada código tiene reglas no escritas. CLAUDE.md las hace explícitas. No es una señal de autoría por IA. Es una señal de disciplina con la IA.
-
-En el [artículo complementario sobre el flujo de trabajo real](/es/articles/ai-assisted-open-source-workflow) profundizo en cómo este archivo da forma a cada interacción — desde investigaciones hasta actualizaciones de dependencias e implementación de funcionalidades.
-
-## Qué acelera realmente la IA
-
-Las tareas que la IA maneja bien son las que de otro modo agotarían a un mantenedor en solitario.
-
-La implementación de funcionalidades bien entendidas es lo más obvio. Una vez que he decidido qué construir y cómo debería funcionar, la programación en sí — la traducción mecánica de intención a código — va más rápido con asistencia de IA. El boilerplate, el scaffolding de tests y las actualizaciones de documentación caen en la misma categoría. Son trabajo necesario, pero no requieren criterio creativo.
-
-Las actualizaciones de dependencias y las respuestas a parches de seguridad son donde el ahorro de tiempo realmente se acumula. El ecosistema npm envía avisos de seguridad varias veces por semana. Cada uno necesita evaluación, parcheo, pruebas y lanzamiento. Sin herramientas, eso solo puede consumir la mayoría de las horas disponibles de un mantenedor.
-
-Explorar APIs poco familiares es otra área donde la IA destaca. La superficie de API de Electron es enorme, Wayland tiene sus propias peculiaridades, y Linux es una caja llena de sorpresas. Tener una herramienta que puede mostrar rápidamente documentación relevante y patrones de uso reduce significativamente el tiempo de exploración.
-
-También construí un bot de triaje con Gemini para issues de GitHub. Cuando un proyecto recibe cientos de issues, separar la señal del ruido manualmente no es sostenible. El bot se encarga de la categorización inicial para que yo pueda centrarme en los issues que realmente necesitan atención humana.
-
-## Qué no puede reemplazar la IA
-
-El trabajo difícil de mantener un proyecto de código abierto no es escribir código. Nunca lo fue.
-
-Decidir qué construir y qué no construir requiere entender la dirección del proyecto, las necesidades de la comunidad y las compensaciones de cada adición. La IA no tiene opinión sobre esto. Construirá felizmente lo que le pidas, necesite el proyecto o no.
-
-La gestión de la comunidad es trabajo completamente humano. Cuando los usuarios empezaron a quejarse de la frecuencia de actualizaciones — la conversación de "calma con las actualizaciones" — eso requería empatía, leer el ambiente y hacer un juicio sobre la cadencia de lanzamientos. Ninguna herramienta de IA puede navegar eso.
-
-Las decisiones arquitectónicas están en la misma categoría. Cuándo refactorizar versus cuándo parchear. Dónde trazar los límites de los módulos. Cuánta compatibilidad hacia atrás mantener y cuándo romperla. Estas decisiones dan forma al proyecto durante años y no se pueden delegar a una herramienta que optimiza para la tarea inmediata.
-
-El criterio de lanzamiento es más matizado de lo que parece. ¿Está lista esta build? ¿Debería acumular más correcciones primero? ¿Es la corrección de Wayland lo suficientemente estable para publicar, o necesita otra semana de pruebas? Estas decisiones requieren contexto al que ninguna herramienta tiene acceso.
-
-Entender los cambios upstream es un desafío constante. La webapp de Teams cambia sin aviso, y la programación defensiva contra esos cambios requiere un conocimiento profundo del dominio sobre lo que Microsoft probablemente hará y cómo evoluciona su plataforma. La IA no sabe qué publicó Microsoft el martes pasado.
-
-Algunos problemas simplemente no tienen solución, independientemente de las herramientas. Cuando Microsoft cambia su webapp de formas que rompen clientes de terceros, ninguna cantidad de programación asistida por IA puede producir una solución alternativa que no existe. El mantenedor tiene que reconocer cuándo un problema no tiene buena solución, comunicarlo honestamente a los usuarios y seguir adelante. La IA seguirá intentando generar correcciones para cosas que no se pueden corregir.
-
-Y luego está decir no a las peticiones de funcionalidades. Eso es quizás la parte más difícil de mantener un proyecto popular, y es enteramente una habilidad humana.
+Lo que la IA no puede tocar, al menos por ahora, es la parte que va por el gusto. Decidir qué construir (y qué rechazar), priorizar dentro de la comunidad, entender dónde deberían estar las fronteras, juzgar cuándo una versión está lista, saber cuándo un cambio upstream no tiene solución. Son decisiones humanas. La IA generará encantada arreglos para problemas que no tienen arreglo, y te dirá que tiene razón con la misma convicción tanto si la tiene como si no. Navegar eso, y comunicarse honestamente con los usuarios, es donde vive el trabajo humano.
 
 ## La realidad del mantenedor en solitario
 
-teams-for-linux es un proyecto de un solo mantenedor con miles de usuarios activos. Esa proporción es el desafío fundamental.
+teams-for-linux tiene muchos contribuidores, pero en cualquier momento dado solo ha habido un mantenedor. El testigo ha cambiado de manos un par de veces, sobre todo cuando Microsoft lanzó su propio cliente para Linux y el proyecto entró en modo mantenimiento durante un tiempo. Hoy lo llevo yo, junto a cientos de miles de usuarios activos.
 
-Sin herramientas de IA, las matemáticas no cuadran. Responder a los issues lleva más tiempo. Los lanzamientos ocurren con menos frecuencia. Los parches de seguridad se quedan en la cola. Eventualmente el backlog crece más rápido de lo que una persona puede abordar, y el proyecto se abandona. Eso no es hipotético — es el resultado por defecto para proyectos populares de un solo mantenedor.
+Esa proporción es el reto principal. Incluso con herramientas de IA, mantenerse al día con issues, PRs, lanzamientos y parches de seguridad es una tarea diaria. Y eso encima de tener un trabajo y una vida. Sin IA las cuentas no salen en absoluto: el backlog crece más rápido de lo que una persona puede atender, los lanzamientos se ralentizan, y el proyecto acaba abandonado. Ese es el resultado por defecto para los proyectos populares con un único mantenedor.
 
-Con herramientas de IA, puedo mantener el ritmo con parches de seguridad, actualizaciones de Electron, reportes de usuarios y seguir sacando funcionalidades nuevas. La herramienta se encarga del trabajo mecánico para que pueda dedicar mi tiempo limitado a las decisiones e interacciones con la comunidad que realmente requieren un humano.
-
-La alternativa al mantenimiento asistido por IA no es "escribirlo todo a mano." Es "dejar que los issues se acumulen y eventualmente abandonar el proyecto." Para mantenedores de código abierto en solitario, la IA es una herramienta de sostenibilidad, no un atajo.
+Para los mantenedores en solitario, la IA no es un atajo. Es la diferencia entre seguir adelante y marcharte.
 
 ## Trabajar a la vista
 
-Cada commit asistido por IA en el repositorio lleva una etiqueta `Co-authored-by`. El archivo CLAUDE.md está incluido en el repositorio donde cualquiera puede leerlo. Esto no es hacer una declaración — es aprender.
+Cada commit asistido por IA lleva una etiqueta `Co-authored-by`. La configuración que dirige el comportamiento de la IA en este código, CLAUDE.md, está en el repositorio para que cualquiera lo lea. Podría perfectamente ocultarlo. Guardar los prompts en carpetas personales, dejar las etiquetas fuera, no mencionar nunca qué partes escribió la IA. ¿Pero por qué? La asistencia de IA ya no es una cuestión de *si*, es una cuestión de *cómo*. Es una herramienta, y tratarla como tal significa ser abierto sobre cómo se usa.
 
-Quiero entender qué funciona. ¿Qué tipos de cambios asistidos por IA son aceptados sin problemas por la comunidad? ¿Cuáles generan fricción? ¿Cambia la participación visible de la IA cómo la gente interactúa con el proyecto? Son preguntas abiertas, y la única forma de responderlas es ser abierto sobre el proceso.
+Lo interesante es lo que cambia cuando un proyecto open source maduro adopta estas herramientas. Qué se vuelve posible, cuánto trabajo más puede llevar un mantenedor en solitario, qué se vuelve más fácil y qué sigue siendo difícil. El siguiente artículo de la serie, [El flujo de trabajo](/es/articles/ai-assisted-open-source-workflow), es la forma práctica del día a día.
 
-Si otros mantenedores eligen mostrar u ocultar su uso de IA es asunto suyo. No me interesa ese debate. Lo que me interesa es hacer un experimento honesto: mantener un proyecto abiertamente con herramientas de IA, ver cuál es realmente la respuesta de la comunidad, y compartir lo que aprenda.
-
-## Reflexión final
-
-La pregunta interesante no es "¿escribió la IA este código?"
-
-Es si el proyecto funciona, si se mantiene y si los usuarios están bien atendidos. Por esas medidas, las herramientas de IA están haciendo exactamente lo que deberían — mantener vivo y receptivo un proyecto útil cuando la alternativa es la decadencia lenta.
-
-En [La trampa de la automatización con IA](/es/articles/the-ai-automation-trap) escribí sobre cómo la IA eliminó la restricción de construir pero no eliminó la restricción de decidir. Este proyecto es el ejemplo vivo. La IA se encarga de construir. El decidir, el mantener y el preocuparse por los usuarios — eso sigue siendo completamente humano. Y siempre lo será.
-
-Si quieres ver cómo funciona esto en el día a día — el flujo de trabajo específico, las herramientas, los controles de calidad — lee [Código abierto asistido por IA: el flujo de trabajo](/es/articles/ai-assisted-open-source-workflow).
+Y hay una trampa esperando. En [La trampa de la automatización con IA](/es/articles/the-ai-automation-trap) escribí que la IA eliminó la restricción de construir pero no la de decidir. Cuanto más delegamos en la máquina, más complejidad podemos generar. Y eso significa más que mantener, más que depurar, más que leer. La IA no te saca de ese bucle, ni de ninguno otro. Pasadas de documentación, trabajo de re-arquitectura, inversiones en observabilidad, la larga cola de soporte. Nada de eso desaparece. Simplemente pasa más rápido.

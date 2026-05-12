@@ -1,6 +1,6 @@
 ---
 title: "AI-Assisted Open Source: The Workflow"
-description: "The practical workflow behind maintaining teams-for-linux with AI — from CLAUDE.md to research spikes, dependency upgrades, feature implementation, and quality gates."
+description: "The practical workflow behind maintaining teams-for-linux with AI: from CLAUDE.md to research spikes, dependency upgrades, feature implementation, and quality gates."
 publishedDate: 2026-03-11
 tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
 draft: true
@@ -8,25 +8,25 @@ draft: true
 
 ## From Principles to Practice
 
-The [companion article](/en/articles/ai-assisted-open-source-maintenance) covered what AI changes when maintaining an open-source project. This one is the day-to-day workflow. The core pattern is always the same: I decide, the AI executes, I review. None of this is theoretical — it's what I've settled into after months of iteration, and it keeps evolving.
+The [companion article](/en/articles/ai-assisted-open-source-maintenance) covered what AI changes when maintaining an open-source project. This one is the day-to-day workflow. The core pattern is always the same: I decide, the AI executes, I review. None of this is theoretical. It's what I've settled into after months of iteration, and it keeps evolving.
 
 ## CLAUDE.md as a Living Document
 
-Every interaction starts with CLAUDE.md. The file is short but dense — architectural invariants, module boundaries, build and test commands, commit conventions, and known constraints like Electron quirks or Wayland-specific behaviour. When I discover a new invariant or footgun, it goes in before anything else. The investment pays off on every subsequent interaction.
+Every interaction starts with CLAUDE.md. The file is short but dense: architectural invariants, module boundaries, build and test commands, commit conventions, known constraints like Electron quirks or Wayland-specific behaviour. For example, this project forbids logging anything sensitive like broker URLs, email addresses, or auth tokens. That's exactly the kind of detail an AI will helpfully sprinkle through `console.info` calls unless you tell it not to. When I discover a new invariant or footgun, it goes in before anything else. The investment pays off on every subsequent interaction.
 
 ## Research Before Coding
 
-Most non-trivial changes start with research, not implementation. I describe the problem ("screen sharing breaks on Wayland with the latest Electron update"); the agent investigates the relevant source, changelog, and upstream issues. For anything non-obvious I ask for a spike — a throwaway prototype that tests one specific hypothesis. Once an approach is viable, the agent writes a plan; I review it, flag risks, and only then does implementation begin. Simple bug fixes skip the spike; complex Electron upgrades need several rounds. The process adapts; what doesn't change is that I understand what's happening before committing to an approach.
+Most non-trivial changes start with research, not implementation. I describe the problem ("screen sharing breaks on Wayland with the latest Electron update"); the agent investigates the relevant source, changelog, and upstream issues. For anything non-obvious I ask for a spike: a throwaway prototype that tests one specific hypothesis. Once an approach is viable, the agent writes a plan. I review it, flag risks, and only then does implementation begin. Simple bug fixes skip the spike; complex Electron upgrades need several rounds. The process adapts; what doesn't change is that I understand what's happening before committing to an approach.
 
 ## Dependency Upgrades
 
-This is where AI assistance saves the most time. Dependabot or npm audit flags something; the agent reads the advisory, checks what changed, and judges whether it affects us — many advisories are for code paths we don't use. Minor and patch versions are usually straightforward. Major versions often trigger a research phase. Electron majors are special: they routinely touch dozens of files, and without AI I'd budget a full weekend per upgrade. The release decision — whether to ship now or batch more fixes — stays with me.
+This is where AI assistance saves the most time. Dependabot or npm audit flags something; the agent reads the advisory, checks what changed, and judges whether it affects us. Many advisories are for code paths we don't use. Minor and patch versions are usually straightforward. Major versions often trigger a research phase. Electron majors are special: they routinely touch dozens of files, and without AI I'd budget a full weekend per upgrade. The release decision, whether to ship now or batch more fixes, stays with me.
 
 ## Features and the Context-Clean Habit
 
 When a feature gets the green light, the flow is consistent: clear specification including what *not* to do, incremental implementation in reviewable chunks, tests written alongside (the AI follows the patterns documented in CLAUDE.md), and a full read of every diff. The AI produces good code most of the time, but "most of the time" isn't good enough for thousands of users.
 
-When work completes, the outcome becomes an ADR; the research that led to it gets deleted. Git remembers the dead ends; the working directory doesn't need to. Old research documents pile up, get re-read, and confuse the AI about what's current versus historical.
+When work completes, the outcome becomes an ADR. The research that led to it gets deleted. Git remembers the dead ends; the working directory doesn't need to. Old research documents pile up, get re-read, and confuse the AI about what's current versus historical.
 
 ## Other Recurring Sessions
 
@@ -34,7 +34,7 @@ Dependency upgrades are the most frequent kind of session, but not the only one.
 
 ## Handling Upstream Changes
 
-The Teams web app changes without notice, and defensive coding against those changes is one of the hardest parts of this project. When something breaks, the agent helps me categorise — is this our regression or an upstream change? — and then investigates DOM, network, or API differences. Some changes have workarounds; some don't. Recognising when a problem is unfixable is a human call, and the response to users is mine to write.
+The Teams web app changes without notice, and defensive coding against those changes is one of the hardest parts of this project. When something breaks, the agent helps me categorise. Is this our regression or an upstream change? Then it investigates DOM, network, or API differences. Some changes have workarounds; some don't. Recognising when a problem is unfixable is a human call, and the response to users is mine to write.
 
 ## Quality Gates
 
@@ -42,10 +42,10 @@ Nothing ships without passing through enforced gates: CI must pass (linting, typ
 
 ## Treat It As a Team
 
-Once you've built enough harness around the AI — CLAUDE.md, the research-then-spike loop, manual review, CI gates — you're not using a tool any more, you're directing a system. The pattern is the same one you'd apply to any software that grows: build trust with data, add hardness as you go, simplify or remove what stops earning its place. The difference is that the cycles run faster.
+Once you've built enough harness around the AI (CLAUDE.md, the research-then-spike loop, manual review, CI gates), you're not using a tool any more. You're directing a system. The pattern is the same one you'd apply to any software that grows: build trust with data, add hardness as you go, simplify or remove what stops earning its place. The difference is that the cycles run faster.
 
 ## Closing Thought
 
-This workflow isn't a template — it's what works for a specific project with a specific maintainer. Your version will look different. But the underlying pattern is portable: a human at the start, a human at the end, the tool in between. Drop either bracket and you're either not leveraging AI effectively or not maintaining the quality your users deserve.
+This workflow isn't a template. It's what works for a specific project with a specific maintainer. Your version will look different. But the underlying pattern is portable: a human at the start, a human at the end, the tool in between. Drop either bracket and you're either not leveraging AI effectively or not maintaining the quality your users deserve.
 
 The [principles article](/en/articles/ai-assisted-open-source-maintenance) covered the why. This article covered the how. Together they're the full picture.

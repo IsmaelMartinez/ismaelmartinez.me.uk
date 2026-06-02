@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { parsePortfolioSnapshot } from '../../src/data/health';
 
+// Dates relative to "now" so freshness checks (release ≤ 90d, push ≤ 180d)
+// stay stable over time instead of rotting against hardcoded dates.
+const daysAgoIso = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+
 const validSnapshot = {
   schema_version: 'v1' as const,
   repos: {
@@ -16,8 +20,8 @@ const validSnapshot = {
       codeScanning: null,
       secretScanning: { count: 0 },
       ci: 4,
-      released_at: '2026-03-01T00:00:00Z',
-      pushed_at: '2026-04-01T00:00:00Z',
+      released_at: daysAgoIso(30),
+      pushed_at: daysAgoIso(30),
       computed: {
         tier: 'gold' as const,
         checks: [{ name: 'Has CI workflows (2+)', passed: true, required_for: 'gold' }],
@@ -62,8 +66,8 @@ describe('parsePortfolioSnapshot', () => {
         codeScanning: null,
         secretScanning: { count: 0 },
         ci: 3,
-        released_at: '2026-03-01T00:00:00Z',
-        pushed_at: '2026-04-01T00:00:00Z',
+        released_at: daysAgoIso(60),
+        pushed_at: daysAgoIso(60),
       },
     };
     const result = parsePortfolioSnapshot(legacySnapshot);

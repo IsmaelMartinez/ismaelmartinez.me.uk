@@ -26,7 +26,8 @@ const liveConfig = {
   reposWord: t('health.pulse.repos'),
   naWord: t('health.table.na'),
   updatedWord: t('health.live.updated'),
-  lang,
+  // Map the internal 'cat' code to the BCP 47 tag 'ca' for browser locale APIs.
+  lang: lang === 'cat' ? 'ca' : lang,
 };
 ---
 

@@ -10,10 +10,10 @@ interface Props {
 const { repo, t } = Astro.props;
 ---
 
-<article class="health-card card">
+<article class="health-card card" data-repo={repo.name}>
   <div class="card-header">
     <a href={`https://github.com/IsmaelMartinez/${repo.name}`} target="_blank" rel="noopener noreferrer" class="repo-name">{repo.name}</a>
-    <span class={`tier-badge tier-${repo.tier}`}>{t(`health.pulse.${repo.tier}`)}</span>
+    <span class={`tier-badge tier-${repo.tier}`} data-field="tier">{t(`health.pulse.${repo.tier}`)}</span>
   </div>
   <a href={`https://ismaelmartinez.github.io/repo-butler/${repo.name}.html`} target="_blank" rel="noopener noreferrer" class="report-link">{t('health.table.viewReport')}</a>
 </article>

@@ -13,6 +13,21 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 const health = await fetchPortfolioHealth();
+
+// Labels the client-side live refresh needs, embedded as JSON so the bundled
+// script can read them without access to the translation table.
+const liveConfig = {
+  tierLabels: {
+    gold: t('health.pulse.gold'),
+    silver: t('health.pulse.silver'),
+    bronze: t('health.pulse.bronze'),
+    none: t('health.pulse.none'),
+  },
+  reposWord: t('health.pulse.repos'),
+  naWord: t('health.table.na'),
+  updatedWord: t('health.live.updated'),
+  lang,
+};
 ---
 
 <Layout title={t('health.title')} description={t('health.description')} lang={lang}>
@@ -26,8 +41,11 @@ const health = await fetchPortfolioHealth();
       {health.available ? (
         <>
           <TierPulse health={health} t={t} />
+          <p class="live-status" data-live-status hidden></p>
           <HealthTable repos={health.repos} t={t} />
           <p class="attribution">{t('health.poweredBy')} <a href="https://ismaelmartinez.github.io/repo-butler/" target="_blank" rel="noopener noreferrer">Repo Butler</a></p>
+          <script type="application/json" id="health-live-config" set:html={JSON.stringify(liveConfig)} />
+          <script>import '../../scripts/health-live.ts';</script>
         </>
       ) : (
         <div class="unavailable card">
@@ -60,6 +78,13 @@ const health = await fetchPortfolioHealth();
     text-align: center;
     color: var(--color-text-muted);
     font-size: 0.8rem;
+  }
+
+  .live-status {
+    text-align: center;
+    color: var(--color-success);
+    font-size: 0.75rem;
+    margin: calc(-1 * var(--space-md)) 0 var(--space-lg);
   }
 
   .unavailable {

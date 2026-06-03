@@ -1,5 +1,6 @@
 ---
 import type { RepoHealth } from '../data/health';
+import { ciColor, vulnColor } from '../data/health';
 import type { TranslationKey } from '../i18n/translations';
 import HealthCard from './HealthCard.astro';
 
@@ -9,17 +10,6 @@ interface Props {
 }
 
 const { repos, t } = Astro.props;
-
-function ciColor(rate: number | null): string {
-  if (rate == null) return 'var(--color-text-muted)';
-  return rate >= 0.9 ? 'var(--color-success)' : rate >= 0.7 ? 'var(--color-warning)' : 'var(--color-danger)';
-}
-
-function vulnColor(vulns: { count: number; max_severity: string | null } | null): string {
-  if (!vulns) return 'var(--color-text-muted)';
-  if (vulns.count === 0) return 'var(--color-success)';
-  return vulns.max_severity === 'critical' || vulns.max_severity === 'high' ? 'var(--color-danger)' : 'var(--color-warning)';
-}
 ---
 
 <!-- Mobile: card layout -->
@@ -44,14 +34,14 @@ function vulnColor(vulns: { count: number; max_severity: string | null } | null)
     </thead>
     <tbody>
       {repos.map(repo => (
-        <tr>
+        <tr data-repo={repo.name}>
           <td>
             <a href={`https://github.com/IsmaelMartinez/${repo.name}`} target="_blank" rel="noopener noreferrer">{repo.name}</a>
           </td>
-          <td><span class={`tier-badge tier-${repo.tier}`}>{t(`health.pulse.${repo.tier}`)}</span></td>
-          <td>{repo.openIssues}</td>
-          <td style={`color: ${ciColor(repo.ciPassRate)}`}>{repo.ciPassRate != null ? `${Math.round(repo.ciPassRate * 100)}%` : '—'}</td>
-          <td style={`color: ${vulnColor(repo.vulns)}`}>{repo.vulns ? repo.vulns.count : t('health.table.na')}</td>
+          <td><span class={`tier-badge tier-${repo.tier}`} data-field="tier">{t(`health.pulse.${repo.tier}`)}</span></td>
+          <td data-field="issues">{repo.openIssues}</td>
+          <td data-field="ci" style={`color: ${ciColor(repo.ciPassRate)}`}>{repo.ciPassRate != null ? `${Math.round(repo.ciPassRate * 100)}%` : '—'}</td>
+          <td data-field="vulns" style={`color: ${vulnColor(repo.vulns)}`}>{repo.vulns ? repo.vulns.count : t('health.table.na')}</td>
           <td><a href={`https://ismaelmartinez.github.io/repo-butler/${repo.name}.html`} target="_blank" rel="noopener noreferrer" class="report-link">{t('health.table.viewReport')}</a></td>
         </tr>
       ))}

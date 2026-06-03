@@ -59,6 +59,23 @@ export interface PortfolioHealth {
   totalRepos: number;
 }
 
+// Presentation helpers shared by the server-rendered table and the client-side
+// live refresh, so both colour cells identically.
+export function ciColor(rate: number | null): string {
+  if (rate == null) return 'var(--color-text-muted)';
+  return rate >= 0.9 ? 'var(--color-success)' : rate >= 0.7 ? 'var(--color-warning)' : 'var(--color-danger)';
+}
+
+export function vulnColor(vulns: { count: number; max_severity: string | null } | null): string {
+  if (!vulns) return 'var(--color-text-muted)';
+  if (vulns.count === 0) return 'var(--color-success)';
+  return vulns.max_severity === 'critical' || vulns.max_severity === 'high' ? 'var(--color-danger)' : 'var(--color-warning)';
+}
+
+export function goldPctColor(goldPct: number): string {
+  return goldPct >= 80 ? 'var(--color-success)' : goldPct >= 50 ? 'var(--color-warning)' : 'var(--color-danger)';
+}
+
 const FALLBACK: PortfolioHealth = {
   available: false,
   lastUpdated: null,
@@ -207,11 +224,7 @@ async function fetchReleaseExempt(): Promise<string[]> {
   }
 }
 
-let cached: PortfolioHealth | null = null;
-
-export async function fetchPortfolioHealth(): Promise<PortfolioHealth> {
-  if (cached) return cached;
-
+async function fetchSnapshot(): Promise<PortfolioHealth> {
   const releaseExempt = await fetchReleaseExempt();
 
   for (const weekKey of [currentWeekKey(), previousWeekKey()]) {
@@ -219,12 +232,26 @@ export async function fetchPortfolioHealth(): Promise<PortfolioHealth> {
       const res = await fetch(`${BASE_URL}/${weekKey}.json`, { signal: AbortSignal.timeout(10000) });
       if (!res.ok) continue;
       const data = await res.json();
-      cached = parsePortfolioSnapshot(data, releaseExempt);
-      return cached;
+      return parsePortfolioSnapshot(data, releaseExempt);
     } catch {
       continue;
     }
   }
-  cached = FALLBACK;
+  return FALLBACK;
+}
+
+let cached: PortfolioHealth | null = null;
+
+// Build-time fetch: cached per build so the snapshot is fetched once and baked
+// into the emitted HTML (also SEO-friendly and works with JS disabled).
+export async function fetchPortfolioHealth(): Promise<PortfolioHealth> {
+  if (cached) return cached;
+  cached = await fetchSnapshot();
   return cached;
+}
+
+// Client-side live refresh: always hits the network (no module cache) so the
+// page can patch in fresher values than the baked snapshot.
+export async function fetchLivePortfolioHealth(): Promise<PortfolioHealth> {
+  return fetchSnapshot();
 }

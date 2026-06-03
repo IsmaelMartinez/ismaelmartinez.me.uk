@@ -28,7 +28,7 @@ export const projects: Project[] = [
     name: 'repo-butler',
     description: {
       en: 'A portfolio-health agent that runs on a schedule, analyses your GitHub repositories, generates health dashboards, and proposes improvements as issues — and it monitors this very site.',
-      es: 'Un agente de salud de portafolio que se ejecuta programadamente, analiza tus repositorios de GitHub, genera paneles de salud y propone mejoras como incidencias, y monitoriza este mismo sitio.',
+      es: 'Un agente de salud de portafolio que se ejecuta de forma programada, analiza tus repositorios de GitHub, genera paneles de salud y propone mejoras como incidencias, y monitoriza este mismo sitio.',
       cat: 'Un agent de salut de cartera que s\'executa en horari programat, analitza els repositoris de GitHub, genera taulers de salut i proposa millores com a incidències — i monitoritza aquest mateix lloc.'
     },
     url: 'https://github.com/IsmaelMartinez/repo-butler',
@@ -64,8 +64,8 @@ export const projects: Project[] = [
     name: 'wifisentinel',
     description: {
       en: 'A multi-persona WiFi and network security analyser with CLI scanning, compliance scoring against CIS, NIST, IEEE and OWASP frameworks, and external reconnaissance.',
-      es: 'Un analizador de seguridad de WiFi y redes con múltiples personalidades, con escaneo por CLI, puntuación de cumplimiento contra los marcos CIS, NIST, IEEE y OWASP, y reconocimiento externo.',
-      cat: 'Un analitzador de seguretat de xarxa i WiFi multipersona amb escaneig CLI, puntuació de compliment contra els marcs CIS, NIST, IEEE i OWASP, i reconeixement extern.'
+      es: 'Un analizador de seguridad de WiFi y redes con múltiples perfiles, con escaneo por CLI, puntuación de cumplimiento contra los marcos CIS, NIST, IEEE y OWASP, y reconocimiento externo.',
+      cat: 'Un analitzador de seguretat de xarxa i WiFi amb múltiples perfils, amb escaneig CLI, puntuació de compliment contra els marcs CIS, NIST, IEEE i OWASP, i reconeixement extern.'
     },
     url: 'https://github.com/IsmaelMartinez/wifisentinel',
     github: 'https://github.com/IsmaelMartinez/wifisentinel',
@@ -77,7 +77,7 @@ export const projects: Project[] = [
     description: {
       en: 'A browser-based hearing test that builds a standard audiogram from pure tones, with tinnitus matching and speech-in-noise tools — running fully offline as a PWA with no data leaving your device.',
       es: 'Una prueba auditiva basada en el navegador que construye un audiograma estándar a partir de tonos puros, con emparejamiento de tinnitus y herramientas de habla en ruido, ejecutándose completamente sin conexión como PWA sin que los datos salgan de tu dispositivo.',
-      cat: 'Una prova d\'oïda basada al navegador que construeix un audiograma estàndard a partir de tons purs, amb emparellament de tinnitus i eines de parla en soroll — s\'executa completament fora de línia com a PWA sense que les dades surtin del dispositiu.'
+      cat: 'Una prova d\'oïda basada en el navegador que construeix un audiograma estàndard a partir de tons purs, amb emparellament de tinnitus i eines de parla en soroll — s\'executa completament fora de línia com a PWA sense que les dades surtin del dispositiu.'
     },
     url: 'https://github.com/IsmaelMartinez/yourear',
     github: 'https://github.com/IsmaelMartinez/yourear',

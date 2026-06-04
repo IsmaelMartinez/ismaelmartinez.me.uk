@@ -25,6 +25,18 @@ export const projects: Project[] = [
     featured: true
   },
   {
+    name: 'repo-butler',
+    description: {
+      en: 'A portfolio-health agent that runs on a schedule, analyses your GitHub repositories, generates health dashboards, and proposes improvements as issues — and it monitors this very site.',
+      es: 'Un agente de salud de portafolio que se ejecuta de forma programada, analiza tus repositorios de GitHub, genera paneles de salud y propone mejoras como incidencias, y monitoriza este mismo sitio.',
+      cat: 'Un agent de salut de cartera que s\'executa en horari programat, analitza els repositoris de GitHub, genera taulers de salut i proposa millores com a incidències — i monitoritza aquest mateix lloc.'
+    },
+    url: 'https://github.com/IsmaelMartinez/repo-butler',
+    github: 'https://github.com/IsmaelMartinez/repo-butler',
+    tags: ['AI Agent', 'Automation', 'GitHub Actions'],
+    featured: true
+  },
+  {
     name: 'sound3fy',
     description: {
       en: 'A library that adds sonification to D3.js visualizations, making charts accessible to blind and low-vision users by mapping data to musical notes.',
@@ -37,39 +49,51 @@ export const projects: Project[] = [
     featured: true
   },
   {
-    name: 'ai-model-advisor',
+    name: 'delegate-local',
     description: {
-      en: 'A browser-based tool to find efficient AI models for your tasks, with recommendations ranked by efficiency and environmental impact estimates.',
-      es: 'Una herramienta basada en navegador para encontrar modelos de IA eficientes para tus tareas, con recomendaciones clasificadas por eficiencia e impacto ambiental.',
-      cat: 'Una eina basada en navegador per trobar models d\'IA eficients per a les teves tasques, amb recomanacions classificades per eficiència i impacte ambiental.'
+      en: 'A Claude Code skill that routes summarisation, triage, and bulk-text tasks to locally-installed models, keeping content on-device and preserving the agent\'s context window.',
+      es: 'Una habilidad de Claude Code que enruta tareas de resumen, triaje y texto masivo a modelos instalados localmente, manteniendo el contenido en el dispositivo y preservando la ventana de contexto del agente.',
+      cat: 'Una habilitat de Claude Code que encamina tasques de resum, triatge i text massiu a models instal·lats localment, mantenint el contingut al dispositiu i preservant la finestra de context de l\'agent.'
     },
-    url: 'https://github.com/IsmaelMartinez/ai-model-advisor',
-    github: 'https://github.com/IsmaelMartinez/ai-model-advisor',
-    tags: ['Svelte', 'AI', 'PWA'],
+    url: 'https://github.com/IsmaelMartinez/delegate-local',
+    github: 'https://github.com/IsmaelMartinez/delegate-local',
+    tags: ['Claude Code', 'Local LLM', 'Shell'],
     featured: true
   },
   {
-    name: 'local-brain',
+    name: 'wifisentinel',
     description: {
-      en: 'A Claude Code plugin marketplace that extends Claude with local capabilities, enabling codebase exploration via locally-running language models.',
-      es: 'Un marketplace de plugins para Claude Code que extiende Claude con capacidades locales, permitiendo la exploración de código mediante modelos de lenguaje locales.',
-      cat: 'Un marketplace de plugins per a Claude Code que estén Claude amb capacitats locals, permetent l\'exploració de codi mitjançant models de llenguatge locals.'
+      en: 'A multi-persona WiFi and network security analyser with CLI scanning, compliance scoring against CIS, NIST, IEEE and OWASP frameworks, and external reconnaissance.',
+      es: 'Un analizador de seguridad de WiFi y redes con múltiples perfiles, con escaneo por CLI, puntuación de cumplimiento contra los marcos CIS, NIST, IEEE y OWASP, y reconocimiento externo.',
+      cat: 'Un analitzador de seguretat de xarxa i WiFi amb múltiples perfils, amb escaneig CLI, puntuació de compliment contra els marcs CIS, NIST, IEEE i OWASP, i reconeixement extern.'
     },
-    url: 'https://github.com/IsmaelMartinez/local-brain',
-    github: 'https://github.com/IsmaelMartinez/local-brain',
-    tags: ['Python', 'Claude Code', 'Ollama'],
+    url: 'https://github.com/IsmaelMartinez/wifisentinel',
+    github: 'https://github.com/IsmaelMartinez/wifisentinel',
+    tags: ['Security', 'TypeScript', 'CLI'],
     featured: true
   },
   {
-    name: 'bonnie-wee-plot',
+    name: 'yourear',
     description: {
-      en: 'A Scottish allotment gardening app with plot planning, seed catalogues, compost tracking, and AI-powered gardening advice for Scottish growing conditions.',
-      es: 'Una aplicación de huertos escocesa con planificación de parcelas, catálogos de semillas, seguimiento de compost y consejos de jardinería con IA para condiciones de cultivo escocesas.',
-      cat: 'Una aplicació d\'horts escocesa amb planificació de parcel·les, catàlegs de llavors, seguiment de compost i consells de jardineria amb IA per a condicions de cultiu escoceses.'
+      en: 'A browser-based hearing test that builds a standard audiogram from pure tones, with tinnitus matching and speech-in-noise tools — running fully offline as a PWA with no data leaving your device.',
+      es: 'Una prueba auditiva basada en el navegador que construye un audiograma estándar a partir de tonos puros, con emparejamiento de tinnitus y herramientas de habla en ruido, ejecutándose completamente sin conexión como PWA sin que los datos salgan de tu dispositivo.',
+      cat: 'Una prova d\'oïda basada en el navegador que construeix un audiograma estàndard a partir de tons purs, amb emparellament de tinnitus i eines de parla en soroll — s\'executa completament fora de línia com a PWA sense que les dades surtin del dispositiu.'
     },
-    url: 'https://github.com/IsmaelMartinez/bonnie-wee-plot',
-    github: 'https://github.com/IsmaelMartinez/bonnie-wee-plot',
-    tags: ['Next.js', 'React', 'TypeScript'],
+    url: 'https://github.com/IsmaelMartinez/yourear',
+    github: 'https://github.com/IsmaelMartinez/yourear',
+    tags: ['Accessibility', 'PWA', 'TypeScript'],
+    featured: true
+  },
+  {
+    name: 'votescot',
+    description: {
+      en: 'An open-source vote compass for the 2026 Scottish Parliament election, built with Astro and React islands, helping voters match parties to their views.',
+      es: 'Una brújula electoral de código abierto para las elecciones al Parlamento Escocés de 2026, construida con Astro y React islands, que ayuda a los votantes a emparejar partidos con sus opiniones.',
+      cat: 'Una brúixola electoral de codi obert per a les eleccions al Parlament Escocès de 2026, construïda amb Astro i React islands, ajudant els votants a emparellar partits amb les seves opinions.'
+    },
+    url: 'https://github.com/IsmaelMartinez/votescot',
+    github: 'https://github.com/IsmaelMartinez/votescot',
+    tags: ['Astro', 'React', 'Civic Tech'],
     featured: true
   }
 ];

@@ -38,7 +38,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev https://raw.githubusercontent.com" />
 
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -103,7 +103,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           <li><a href={getLocalizedPath('/about', lang)} aria-current={currentPath === '/about' ? 'page' : undefined}>{t('nav.about')}</a></li>
           <li><a href={getLocalizedPath('/projects', lang)} aria-current={currentPath === '/projects' ? 'page' : undefined}>{t('nav.projects')}</a></li>
           <li><a href={getLocalizedPath('/writing', lang)} aria-current={currentPath === '/writing' ? 'page' : undefined}>{t('nav.writing')}</a></li>
-          <li><a href={getLocalizedPath('/fun', lang)} aria-current={currentPath.startsWith('/fun') ? 'page' : undefined}>{t('nav.fun')}</a></li>
           <li><a href={getLocalizedPath('/health', lang)} aria-current={currentPath === '/health' ? 'page' : undefined}>{t('nav.health')}</a></li>
           <li><a href={getLocalizedPath('/connect', lang)} aria-current={currentPath === '/connect' ? 'page' : undefined}>{t('nav.connect')}</a></li>
         </ul>

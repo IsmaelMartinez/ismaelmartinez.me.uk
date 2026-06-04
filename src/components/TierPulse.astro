@@ -1,5 +1,6 @@
 ---
 import type { PortfolioHealth } from '../data/health';
+import { goldPctColor } from '../data/health';
 import type { TranslationKey } from '../i18n/translations';
 
 interface Props {
@@ -13,17 +14,17 @@ const tierEntries = (['gold', 'silver', 'bronze', 'none'] as const)
   .filter(tier => health.tierCounts[tier] > 0)
   .map(tier => ({ tier, count: health.tierCounts[tier], label: t(`health.pulse.${tier}`) }));
 
-const goldColor = health.goldPct >= 80 ? 'var(--color-success)' : health.goldPct >= 50 ? 'var(--color-warning)' : 'var(--color-danger)';
+const goldColor = goldPctColor(health.goldPct);
 ---
 
 <div class="tier-pulse card">
-  <div class="pulse-headline" style={`color: ${goldColor}`}>{health.goldPct}% {t('health.pulse.gold')}</div>
-  <div class="pulse-badges">
+  <div class="pulse-headline" data-pulse="headline" style={`color: ${goldColor}`}>{health.goldPct}% {t('health.pulse.gold')}</div>
+  <div class="pulse-badges" data-pulse="badges">
     {tierEntries.map(({ tier, count, label }) => (
       <span class={`tier-badge tier-${tier}`}>{count} {label}</span>
     ))}
   </div>
-  <div class="pulse-summary">{health.totalRepos} {t('health.pulse.repos')}</div>
+  <div class="pulse-summary" data-pulse="summary">{health.totalRepos} {t('health.pulse.repos')}</div>
 </div>
 
 <style>

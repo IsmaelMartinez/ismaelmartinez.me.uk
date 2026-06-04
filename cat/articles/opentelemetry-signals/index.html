@@ -60,47 +60,14 @@
 <h2 id="com-es-connecten-els-senyals">Com es connecten els senyals</h2>
 <p>Els senyals estan dissenyats per treballar junts, i el trace ID és el fil que els connecta.</p>
 <p><em>Taula resum que mostra com es connecta cada senyal d’OpenTelemetry, quina pregunta respon i a través de quin mecanisme.</em></p>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<table><thead><tr><th>Senyal</th><th>Pregunta que respon</th><th>Es connecta mitjançant</th></tr></thead><tbody><tr><td>Mètriques</td><td>Alguna cosa va malament?</td><td>Finestra temporal + atributs compartits</td></tr><tr><td>Traces</td><td>On es trenca?</td><td>Trace ID, span ID</td></tr><tr><td>Logs</td><td>Per què es va trencar?</td><td>Trace ID, span ID</td></tr><tr><td>Baggage</td><td>Qui es veu afectat?</td><td>Propagació de context de petició</td></tr><tr><td>Events</td><td>Quina acció de negoci va passar?</td><td>Esquema estructurat</td></tr><tr><td>Profiles</td><td>Quin codi és responsable?</td><td>Trace ID, span ID</td></tr></tbody></table>
+<p>| Senyal | Pregunta que respon | Es connecta mitjançant |
+|--------|--------------------|-----------------------|
+| Mètriques | Alguna cosa va malament? | Finestra temporal + atributs compartits |
+| Traces | On es trenca? | Trace ID, span ID |
+| Logs | Per què es va trencar? | Trace ID, span ID |
+| Baggage | Qui es veu afectat? | Propagació de context de petició |
+| Events | Quina acció de negoci va passar? | Esquema estructurat |
+| Profiles | Quin codi és responsable? | Trace ID, span ID |</p>
 <p>Individualment, cada senyal et dona una vista parcial. Connectats a través de context compartit, et donen el panorama complet. No estàs mantenint múltiples sistemes pel mer fet de fer-ho.</p>
 <h2 id="conclusió">Conclusió</h2>
 <p>OpenTelemetry ens ha donat un llenguatge compartit per a l’observabilitat. Cada senyal resol un problema específic, i junts proporcionen un nivell de visibilitat que cap arxiu de log únic podria igualar.</p>

@@ -47,47 +47,14 @@
 </ol>
 <h2 id="elegir-el-enfoque-adecuado">Elegir el enfoque adecuado</h2>
 <p>La elección entre coreografía y orquestación depende de múltiples factores, incluyendo la complejidad de tu sistema, la experiencia del equipo y los requisitos operativos. Aquí tienes algunas consideraciones clave para guiar tu decisión:</p>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<table><thead><tr><th>Consideración</th><th>Coreografía</th><th>Orquestación</th></tr></thead><tbody><tr><td>Complejidad</td><td>Mejor para interacciones simples y desacopladas</td><td>Mejor para flujos de trabajo complejos y con múltiples pasos</td></tr><tr><td>Escalabilidad</td><td>Escala de forma independiente por servicio</td><td>Riesgo de cuello de botella centralizado</td></tr><tr><td>Depuración</td><td>Más difícil de rastrear entre servicios</td><td>Más fácil con control centralizado</td></tr><tr><td>Flexibilidad</td><td>Más fácil intercambiar servicios individuales</td><td>Requiere actualizaciones del orquestador</td></tr><tr><td>Consistencia</td><td>Consistencia eventual</td><td>Garantías de consistencia más fuertes</td></tr><tr><td>Resiliencia</td><td>Sin punto único de fallo</td><td>El orquestador es un punto de riesgo</td></tr></tbody></table>
+<p>| Consideración | Coreografía | Orquestación |
+|---|---|---|
+| Complejidad | Mejor para interacciones simples y desacopladas | Mejor para flujos de trabajo complejos y con múltiples pasos |
+| Escalabilidad | Escala de forma independiente por servicio | Riesgo de cuello de botella centralizado |
+| Depuración | Más difícil de rastrear entre servicios | Más fácil con control centralizado |
+| Flexibilidad | Más fácil intercambiar servicios individuales | Requiere actualizaciones del orquestador |
+| Consistencia | Consistencia eventual | Garantías de consistencia más fuertes |
+| Resiliencia | Sin punto único de fallo | El orquestador es un punto de riesgo |</p>
 <h2 id="por-qué-no-ambos">¿Por qué no ambos?</h2>
 <p>No tienes que elegir un único enfoque: muchos sistemas se benefician de un modelo híbrido.</p>
 <p>Personalmente, me inclino hacia la orquestación para flujos internos que requieren un control robusto, como el procesamiento de pagos o la incorporación de usuarios.</p>

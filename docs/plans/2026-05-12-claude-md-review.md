@@ -14,9 +14,9 @@ The expectation is that there are more contradictions, duplications, and ambigui
 
 The 2026-05-12 review should at minimum address the following. These are the ones already noticed during the session that produced this roadmap entry; the actual review should expand and verify.
 
-The no-autonomous-merge rule on line 2 says "anything past [opening a PR] requires explicit user confirmation per MR". The new rule on line 7 says "after opening a PR/MR, immediately run `/address-pr-comments` without being asked." These are reconcilable in spirit (the address-pr-comments skill explicitly stops before merging) but the wording is in surface conflict. A reader applying line 2 literally would refuse to run address-pr-comments without being asked. The fix is probably to rewrite line 2 so "anything past that point" specifies merge and ship actions rather than all post-PR actions.
+The no-autonomous-merge rule says "anything past [opening a PR] requires explicit user confirmation per MR". The new rule says "after opening a PR/MR, immediately run `/address-pr-comments` without being asked." These are reconcilable in spirit (the address-pr-comments skill explicitly stops before merging) but the wording is in surface conflict. A reader applying the no-autonomous-merge rule literally would refuse to run address-pr-comments without being asked. The fix is probably to rewrite the no-autonomous-merge rule so "anything past that point" specifies merge and ship actions rather than all post-PR actions.
 
-There may also be redundancy between line 5 ("when addressing PR review comments, always reply to each individual comment") and line 7 (the new rule that triggers the address-pr-comments skill, which itself enforces per-comment replies). Line 5 may become subsumed once line 7 takes effect.
+There may also be redundancy between the rule "when addressing PR review comments, always reply to each individual comment" and the new rule that triggers the address-pr-comments skill (which itself enforces per-comment replies). The former may become subsumed once the latter takes effect.
 
 ## Approach
 
@@ -56,6 +56,6 @@ No changes applied until the user approves the proposed version.
 
 ## Notes for the executor
 
-The file currently has rules expressed in multiple formats: bullet points, `<tag>` blocks, and prose paragraphs. Preserve that mix unless asked to normalise. The `<avoid_excessive_markdown_and_bullet_points>` block at lines 8-16 is itself an example of the tag-block style and should be respected when proposing rewrites.
+The file currently has rules expressed in multiple formats: bullet points, `<tag>` blocks, and prose paragraphs. Preserve that mix unless asked to normalise. The `<avoid_excessive_markdown_and_bullet_points>` block is itself an example of the tag-block style and should be respected when proposing rewrites.
 
 The user has expressed preferences in this session that should also be reflected in the reconciled file if not already: prefer parallel tool calls when independent, delegate to local models where appropriate, write in flowing prose rather than bullet-heavy lists.

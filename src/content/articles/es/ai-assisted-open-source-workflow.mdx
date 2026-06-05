@@ -1,0 +1,51 @@
+---
+title: "Código abierto asistido por IA: el flujo de trabajo"
+description: "El flujo de trabajo práctico detrás del mantenimiento de teams-for-linux con IA: desde CLAUDE.md hasta investigación, actualizaciones de dependencias, implementación de funcionalidades y controles de calidad."
+publishedDate: 2026-03-11
+tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
+draft: true
+---
+
+## De los principios a la práctica
+
+El [artículo complementario](/es/articles/ai-assisted-open-source-maintenance) cubrió qué cambia la IA al mantener un proyecto open source. Este es el flujo de trabajo del día a día. El patrón central siempre es el mismo: yo decido, la IA ejecuta, yo reviso. Nada de esto es teórico. Es lo que me ha quedado tras meses de iteración, y sigue evolucionando.
+
+## CLAUDE.md como documento vivo
+
+Cada interacción empieza con CLAUDE.md. El archivo es corto pero denso: invariantes arquitectónicas, fronteras entre módulos, comandos de build y test, convenciones de commit, restricciones conocidas como las peculiaridades de Electron o el comportamiento específico de Wayland. Por ejemplo, este proyecto prohíbe loguear cualquier cosa sensible como URLs de broker, direcciones de email o tokens de autenticación. Es exactamente el tipo de detalle que una IA esparcirá amablemente por llamadas a `console.info` a menos que le digas que no. Cuando descubro un nuevo invariante o footgun, va al archivo antes que nada. La inversión se amortiza en cada interacción posterior.
+
+## Investigar antes de programar
+
+La mayoría de los cambios no triviales empiezan con investigación, no con implementación. Describo el problema ("la pantalla compartida falla en Wayland con la última actualización de Electron"); el agente investiga el código relevante, el changelog y los issues upstream. Para cualquier cosa no obvia pido un spike: un prototipo desechable que prueba una hipótesis concreta. Una vez que un enfoque es viable, el agente escribe un plan. Lo reviso, marco riesgos, y solo entonces empieza la implementación. Los bugs simples se saltan el spike; las actualizaciones complejas de Electron necesitan varias rondas. El proceso se adapta; lo que no cambia es que entiendo qué está pasando antes de comprometerme con un enfoque.
+
+## Actualizaciones de dependencias
+
+Aquí es donde la asistencia de IA ahorra más tiempo. Dependabot o npm audit marca algo; el agente lee el aviso, comprueba qué cambió, y juzga si nos afecta. Muchos avisos son para rutas de código que no usamos. Las versiones menores y de parche suelen ser sencillas. Las versiones mayores a menudo desencadenan una fase de investigación. Las mayores de Electron son especiales: tocan rutinariamente decenas de archivos, y sin IA presupuestaría un fin de semana entero por actualización. La decisión de lanzamiento, si lanzar ahora o agrupar más correcciones, sigue siendo mía.
+
+## Funcionalidades y el hábito de contexto limpio
+
+Cuando una funcionalidad recibe luz verde, el flujo es consistente: especificación clara incluyendo lo que *no* hay que hacer, implementación incremental en trozos revisables, tests escritos en paralelo (la IA sigue los patrones documentados en CLAUDE.md) y una lectura completa de cada diff. La IA produce buen código la mayor parte del tiempo, pero "la mayor parte del tiempo" no es suficiente para miles de usuarios.
+
+Cuando el trabajo termina, el resultado se convierte en un ADR. La investigación que lo llevó allí se borra. Git recuerda los callejones sin salida; el directorio de trabajo no necesita hacerlo. Los documentos de investigación viejos se acumulan, se vuelven a leer y confunden a la IA sobre qué es actual y qué es histórico.
+
+## Otras sesiones recurrentes
+
+Las actualizaciones de dependencias son el tipo de sesión más frecuente, pero no el único. Las sesiones de seguridad evalúan y parchean avisos. Las pasadas de documentación actualizan READMEs y refrescan CLAUDE.md con invariantes recién descubiertos. Las sesiones de métricas miran tendencias de issues, actividad de contribuidores, tiempos de build, cambios en cobertura de tests. Cada una sigue la misma forma: yo establezco el alcance, la IA ejecuta, yo reviso.
+
+## Gestionar cambios upstream
+
+La web app de Teams cambia sin previo aviso, y programar defensivamente contra esos cambios es una de las partes más difíciles de este proyecto. Cuando algo se rompe, el agente me ayuda a categorizar. ¿Es una regresión nuestra o un cambio upstream? Después investiga diferencias en DOM, red o respuestas de API. Algunos cambios tienen workaround; otros no. Reconocer cuándo un problema no tiene solución es una decisión humana, y la respuesta a los usuarios es mía.
+
+## Controles de calidad
+
+Nada se lanza sin pasar los controles aplicados: CI tiene que pasar (linting, type checking, suite de tests completa, sin excepciones), cada commit asistido por IA lleva una etiqueta `Co-authored-by`, cada diff se lee manualmente, y las release notes se editan para explicar el *porqué* en lugar de listar archivos.
+
+## Trátalo como un equipo
+
+Una vez que has construido suficientes restricciones alrededor de la IA (CLAUDE.md, el ciclo de investigación-luego-spike, la revisión manual, los controles de CI), ya no estás usando una herramienta. Estás dirigiendo un sistema. El patrón es el mismo que aplicarías a cualquier software que crece: construir confianza con datos, añadir solidez a medida que avanzas, simplificar o quitar lo que deja de ganarse su sitio. La diferencia es que los ciclos van más rápido.
+
+## Reflexión final
+
+Este flujo de trabajo no es una plantilla. Es lo que funciona para un proyecto específico con un mantenedor específico. Tu versión será diferente. Pero el patrón subyacente es portable: un humano al principio, un humano al final, la herramienta en medio. Salta cualquiera de esos extremos y o no estás aprovechando la IA efectivamente o no estás manteniendo la calidad que tus usuarios merecen.
+
+El [artículo de principios](/es/articles/ai-assisted-open-source-maintenance) cubrió el porqué. Este artículo cubrió el cómo. Juntos son la imagen completa.

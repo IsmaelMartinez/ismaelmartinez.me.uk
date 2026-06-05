@@ -1,16 +1,26 @@
 # Content Pipeline
 
-## In Progress: Observability Series
+## Shipped: Observability Series
 
-Tracked in `docs/plans/2026-02-27-observability-series-design.md`. Two articles planned: OpenTelemetry Signals (article 1, drafted) and Observability for Agentic Systems (article 2, not started). Both need translations to es/cat once the English versions are finalised.
+Designed in `docs/plans/2026-02-27-observability-series-design.md` and now live on `main` across en/es/cat (OpenTelemetry Signals, Observability with OpenTelemetry, Integrating Agentic Systems into Event-Driven Architectures, and the supporting pieces).
 
-## Next: AI-Assisted Open Source Maintenance
+## Drafted: AI-Assisted Open Source series
 
-Draft outline exists at `src/content/articles/en/ai-assisted-open-source-maintenance.mdx`. The structure is solid (seven sections, clear argument arc from "the project predates the tools" through to "transparency should be normalised"). What remains:
+A three-article trilingual series under `src/content/articles/{en,es,cat}/ai-assisted-open-source-*.mdx`:
 
-- Convert bullet-point outlines into prose for each section. The inline comments already note the point each section should land on.
-- Add concrete examples from teams-for-linux: specific PRs, commit hashes, or issue threads that illustrate the claims (the CLAUDE.md invariant breakage, the Gemini triage bot, the "chill with updates" discussion).
-- Write the closing to tie back to the companion piece ("The AI Automation Trap" covers philosophy, this one covers practice).
-- Decide on tags and cross-links. Current tags look right. Consider linking to the Agentic EDA article if the observability series is published first.
-- Translate to es/cat after the English version is complete.
-- Set `draft: false` and confirm `publishedDate` before merging.
+- `maintenance` — What Changes and What Doesn't. Already on `main` (the refined version with concrete teams-for-linux figures), still `draft: true`.
+- `workflow` — The Workflow. Consolidated onto `main` via the series-consolidation PR.
+- `cadences` — Cadences and Signals. Consolidated onto `main` via the series-consolidation PR.
+
+All three remain `draft: true`. Publishing (flip to `draft: false`, confirm `publishedDate`, verify build/RSS/tag-pages/link-checker) is the next step now that the site is live on its own domain and analytics are flowing.
+
+This series previously lived across three overlapping PRs (#45, #92, #40); they were consolidated into a single branch cut from current `main` so `maintenance.mdx` keeps its refined copy rather than being reverted by a stale branch.
+
+## Backlog: future standalone articles
+
+Salvaged from the closed, English-only PR #40 so the ideas are not lost. Each needs the prose finishing, concrete examples, and es/cat translations before it ships:
+
+- Standardising Issue Triage with AI — the GitHub Issue Triage Bot: a multi-phase pipeline using vector search for duplicate detection, with safety layers and human oversight by design. Proposes actions without executing them, working inside a shadow repository.
+- Vibe Coding an Allotment App — building Bonnie Wee Plot, a Next.js gardening tool for Scottish weather, by letting AI handle implementation while steering direction. A reflection on where vibe coding works and where it doesn't.
+
+The third draft from #40, "Observability for Agentic Systems", was dropped: it is superseded by the shipped observability series above, and its worked example (the triage bot) is better served by the dedicated triage article.

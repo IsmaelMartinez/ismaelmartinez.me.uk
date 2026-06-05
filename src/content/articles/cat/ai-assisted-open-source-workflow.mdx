@@ -1,0 +1,51 @@
+---
+title: "Codi obert assistit per IA: el flux de treball"
+description: "El flux de treball pràctic darrere del manteniment de teams-for-linux amb IA: des de CLAUDE.md fins a investigació, actualitzacions de dependències, implementació de funcionalitats i controls de qualitat."
+publishedDate: 2026-03-11
+tags: ["IA", "Codi Obert", "Desenvolupament de Software", "Teams for Linux"]
+draft: true
+---
+
+## Dels principis a la pràctica
+
+L'[article complementari](/cat/articles/ai-assisted-open-source-maintenance) va cobrir què canvia la IA en mantenir un projecte open source. Aquest és el flux de treball del dia a dia. El patró central sempre és el mateix: jo decideixo, la IA executa, jo reviso. Res d'això és teòric. És el que m'ha quedat després de mesos d'iteració, i continua evolucionant.
+
+## CLAUDE.md com a document viu
+
+Cada interacció comença amb CLAUDE.md. L'arxiu és curt però dens: invariants arquitectòniques, fronteres entre mòduls, comandes de build i test, convencions de commit, restriccions conegudes com les peculiaritats d'Electron o el comportament específic de Wayland. Per exemple, aquest projecte prohibeix loguejar qualsevol cosa sensible com URLs de broker, adreces d'email o tokens d'autenticació. És exactament el tipus de detall que una IA escamparà amablement per crides a `console.info` tret que li diguis que no. Quan descobreixo un nou invariant o footgun, va a l'arxiu abans que res. La inversió s'amortitza en cada interacció posterior.
+
+## Investigar abans de programar
+
+La majoria dels canvis no trivials comencen amb investigació, no amb implementació. Descric el problema ("la pantalla compartida falla a Wayland amb la darrera actualització d'Electron"); l'agent investiga el codi rellevant, el changelog i els issues upstream. Per a qualsevol cosa no òbvia demano un spike: un prototip d'usar i llençar que prova una hipòtesi concreta. Un cop un enfocament és viable, l'agent escriu un pla. El reviso, marco riscos, i només llavors comença la implementació. Els bugs simples es salten el spike; les actualitzacions complexes d'Electron necessiten diverses rondes. El procés s'adapta; el que no canvia és que entenc què està passant abans de comprometre'm amb un enfocament.
+
+## Actualitzacions de dependències
+
+Aquí és on l'assistència d'IA estalvia més temps. Dependabot o npm audit marca alguna cosa; l'agent llegeix l'avís, comprova què va canviar, i jutja si ens afecta. Molts avisos són per a rutes de codi que no fem servir. Les versions menors i de pegat solen ser senzilles. Les versions majors sovint desencadenen una fase d'investigació. Les majors d'Electron són especials: toquen rutinàriament desenes d'arxius, i sense IA pressupostaria un cap de setmana sencer per actualització. La decisió de llançament, si llançar ara o agrupar més correccions, segueix sent meva.
+
+## Funcionalitats i l'hàbit de context net
+
+Quan una funcionalitat rep llum verda, el flux és consistent: especificació clara incloent el que *no* s'ha de fer, implementació incremental en trossos revisables, tests escrits en paral·lel (la IA segueix els patrons documentats a CLAUDE.md) i una lectura completa de cada diff. La IA produeix bon codi la major part del temps, però "la major part del temps" no és prou per a milers d'usuaris.
+
+Quan la feina acaba, el resultat es converteix en un ADR. La investigació que va portar fins allà s'esborra. Git recorda els carrerons sense sortida; el directori de treball no cal que ho faci. Els documents d'investigació vells s'acumulen, es tornen a llegir i confonen la IA sobre què és actual i què és històric.
+
+## Altres sessions recurrents
+
+Les actualitzacions de dependències són el tipus de sessió més freqüent, però no l'únic. Les sessions de seguretat avaluen i peguen avisos. Les passades de documentació actualitzen READMEs i refresquen CLAUDE.md amb invariants acabats de descobrir. Les sessions de mètriques miren tendències d'issues, activitat de contribuïdors, temps de build, canvis en cobertura de tests. Cadascuna segueix la mateixa forma: jo estableixo l'abast, la IA executa, jo reviso.
+
+## Gestionar canvis upstream
+
+La web app de Teams canvia sense avís previ, i programar defensivament contra aquests canvis és una de les parts més difícils d'aquest projecte. Quan alguna cosa es trenca, l'agent m'ajuda a categoritzar. És una regressió nostra o un canvi upstream? Després investiga diferències a DOM, xarxa o respostes d'API. Alguns canvis tenen workaround; d'altres no. Reconèixer quan un problema no té solució és una decisió humana, i la resposta als usuaris és meva.
+
+## Controls de qualitat
+
+Res es llança sense passar els controls aplicats: CI ha de passar (linting, type checking, suite de tests completa, sense excepcions), cada commit assistit per IA porta una etiqueta `Co-authored-by`, cada diff es llegeix manualment, i les release notes s'editen per explicar el *perquè* en lloc de llistar arxius.
+
+## Tracta-la com un equip
+
+Un cop has construït prou restriccions al voltant de la IA (CLAUDE.md, el cicle d'investigació-llavors-spike, la revisió manual, els controls de CI), ja no estàs usant una eina. Estàs dirigint un sistema. El patró és el mateix que aplicaries a qualsevol software que creix: construir confiança amb dades, afegir solidesa a mesura que avances, simplificar o treure el que deixa de guanyar-se el seu lloc. La diferència és que els cicles van més ràpid.
+
+## Reflexió final
+
+Aquest flux de treball no és una plantilla. És el que funciona per a un projecte específic amb un mantenidor específic. La teva versió serà diferent. Però el patró subjacent és portable: un humà al començament, un humà al final, l'eina al mig. Salta't qualsevol d'aquests extrems i o no estàs aprofitant la IA efectivament o no estàs mantenint la qualitat que els teus usuaris mereixen.
+
+L'[article de principis](/cat/articles/ai-assisted-open-source-maintenance) va cobrir el perquè. Aquest article va cobrir el com. Junts són la imatge completa.

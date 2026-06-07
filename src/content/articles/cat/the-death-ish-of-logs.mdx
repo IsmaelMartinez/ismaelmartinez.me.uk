@@ -101,7 +101,7 @@ Van emergir empreses centrades en aquest problema i en proporcionar una solució
 
 ## La dècada del Big Data i l'observabilitat
 
-A partir del 2010, la quantitat de dades que generàvem va explotar, i només augmenta a cada segon. L'IoT canviarà les nostres vides, però aviat ens vam adonar que trigaria uns quants anys més i ens vam centrar en les coses importants — tenir llums ambientals a les quals pots cridar, altaveus de vigilància que et diuen el temps, posen una cançó i als quals pots cridar, i timbres... als quals definitivament cridaràs si Internet cau i no pots entrar a casa.
+A partir del 2010, la quantitat de dades que generàvem va explotar, i només augmenta a cada segon. L'IoT canviarà les nostres vides, però aviat ens vam adonar que trigaria uns quants anys més i ens vam centrar en les coses importants: tenir llums ambientals a les quals pots cridar, altaveus de vigilància que et diuen el temps, posen una cançó i als quals pots cridar, i timbres... als quals definitivament cridaràs si Internet cau i no pots entrar a casa.
 
 Bromes a part, vam haver de començar a investigar com consultar grans quantitats de dades. L'emmagatzematge era tan barat que les tecnologies de bases de dades no relacionals tenien més sentit. Teníem altres patrons d'ús als quals donar servei.
 
@@ -109,7 +109,7 @@ Els microserveis són la nova norma, augmentant la complexitat dels nostres sist
 
 Realment necessitàvem saber què havia cridat què i quan, però confiar en les marques de temps ja no era adequat, ja que els serveis podien executar-se dins del mateix microsegon (o el rellotge del maquinari podia estar lleugerament "desajustat").
 
-Tots utilitzem logs contextuals i IDs de correlació — o almenys sabem que ho hauríem de fer. El cubell del deute tècnic comença a omplir-se, així que li donem noms diferents.
+Tots utilitzem logs contextuals i IDs de correlació, o almenys sabem que ho hauríem de fer. El cubell del deute tècnic comença a omplir-se, així que li donem noms diferents.
 
 Els nostres logs van començar a capturar tot el que podien, i més:
 
@@ -150,7 +150,7 @@ Cap al final de la dècada, OpenTelemetry finalment es va consolidar, aportant u
 
 ## I ara què?
 
-Bé, a OpenTelemetry tenim traces, mètriques, logs — aviat, també esdeveniments i perfils.
+Bé, a OpenTelemetry tenim traces, mètriques, logs, i aviat també esdeveniments i perfils.
 
 Alguns diuen que els esdeveniments són logs simples. Similars a l'original:
 
@@ -162,10 +162,10 @@ Llavors... hauríem de matar els logs? Per què no confiar únicament en esdeven
 
 Personalment, no ho crec. Però els logs sí que necessiten evolucionar.
 
-Els sistemes moderns demanen claredat. Cada senyal — sigui una traça, una mètrica o un esdeveniment — té un propòsit específic. Combinats, ens donen millor visibilitat, com es discuteix a l'article [Observabilitat amb OpenTelemetry](/cat/articles/observability-with-opentelemetry).
+Els sistemes moderns demanen claredat. Cada senyal, sigui una traça, una mètrica o un esdeveniment, té un propòsit específic. Combinats, ens donen millor visibilitat, com es discuteix a l'article [Observabilitat amb OpenTelemetry](/cat/articles/observability-with-opentelemetry).
 
 Els logs? Necessiten trobar el seu lloc de nou.
 
-Tot i així, crec que els logs no desapareixeran. Evolucionaran — com sempre han fet — per ajudar-nos a donar sentit a tota aquesta bogeria distribuïda.
+Tot i així, crec que els logs no desapareixeran. Evolucionaran, com sempre han fet, per ajudar-nos a donar sentit a tota aquesta bogeria distribuïda.
 
 Què en penses? Hauríem de matar els logs?

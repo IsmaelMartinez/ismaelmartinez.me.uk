@@ -38,7 +38,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev https://raw.githubusercontent.com" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev https://raw.githubusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
 
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -291,7 +291,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       }
       initMenuToggle();
 
-      // Theme toggle
+      // Theme toggle — with a circular sweep via the View Transitions API where supported
       let themeAbort: AbortController | null = null;
 
       function initThemeToggle() {
@@ -312,11 +312,126 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             next = prefersDark ? 'light' : 'dark';
           }
-          document.documentElement.setAttribute('data-theme', next);
-          localStorage.setItem('theme', next);
+
+          const applyTheme = () => {
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+          };
+
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          if (!document.startViewTransition || reduceMotion) {
+            applyTheme();
+            return;
+          }
+
+          // Sweep the new theme out from the toggle button
+          const rect = toggle.getBoundingClientRect();
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const radius = Math.hypot(
+            Math.max(x, window.innerWidth - x),
+            Math.max(y, window.innerHeight - y)
+          );
+
+          document.documentElement.classList.add('theme-switching');
+          const transition = document.startViewTransition(applyTheme);
+          transition.ready.then(() => {
+            document.documentElement.animate(
+              { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+              { duration: 450, easing: 'ease-in-out', pseudoElement: '::view-transition-new(root)' }
+            );
+          }).catch(() => {});
+          transition.finished.finally(() => {
+            document.documentElement.classList.remove('theme-switching');
+          });
         }, { signal: themeAbort!.signal });
       }
       initThemeToggle();
+
+      // Scroll-reveal: cards and section headers drift in as they enter the viewport.
+      // Classes are only added here, so content stays visible without JS.
+      let revealObserver: IntersectionObserver | null = null;
+
+      function initReveal() {
+        if (!('IntersectionObserver' in window)) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+        document.documentElement.classList.add('js-reveal');
+        revealObserver?.disconnect();
+        revealObserver = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('revealed');
+              revealObserver?.unobserve(entry.target);
+            }
+          }
+        }, { threshold: 0.1, rootMargin: '0px 0px -8% 0px' });
+
+        const targets = document.querySelectorAll('.grid > *, .related-grid > *, .link-card, .section-title, .section-description');
+        let index = 0;
+        targets.forEach((el) => {
+          if (el.classList.contains('revealed')) return;
+          (el as HTMLElement).style.setProperty('--reveal-delay', `${(index++ % 5) * 70}ms`);
+          el.classList.add('reveal');
+          revealObserver?.observe(el);
+        });
+      }
+      initReveal();
+
+      // Cursor spotlight: cards glow where the pointer is (document-level, survives swaps)
+      document.addEventListener('pointermove', (e) => {
+        const target = e.target as Element | null;
+        const card = target?.closest?.('.card, .link-card');
+        if (!(card instanceof HTMLElement)) return;
+        const rect = card.getBoundingClientRect();
+        card.style.setProperty('--glow-x', `${e.clientX - rect.left}px`);
+        card.style.setProperty('--glow-y', `${e.clientY - rect.top}px`);
+      }, { passive: true });
+
+      // Easter egg: type "magic" anywhere for a little sparkle shower ✨
+      const magicWord = 'magic';
+      let magicProgress = 0;
+
+      document.addEventListener('keydown', (e) => {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+        const key = e.key.length === 1 ? e.key.toLowerCase() : '';
+        magicProgress = key === magicWord[magicProgress] ? magicProgress + 1 : (key === magicWord[0] ? 1 : 0);
+        if (magicProgress === magicWord.length) {
+          magicProgress = 0;
+          castSparkles();
+        }
+      });
+
+      function castSparkles() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const field = document.createElement('div');
+        field.className = 'sparkle-field';
+        field.setAttribute('aria-hidden', 'true');
+        const glyphs = ['✨', '⭐', '🌟', '💫'];
+        for (let i = 0; i < 36; i++) {
+          const sparkle = document.createElement('span');
+          sparkle.className = 'sparkle';
+          sparkle.textContent = glyphs[Math.floor(Math.random() * glyphs.length)];
+          sparkle.style.cssText = `
+            left: ${Math.random() * 100}%;
+            top: ${20 + Math.random() * 80}%;
+            font-size: ${0.6 + Math.random() * 1.4}rem;
+            animation-delay: ${Math.random() * 0.8}s;
+            --sparkle-duration: ${1 + Math.random() * 1.2}s;
+          `;
+          field.appendChild(sparkle);
+        }
+        document.body.appendChild(field);
+        setTimeout(() => field.remove(), 2600);
+      }
+
+      // A hint for fellow explorers of the console
+      // eslint-disable-next-line no-console
+      console.log(
+        '%c✨ Curious, are we? %c\n\nTry typing "magic" anywhere on the page…\nor the old classic: ↑ ↑ ↓ ↓ ← → ← → B A',
+        'font-size: 1.2em; font-weight: bold; color: #8b5cf6;',
+        'color: #3b82f6;'
+      );
 
       document.addEventListener('astro:after-swap', () => {
         const theme = localStorage.getItem('theme');
@@ -325,6 +440,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
         initMenuToggle();
         initLogoEasterEgg();
         initKonamiClose();
+        initReveal();
       });
     </script>
   </body>
@@ -381,11 +497,37 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     color: var(--color-text-muted);
     font-weight: 500;
     transition: color 0.2s ease;
+    position: relative;
+  }
+
+  .nav-links a::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--gradient-magic);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s ease;
   }
 
   .nav-links a:hover,
   .nav-links a[aria-current="page"] {
     color: var(--color-text);
+  }
+
+  .nav-links a:hover::after,
+  .nav-links a[aria-current="page"]::after {
+    transform: scaleX(1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav-links a::after {
+      transition: none;
+    }
   }
 
   .nav-actions {

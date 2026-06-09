@@ -43,6 +43,22 @@ import '../styles/global.css';
     line-height: 1;
     margin-bottom: var(--space-md);
     color: var(--color-text-muted);
+    background: var(--gradient-magic);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: error-float 3s ease-in-out infinite;
+  }
+
+  @keyframes error-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .error-code {
+      animation: none;
+    }
   }
 
   .error-message {

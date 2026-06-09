@@ -30,9 +30,12 @@ The findings below were either fixed in the accompanying commit or accepted with
    keeps pinned SHAs updated.
 
 2. **Added HTTP security headers to `vercel.json`**: `Strict-Transport-Security`,
-   `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, and
-   `Permissions-Policy`. These apply to the Vercel mirror; see "accepted risks"
-   for the GitHub Pages caveat.
+   `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`,
+   `Permissions-Policy`, and a full `Content-Security-Policy` header (including
+   `frame-ancestors 'none'`, which only works as a header). These apply to the
+   Vercel mirror; see "accepted risks" for the GitHub Pages caveat. The meta CSP
+   in `Layout.astro` remains as the protection for GitHub Pages, which cannot
+   set response headers.
 
 3. **Hardened the meta CSP** in `src/layouts/Layout.astro` with
    `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and

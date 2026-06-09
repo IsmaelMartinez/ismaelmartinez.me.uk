@@ -6,21 +6,18 @@ Designed in `docs/plans/2026-02-27-observability-series-design.md` and now live 
 
 ## Drafted: AI-Assisted Open Source series
 
-A three-article trilingual series under `src/content/articles/{en,es,cat}/ai-assisted-open-source-*.mdx`:
+The public-facing series is two articles about teams-for-linux, both trilingual under `src/content/articles/{en,es,cat}/ai-assisted-open-source-*.mdx`: `maintenance` (the why) and `workflow` (the how of the day to day). The pair is framed as a pair, with no "first of three" signpost and no promise of a third piece.
 
-- `maintenance` — What Changes and What Doesn't. Already on `main` (the refined version with concrete teams-for-linux figures), still `draft: true`.
-- `workflow` — The Workflow. Consolidated onto `main` via the series-consolidation PR.
-- `cadences` — Cadences and Signals. Consolidated onto `main` via the series-consolidation PR.
+A third article, `ai-assisted-open-source-bot-to-skill`, tells the story of the issue-triage bot that grew complex and got deliberately torn down to a skill plus embeddings (shadow-repo approval gate, Cloud Run cold-start latency, Electron-side false positives, and the community pushback against a bot replying on the main repo, all leading back to a human-in-control skill; the surviving piece is the issue-history embeddings, now moving toward living locally inside teams-for-linux). It exists as a held-back draft (Spanish first, at `es/ai-assisted-open-source-bot-to-skill.mdx`), deliberately not advertised from articles 1 or 2. It may or may not ship; it is not being sold as coming.
 
-All three remain `draft: true`. Publishing (flip to `draft: false`, confirm `publishedDate`, verify build/RSS/tag-pages/link-checker) is the next step now that the site is live on its own domain and analytics are flowing.
+`cadences` (Cadences and Signals) leaves the series to become a standalone portfolio piece, since most of its examples are not teams-for-linux. Its in-body series framing has now been decoupled: the "first/second/third" opener is standalone, the "Article 2" reference is gone, and the `maintenance` opener frames the remaining articles as a pair rather than a trilogy.
 
-This series previously lived across three overlapping PRs (#45, #92, #40); they were consolidated into a single branch cut from current `main` so `maintenance.mdx` keeps its refined copy rather than being reverted by a stale branch.
+Everything here remains `draft: true`. Publishing the pair (flip to `draft: false`, confirm `publishedDate`, verify build/RSS/tag-pages/link-checker) is the next step. History: this material previously lived across three overlapping PRs (#45, #92, #40), consolidated into a single branch cut from current `main` so `maintenance.mdx` keeps its refined copy rather than being reverted by a stale branch.
 
 ## Backlog: future standalone articles
 
 Salvaged from the closed, English-only PR #40 so the ideas are not lost. Each needs the prose finishing, concrete examples, and es/cat translations before it ships:
 
-- Standardising Issue Triage with AI — the GitHub Issue Triage Bot: a multi-phase pipeline using vector search for duplicate detection, with safety layers and human oversight by design. Proposes actions without executing them, working inside a shadow repository.
 - Vibe Coding an Allotment App — building Bonnie Wee Plot, a Next.js gardening tool for Scottish weather, by letting AI handle implementation while steering direction. A reflection on where vibe coding works and where it doesn't.
 
 The third draft from #40, "Observability for Agentic Systems", was dropped: it is superseded by the shipped observability series above, and its worked example (the triage bot) is better served by the dedicated triage article.

@@ -8,30 +8,30 @@ draft: true
 
 ## From One Project to Several
 
-The [first article](/en/articles/ai-assisted-open-source-maintenance) asked what AI changes about maintaining an open-source project, through the lens of one 7-year codebase. The [second](/en/articles/ai-assisted-open-source-workflow) was the workflow that keeps it going. Both stayed inside a single long-lived cadence. This one steps out of that frame: AI assistance makes running several projects in parallel, at different speeds, actually feasible, and that changes what the workflow has to handle.
+Maintaining one open-source project well is a steady, long-lived cadence: a single codebase, a single rhythm. Running several at once is a different problem. AI assistance makes it feasible to keep several projects moving in parallel, at different speeds, and that changes what the workflow has to handle, because no single cadence fits them all.
 
 ## Four Cadences
 
 [teams-for-linux](https://github.com/IsmaelMartinez/teams-for-linux) is the long-lived one: seven years of history, hundreds of thousands of active users, the full harness.
 
-[bonnie-wee-plot](https://github.com/IsmaelMartinez/bonnie-wee-plot) is seasonal, a Scottish allotment app where the features that matter in March (sowing windows) are different from the ones that matter in August (harvest, blight watch). The codebase grows in chapters, with the gardening year telling it what to build next.
+[bonnie-wee-plot](https://github.com/IsmaelMartinez/bonnie-wee-plot) is seasonal, a Scottish allotment app where the features that matter in March (sowing windows) aren't the ones that matter in August (harvest, blight watch). The codebase grows in chapters, and it's the gardening year that decides what to build next.
 
-[votescot](https://github.com/IsmaelMartinez/votescot) is ephemeral, an open-source vote compass built for the 2026 Scottish Parliament election. The relevance window is narrow; the code has to be solid for the duration, but the lifecycle has a built-in end.
+[votescot](https://github.com/IsmaelMartinez/votescot) is ephemeral, an open-source vote compass built for the 2026 Scottish Parliament election. The relevance window is narrow: the code has to be solid for as long as it lasts, but the lifecycle comes with a built-in end.
 
-[wifisentinel](https://github.com/IsmaelMartinez/wifisentinel) is reactive, built quickly because a specific situation needed it (a dodgy Amsterdam Airbnb where I wanted to know what was actually on the network). What started as a one-off grew into a real toolkit once the original problem was solved.
+[wifisentinel](https://github.com/IsmaelMartinez/wifisentinel) is reactive, built quickly because a specific situation needed it (a dodgy Amsterdam Airbnb where I wanted to know what was actually on the network). What started as a one-off grew into a full toolkit once the original problem was solved.
 
 ## Match the Harness to the Cadence
 
-The full harness from Article 2 is right for a 7-year project and wrong for a 1-month vote compass. Maximum process on an ephemeral codebase is overhead masquerading as rigour. But "less harness" isn't "no harness": votescot still has CI, linting, and manual review on every diff. The standards that protect users from broken behaviour apply at every cadence; the ones that protect a long-lived codebase against future-self confusion don't apply when there's no future-self to confuse. The discipline is sizing the harness to the lifecycle, not applying maximum ceremony everywhere.
+The full harness is right for a seven-year project and excessive for a one-month vote compass. Putting the whole process on an ephemeral codebase is bureaucracy dressed up as rigour. But "less harness" isn't "no harness": votescot still has CI, a linter, and manual review on every diff. The standards that protect users from something breaking apply at every cadence; the ones that protect a long-lived codebase from future-self confusion aren't needed when there's no future self to confuse. The discipline is in sizing the harness to the lifecycle, not in applying maximum ceremony everywhere.
 
 ## The Death Star Is Still Real
 
-Bugs hide in complexity. AI doesn't repeal that rule; it makes it more pressing. When the cost of writing code drops, only the writing cost drops, not the reading, debugging, or retirement cost. The temptation to keep adding is greater than ever, which means saying "no, that's a Death Star" matters more, not less. Across cadences it shows up differently. "Ten years of maintenance" on a long-lived project, "too clever for six weeks" on an ephemeral one. But it's the same reminder.
+Bugs hide in complexity. AI doesn't override that rule; it makes it more pressing. When the cost of writing code drops, only the writing cost drops, not the reading, debugging, or retirement cost. The temptation to keep adding is greater than ever, so saying "no, that's a Death Star" matters more, not less. It shows up differently at each cadence: "ten years of maintenance" on a long-lived project, "too clever for six weeks" on an ephemeral one. But it's the same reminder.
 
 ## Signals Are the Constraint
 
-With AI assistance and right-sized harness, the bottleneck shifts. It's no longer how much code you can ship; that's solved. It's whether you can tell, in time, when something has gone wrong. Tests are signal. CI is signal. Manual review is signal. ADRs are signal about decisions. The harness exists to produce signal; the workflow exists to act on it. The journey is the same loop [the workflow piece](/en/articles/ai-assisted-open-source-workflow) described: trust built from data, hardness added over time, anything that stops earning its place taken back out. AI just accelerates the cycles, so signal quality has to keep up. Skimping on it is what turns AI-assisted productivity into AI-amplified mess.
+With AI assistance and a right-sized harness, the bottleneck shifts. It's no longer how much code you can ship; that's solved. It's whether you can tell, in time, when something has gone wrong. Tests are a signal, and so are CI, manual review, and the ADRs. The harness exists to produce signal, and the workflow exists to act on it. It's the same loop [the workflow piece](/en/articles/ai-assisted-open-source-workflow) described: you build trust from data, add hardness over time, and take back out whatever stops earning its place. AI just accelerates the cycles, so signal quality has to keep up. And if you skimp there, AI stops amplifying your productivity and starts amplifying the chaos.
 
 ## Closing Thought
 
-Same discipline, very different lifecycles. The harness bends, the cadence dictates the shape, and signals become the thing you optimise for. The journey isn't finished. The cadence taxonomy will need new categories, and the Death Star will keep being a temptation. What changes is how fast you can move through the cycles, and whether your signal quality keeps up with your speed.
+Same discipline, very different lifecycles. The harness bends, the cadence dictates the shape, and signals become the thing you optimise for. This isn't settled: new cadences will probably show up that don't fit these four, and the Death Star will keep being a temptation. What changes is how fast you move through the cycles, and whether your signal quality keeps up with your speed.

@@ -1,6 +1,6 @@
 ---
 title: "Código abierto asistido por IA: cadencias y señales"
-description: "Qué cambia cuando ejecutas varios proyectos a distintas velocidades: vida larga, estacional, efímero, reactivo. La disciplina es la misma; las restricciones tienen que doblarse con el ciclo de vida, y las señales se convierten en la verdadera limitación."
+description: "Qué cambia cuando llevas varios proyectos a distintas velocidades: vida larga, estacional, efímero, reactivo. La disciplina es la misma; las restricciones tienen que doblarse con el ciclo de vida, y las señales se convierten en la verdadera limitación."
 publishedDate: 2026-03-18
 tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux", "Votescot", "Wifisentinel"]
 draft: true
@@ -8,30 +8,30 @@ draft: true
 
 ## De un proyecto a varios
 
-El [primer artículo](/es/articles/ai-assisted-open-source-maintenance) preguntó qué cambia la IA al mantener un proyecto open source, a través del lente de un código de 7 años. El [segundo](/es/articles/ai-assisted-open-source-workflow) fue el flujo de trabajo que lo mantiene en marcha. Ambos se quedaron dentro de una sola cadencia de vida larga. Este sale de ese marco: la asistencia de IA hace que ejecutar varios proyectos en paralelo, a distintas velocidades, sea realmente factible, y eso cambia lo que el flujo de trabajo tiene que manejar.
+Mantener bien un proyecto de código abierto es una cadencia estable y de vida larga: un solo código, un solo ritmo. Llevar varios a la vez es un problema distinto. La asistencia de IA hace factible mantener varios proyectos en marcha en paralelo, a distintas velocidades, y eso cambia lo que el flujo de trabajo tiene que manejar, porque ninguna cadencia única les sirve a todos.
 
 ## Cuatro cadencias
 
 [teams-for-linux](https://github.com/IsmaelMartinez/teams-for-linux) es el de vida larga: siete años de historia, cientos de miles de usuarios activos, todas las restricciones.
 
-[bonnie-wee-plot](https://github.com/IsmaelMartinez/bonnie-wee-plot) es estacional, una app escocesa de huerto donde las funcionalidades que importan en marzo (ventanas de siembra) son distintas de las que importan en agosto (cosecha, vigilancia de tizón). El código crece en capítulos, con el año hortícola diciéndole qué construir a continuación.
+[bonnie-wee-plot](https://github.com/IsmaelMartinez/bonnie-wee-plot) es estacional, una aplicación escocesa de huerto donde las funcionalidades que importan en marzo (ventanas de siembra) no son las que importan en agosto (cosecha, vigilancia del tizón). El código crece por capítulos, y es el año hortícola el que dicta qué toca construir a continuación.
 
-[votescot](https://github.com/IsmaelMartinez/votescot) es efímero, una brújula de voto open source construida para las elecciones del Parlamento Escocés de 2026. La ventana de relevancia es estrecha; el código tiene que ser sólido durante toda su duración, pero el ciclo de vida tiene un final incorporado.
+[votescot](https://github.com/IsmaelMartinez/votescot) es efímero, una brújula de voto de código abierto construida para las elecciones del Parlamento Escocés de 2026. La ventana de relevancia es estrecha: el código tiene que ser sólido mientras dura, pero el ciclo de vida trae su final de fábrica.
 
-[wifisentinel](https://github.com/IsmaelMartinez/wifisentinel) es reactivo, construido rápidamente porque una situación específica lo necesitaba (un Airbnb sospechoso en Ámsterdam donde quería saber qué había realmente en la red). Lo que empezó como una herramienta puntual creció hasta convertirse en un kit completo una vez que el problema original se resolvió.
+[wifisentinel](https://github.com/IsmaelMartinez/wifisentinel) es reactivo, construido deprisa porque una situación concreta lo pedía (un Airbnb sospechoso en Ámsterdam donde quería saber qué había de verdad en la red). Lo que empezó como una herramienta puntual creció hasta convertirse en un kit completo, una vez resuelto el problema original.
 
 ## Ajusta las restricciones a la cadencia
 
-Las restricciones completas del Artículo 2 son adecuadas para un proyecto de 7 años y equivocadas para una brújula de voto de un mes. Proceso máximo en un código efímero es sobrecarga disfrazada de rigor. Pero "menos restricciones" no es "ninguna restricción": votescot sigue teniendo CI, linting y revisión manual en cada diff. Los estándares que protegen a los usuarios de un comportamiento roto se aplican en cada cadencia; los que protegen un código de vida larga contra la confusión del yo futuro no se aplican cuando no hay yo futuro al que confundir. La disciplina es ajustar las restricciones al ciclo de vida, no aplicar ceremonia máxima en todas partes.
+Las restricciones completas son adecuadas para un proyecto de siete años y excesivas para una brújula de voto de un mes. Meterle todo el proceso a un código efímero es burocracia disfrazada de rigor. Pero "menos restricciones" no es "ninguna restricción": votescot sigue teniendo CI, linter y revisión manual de cada diff. Los estándares que protegen al usuario de que algo se rompa se aplican en todas las cadencias; los que protegen un código de vida larga de la confusión del yo futuro no hacen falta cuando no hay yo futuro al que confundir. La disciplina está en ajustar las restricciones al ciclo de vida, no en aplicar la ceremonia máxima en todo.
 
 ## La Estrella de la Muerte sigue siendo real
 
-Los bugs se esconden en la complejidad. La IA no deroga esa regla; la hace más urgente. Cuando el coste de escribir código baja, solo baja el coste de escribir, no el de leer, el de depurar ni el de retirar. La tentación de seguir añadiendo es mayor que nunca, lo que significa que decir "no, eso es una Estrella de la Muerte" importa más, no menos. En cada cadencia se manifiesta de forma distinta. "Diez años de mantenimiento" en un proyecto de vida larga, "demasiado astuto para seis semanas" en uno efímero. Pero es el mismo recordatorio.
+Los errores se esconden en la complejidad. La IA no anula esa regla; la hace más urgente. Cuando el coste de escribir código baja, solo baja el de escribir, no el de leer, depurar o retirar. La tentación de seguir añadiendo es mayor que nunca, así que decir "no, eso es una Estrella de la Muerte" importa más, no menos. En cada cadencia se manifiesta distinto: "diez años de mantenimiento" en un proyecto de vida larga, "demasiado listo para seis semanas" en uno efímero. Pero es el mismo recordatorio.
 
 ## Las señales son la limitación
 
-Con asistencia de IA y restricciones del tamaño adecuado, el cuello de botella se desplaza. Ya no es cuánto código puedes lanzar; eso está resuelto. Es si puedes detectar, a tiempo, cuándo algo ha ido mal. Los tests son señal. CI es señal. La revisión manual es señal. Los ADRs son señal sobre decisiones. Las restricciones existen para producir señal; el flujo de trabajo existe para actuar sobre ella. El viaje es el mismo bucle que describió [el artículo del flujo de trabajo](/es/articles/ai-assisted-open-source-workflow): confianza construida con datos, solidez añadida con el tiempo, todo lo que deja de ganarse su sitio retirado de nuevo. La IA solo acelera los ciclos, así que la calidad de la señal tiene que seguirles el ritmo. Escatimar en eso es lo que convierte la productividad asistida por IA en un caos amplificado por IA.
+Con asistencia de IA y las restricciones del tamaño adecuado, el cuello de botella se desplaza. Ya no es cuánto código puedes publicar; eso está resuelto. Es si puedes detectar a tiempo cuándo algo ha ido mal. Los tests son una señal, igual que el CI, la revisión manual o los ADRs. Las restricciones existen para producir señal, y el flujo de trabajo existe para actuar sobre ella. Es el mismo bucle que describía [el artículo del flujo de trabajo](/es/articles/ai-assisted-open-source-workflow): construyes confianza con datos, añades solidez con el tiempo y retiras lo que deja de ganarse su sitio. La IA solo acelera los ciclos, así que la calidad de la señal tiene que seguirles el ritmo. Y si escatimas ahí, la IA deja de amplificar tu productividad y empieza a amplificar el caos.
 
 ## Reflexión final
 
-Misma disciplina, ciclos de vida muy diferentes. Las restricciones se doblan, la cadencia dicta la forma, y las señales se convierten en aquello que optimizas. El viaje no está terminado. La taxonomía de cadencias necesitará nuevas categorías, y la Estrella de la Muerte seguirá siendo una tentación. Lo que cambia es lo rápido que puedes moverte por los ciclos, y si tu calidad de señal sigue el ritmo de tu velocidad.
+Misma disciplina, ciclos de vida muy distintos. Las restricciones se doblan, la cadencia dicta la forma y las señales se convierten en lo que optimizas. Esto no está cerrado: seguramente aparezcan cadencias nuevas que no encajen en estas cuatro, y la Estrella de la Muerte seguirá siendo una tentación. Lo que cambia es lo rápido que te mueves por los ciclos, y si la calidad de tu señal sigue el ritmo de tu velocidad.

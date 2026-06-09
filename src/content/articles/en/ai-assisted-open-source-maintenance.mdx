@@ -8,17 +8,17 @@ draft: true
 
 ## Seven Years and Still Growing
 
-teams-for-linux started in 2018. Microsoft had no Linux client and the web app didn't even deliver notifications, which made it fairly useless as a chat app, so I revived an Electron wrapper to scratch my own itch. I didn't expect much beyond that. It's now closing in on 5,000 stars, with 344 forks and 116 people who have landed a commit. I've never met almost any of them.
+teams-for-linux started in 2018. Microsoft had no Linux client and the web app didn't even deliver notifications, which made it fairly useless as a chat app, so I revived an Electron wrapper to scratch my own itch. I didn't expect much beyond that, but the community pushed me to keep maintaining it. It's now closing in on 5,000 stars, 350 forks, and more than 100 people who have landed a commit.
 
-That contributor number still catches me off guard. People I've never spoken to turn up with a fix, a sharp bug report, or a PR for a setup I don't even run. Every now and then a donation arrives from someone I didn't know was using it. Seven years in, that's still how open source works, and none of it is changing because of AI.
+That contributor number still catches me off guard. People I've never spoken to turn up with a fix, a bug report, or a PR adding new features. Every now and then a donation arrives from someone who didn't know they were using it, always welcome. Seven years in, that's still how open source works, and the little AI has changed is that some of those contributions now come with AI help, and some people use it better than others, but we're all learning.
 
-What AI changed is whether one person can keep up with a project this size. Adopting it wasn't the origin story. The code, the architecture, and the hard-won decisions predate the tools by years; AI was simply the choice that lets me stay on top of the demands without burning out. The rest of this article is what that looks like in practice: what it accelerates, what it can't touch, and why there's a CLAUDE.md file in the repo. It's the first of three: this one is the why, [the next](/en/articles/ai-assisted-open-source-workflow) is the day-to-day how, and [the third](/en/articles/ai-assisted-open-source-cadences) is what changes when you run several projects at once, at different speeds.
+What AI changed is whether one person can keep up with a project this size. Adopting it wasn't the origin story. The code, the architecture, and the hard-won decisions predate the tools by years; AI was simply the choice that lets me stay on top of the demands without burning out. The rest of this article is what that looks like in practice: what it accelerates, what it can't touch, and why there's a CLAUDE.md file in the repo. It's one of a pair: this one is the why, and [the next](/en/articles/ai-assisted-open-source-workflow) is the day-to-day how.
 
 ## What CLAUDE.md Actually Is
 
 When people spot the CLAUDE.md file in the repository, some assume it means the project is AI-authored. That's a misunderstanding of what the file does.
 
-CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, module boundaries, and critical invariants, like initialisation requirements and other things that get broken again and again.
+CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, how things are structured, how I like to work with the code, requirements, and other things that get broken again and again. Basically, what I'd normally keep in my head, and the bits that are the way they are for one reason or another.
 
 The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. CLAUDE.md makes them explicit. It's not a sign of AI authorship. It's a sign of AI discipline.
 
@@ -28,15 +28,15 @@ The tasks AI handles well are the ones that would otherwise burn out a solo main
 
 Implementation of well-understood features is the obvious one. Once I've decided what to build and how it should work, the actual coding (the mechanical translation of intent into code) goes faster with AI assistance. Boilerplate, test scaffolding, and documentation updates fall into the same category. They're necessary work, but they don't require creative judgement.
 
-Dependency upgrades and security patch responses are where the time savings really add up. The npm ecosystem pushes security advisories multiple times a week. Each one needs evaluation, patching, testing, and release. Without tooling, that alone can consume most of a maintainer's available hours.
+Dependency upgrades and security patches are where the time savings really add up. The npm ecosystem pushes advisories multiple times a week, and handling each one by hand can eat most of a maintainer's hours.
 
 Exploring unfamiliar APIs is another area where AI shines. Electron's API surface is vast, Wayland has its own quirks, and Linux in general never stops surprising you. Having a tool that can quickly surface relevant documentation and usage patterns cuts the exploration time significantly.
 
-It helps with other kinds of exploration too, like the bot I built (now retired) that helped me work through old issues, classify them, and basically give the app's users a better answer.
+It helps with other kinds of exploration too, like working through old issues, classifying and sorting them. Basically, giving whoever uses the app a better and faster answer, which is what it's all about in the end.
 
 ## What AI Cannot Replace
 
-The hard work of maintaining an open-source project is not writing code. It never was.
+The hard work of maintaining an open-source project is not writing code. It rarely was.
 
 Deciding what to build and what not to build requires understanding the project's direction, the community's needs, and the trade-offs of every addition. AI has no opinion on this. It will happily build whatever you ask for, whether the project needs it or not.
 
@@ -44,11 +44,9 @@ Community management is entirely human work. When users started pushing back on 
 
 Architectural decisions sit in the same category. When to refactor versus when to patch. Where to draw module boundaries. How much backwards compatibility to maintain and when to break it. These choices shape the project for years and can't be delegated to a tool that optimises for the immediate task.
 
-Release judgement is more nuanced than it sounds. Is this build ready? Should I batch more fixes first? Is the Wayland fix stable enough to ship, or does it need another week of testing? These decisions require context that no tool has access to.
+Release judgement is more nuanced than it sounds. Is this build ready? Should I batch more fixes first? Is the Wayland fix stable enough to ship, or does it need another week of testing? These decisions require context that no tool has access to. Sometimes it's a gut feeling that's hard to explain.
 
-Understanding upstream changes is a constant challenge. The Teams web app changes without notice, and defensive coding against those changes requires deep domain knowledge about what Microsoft is likely to do and how their platform evolves. AI doesn't know what Microsoft shipped last Tuesday; sometimes I'm not sure they do either.
-
-And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a popular project, and it's entirely a human skill.
+And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a project, and it's entirely a human skill. AI will try everything, everything, everything to help the user, but sometimes saying no beats spending weeks digging a tunnel with no way out.
 
 ## Solo Maintainer Reality
 
@@ -56,19 +54,19 @@ teams-for-linux is a single-maintainer project with hundreds of thousands of dai
 
 Without AI tooling, the maths doesn't work. Responding to issues takes longer. Releases happen less frequently. Security patches sit in the queue. Eventually the backlog grows faster than one person can address it, and the project gets abandoned. That's not hypothetical; it's the default outcome for popular single-maintainer projects.
 
-With AI tooling, I can keep up with security patches, Electron upgrades, user reports, and still ship new features. The tool handles the mechanical work so I can spend my limited time on the decisions and community interactions that actually require a human.
+With AI tooling, I can keep up. The tool handles the mechanical work so I can spend my limited time on the decisions and community interactions that actually require a human.
 
 The alternative to AI-assisted maintenance isn't "write everything by hand." It's "let issues pile up and eventually walk away." For solo open-source maintainers, AI is a sustainability tool, not a shortcut.
 
 ## The Visible Markers
 
-Every AI-assisted commit in the repository carries a `Co-authored-by` tag. That's transparency, not confession.
+Every AI-assisted commit in the repository carries a `Co-authored-by` tag. It's a decision I made from the start, for transparency, the same as checking the CLAUDE.md file into the repo where anyone can read it.
 
-The CLAUDE.md file is checked into the repo where anyone can read it. I could hide all of this easily. Strip the co-author tags, remove the configuration file, and nobody would know. I chose not to because being open about tooling is the right thing to do.
+I could hide all of this easily. Strip the co-author tags, remove the config file, and people would think I'm some kind of superhuman. I chose not to because being open about tooling is the right thing to do.
 
-The irony is that hiding AI usage is trivially easy and almost certainly widespread. The projects that are transparent about it are the ones getting scrutinised, while projects that hide it face no questions at all. That incentive structure is backwards.
+The irony is that hiding AI use is trivially easy and almost certainly widespread. The projects that are transparent about it are the ones getting scrutinised, while projects that hide it face no questions at all. That incentive structure is backwards.
 
-Transparency about AI usage should be normalised, not penalised.
+Transparency about AI use should be normalised, not penalised, because it's been the present for a while now.
 
 ## Closing Thought
 
@@ -76,4 +74,4 @@ The interesting question isn't "did AI write this code?"
 
 It's whether the project works, whether it's maintained, and whether users are served well. By those measures, AI tooling is doing exactly what it should: keeping a useful project alive and responsive when the alternative is slow decay.
 
-In [The AI Automation Trap](/en/articles/the-ai-automation-trap), I wrote about how AI removed the building constraint but didn't remove the deciding constraint. This project is the lived example. AI handles the building. The deciding, the maintaining, and the caring about users is still entirely human. And I doubt AI will ever replace that.
+In [The AI Automation Trap](/en/articles/the-ai-automation-trap), I wrote about how AI removed the building constraint but didn't remove the deciding constraint. This project is a living example. AI handles the building. The deciding, the maintaining, and the caring about users is still entirely human. And I doubt that, for now, it could be replaced by AI without losing a good part of the humanity it carries.

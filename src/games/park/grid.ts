@@ -2,6 +2,7 @@
  * Pixel Park grid model: tile types, building catalogue, and placement rules.
  * The park is a flat W×H grid stored as a flat array; index = y * GRID_W + x.
  */
+import { gridNeighbours } from '../engine/grid2d';
 
 export const GRID_W = 24;
 export const GRID_H = 14;
@@ -65,14 +66,7 @@ export function createPark(): { tiles: TileType[]; entrance: number } {
 }
 
 export function neighbours(i: number): number[] {
-  const x = i % GRID_W;
-  const y = Math.floor(i / GRID_W);
-  const out: number[] = [];
-  if (x > 0) out.push(i - 1);
-  if (x < GRID_W - 1) out.push(i + 1);
-  if (y > 0) out.push(i - GRID_W);
-  if (y < GRID_H - 1) out.push(i + GRID_W);
-  return out;
+  return gridNeighbours(i, GRID_W, GRID_H);
 }
 
 /**

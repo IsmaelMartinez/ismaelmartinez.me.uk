@@ -32,7 +32,7 @@ Articles follow POSSE (Publish Own Site, Syndicate Elsewhere) strategy per ADR 0
 
 ### Arcade games
 
-Arcade pages live under `src/pages/[lang]/fun/`. Newer games (Tank Duel, Pixel Park) split pure game logic into DOM-free TypeScript modules under `src/games/<game>/` (unit-tested in `tests/games/`) with a single `init<Game>()` entry the page calls; shared utilities (fixed-timestep loop, localStorage scores) live in `src/games/engine/`. Static labels render server-side via `useTranslations`; runtime-composed strings pass through `data-t-*` attributes on the game root. New games register a cabinet in `src/pages/[lang]/fun/index.astro`. Designs for the next games (Lemmings, SimCity) are in `docs/plans/2026-06-10-arcade-expansion-design.md`.
+Arcade pages live under `src/pages/[lang]/fun/`. Newer games (Tank Duel, Pixel Park, Microcity) split pure game logic into DOM-free TypeScript modules under `src/games/<game>/` (unit-tested in `tests/games/`) with a single `init<Game>()` entry the page calls; shared utilities (fixed-timestep loop, localStorage scores, grid helpers) live in `src/games/engine/`. Static labels render server-side via `useTranslations`; runtime-composed strings pass through `data-t-*` attributes on the game root. New games register a cabinet in `src/pages/[lang]/fun/index.astro`. The design for the next game (Lemmings) is in `docs/plans/2026-06-10-arcade-expansion-design.md`.
 
 ### Layouts and Components
 

@@ -1,7 +1,7 @@
 # Arcade Expansion: Shared Engine + New Games
 
 Date: 2026-06-10
-Status: Tank Duel and Pixel Park shipped; Lemmings and SimCity designed but not built.
+Status: Tank Duel, Pixel Park, and Microcity shipped; Lemmings designed but not built.
 
 ## Context
 
@@ -153,37 +153,39 @@ building, and there is no inspect panel — feedback comes from toasts and the
 HUD. Bulldozing a path is blocked while a guest is standing on it; any guest
 routes invalidated by a grid edit are recomputed.
 
-## Designed: SimCity-lite — "Microcity"
+## Shipped: Microcity (`/fun/city`)
 
-**Goal.** Classic RCI zoning: lay roads, zone residential/commercial/
-industrial, manage budget, watch the city grow.
+Classic RCI zoning: lay roads, zone residential/commercial/industrial,
+manage the budget, watch the city grow.
 
-**Shared base with Pixel Park.** Both are grid-placement sims with an economy
-tick, BFS reachability, and a build palette. Pixel Park shipped first and
-self-contained; when Microcity starts, extract the common parts of
-`src/games/park/` into `src/games/engine/grid-sim/` (grid model + renderer,
-tile picking, tick scheduler, BFS) and build both games on it.
+**Shared base with Pixel Park.** Both are grid-placement sims. Rather than the
+full `grid-sim` extraction originally sketched, the genuinely shared pieces
+(`gridNeighbours`, `chebyshev`) moved into `src/games/engine/grid2d.ts` and
+both games consume them; the rest (renderers, tick scheduling) stayed
+per-game because the two sims diverged more than expected (agents vs. cellular
+growth). Revisit a deeper extraction if a third grid sim appears.
 
-**Mechanics sketch.**
-- Zones develop only when road-connected and powered; demand for R/C/I is a
-  simple coupled function (residents need jobs → C/I demand; businesses need
-  customers/workers → R demand).
-- Buildings level up (3 tiers per zone) when demand, land value, and services
-  allow. Land value from proximity to water/parks, lowered by industry.
-- Services: power plant (radius-free, capacity-based), police/fire/park
-  (radius-based coverage boosting value).
-- Budget: per-tier tax income minus service upkeep per tick; deficit drains
-  treasury → service shutdown → decay spiral.
-- Score: population, persisted as high score.
+**Mechanics as shipped.**
+- Zones develop (3 levels, emoji scaled by level) only when powered (within
+  Chebyshev radius 7 of a plant) and road-adjacent; unserviced developed
+  zones decay with a ⚠️ flash.
+- Coupled RCI demand: jobs attract residents, population drives shop and
+  industry demand; shown as R/C/I meter bars. A +16 base residential demand
+  bootstraps new cities.
+- Top-level residential additionally requires a park within radius 3
+  (the land-value gate, simplified).
+- Budget: monthly taxes (per resident + per job) minus upkeep (roads, power,
+  parks); treasury below zero ends the game.
+- Score: peak population, persisted live as `city-record-pop`.
 
-**Structure.** `src/games/city/{zones.ts, demand.ts, services.ts, game.ts}`
-on top of `engine/grid-sim/`.
+**Structure.** `src/games/city/{tiles.ts, simulation.ts, budget.ts, game.ts}`
+— everything except `game.ts` pure and unit-tested (`tests/games/city.test.ts`).
 
 ## Suggested build order
 
 1. ~~Tank Duel~~ (shipped)
 2. ~~Pixel Park~~ (shipped)
-3. Microcity — extract grid-sim from Pixel Park, then mostly new rules
+3. ~~Microcity~~ (shipped)
 4. Critter Rescue — biggest standalone effort; needs level design time
 
 Each game lands the same way Tanks did: pure modules + tests, page under

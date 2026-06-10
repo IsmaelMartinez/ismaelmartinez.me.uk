@@ -1,7 +1,7 @@
 # Arcade Expansion: Shared Engine + New Games
 
 Date: 2026-06-10
-Status: Tank Duel shipped; Lemmings, Theme Park, and SimCity designed but not built.
+Status: Tank Duel and Pixel Park shipped; Lemmings and SimCity designed but not built.
 
 ## Context
 
@@ -116,9 +116,9 @@ per-tick) and `engine/storage.ts` (highest level reached).
 **Scope estimate.** The hardest of the three remaining games: FSM + bitmap
 terrain + ~6 hand-tuned levels. Roughly 2× the Tanks effort.
 
-## Designed: Theme Park sim — "Pixel Park"
+## Shipped: Pixel Park (`/fun/park`)
 
-**Goal.** RollerCoaster Tycoon-flavoured management on a small grid: place
+RollerCoaster Tycoon-flavoured management on a small grid: place
 rides, stalls, and paths; keep guests happy; don't go broke.
 
 **World.** Flat top-down grid (~24×16 tiles, drawn as coloured tiles + emoji
@@ -144,7 +144,14 @@ toast. Lose condition: bankruptcy. No win condition — it's a sandbox with a
 speed. Pointer-first design, no keyboard required.
 
 **Structure.** `src/games/park/{grid.ts, pathfind.ts, guests.ts, economy.ts,
-game.ts}` — everything except `game.ts` pure and unit-tested.
+game.ts}` — everything except `game.ts` pure and unit-tested
+(`tests/games/park.test.ts`).
+
+**v1 simplifications** (room to grow): rides occupy a single tile, no queues
+or ride capacity (guests use buildings concurrently), prices are fixed per
+building, and there is no inspect panel — feedback comes from toasts and the
+HUD. Bulldozing a path is blocked while a guest is standing on it; any guest
+routes invalidated by a grid edit are recomputed.
 
 ## Designed: SimCity-lite — "Microcity"
 
@@ -152,12 +159,10 @@ game.ts}` — everything except `game.ts` pure and unit-tested.
 industrial, manage budget, watch the city grow.
 
 **Shared base with Pixel Park.** Both are grid-placement sims with an economy
-tick, BFS reachability, tile inspection, and a build palette. Before building
-the second of the two, extract the common parts into `src/games/engine/grid-sim/`
-(grid model + renderer, tile picking, tick scheduler, BFS). **Recommendation:
-build Pixel Park first** — guest agents are more visible/fun at small scale than
-abstract city growth, and it derisks the grid-sim core that Microcity then
-reuses.
+tick, BFS reachability, and a build palette. Pixel Park shipped first and
+self-contained; when Microcity starts, extract the common parts of
+`src/games/park/` into `src/games/engine/grid-sim/` (grid model + renderer,
+tile picking, tick scheduler, BFS) and build both games on it.
 
 **Mechanics sketch.**
 - Zones develop only when road-connected and powered; demand for R/C/I is a
@@ -177,8 +182,8 @@ on top of `engine/grid-sim/`.
 ## Suggested build order
 
 1. ~~Tank Duel~~ (shipped)
-2. Pixel Park — derisks the grid-sim core
-3. Microcity — reuses grid-sim; mostly new rules, little new plumbing
+2. ~~Pixel Park~~ (shipped)
+3. Microcity — extract grid-sim from Pixel Park, then mostly new rules
 4. Critter Rescue — biggest standalone effort; needs level design time
 
 Each game lands the same way Tanks did: pure modules + tests, page under

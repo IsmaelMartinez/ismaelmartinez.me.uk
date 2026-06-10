@@ -1,0 +1,1 @@
+export { initParkGame } from './game';

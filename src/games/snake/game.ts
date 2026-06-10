@@ -350,7 +350,7 @@ export function initSnakeGame(): void {
 
   // --- Input wiring ---
 
-  const gameKeys = new Set([...Object.keys(KEY_DIRECTIONS), ' ']);
+  const gameKeys = new Set(Object.keys(KEY_DIRECTIONS));
 
   document.addEventListener('keydown', e => {
     if (gameKeys.has(e.key)) e.preventDefault();

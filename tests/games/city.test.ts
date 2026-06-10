@@ -20,6 +20,7 @@ import {
   RESIDENTS_PER_LEVEL
 } from '../../src/games/city/simulation';
 import { monthlyIncome, monthlyExpenses } from '../../src/games/city/budget';
+import { targetCarCount, spawnCar, stepCar } from '../../src/games/city/traffic';
 
 describe('engine grid2d', () => {
   it('respects grid edges for neighbours', () => {
@@ -110,8 +111,10 @@ describe('city simulation', () => {
     build(tiles, 5, 5, 'power');
     build(tiles, 6, 6, 'road');
     build(tiles, 6, 5, 'res');
-    growthStep(tiles, () => 0); // random()=0 < growth probability
+    const result = growthStep(tiles, () => 0); // random()=0 < growth probability
     expect(tiles[cityIdx(6, 5)].level).toBe(1);
+    expect(result.grown).toEqual([cityIdx(6, 5)]);
+    expect(result.decayed).toEqual([]);
   });
 
   it('does not grow zones without road or power', () => {
@@ -160,5 +163,58 @@ describe('city budget', () => {
     build(tiles, 3, 0, 'park');
     build(tiles, 4, 0, 'res');
     expect(monthlyExpenses(tiles)).toBe(1 + 1 + 40 + 3);
+  });
+});
+
+describe('city traffic', () => {
+  function seededRandom(seed = 42): () => number {
+    let state = seed;
+    return () => {
+      state = (state * 1664525 + 1013904223) % 4294967296;
+      return state / 4294967296;
+    };
+  }
+
+  it('scales car count with population, capped', () => {
+    expect(targetCarCount(0)).toBe(0);
+    expect(targetCarCount(80)).toBe(2);
+    expect(targetCarCount(100000)).toBe(14);
+  });
+
+  it('spawns cars only when a drivable road exists', () => {
+    const tiles = createCity();
+    expect(spawnCar(tiles, seededRandom())).toBeNull();
+    build(tiles, 3, 3, 'road');
+    // A single isolated road tile has no exit, so still nothing to drive
+    expect(spawnCar(tiles, seededRandom())).toBeNull();
+    build(tiles, 4, 3, 'road');
+    const car = spawnCar(tiles, seededRandom());
+    expect(car).not.toBeNull();
+    expect(tiles[car!.from].type).toBe('road');
+    expect(tiles[car!.to].type).toBe('road');
+  });
+
+  it('keeps cars on the road network as they wander', () => {
+    const tiles = createCity();
+    for (let x = 2; x <= 8; x++) build(tiles, x, 3, 'road');
+    for (let y = 3; y <= 7; y++) build(tiles, 5, y, 'road');
+    const random = seededRandom(7);
+    const car = spawnCar(tiles, random)!;
+    for (let i = 0; i < 200; i++) {
+      expect(stepCar(tiles, car, 0.1, random)).toBe(true);
+      expect(tiles[car.from].type).toBe('road');
+      expect(tiles[car.to].type).toBe('road');
+      expect(car.progress).toBeGreaterThanOrEqual(0);
+      expect(car.progress).toBeLessThan(1);
+    }
+  });
+
+  it('despawns cars when their road is bulldozed', () => {
+    const tiles = createCity();
+    build(tiles, 3, 3, 'road');
+    build(tiles, 4, 3, 'road');
+    const car = spawnCar(tiles, seededRandom())!;
+    build(tiles, car.to % CITY_W, Math.floor(car.to / CITY_W), 'bulldoze');
+    expect(stepCar(tiles, car, 0.1, seededRandom())).toBe(false);
   });
 });

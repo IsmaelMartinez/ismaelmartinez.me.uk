@@ -68,16 +68,17 @@ export function hasParkNearby(tiles: CityTile[], i: number, radius = 3): boolean
 /**
  * One growth tick. Serviced zones (powered + next to a road) develop while
  * demand for their type is positive; unserviced developed zones decay.
- * Residential needs a park nearby to reach the top level.
+ * Residential needs a park nearby to reach the top level. Returns the tile
+ * indices that changed so the UI can celebrate (or mourn) them.
  */
 export function growthStep(
   tiles: CityTile[],
   random: () => number = Math.random
-): { grown: number; decayed: number } {
+): { grown: number[]; decayed: number[] } {
   const powered = computePowered(tiles);
   const demand = computeDemand(cityStats(tiles));
-  let grown = 0;
-  let decayed = 0;
+  const grown: number[] = [];
+  const decayed: number[] = [];
 
   tiles.forEach((tile, i) => {
     if (!isZone(tile.type)) return;
@@ -85,7 +86,7 @@ export function growthStep(
     if (!serviced) {
       if (tile.level > 0 && random() < 0.08) {
         tile.level--;
-        decayed++;
+        decayed.push(i);
       }
       return;
     }
@@ -93,7 +94,7 @@ export function growthStep(
     if (tile.type === 'res' && tile.level === MAX_LEVEL - 1 && !hasParkNearby(tiles, i)) return;
     if (random() < Math.min(0.45, demand[tile.type] / 70)) {
       tile.level++;
-      grown++;
+      grown.push(i);
     }
   });
 

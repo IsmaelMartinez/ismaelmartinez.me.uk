@@ -31,6 +31,7 @@ import {
 } from './tiles';
 import { computePowered, roadAdjacent, cityStats, computeDemand, growthStep } from './simulation';
 import { monthlyIncome, monthlyExpenses } from './budget';
+import { targetCarCount, spawnCar, stepCar, type Car } from './traffic';
 
 const VIEW: IsoView = { halfW: 20, halfH: 10, originX: CITY_H * 20, originY: 60 };
 const CANVAS_W = (CITY_W + CITY_H) * VIEW.halfW;
@@ -115,12 +116,20 @@ export function initCityGame(): void {
   let speedMult = 1;
   let hoverTile = -1;
   let clock = 0;
+  let cars: Car[] = [];
+  let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
+  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
   let record = loadScore(RECORD_KEY);
   let powered = computePowered(tiles);
   let stats = cityStats(tiles);
   let demand = computeDemand(stats);
 
   recordEl.textContent = record.toString();
+
+  function addFloater(i: number, text: string, color: string) {
+    const p = isoProject(VIEW, (i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.5);
+    floaters.push({ x: p.x, y: p.y - zoneHeight(tiles[i].level) - 8, text, color, life: 1 });
+  }
 
   function showToast(text: string) {
     const toast = document.createElement('div');
@@ -146,6 +155,9 @@ export function initCityGame(): void {
     peakPop = 0;
     milestoneIdx = 0;
     speedMult = 1;
+    cars = [];
+    smoke = [];
+    floaters = [];
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     refreshDerivedState();
     phase = 'play';
@@ -159,15 +171,52 @@ export function initCityGame(): void {
   }
 
   function update(dt: number) {
+    floaters = floaters.filter(f => {
+      f.life -= dt;
+      f.y -= 14 * dt;
+      return f.life > 0;
+    });
+    smoke = smoke.filter(s => {
+      s.life -= dt;
+      s.x += s.vx * dt;
+      s.y -= 14 * dt;
+      s.r += 3.5 * dt;
+      return s.life > 0;
+    });
+
     if (phase !== 'play' || speedMult === 0) return;
     const simDt = dt * speedMult;
     clock += simDt;
+
+    // Cosmetic traffic scaled to the population
+    cars = cars.filter(car => stepCar(tiles, car, simDt));
+    if (cars.length < targetCarCount(stats.population)) {
+      const car = spawnCar(tiles);
+      if (car) cars.push(car);
+    }
+
+    // Power plants puff smoke while the city runs
+    tiles.forEach((tile, i) => {
+      if (tile.type === 'power' && Math.random() < simDt * 1.6) {
+        const p = isoProject(VIEW, (i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.35);
+        smoke.push({
+          x: p.x + (Math.random() - 0.5) * 4,
+          y: p.y - 24,
+          vx: 3 + Math.random() * 5,
+          r: 1.5 + Math.random() * 1.5,
+          life: 1.6 + Math.random() * 0.8,
+          maxLife: 2.4
+        });
+      }
+    });
 
     growthTimer += simDt;
     if (growthTimer >= GROWTH_INTERVAL) {
       growthTimer -= GROWTH_INTERVAL;
       const result = growthStep(tiles);
-      if (result.grown || result.decayed) refreshDerivedState();
+      if (result.grown.length || result.decayed.length) refreshDerivedState();
+      for (const i of result.grown) addFloater(i, '▲', '#4ade80');
+      for (const i of result.decayed) addFloater(i, '▼', '#f87171');
 
       peakPop = Math.max(peakPop, stats.population);
       if (peakPop > record) {
@@ -227,6 +276,45 @@ export function initCityGame(): void {
     ctx.setLineDash([]);
   }
 
+  /** Lit windows on the two visible faces of a developed zone block. */
+  function drawWindows(x: number, y: number, i: number, level: number, height: number) {
+    const inset = 0.08;
+    const w = isoProject(VIEW, x + inset, y + 1 - inset);
+    const s = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
+    const e = isoProject(VIEW, x + 1 - inset, y + inset);
+    const faces: [{ x: number; y: number }, { x: number; y: number }][] = [[w, s], [s, e]];
+    faces.forEach(([a, b], f) => {
+      for (let r = 0; r < level; r++) {
+        for (let c = 0; c < 2; c++) {
+          const t = 0.3 + c * 0.4;
+          const bx = a.x + (b.x - a.x) * t;
+          const by = a.y + (b.y - a.y) * t - height * ((r + 0.5) / level);
+          // Stable per-window pattern: most lit, some dark
+          const lit = (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
+          ctx.fillStyle = lit ? 'rgba(254, 240, 138, 0.85)' : 'rgba(2, 6, 23, 0.5)';
+          ctx.fillRect(bx - 1, by - 1.5, 2, 3.5);
+        }
+      }
+    });
+  }
+
+  function carPos(car: Car): { x: number; y: number } {
+    const fx = (car.from % CITY_W) + 0.5;
+    const fy = Math.floor(car.from / CITY_W) + 0.5;
+    const tx = (car.to % CITY_W) + 0.5;
+    const ty = Math.floor(car.to / CITY_W) + 0.5;
+    return { x: fx + (tx - fx) * car.progress, y: fy + (ty - fy) * car.progress };
+  }
+
+  function drawCar(car: Car) {
+    const pos = carPos(car);
+    const p = isoProject(VIEW, pos.x, pos.y);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(p.x - 2.5, p.y - 1, 5, 2.5);
+    ctx.fillStyle = car.color;
+    ctx.fillRect(p.x - 2, p.y - 3, 4, 2.5);
+  }
+
   function render() {
     const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
     sky.addColorStop(0, '#101723');
@@ -236,7 +324,23 @@ export function initCityGame(): void {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    forEachTileBackToFront(CITY_W, CITY_H, (x, y, i) => {
+    // Cars draw interleaved with their diagonal so blocks occlude them correctly
+    const carsByDiag: Car[][] = Array.from({ length: CITY_W + CITY_H - 1 }, () => []);
+    for (const car of cars) {
+      const pos = carPos(car);
+      const d = Math.min(
+        CITY_W + CITY_H - 2,
+        Math.max(0, Math.floor(pos.x) + Math.floor(pos.y))
+      );
+      carsByDiag[d].push(car);
+    }
+
+    let lastDiag = -1;
+    forEachTileBackToFront(CITY_W, CITY_H, (x, y, i, diag) => {
+      if (diag !== lastDiag) {
+        if (lastDiag >= 0) carsByDiag[lastDiag].forEach(drawCar);
+        lastDiag = diag;
+      }
       const tile = tiles[i];
       const top = isoProject(VIEW, x + 0.5, y + 0.5);
 
@@ -262,6 +366,7 @@ export function initCityGame(): void {
         } else {
           const height = zoneHeight(tile.level);
           drawBlock(ctx, VIEW, x, y, height, ZONE_BLOCK[tile.type]);
+          drawWindows(x, y, i, tile.level, height);
           ctx.font = `${LEVEL_FONT[tile.level]}px serif`;
           ctx.fillText(ZONE_EMOJI[tile.type], top.x, top.y - height);
           // Unserviced developed zones flash a warning above the roof
@@ -272,6 +377,16 @@ export function initCityGame(): void {
         }
       }
     });
+    if (lastDiag >= 0) carsByDiag[lastDiag].forEach(drawCar);
+
+    for (const puff of smoke) {
+      ctx.globalAlpha = Math.max(0, (puff.life / puff.maxLife) * 0.45);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath();
+      ctx.arc(puff.x, puff.y, puff.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % CITY_W;
@@ -279,6 +394,14 @@ export function initCityGame(): void {
       const valid = canBuild(tiles, x, y, selectedTool) && TOOL_COSTS[selectedTool] <= money;
       strokeTile(ctx, VIEW, x, y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
+
+    ctx.font = 'bold 10px monospace';
+    for (const f of floaters) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
 
     moneyEl.textContent = `£${Math.floor(money)}`;
     popEl.textContent = stats.population.toString();

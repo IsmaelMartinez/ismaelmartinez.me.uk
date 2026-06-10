@@ -444,9 +444,15 @@ export function initTanksGame(): void {
   });
 
   const gameKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ']);
+  const isTextEntry = (target: EventTarget | null) =>
+    target instanceof HTMLElement &&
+    (target.tagName === 'TEXTAREA' ||
+      target.isContentEditable ||
+      (target instanceof HTMLInputElement && target.type !== 'range'));
+
   document.addEventListener('keydown', e => {
+    if (!isHumanTurn() || isTextEntry(e.target)) return;
     if (gameKeys.has(e.key)) e.preventDefault();
-    if (!isHumanTurn()) return;
     const tank = tanks[current];
     switch (e.key) {
       case 'ArrowLeft':

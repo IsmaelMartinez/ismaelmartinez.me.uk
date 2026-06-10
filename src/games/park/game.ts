@@ -5,7 +5,18 @@
  * module owns DOM wiring, the simulation loop, and canvas rendering. It
  * expects the markup defined in src/pages/[lang]/fun/park.astro.
  */
-import { createGameLoop, loadScore, recordHighScore } from '../engine';
+import {
+  createGameLoop,
+  loadScore,
+  recordHighScore,
+  isoProject,
+  isoTileFromPoint,
+  fillTile,
+  strokeTile,
+  drawBlock,
+  forEachTileBackToFront,
+  type IsoView
+} from '../engine';
 import {
   GRID_W,
   GRID_H,
@@ -16,7 +27,6 @@ import {
   toolCost,
   neighbours,
   isWalkable,
-  idx,
   type TileType,
   type Tool
 } from './grid';
@@ -31,9 +41,10 @@ import {
 } from './guests';
 import { parkRating, spawnInterval, dailyUpkeep } from './economy';
 
-const TILE = 32;
-const WIDTH = GRID_W * TILE;
-const HEIGHT = GRID_H * TILE;
+const VIEW: IsoView = { halfW: 20, halfH: 10, originX: GRID_H * 20, originY: 60 };
+const CANVAS_W = (GRID_W + GRID_H) * VIEW.halfW;
+const CANVAS_H = (GRID_W + GRID_H) * VIEW.halfH + VIEW.originY + 10;
+const BLOCK_HEIGHT = 16;
 const START_MONEY = 1500;
 const DAY_LENGTH = 24; // seconds of game time per day
 const GUEST_SPEED = 2.4; // tiles per second
@@ -100,8 +111,8 @@ export function initParkGame(): void {
     blocked: root.dataset.tBlocked || 'A guest is in the way!'
   };
 
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+  canvas.width = CANVAS_W;
+  canvas.height = CANVAS_H;
 
   let { tiles, entrance } = createPark();
   let phase: Phase = 'idle';
@@ -358,11 +369,9 @@ export function initParkGame(): void {
 
   // --- Rendering ---
 
+  // Positions below are in tile units; isoProject turns them into pixels.
   function tileCenter(i: number): { x: number; y: number } {
-    return {
-      x: (i % GRID_W) * TILE + TILE / 2,
-      y: Math.floor(i / GRID_W) * TILE + TILE / 2
-    };
+    return { x: (i % GRID_W) + 0.5, y: Math.floor(i / GRID_W) + 0.5 };
   }
 
   function guestPos(guest: Guest): { x: number; y: number } {
@@ -386,57 +395,73 @@ export function initParkGame(): void {
     return pos;
   }
 
+  function drawGuest(guest: Guest) {
+    const pos = guestPos(guest);
+    const p = isoProject(VIEW, pos.x, pos.y);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = guest.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - 5, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
   function render() {
-    for (let y = 0; y < GRID_H; y++) {
-      for (let x = 0; x < GRID_W; x++) {
-        const i = idx(x, y);
-        const tile = tiles[i];
-        const px = x * TILE;
-        const py = y * TILE;
+    const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+    sky.addColorStop(0, '#11271a');
+    sky.addColorStop(1, '#0c1c13');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-        ctx.fillStyle = (x + y) % 2 === 0 ? '#1d3b24' : '#1f4028';
-        ctx.fillRect(px, py, TILE, TILE);
-
-        if (tile === 'path' || tile === 'entrance') {
-          ctx.fillStyle = '#8a7a5c';
-          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-          ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
-        } else if (BUILDINGS[tile]) {
-          ctx.fillStyle = '#272741';
-          ctx.beginPath();
-          ctx.roundRect(px + 2, py + 2, TILE - 4, TILE - 4, 6);
-          ctx.fill();
-        }
-
-        const emoji = TILE_EMOJI[tile];
-        if (emoji) {
-          ctx.font = '20px serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(emoji, px + TILE / 2, py + TILE / 2 + 1);
-        }
-      }
-    }
-
+    // Guests draw interleaved with their diagonal so blocks occlude them correctly
+    const guestsByDiag: Guest[][] = Array.from({ length: GRID_W + GRID_H - 1 }, () => []);
     for (const guest of guests) {
       const pos = guestPos(guest);
-      ctx.fillStyle = guest.color;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+      const d = Math.min(GRID_W + GRID_H - 2, Math.max(0, Math.floor(pos.x) + Math.floor(pos.y)));
+      guestsByDiag[d].push(guest);
     }
+
+    let lastDiag = -1;
+    forEachTileBackToFront(GRID_W, GRID_H, (x, y, i, diag) => {
+      if (diag !== lastDiag) {
+        if (lastDiag >= 0) guestsByDiag[lastDiag].forEach(drawGuest);
+        lastDiag = diag;
+      }
+      const tile = tiles[i];
+      if (tile === 'path' || tile === 'entrance') {
+        fillTile(ctx, VIEW, x, y, '#8a7a5c');
+        strokeTile(ctx, VIEW, x, y, 'rgba(0, 0, 0, 0.2)', 1);
+      } else {
+        fillTile(ctx, VIEW, x, y, (x + y) % 2 === 0 ? '#1d3b24' : '#1f4028');
+      }
+
+      const top = isoProject(VIEW, x + 0.5, y + 0.5);
+      if (tile === 'entrance') {
+        ctx.font = '13px serif';
+        ctx.fillText('🎟️', top.x, top.y);
+      } else if (tile === 'tree') {
+        ctx.font = '17px serif';
+        ctx.fillText('🌳', top.x, top.y - 7);
+      } else if (BUILDINGS[tile]) {
+        drawBlock(ctx, VIEW, x, y, BLOCK_HEIGHT, '#44447a');
+        ctx.font = '14px serif';
+        ctx.fillText(TILE_EMOJI[tile] ?? '', top.x, top.y - BLOCK_HEIGHT);
+      }
+    });
+    if (lastDiag >= 0) guestsByDiag[lastDiag].forEach(drawGuest);
 
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;
       const y = Math.floor(hoverTile / GRID_W);
       const valid = canPlace(tiles, x, y, selectedTool) && toolCost(selectedTool) <= money;
-      ctx.strokeStyle = valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x * TILE + 1.5, y * TILE + 1.5, TILE - 3, TILE - 3);
+      strokeTile(ctx, VIEW, x, y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
 
     moneyEl.textContent = `£${Math.floor(money)}`;
@@ -449,10 +474,9 @@ export function initParkGame(): void {
 
   function tileFromEvent(e: MouseEvent): number {
     const rect = canvas.getBoundingClientRect();
-    const x = Math.floor(((e.clientX - rect.left) * (canvas.width / rect.width)) / TILE);
-    const y = Math.floor(((e.clientY - rect.top) * (canvas.height / rect.height)) / TILE);
-    if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return -1;
-    return idx(x, y);
+    const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    return isoTileFromPoint(VIEW, sx, sy, GRID_W, GRID_H);
   }
 
   canvas.addEventListener('mousemove', e => {

@@ -5,7 +5,18 @@
  * DOM wiring, the simulation loop, and canvas rendering. It expects the
  * markup defined in src/pages/[lang]/fun/city.astro.
  */
-import { createGameLoop, loadScore, recordHighScore } from '../engine';
+import {
+  createGameLoop,
+  loadScore,
+  recordHighScore,
+  isoProject,
+  isoTileFromPoint,
+  fillTile,
+  strokeTile,
+  drawBlock,
+  forEachTileBackToFront,
+  type IsoView
+} from '../engine';
 import {
   CITY_W,
   CITY_H,
@@ -13,7 +24,6 @@ import {
   createCity,
   canBuild,
   build,
-  cityIdx,
   isZone,
   type CityTile,
   type CityTool,
@@ -22,9 +32,9 @@ import {
 import { computePowered, roadAdjacent, cityStats, computeDemand, growthStep } from './simulation';
 import { monthlyIncome, monthlyExpenses } from './budget';
 
-const TILE = 32;
-const WIDTH = CITY_W * TILE;
-const HEIGHT = CITY_H * TILE;
+const VIEW: IsoView = { halfW: 20, halfH: 10, originX: CITY_H * 20, originY: 60 };
+const CANVAS_W = (CITY_W + CITY_H) * VIEW.halfW;
+const CANVAS_H = (CITY_W + CITY_H) * VIEW.halfH + VIEW.originY + 10;
 const START_MONEY = 2500;
 const MONTH_LENGTH = 20; // seconds of game time
 const GROWTH_INTERVAL = 1.2;
@@ -42,7 +52,13 @@ const ZONE_BORDER: Record<ZoneType, string> = {
   com: 'rgba(96, 165, 250, 0.5)',
   ind: 'rgba(250, 204, 21, 0.5)'
 };
-const LEVEL_FONT = [0, 13, 18, 24];
+const ZONE_BLOCK: Record<ZoneType, string> = {
+  res: '#3fae6e',
+  com: '#4f86d6',
+  ind: '#c8a23c'
+};
+const LEVEL_FONT = [0, 12, 15, 18];
+const zoneHeight = (level: number) => 6 + level * 7;
 
 type Phase = 'idle' | 'play' | 'over';
 
@@ -84,8 +100,8 @@ export function initCityGame(): void {
     milestone: root.dataset.tMilestone || 'Population'
   };
 
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+  canvas.width = CANVAS_W;
+  canvas.height = CANVAS_H;
 
   let tiles: CityTile[] = createCity();
   let phase: Phase = 'idle';
@@ -178,96 +194,90 @@ export function initCityGame(): void {
 
   // --- Rendering ---
 
-  function drawRoad(i: number, px: number, py: number) {
-    ctx.fillStyle = '#3a4150';
-    ctx.fillRect(px, py, TILE, TILE);
+  function drawRoad(i: number, x: number, y: number) {
+    fillTile(ctx, VIEW, x, y, '#3a4150');
     ctx.strokeStyle = 'rgba(226, 232, 240, 0.35)';
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
-    const cx = px + TILE / 2;
-    const cy = py + TILE / 2;
-    const x = i % CITY_W;
-    const y = Math.floor(i / CITY_W);
+    const centre = isoProject(VIEW, x + 0.5, y + 0.5);
     const connections: Array<[boolean, number, number]> = [
-      [x > 0 && tiles[i - 1].type === 'road', px, cy],
-      [x < CITY_W - 1 && tiles[i + 1].type === 'road', px + TILE, cy],
-      [y > 0 && tiles[i - CITY_W].type === 'road', cx, py],
-      [y < CITY_H - 1 && tiles[i + CITY_W].type === 'road', cx, py + TILE]
+      [x > 0 && tiles[i - 1].type === 'road', x, y + 0.5],
+      [x < CITY_W - 1 && tiles[i + 1].type === 'road', x + 1, y + 0.5],
+      [y > 0 && tiles[i - CITY_W].type === 'road', x + 0.5, y],
+      [y < CITY_H - 1 && tiles[i + CITY_W].type === 'road', x + 0.5, y + 1]
     ];
     let any = false;
     for (const [connected, tx, ty] of connections) {
       if (!connected) continue;
       any = true;
+      const edge = isoProject(VIEW, tx, ty);
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(tx, ty);
+      ctx.moveTo(centre.x, centre.y);
+      ctx.lineTo(edge.x, edge.y);
       ctx.stroke();
     }
     if (!any) {
+      const a = isoProject(VIEW, x + 0.2, y + 0.5);
+      const b = isoProject(VIEW, x + 0.8, y + 0.5);
       ctx.beginPath();
-      ctx.moveTo(px + 6, cy);
-      ctx.lineTo(px + TILE - 6, cy);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
       ctx.stroke();
     }
     ctx.setLineDash([]);
   }
 
   function render() {
+    const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+    sky.addColorStop(0, '#101723');
+    sky.addColorStop(1, '#0b111b');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    for (let y = 0; y < CITY_H; y++) {
-      for (let x = 0; x < CITY_W; x++) {
-        const i = cityIdx(x, y);
-        const tile = tiles[i];
-        const px = x * TILE;
-        const py = y * TILE;
+    forEachTileBackToFront(CITY_W, CITY_H, (x, y, i) => {
+      const tile = tiles[i];
+      const top = isoProject(VIEW, x + 0.5, y + 0.5);
 
-        ctx.fillStyle = (x + y) % 2 === 0 ? '#171e29' : '#1a2230';
-        ctx.fillRect(px, py, TILE, TILE);
+      if (tile.type === 'road') {
+        drawRoad(i, x, y);
+        return;
+      }
 
-        if (tile.type === 'road') {
-          drawRoad(i, px, py);
-        } else if (tile.type === 'power') {
-          ctx.fillStyle = '#2d2438';
-          ctx.beginPath();
-          ctx.roundRect(px + 2, py + 2, TILE - 4, TILE - 4, 5);
-          ctx.fill();
-          ctx.font = '20px serif';
-          ctx.fillText('⚡', px + TILE / 2, py + TILE / 2 + 1);
-        } else if (tile.type === 'park') {
-          ctx.fillStyle = 'rgba(34, 84, 61, 0.55)';
-          ctx.beginPath();
-          ctx.roundRect(px + 2, py + 2, TILE - 4, TILE - 4, 5);
-          ctx.fill();
-          ctx.font = '18px serif';
-          ctx.fillText('🌳', px + TILE / 2, py + TILE / 2 + 1);
-        } else if (isZone(tile.type)) {
-          ctx.fillStyle = ZONE_TINT[tile.type];
-          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-          ctx.strokeStyle = ZONE_BORDER[tile.type];
-          ctx.lineWidth = 1;
-          ctx.strokeRect(px + 1.5, py + 1.5, TILE - 3, TILE - 3);
-          if (tile.level > 0) {
-            ctx.font = `${LEVEL_FONT[tile.level]}px serif`;
-            ctx.fillText(ZONE_EMOJI[tile.type], px + TILE / 2, py + TILE / 2 + 1);
-            // Unserviced developed zones flash a power warning
-            if ((!powered[i] || !roadAdjacent(tiles, i)) && Math.floor(clock * 2) % 2 === 0) {
-              ctx.font = '11px serif';
-              ctx.fillText('⚠️', px + TILE - 8, py + 9);
-            }
+      fillTile(ctx, VIEW, x, y, (x + y) % 2 === 0 ? '#171e29' : '#1a2230');
+
+      if (tile.type === 'power') {
+        drawBlock(ctx, VIEW, x, y, 22, '#5b4a7a');
+        ctx.font = '15px serif';
+        ctx.fillText('⚡', top.x, top.y - 22);
+      } else if (tile.type === 'park') {
+        fillTile(ctx, VIEW, x, y, '#22543d');
+        ctx.font = '14px serif';
+        ctx.fillText('🌳', top.x, top.y - 5);
+      } else if (isZone(tile.type)) {
+        if (tile.level === 0) {
+          fillTile(ctx, VIEW, x, y, ZONE_TINT[tile.type]);
+          strokeTile(ctx, VIEW, x, y, ZONE_BORDER[tile.type], 1);
+        } else {
+          const height = zoneHeight(tile.level);
+          drawBlock(ctx, VIEW, x, y, height, ZONE_BLOCK[tile.type]);
+          ctx.font = `${LEVEL_FONT[tile.level]}px serif`;
+          ctx.fillText(ZONE_EMOJI[tile.type], top.x, top.y - height);
+          // Unserviced developed zones flash a warning above the roof
+          if ((!powered[i] || !roadAdjacent(tiles, i)) && Math.floor(clock * 2) % 2 === 0) {
+            ctx.font = '11px serif';
+            ctx.fillText('⚠️', top.x, top.y - height - 14);
           }
         }
       }
-    }
+    });
 
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % CITY_W;
       const y = Math.floor(hoverTile / CITY_W);
       const valid = canBuild(tiles, x, y, selectedTool) && TOOL_COSTS[selectedTool] <= money;
-      ctx.strokeStyle = valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x * TILE + 1.5, y * TILE + 1.5, TILE - 3, TILE - 3);
+      strokeTile(ctx, VIEW, x, y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
 
     moneyEl.textContent = `£${Math.floor(money)}`;
@@ -285,10 +295,9 @@ export function initCityGame(): void {
 
   function tileFromEvent(e: MouseEvent): number {
     const rect = canvas.getBoundingClientRect();
-    const x = Math.floor(((e.clientX - rect.left) * (canvas.width / rect.width)) / TILE);
-    const y = Math.floor(((e.clientY - rect.top) * (canvas.height / rect.height)) / TILE);
-    if (x < 0 || x >= CITY_W || y < 0 || y >= CITY_H) return -1;
-    return cityIdx(x, y);
+    const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    return isoTileFromPoint(VIEW, sx, sy, CITY_W, CITY_H);
   }
 
   canvas.addEventListener('mousemove', e => {

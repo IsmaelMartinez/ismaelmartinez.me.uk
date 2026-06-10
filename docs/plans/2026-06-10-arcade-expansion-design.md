@@ -30,6 +30,8 @@ src/games/
   engine/           # shared across games
     loop.ts         # fixed-timestep rAF game loop (60Hz update, per-frame render)
     storage.ts      # guarded localStorage scores (loadScore/saveScore/recordHighScore)
+    grid2d.ts       # flat-grid helpers (neighbours, chebyshev)
+    iso.ts          # isometric projection/picking + diamond/block drawing
     index.ts
   tanks/            # one folder per game
     terrain.ts      # pure logic — unit tested
@@ -121,9 +123,9 @@ terrain + ~6 hand-tuned levels. Roughly 2× the Tanks effort.
 RollerCoaster Tycoon-flavoured management on a small grid: place
 rides, stalls, and paths; keep guests happy; don't go broke.
 
-**World.** Flat top-down grid (~24×16 tiles, drawn as coloured tiles + emoji
-glyphs — no isometric art, keeps it asset-free). Tile types: grass, path,
-entrance, ride (1–4 cells), food/drink stall, toilet, decoration.
+**World.** 24×14 tile grid rendered isometrically via `engine/iso.ts`
+(diamond ground tiles, extruded emoji-topped blocks — still asset-free).
+Tile types: grass, path, entrance, ride, food/drink stall, toilet, decoration.
 
 **Guests.** Spawn at the entrance at a rate driven by park reputation. Each
 guest has needs (fun, hunger, thirst, bladder, energy) that decay per tick;
@@ -160,15 +162,17 @@ manage the budget, watch the city grow.
 
 **Shared base with Pixel Park.** Both are grid-placement sims. Rather than the
 full `grid-sim` extraction originally sketched, the genuinely shared pieces
-(`gridNeighbours`, `chebyshev`) moved into `src/games/engine/grid2d.ts` and
-both games consume them; the rest (renderers, tick scheduling) stayed
-per-game because the two sims diverged more than expected (agents vs. cellular
-growth). Revisit a deeper extraction if a third grid sim appears.
+moved into the engine — `grid2d.ts` (`gridNeighbours`, `chebyshev`) and
+`iso.ts` (isometric projection, screen→tile picking, diamond/extruded-block
+drawing, back-to-front traversal) — and both games consume them; tick
+scheduling and game-specific drawing stayed per-game because the two sims
+diverged more than expected (agents vs. cellular growth). Revisit a deeper
+extraction if a third grid sim appears.
 
 **Mechanics as shipped.**
-- Zones develop (3 levels, emoji scaled by level) only when powered (within
-  Chebyshev radius 7 of a plant) and road-adjacent; unserviced developed
-  zones decay with a ⚠️ flash.
+- Zones develop (3 levels, rendered as iso blocks that grow taller with
+  level) only when powered (within Chebyshev radius 7 of a plant) and
+  road-adjacent; unserviced developed zones decay with a ⚠️ flash.
 - Coupled RCI demand: jobs attract residents, population drives shop and
   industry demand; shown as R/C/I meter bars. A +16 base residential demand
   bootstraps new cities.

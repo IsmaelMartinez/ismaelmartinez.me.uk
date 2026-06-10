@@ -24,13 +24,12 @@ export const translations = {
     'nav.mainNavigation': 'Main navigation',
     'nav.languageSwitcher': 'Language switcher',
     'nav.themeToggle': 'Toggle dark/light mode',
-    'nav.uses': 'Uses',
 
     // Hero
     'hero.greeting': "Hi, I'm",
     'hero.name': 'Ismael Martinez',
     'hero.tagline': 'Principal Software Developer & Open Source Enthusiast',
-    'hero.description': 'I build things, write about technology, and contribute to open source. Welcome to my corner of the internet.',
+    'hero.description': 'I build things, write about technology, and contribute to open source. I care deeply about responsible AI — and about how this technology lets us explore problems in entirely new ways.',
 
     // Sections
     'section.projects': 'Open Source Projects',
@@ -38,7 +37,13 @@ export const translations = {
     'section.writing': 'Latest Writing',
     'section.writing.description': 'Thoughts on software development, technology, and more',
     'section.connect': 'Let\'s Connect',
-    'section.connect.description': 'Find me on these platforms',
+    'section.connect.description': 'Have a question, an idea, or a project in mind? Reach out on any of these platforms — LinkedIn is the fastest way to get hold of me.',
+
+    // Contact CTA
+    'cta.title': 'Let\'s build something together',
+    'cta.description': 'Whether it\'s responsible AI, event-driven systems, open source, or just a good problem worth exploring — I\'d love to hear from you.',
+    'cta.connect': 'Contact me',
+    'cta.linkedin': 'Connect on LinkedIn',
 
     // Footer
     'footer.built': 'Built with',
@@ -61,10 +66,8 @@ export const translations = {
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'External Platforms',
     'article.minRead': 'min read',
-
-    // Uses
-    'uses.title': 'Uses',
-    'uses.description': 'Tools, software, and hardware I use for development and everyday work',
+    'article.discussPrompt': 'Enjoyed this article, or want to chat about it?',
+    'article.discussLink': 'Get in touch',
 
     // Fun Section
     'fun.title': 'Fun Stuff',
@@ -211,9 +214,16 @@ export const translations = {
     // About
     'nav.about': 'About',
     'about.title': 'About',
-    'about.description': 'Principal Software Developer, open source enthusiast, and lifelong learner',
+    'about.description': 'Principal software developer, open source maintainer, and advocate for responsible AI',
     'about.bioTitle': 'Hello!',
-    'about.bio': "I'm Ismael Martinez, a principal software developer based in the UK with a passion for building reliable, well-crafted software. I enjoy working across the full stack, contributing to open source, and writing about what I learn along the way.",
+    'about.bio': "I'm Ismael Martinez, a principal software developer based in the UK. I've spent over 15 years building reliable, well-crafted software across industries — from event-driven architectures and observability to platform engineering. I maintain several open source projects, including teams-for-linux, and I write regularly about what I learn along the way.",
+    'about.focusTitle': 'What Drives Me',
+    'about.focus1Title': 'Responsible AI',
+    'about.focus1': "I'm passionate about building AI systems responsibly — with the governance, observability, and human oversight they need. I write about agentic systems, the automation trap, and keeping people in the loop.",
+    'about.focus2Title': 'New Ways of Exploring Problems',
+    'about.focus2': 'What excites me most about this technology is how it changes the way we approach problems — prototyping in hours instead of weeks, asking better questions, and exploring ideas that used to feel out of reach.',
+    'about.focus3Title': 'Open Source & Accessibility',
+    'about.focus3': 'From a Teams client for Linux to sonified data visualisations and an offline hearing test, I build tools that are open, accessible, and respectful of your data.',
     'about.careerTitle': 'Career Highlights',
     'about.career1': 'Over 15 years of experience in software development across multiple industries',
     'about.career2': 'Specialising in cloud-native architectures, DevOps practices, and platform engineering',
@@ -221,6 +231,7 @@ export const translations = {
     'about.career4': 'Regular writer on Medium and Dev.to covering software development topics',
     'about.interestsTitle': 'Interests',
     'about.interests': 'Outside of coding, I enjoy exploring new technologies, reading about software architecture, and spending time with my family. I believe in continuous learning and sharing knowledge with the community.',
+    'about.elsewhereTitle': 'Find Me Elsewhere',
 
     // Health
     'nav.health': 'Health',
@@ -260,13 +271,12 @@ export const translations = {
     'nav.mainNavigation': 'Navegación principal',
     'nav.languageSwitcher': 'Selector de idioma',
     'nav.themeToggle': 'Cambiar modo oscuro/claro',
-    'nav.uses': 'Herramientas',
 
     // Hero
     'hero.greeting': 'Hola, soy',
     'hero.name': 'Ismael Martinez',
     'hero.tagline': 'Desarrollador de Software Principal y Entusiasta del Open Source',
-    'hero.description': 'Construyo cosas, escribo sobre tecnología y contribuyo al código abierto. Bienvenido a mi rincón de internet.',
+    'hero.description': 'Construyo cosas, escribo sobre tecnología y contribuyo al código abierto. Me importa profundamente la IA responsable, y cómo esta tecnología nos permite explorar problemas de formas completamente nuevas.',
 
     // Sections
     'section.projects': 'Proyectos Open Source',
@@ -274,7 +284,13 @@ export const translations = {
     'section.writing': 'Últimos Escritos',
     'section.writing.description': 'Reflexiones sobre desarrollo de software, tecnología y más',
     'section.connect': 'Conectemos',
-    'section.connect.description': 'Encuéntrame en estas plataformas',
+    'section.connect.description': '¿Tienes una pregunta, una idea o un proyecto en mente? Escríbeme por cualquiera de estas plataformas; LinkedIn es la forma más rápida de localizarme.',
+
+    // Contact CTA
+    'cta.title': '¿Construimos algo juntos?',
+    'cta.description': 'Ya sea sobre IA responsable, sistemas orientados a eventos, código abierto o simplemente un buen problema que explorar, me encantará saber de ti.',
+    'cta.connect': 'Contáctame',
+    'cta.linkedin': 'Conecta en LinkedIn',
 
     // Footer
     'footer.built': 'Construido con',
@@ -297,10 +313,8 @@ export const translations = {
     'article.localArticles': 'Artículos',
     'article.externalPlatforms': 'Plataformas Externas',
     'article.minRead': 'min de lectura',
-
-    // Uses
-    'uses.title': 'Herramientas',
-    'uses.description': 'Herramientas, software y hardware que uso para desarrollo y trabajo diario',
+    'article.discussPrompt': '¿Te ha gustado este artículo o quieres comentarlo?',
+    'article.discussLink': 'Contáctame',
 
     // Fun Section
     'fun.title': 'Diversión',
@@ -447,9 +461,16 @@ export const translations = {
     // About
     'nav.about': 'Sobre mí',
     'about.title': 'Sobre mí',
-    'about.description': 'Desarrollador de Software Principal, entusiasta del código abierto y aprendiz permanente',
+    'about.description': 'Desarrollador de software principal, mantenedor de código abierto y defensor de la IA responsable',
     'about.bioTitle': '¡Hola!',
-    'about.bio': 'Soy Ismael Martinez, desarrollador de software principal en Reino Unido con pasión por construir software fiable y bien diseñado. Me gusta trabajar en todo el stack, contribuir al código abierto y escribir sobre lo que aprendo.',
+    'about.bio': 'Soy Ismael Martinez, desarrollador de software principal en el Reino Unido. Llevo más de 15 años construyendo software fiable y bien diseñado en múltiples industrias: desde arquitecturas orientadas a eventos y observabilidad hasta ingeniería de plataformas. Mantengo varios proyectos de código abierto, incluido teams-for-linux, y escribo regularmente sobre lo que aprendo por el camino.',
+    'about.focusTitle': 'Qué me motiva',
+    'about.focus1Title': 'IA responsable',
+    'about.focus1': 'Me apasiona construir sistemas de IA de forma responsable: con la gobernanza, la observabilidad y la supervisión humana que necesitan. Escribo sobre sistemas agénticos, la trampa de la automatización y mantener a las personas al mando.',
+    'about.focus2Title': 'Nuevas formas de explorar problemas',
+    'about.focus2': 'Lo que más me entusiasma de esta tecnología es cómo cambia nuestra manera de abordar los problemas: prototipar en horas en lugar de semanas, hacer mejores preguntas y explorar ideas que antes parecían inalcanzables.',
+    'about.focus3Title': 'Código abierto y accesibilidad',
+    'about.focus3': 'Desde un cliente de Teams para Linux hasta visualizaciones de datos sonificadas y una prueba auditiva sin conexión, construyo herramientas abiertas, accesibles y respetuosas con tus datos.',
     'about.careerTitle': 'Trayectoria',
     'about.career1': 'Más de 15 años de experiencia en desarrollo de software en múltiples industrias',
     'about.career2': 'Especializado en arquitecturas cloud-native, prácticas DevOps e ingeniería de plataformas',
@@ -457,6 +478,7 @@ export const translations = {
     'about.career4': 'Escritor habitual en Medium y Dev.to sobre desarrollo de software',
     'about.interestsTitle': 'Intereses',
     'about.interests': 'Fuera del código, me gusta explorar nuevas tecnologías, leer sobre arquitectura de software y pasar tiempo con mi familia. Creo en el aprendizaje continuo y en compartir conocimiento con la comunidad.',
+    'about.elsewhereTitle': 'Encuéntrame en otros sitios',
 
     // Health
     'nav.health': 'Salud',
@@ -496,13 +518,12 @@ export const translations = {
     'nav.mainNavigation': 'Navegació principal',
     'nav.languageSwitcher': 'Selector d\'idioma',
     'nav.themeToggle': 'Canviar mode fosc/clar',
-    'nav.uses': 'Eines',
 
     // Hero
     'hero.greeting': 'Hola, sóc',
     'hero.name': 'Ismael Martinez',
     'hero.tagline': 'Desenvolupador de Software Principal i Entusiasta de l\'Open Source',
-    'hero.description': 'Construeixo coses, escric sobre tecnologia i contribueixo al codi obert. Benvingut al meu racó d\'internet.',
+    'hero.description': 'Construeixo coses, escric sobre tecnologia i contribueixo al codi obert. Em preocupa profundament la IA responsable, i com aquesta tecnologia ens permet explorar problemes de maneres completament noves.',
 
     // Sections
     'section.projects': 'Projectes Open Source',
@@ -510,7 +531,13 @@ export const translations = {
     'section.writing': 'Últims Escrits',
     'section.writing.description': 'Reflexions sobre desenvolupament de software, tecnologia i més',
     'section.connect': 'Connectem',
-    'section.connect.description': 'Troba\'m en aquestes plataformes',
+    'section.connect.description': 'Tens una pregunta, una idea o un projecte en ment? Escriu-me per qualsevol d\'aquestes plataformes; LinkedIn és la manera més ràpida de localitzar-me.',
+
+    // Contact CTA
+    'cta.title': 'Construïm alguna cosa junts?',
+    'cta.description': 'Ja sigui sobre IA responsable, sistemes orientats a esdeveniments, codi obert o simplement un bon problema per explorar, m\'encantarà saber de tu.',
+    'cta.connect': 'Contacta amb mi',
+    'cta.linkedin': 'Connecta a LinkedIn',
 
     // Footer
     'footer.built': 'Construït amb',
@@ -533,10 +560,8 @@ export const translations = {
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'Plataformes Externes',
     'article.minRead': 'min de lectura',
-
-    // Uses
-    'uses.title': 'Eines',
-    'uses.description': 'Eines, software i hardware que faig servir per al desenvolupament i treball diari',
+    'article.discussPrompt': 'T\'ha agradat aquest article o vols comentar-lo?',
+    'article.discussLink': 'Contacta amb mi',
 
     // Fun Section
     'fun.title': 'Diversió',
@@ -683,9 +708,16 @@ export const translations = {
     // About
     'nav.about': 'Sobre mi',
     'about.title': 'Sobre mi',
-    'about.description': 'Desenvolupador de Software Principal, entusiasta del codi obert i aprenent permanent',
+    'about.description': 'Desenvolupador de software principal, mantenidor de codi obert i defensor de la IA responsable',
     'about.bioTitle': 'Hola!',
-    'about.bio': "Sóc Ismael Martinez, desenvolupador de software principal al Regne Unit amb passió per construir software fiable i ben dissenyat. M'agrada treballar en tot l'stack, contribuir al codi obert i escriure sobre el que aprenc.",
+    'about.bio': "Sóc Ismael Martinez, desenvolupador de software principal al Regne Unit. Fa més de 15 anys que construeixo software fiable i ben dissenyat en múltiples indústries: des d'arquitectures orientades a esdeveniments i observabilitat fins a enginyeria de plataformes. Mantinc diversos projectes de codi obert, incloent teams-for-linux, i escric regularment sobre el que aprenc pel camí.",
+    'about.focusTitle': 'Què em motiva',
+    'about.focus1Title': 'IA responsable',
+    'about.focus1': "M'apassiona construir sistemes d'IA de manera responsable: amb la governança, l'observabilitat i la supervisió humana que necessiten. Escric sobre sistemes agèntics, la trampa de l'automatització i mantenir les persones al capdavant.",
+    'about.focus2Title': "Noves maneres d'explorar problemes",
+    'about.focus2': "El que més m'entusiasma d'aquesta tecnologia és com canvia la nostra manera d'abordar els problemes: prototipar en hores en lloc de setmanes, fer millors preguntes i explorar idees que abans semblaven inabastables.",
+    'about.focus3Title': 'Codi obert i accessibilitat',
+    'about.focus3': "Des d'un client de Teams per a Linux fins a visualitzacions de dades sonificades i una prova d'oïda fora de línia, construeixo eines obertes, accessibles i respectuoses amb les teves dades.",
     'about.careerTitle': 'Trajectòria',
     'about.career1': "Més de 15 anys d'experiència en desenvolupament de software en múltiples indústries",
     'about.career2': 'Especialitzat en arquitectures cloud-native, pràctiques DevOps i enginyeria de plataformes',
@@ -693,6 +725,7 @@ export const translations = {
     'about.career4': 'Escriptor habitual a Medium i Dev.to sobre desenvolupament de software',
     'about.interestsTitle': 'Interessos',
     'about.interests': "Fora del codi, m'agrada explorar noves tecnologies, llegir sobre arquitectura de software i passar temps amb la meva família. Crec en l'aprenentatge continu i en compartir coneixement amb la comunitat.",
+    'about.elsewhereTitle': "Troba'm en altres llocs",
 
     // Health
     'nav.health': 'Salut',

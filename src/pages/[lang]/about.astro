@@ -1,7 +1,9 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import ContactCTA from '../../components/ContactCTA.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
+import { socialLinks } from '../../data/links';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -10,6 +12,12 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
+const focusAreas = [
+  { icon: '🤖', title: t('about.focus1Title'), body: t('about.focus1') },
+  { icon: '🧭', title: t('about.focus2Title'), body: t('about.focus2') },
+  { icon: '🌍', title: t('about.focus3Title'), body: t('about.focus3') },
+];
+
 const personJsonLd = {
   "@context": "https://schema.org",
   "@type": "Person",
@@ -17,11 +25,7 @@ const personJsonLd = {
   "url": "https://ismaelmartinez.me.uk",
   "jobTitle": "Principal Software Developer",
   "description": t('about.description'),
-  "knowsAbout": ["Software Development", "Cloud Architecture", "DevOps", "Open Source", "Platform Engineering", "TypeScript", "JavaScript", "AWS"],
-  "alumniOf": {
-    "@type": "Organization",
-    "name": "University"
-  },
+  "knowsAbout": ["Software Development", "Responsible AI", "Agentic Systems", "Event-Driven Architecture", "Observability", "Cloud Architecture", "DevOps", "Open Source", "Platform Engineering", "Accessibility", "TypeScript", "JavaScript", "AWS"],
   "sameAs": [
     "https://github.com/IsmaelMartinez",
     "https://www.linkedin.com/in/ismaelmartinezramos",
@@ -48,6 +52,19 @@ const personJsonLd = {
         </div>
 
         <div class="about-section">
+          <h2>{t('about.focusTitle')}</h2>
+          <div class="grid focus-grid">
+            {focusAreas.map(area => (
+              <div class="card focus-card">
+                <span class="focus-icon" aria-hidden="true">{area.icon}</span>
+                <h3>{area.title}</h3>
+                <p>{area.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div class="about-section">
           <h2>{t('about.careerTitle')}</h2>
           <ul class="career-list">
             <li>{t('about.career1')}</li>
@@ -61,9 +78,23 @@ const personJsonLd = {
           <h2>{t('about.interestsTitle')}</h2>
           <p>{t('about.interests')}</p>
         </div>
+
+        <div class="about-section">
+          <h2>{t('about.elsewhereTitle')}</h2>
+          <div class="social-row">
+            {socialLinks.map(link => (
+              <a href={link.url} class="social-pill" target="_blank" rel="noopener noreferrer">
+                <span aria-hidden="true">{link.icon}</span>
+                {link.name}
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   </section>
+
+  <ContactCTA lang={lang} />
 </Layout>
 
 <style>
@@ -84,7 +115,7 @@ const personJsonLd = {
   }
 
   .about-content {
-    max-width: 700px;
+    max-width: 800px;
   }
 
   .about-section {
@@ -97,9 +128,35 @@ const personJsonLd = {
     margin-bottom: var(--space-md);
   }
 
-  .about-section p {
+  .about-section > p {
     line-height: 1.8;
     color: var(--color-text-muted);
+  }
+
+  .focus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: var(--space-sm) 0;
+  }
+
+  .focus-card p {
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    color: var(--color-text-muted);
+  }
+
+  .focus-icon {
+    font-size: 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .focus-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
   }
 
   .career-list {
@@ -116,5 +173,29 @@ const personJsonLd = {
     border-radius: 0.75rem;
     color: var(--color-text-muted);
     line-height: 1.5;
+  }
+
+  .social-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+
+  .social-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 2rem;
+    color: var(--color-text);
+    font-weight: 500;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .social-pill:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
   }
 </style>

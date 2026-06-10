@@ -1,0 +1,97 @@
+---
+import { useTranslations } from '../i18n/translations';
+import type { Locale } from '../i18n/translations';
+
+interface Props {
+  lang: Locale;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<section class="section cta-section">
+  <div class="container">
+    <div class="cta-panel">
+      <div class="cta-glow" aria-hidden="true"></div>
+      <h2 class="cta-title">{t('cta.title')}</h2>
+      <p class="cta-description">{t('cta.description')}</p>
+      <div class="cta-actions">
+        <a href={`/${lang}/connect`} class="btn btn-primary">{t('cta.connect')} →</a>
+        <a
+          href="https://www.linkedin.com/in/ismaelmartinezramos"
+          class="btn btn-outline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {t('cta.linkedin')}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta-section {
+    padding-top: 0;
+  }
+
+  .cta-panel {
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    padding: var(--space-2xl) var(--space-xl);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+  }
+
+  .cta-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--gradient-magic);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .cta-glow {
+    position: absolute;
+    top: -6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24rem;
+    height: 12rem;
+    background: radial-gradient(ellipse at center, var(--color-glow), transparent 70%);
+    pointer-events: none;
+  }
+
+  .cta-title {
+    position: relative;
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: var(--space-md);
+  }
+
+  .cta-description {
+    position: relative;
+    color: var(--color-text-muted);
+    max-width: 540px;
+    margin: 0 auto var(--space-xl);
+    line-height: 1.7;
+  }
+
+  .cta-actions {
+    position: relative;
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>

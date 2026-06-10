@@ -8,6 +8,7 @@ import {
   GRAVITY
 } from '../../src/games/tanks/physics';
 import { chooseAiShot } from '../../src/games/tanks/ai';
+import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster } from '../../src/games/tanks/weapons';
 
 const WIDTH = 800;
 const HEIGHT = 450;
@@ -148,6 +149,41 @@ describe('ai', () => {
       expect(shot.angle).toBeLessThanOrEqual(175);
       expect(shot.power).toBeGreaterThanOrEqual(10);
       expect(shot.power).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
+describe('weapons', () => {
+  it('stocks unlimited missiles and scarce specials', () => {
+    const ammo = freshAmmo();
+    expect(ammo.missile).toBe(Infinity);
+    expect(ammo.heavy).toBeGreaterThan(0);
+    expect(ammo.heavy).toBeLessThan(5);
+    expect(ammo.mirv).toBeGreaterThan(0);
+  });
+
+  it('defines every listed weapon', () => {
+    for (const id of WEAPON_IDS) {
+      expect(WEAPONS[id].radius).toBeGreaterThan(0);
+      expect(WEAPONS[id].maxDamage).toBeGreaterThan(0);
+      expect(WEAPONS[id].cluster).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('splits a cluster into a symmetric horizontal fan', () => {
+    const p = { x: 400, y: 120, vx: 80, vy: 0 };
+    const parts = splitCluster(p, 5, 50);
+    expect(parts).toHaveLength(5);
+    // Middle warhead keeps the original trajectory
+    expect(parts[2]).toEqual(p);
+    // Fan is symmetric around the original vx
+    expect(parts[0].vx + parts[4].vx).toBeCloseTo(2 * p.vx, 5);
+    expect(parts[1].vx + parts[3].vx).toBeCloseTo(2 * p.vx, 5);
+    // All inherit position and vertical velocity
+    for (const part of parts) {
+      expect(part.x).toBe(p.x);
+      expect(part.y).toBe(p.y);
+      expect(part.vy).toBe(p.vy);
     }
   });
 });

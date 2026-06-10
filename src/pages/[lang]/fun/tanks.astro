@@ -9,6 +9,12 @@ export function getStaticPaths() {
 
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
+
+const weapons = [
+  { id: 'missile', emoji: '🚀', label: t('fun.tanks.weaponMissile') },
+  { id: 'heavy', emoji: '💣', label: t('fun.tanks.weaponHeavy') },
+  { id: 'mirv', emoji: '🎇', label: t('fun.tanks.weaponMirv') }
+];
 ---
 
 <Layout title="Tank Duel" lang={lang}>
@@ -65,6 +71,16 @@ const t = useTranslations(lang);
               <button id="play-again-btn" class="btn btn-primary btn-large" style="display: none;">{t('fun.tanks.playAgain')}</button>
             </div>
           </div>
+        </div>
+
+        <div class="weapon-bar">
+          {weapons.map((weapon, i) => (
+            <button class={`weapon-btn${i === 0 ? ' active' : ''}`} data-weapon={weapon.id} disabled>
+              <span class="weapon-emoji">{weapon.emoji}</span>
+              <span class="weapon-name">{weapon.label}</span>
+              <span class="weapon-ammo">∞</span>
+            </button>
+          ))}
         </div>
 
         <div class="controls">
@@ -229,6 +245,57 @@ const t = useTranslations(lang);
   .btn-large {
     padding: var(--space-md) var(--space-2xl);
     font-size: 1.1rem;
+  }
+
+  .weapon-bar {
+    display: flex;
+    gap: var(--space-xs);
+    margin-top: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .weapon-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .weapon-btn:hover:not(:disabled) {
+    border-color: #f97316;
+  }
+
+  .weapon-btn.active {
+    border-color: #f97316;
+    background: rgba(249, 115, 22, 0.12);
+  }
+
+  .weapon-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .weapon-emoji {
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+
+  .weapon-name {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .weapon-ammo {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #facc15;
   }
 
   .controls {

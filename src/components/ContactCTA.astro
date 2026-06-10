@@ -13,7 +13,6 @@ const t = useTranslations(lang);
 <section class="section cta-section">
   <div class="container">
     <div class="cta-panel">
-      <div class="cta-glow" aria-hidden="true"></div>
       <h2 class="cta-title">{t('cta.title')}</h2>
       <p class="cta-description">{t('cta.description')}</p>
       <div class="cta-actions">
@@ -37,61 +36,54 @@ const t = useTranslations(lang);
   }
 
   .cta-panel {
-    position: relative;
-    overflow: hidden;
     text-align: center;
     padding: var(--space-2xl) var(--space-xl);
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 1rem;
-  }
-
-  .cta-panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: var(--gradient-magic);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    opacity: 0.5;
-    pointer-events: none;
-  }
-
-  .cta-glow {
-    position: absolute;
-    top: -6rem;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 24rem;
-    height: 12rem;
-    background: radial-gradient(ellipse at center, var(--color-glow), transparent 70%);
-    pointer-events: none;
+    background: var(--color-accent-solid);
+    color: #fff;
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
   }
 
   .cta-title {
-    position: relative;
-    font-size: 1.75rem;
-    font-weight: 700;
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
     margin-bottom: var(--space-md);
   }
 
   .cta-description {
-    position: relative;
-    color: var(--color-text-muted);
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.88);
     max-width: 540px;
     margin: 0 auto var(--space-xl);
     line-height: 1.7;
+    font-size: 1.1rem;
   }
 
   .cta-actions {
-    position: relative;
     display: flex;
     gap: var(--space-md);
     justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .cta-panel .btn-primary {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .cta-panel .btn-primary:hover {
+    background: var(--color-bg-secondary);
+    color: var(--color-accent);
+  }
+
+  .cta-panel .btn-outline {
+    background: transparent;
+    color: #fff;
+  }
+
+  .cta-panel .btn-outline:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
   }
 </style>

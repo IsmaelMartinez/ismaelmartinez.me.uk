@@ -29,6 +29,9 @@ export const translations = {
     'hero.greeting': "Hi, I'm",
     'hero.name': 'Ismael Martinez',
     'hero.tagline': 'Principal Software Developer & Open Source Enthusiast',
+    'hero.headline1': 'Building software that\'s ',
+    'hero.headlineAccent': 'reliable',
+    'hero.headline2': ', open, and worth writing about.',
     'hero.description': 'I build things, write about technology, and contribute to open source. I care deeply about responsible AI — and about how this technology lets us explore problems in entirely new ways.',
 
     // Sections
@@ -276,6 +279,9 @@ export const translations = {
     'hero.greeting': 'Hola, soy',
     'hero.name': 'Ismael Martinez',
     'hero.tagline': 'Desarrollador de Software Principal y Entusiasta del Open Source',
+    'hero.headline1': 'Construyo software ',
+    'hero.headlineAccent': 'fiable',
+    'hero.headline2': ', abierto y del que vale la pena escribir.',
     'hero.description': 'Construyo cosas, escribo sobre tecnología y contribuyo al código abierto. Me importa profundamente la IA responsable, y cómo esta tecnología nos permite explorar problemas de formas completamente nuevas.',
 
     // Sections
@@ -523,6 +529,9 @@ export const translations = {
     'hero.greeting': 'Hola, sóc',
     'hero.name': 'Ismael Martinez',
     'hero.tagline': 'Desenvolupador de Software Principal i Entusiasta de l\'Open Source',
+    'hero.headline1': 'Construeixo software ',
+    'hero.headlineAccent': 'fiable',
+    'hero.headline2': ', obert i del qual val la pena escriure.',
     'hero.description': 'Construeixo coses, escric sobre tecnologia i contribueixo al codi obert. Em preocupa profundament la IA responsable, i com aquesta tecnologia ens permet explorar problemes de maneres completament noves.',
 
     // Sections

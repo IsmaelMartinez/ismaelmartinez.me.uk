@@ -169,8 +169,9 @@ const personJsonLd = {
   .career-list li {
     padding: var(--space-md) var(--space-lg);
     background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 0.75rem;
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-btn);
     color: var(--color-text-muted);
     line-height: 1.5;
   }
@@ -187,15 +188,20 @@ const personJsonLd = {
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-lg);
     background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 2rem;
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-btn);
     color: var(--color-text);
-    font-weight: 500;
-    transition: border-color 0.2s ease, color 0.2s ease;
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, color 0.2s ease;
   }
 
   .social-pill:hover {
-    border-color: var(--color-accent);
+    transform: translate(2px, 2px);
+    box-shadow: var(--shadow-btn-pressed);
     color: var(--color-accent);
   }
 </style>

@@ -69,8 +69,9 @@ type Phase = 'idle' | 'play' | 'over';
 
 export function initParkGame(): void {
   const root = document.getElementById('park-root');
-  const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvas) return;
+  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
+  if (!root || !canvasEl) return;
+  const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;

@@ -30,6 +30,10 @@ Static data (projects, links, uses, health, fun) lives in TypeScript files under
 
 Articles follow POSSE (Publish Own Site, Syndicate Elsewhere) strategy per ADR 001 in `docs/adr/`. Frontmatter includes `originalUrl` and `originalPlatform` to link back to syndicated copies on Medium/Dev.to.
 
+### Arcade games
+
+Arcade pages live under `src/pages/[lang]/fun/`. Newer games (Tank Duel, Pixel Park, Microcity) split pure game logic into DOM-free TypeScript modules under `src/games/<game>/` (unit-tested in `tests/games/`) with a single `init<Game>()` entry the page calls; shared utilities (fixed-timestep loop, localStorage scores, grid helpers, isometric renderer) live in `src/games/engine/`. Static labels render server-side via `useTranslations`; runtime-composed strings pass through `data-t-*` attributes on the game root. New games register a cabinet in `src/pages/[lang]/fun/index.astro`. The design for the next game (Lemmings) is in `docs/plans/2026-06-10-arcade-expansion-design.md`.
+
 ### Layouts and Components
 
 `src/layouts/Layout.astro` is the base layout with navigation, language switcher, and footer. `src/layouts/ArticleLayout.astro` handles article pages. Components in `src/components/` are shared across locales.

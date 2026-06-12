@@ -61,6 +61,28 @@ const TILE_EMOJI: Partial<Record<TileType, string>> = {
   tree: '🌳'
 };
 
+/** Per-building block colour and height so each attraction reads distinctly. */
+const BUILDING_STYLE: Partial<Record<TileType, { color: string; height: number }>> = {
+  carousel: { color: '#b34a8f', height: 14 },
+  ferris: { color: '#5a67c0', height: 26 },
+  food: { color: '#a8632c', height: 11 },
+  drink: { color: '#2f7fb0', height: 11 },
+  toilet: { color: '#5e6a72', height: 9 }
+};
+
+/** Spin rates (radians/s) for rides: gentle idle, lively while in use. */
+const RIDE_SPIN: Partial<Record<TileType, { idle: number; busy: number }>> = {
+  carousel: { idle: 0.7, busy: 3 },
+  ferris: { idle: 0.35, busy: 1.4 }
+};
+
+const NEED_EMOJI: Record<string, string> = {
+  fun: '🎢',
+  hunger: '🍔',
+  thirst: '🥤',
+  bladder: '🚻'
+};
+
 const GUEST_COLORS = ['#f472b6', '#60a5fa', '#fbbf24', '#34d399', '#c084fc', '#fb923c'];
 
 interface Guest {
@@ -114,6 +136,11 @@ export function initParkGame(): void {
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
 
+  // On narrow screens the board keeps a minimum size inside a pannable
+  // container; start the view centred on the entrance.
+  const scroller = document.getElementById('canvas-scroll');
+  if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+
   let { tiles, entrance } = createPark();
   let phase: Phase = 'idle';
   let money = START_MONEY;
@@ -126,9 +153,17 @@ export function initParkGame(): void {
   let selectedTool: Tool = 'path';
   let speedMult = 1;
   let hoverTile = -1;
+  let clock = 0;
+  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
   let record = loadScore(RECORD_KEY);
 
   recordEl.textContent = record.toString();
+
+  function addFloater(tile: number, text: string, color: string) {
+    const c = tileCenter(tile);
+    const p = isoProject(VIEW, c.x, c.y);
+    floaters.push({ x: p.x, y: p.y - BLOCK_HEIGHT - 6, text, color, life: 1 });
+  }
 
   function showToast(text: string) {
     const toast = document.createElement('div');
@@ -229,6 +264,7 @@ export function initParkGame(): void {
     guest.targetBuilding = building;
     guest.useTimer = def.useTime;
     money += def.price;
+    addFloater(building, `+£${def.price}`, '#4ade80');
   }
 
   function arrive(guest: Guest): boolean {
@@ -314,6 +350,12 @@ export function initParkGame(): void {
   // --- Simulation ---
 
   function update(dt: number) {
+    clock += dt;
+    floaters = floaters.filter(f => {
+      f.life -= dt;
+      f.y -= 16 * dt;
+      return f.life > 0;
+    });
     if (phase !== 'play' || speedMult === 0) return;
     const simDt = dt * speedMult;
 
@@ -363,6 +405,7 @@ export function initParkGame(): void {
     peakGuests = 0;
     rating = parkRating(null, 0);
     speedMult = 1;
+    floaters = [];
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     phase = 'play';
   }
@@ -409,6 +452,27 @@ export function initParkGame(): void {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+
+    // Theme Park-style thought bubble: what this guest badly wants right now
+    const urgent = mostUrgentNeed(guest.needs);
+    const thought =
+      guest.state === 'leaving' && happiness(guest.needs) < 25
+        ? '😡'
+        : guest.state !== 'using' && urgent && guest.needs[urgent] < 40
+          ? NEED_EMOJI[urgent]
+          : undefined;
+    if (thought) {
+      const by = p.y - 17;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.beginPath();
+      ctx.arc(p.x, by, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x - 3, by + 8, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = '9px serif';
+      ctx.fillText(thought, p.x, by + 1);
+    }
   }
 
   function render() {
@@ -419,6 +483,11 @@ export function initParkGame(): void {
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+
+    const inUse = new Set<number>();
+    for (const guest of guests) {
+      if (guest.state === 'using' && guest.targetBuilding !== null) inUse.add(guest.targetBuilding);
+    }
 
     // Guests draw interleaved with their diagonal so blocks occlude them correctly
     const guestsByDiag: Guest[][] = Array.from({ length: GRID_W + GRID_H - 1 }, () => []);
@@ -450,9 +519,16 @@ export function initParkGame(): void {
         ctx.font = '17px serif';
         ctx.fillText('🌳', top.x, top.y - 7);
       } else if (BUILDINGS[tile]) {
-        drawBlock(ctx, VIEW, x, y, BLOCK_HEIGHT, '#44447a');
-        ctx.font = '14px serif';
-        ctx.fillText(TILE_EMOJI[tile] ?? '', top.x, top.y - BLOCK_HEIGHT);
+        const style = BUILDING_STYLE[tile] ?? { color: '#44447a', height: BLOCK_HEIGHT };
+        drawBlock(ctx, VIEW, x, y, style.height, style.color);
+        const spin = RIDE_SPIN[tile];
+        const busy = inUse.has(i);
+        ctx.save();
+        ctx.translate(top.x, top.y - style.height - (busy ? 2 : 0));
+        if (spin) ctx.rotate((clock * (busy ? spin.busy : spin.idle)) % (Math.PI * 2));
+        ctx.font = `${tile === 'ferris' ? 16 : 14}px serif`;
+        ctx.fillText(TILE_EMOJI[tile] ?? '', 0, 0);
+        ctx.restore();
       }
     });
     if (lastDiag >= 0) guestsByDiag[lastDiag].forEach(drawGuest);
@@ -463,6 +539,14 @@ export function initParkGame(): void {
       const valid = canPlace(tiles, x, y, selectedTool) && toolCost(selectedTool) <= money;
       strokeTile(ctx, VIEW, x, y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
+
+    ctx.font = 'bold 11px monospace';
+    for (const f of floaters) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
 
     moneyEl.textContent = `£${Math.floor(money)}`;
     guestCountEl.textContent = guests.length.toString();
@@ -486,10 +570,23 @@ export function initParkGame(): void {
     hoverTile = -1;
   });
 
+  // Touch taps can't hover-preview, so the first tap arms a tile (showing
+  // the placement highlight) and a second tap on the same tile confirms.
+  let coarsePointer = false;
+  let armedTile = -1;
+  canvas.addEventListener('pointerdown', e => {
+    coarsePointer = e.pointerType !== 'mouse';
+  });
+
   canvas.addEventListener('click', e => {
     if (phase !== 'play') return;
     const i = tileFromEvent(e);
     if (i < 0) return;
+    if (coarsePointer && armedTile !== i) {
+      armedTile = i;
+      hoverTile = i;
+      return;
+    }
     const x = i % GRID_W;
     const y = Math.floor(i / GRID_W);
 
@@ -522,6 +619,7 @@ export function initParkGame(): void {
   toolButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       selectedTool = btn.dataset.tool as Tool;
+      armedTile = -1;
       toolButtons.forEach(b => b.classList.toggle('active', b === btn));
     });
   });

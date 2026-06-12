@@ -132,6 +132,7 @@ export function initSyndicateGame(): void {
   let boostCooldown = 0;
   let clock = 0;
   let moveMarker: { tile: number; t: number } | null = null;
+  let extractionAnnounced = false;
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
 
   recordEl.textContent = `£${record}`;
@@ -162,6 +163,7 @@ export function initSyndicateGame(): void {
     selected = new Set([0, 1, 2, 3]);
     boostCooldown = 0;
     moveMarker = null;
+    extractionAnnounced = false;
     floaters = [];
     missionEl.textContent = `${index + 1}/${MISSIONS.length}`;
     phase = 'play';
@@ -255,6 +257,15 @@ export function initSyndicateGame(): void {
 
     boostCooldown = Math.max(0, boostCooldown - dt);
     handleEvents(stepWorld(world, dt));
+
+    if (
+      spec.objective === 'persuade' &&
+      !extractionAnnounced &&
+      persuadedCivilians(world) >= spec.persuadeQuota
+    ) {
+      extractionAnnounced = true;
+      showToast(`🚁 ${strings.objectiveExtract}`);
+    }
 
     const status = missionStatus(spec, world.units, persuadedCivilians(world), agentAtExtraction());
     if (status === 'won') completeMission();
@@ -408,12 +419,24 @@ export function initSyndicateGame(): void {
     const y = Math.floor(extraction / MAP_W);
     const open = persuadedCivilians(world) >= spec.persuadeQuota;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 4);
-    ctx.globalAlpha = open ? 0.5 + pulse * 0.5 : 0.35;
-    strokeTile(ctx, VIEW, x, y, open ? '#4ade80' : '#94a3b8', 2);
-    ctx.globalAlpha = 1;
+    const colour = open ? '#4ade80' : '#94a3b8';
+
+    ctx.globalAlpha = open ? 0.55 + pulse * 0.45 : 0.45 + pulse * 0.2;
+    strokeTile(ctx, VIEW, x, y, colour, 2.5);
+
+    // Vertical light beam so the pad reads from anywhere on the map
     const p = isoProject(VIEW, x + 0.5, y + 0.5);
-    ctx.font = '12px serif';
-    ctx.fillText('🚁', p.x, p.y - 12 - pulse * 2);
+    const beamH = 96;
+    const beam = ctx.createLinearGradient(0, p.y - beamH, 0, p.y);
+    beam.addColorStop(0, 'rgba(74, 222, 128, 0)');
+    beam.addColorStop(1, open ? 'rgba(74, 222, 128, 0.5)' : 'rgba(148, 163, 184, 0.35)');
+    ctx.fillStyle = beam;
+    ctx.globalAlpha = 0.5 + pulse * 0.5;
+    ctx.fillRect(p.x - VIEW.halfW * 0.5, p.y - beamH, VIEW.halfW, beamH);
+    ctx.globalAlpha = 1;
+
+    ctx.font = '16px serif';
+    ctx.fillText('🚁', p.x, p.y - beamH - 6 - pulse * 3);
   }
 
   function render() {
@@ -462,7 +485,6 @@ export function initSyndicateGame(): void {
         drawWindows(x, y, i, tile.height);
         drawNeonTrim(x, y, tile.height, tile.palette);
       }
-      if (i === extraction) drawExtraction();
       if (moveMarker && moveMarker.tile === i) {
         ctx.globalAlpha = Math.min(1, moveMarker.t / 0.4);
         strokeTile(ctx, VIEW, x, y, 'rgba(103, 232, 249, 0.9)', 1.5);
@@ -473,6 +495,9 @@ export function initSyndicateGame(): void {
       pickupsByDiag[lastDiag].forEach(drawPickup);
       unitsByDiag[lastDiag].forEach(drawUnit);
     }
+
+    // The beacon draws over the city — a tower must never hide the way out
+    drawExtraction();
 
     // Weapon tracers on top of everything
     for (const shot of world.shots) {

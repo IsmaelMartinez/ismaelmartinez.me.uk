@@ -63,7 +63,9 @@ const tools = [
         </div>
 
         <div class="game-area">
-          <canvas id="game-canvas"></canvas>
+          <div class="canvas-scroll" id="canvas-scroll">
+            <canvas id="game-canvas"></canvas>
+          </div>
           <div id="toast-area" class="toast-area"></div>
           <div id="start-overlay" class="game-overlay">
             <div class="overlay-content">
@@ -195,12 +197,24 @@ const tools = [
     border: 2px solid var(--color-border);
   }
 
+  .canvas-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   #game-canvas {
     display: block;
     width: 100%;
     height: auto;
     aspect-ratio: 76 / 45;
     cursor: pointer;
+  }
+
+  /* Keep tiles tappable on phones: minimum board size + horizontal pan */
+  @media (max-width: 600px) {
+    #game-canvas {
+      min-width: 640px;
+    }
   }
 
   .toast-area {

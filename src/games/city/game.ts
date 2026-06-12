@@ -104,6 +104,11 @@ export function initCityGame(): void {
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
 
+  // On narrow screens the board keeps a minimum size inside a pannable
+  // container; start the view centred.
+  const scroller = document.getElementById('canvas-scroll');
+  if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+
   let tiles: CityTile[] = createCity();
   let phase: Phase = 'idle';
   let money = START_MONEY;
@@ -430,10 +435,23 @@ export function initCityGame(): void {
     hoverTile = -1;
   });
 
+  // Touch taps can't hover-preview, so the first tap arms a tile (showing
+  // the placement highlight) and a second tap on the same tile confirms.
+  let coarsePointer = false;
+  let armedTile = -1;
+  canvas.addEventListener('pointerdown', e => {
+    coarsePointer = e.pointerType !== 'mouse';
+  });
+
   canvas.addEventListener('click', e => {
     if (phase !== 'play') return;
     const i = tileFromEvent(e);
     if (i < 0) return;
+    if (coarsePointer && armedTile !== i) {
+      armedTile = i;
+      hoverTile = i;
+      return;
+    }
     const x = i % CITY_W;
     const y = Math.floor(i / CITY_W);
     if (!canBuild(tiles, x, y, selectedTool)) return;
@@ -450,6 +468,7 @@ export function initCityGame(): void {
   toolButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       selectedTool = btn.dataset.tool as CityTool;
+      armedTile = -1;
       toolButtons.forEach(b => b.classList.toggle('active', b === btn));
     });
   });

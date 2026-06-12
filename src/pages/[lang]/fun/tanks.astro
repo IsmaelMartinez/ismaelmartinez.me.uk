@@ -197,6 +197,9 @@ const weapons = [
     width: 100%;
     height: auto;
     aspect-ratio: 16 / 9;
+    /* Dragging on the battlefield aims the shot, so don't scroll the page */
+    touch-action: none;
+    cursor: crosshair;
   }
 
   .game-overlay {

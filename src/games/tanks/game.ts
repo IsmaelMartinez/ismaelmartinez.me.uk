@@ -85,8 +85,9 @@ type Phase = 'idle' | 'aim' | 'cpu-think' | 'fly' | 'round-over';
 
 export function initTanksGame(): void {
   const root = document.getElementById('tanks-root');
-  const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvas) return;
+  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
+  if (!root || !canvasEl) return;
+  const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
@@ -576,6 +577,23 @@ export function initTanksGame(): void {
 
     tanks.forEach((tank, index) => drawTank(tank, index));
 
+    // Aim guide while a human is lining up a shot
+    if (isHumanTurn()) {
+      const tank = tanks[current];
+      const rad = (tank.angle * Math.PI) / 180;
+      const fromX = tank.x + Math.cos(rad) * BARREL_LEN;
+      const fromY = tank.y - TANK_H - Math.sin(rad) * BARREL_LEN;
+      const len = 14 + tank.power * 1.1;
+      ctx.strokeStyle = `${tank.color}88`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(fromX + Math.cos(rad) * len, fromY - Math.sin(rad) * len);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     if (muzzleFlash) {
       ctx.fillStyle = `rgba(253, 224, 71, ${muzzleFlash.t / 0.12})`;
       ctx.beginPath();
@@ -632,6 +650,51 @@ export function initTanksGame(): void {
   }
 
   // --- Input wiring ---
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+
+  function canvasPoint(e: PointerEvent): { x: number; y: number } {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (WIDTH / rect.width),
+      y: (e.clientY - rect.top) * (HEIGHT / rect.height)
+    };
+  }
+
+  // Drag anywhere on the battlefield to aim: the vector from the turret to
+  // the pointer sets angle and power. Touch-friendly; sliders fine-tune.
+  let aiming = false;
+
+  function aimFromPointer(e: PointerEvent) {
+    const tank = tanks[current];
+    if (!tank) return;
+    const p = canvasPoint(e);
+    const dx = p.x - tank.x;
+    const dy = tank.y - TANK_H - p.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 10) return;
+    tank.angle = clamp((Math.atan2(dy, dx) * 180) / Math.PI, 5, 175);
+    tank.power = clamp(dist / 3.2, 10, 100);
+    syncControls();
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    if (!isHumanTurn()) return;
+    aiming = true;
+    canvas.setPointerCapture(e.pointerId);
+    aimFromPointer(e);
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (aiming && isHumanTurn()) aimFromPointer(e);
+  });
+  canvas.addEventListener('pointerup', () => {
+    aiming = false;
+  });
+  canvas.addEventListener('pointercancel', () => {
+    aiming = false;
+  });
 
   angleSlider.addEventListener('input', () => {
     if (!isHumanTurn()) return;

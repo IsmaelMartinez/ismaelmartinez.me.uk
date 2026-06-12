@@ -92,7 +92,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
     <nav class="nav" aria-label={t('nav.mainNavigation')}>
       <div class="container nav-container">
-        <a href={getLocalizedPath('/', lang)} class="nav-logo">IMR</a>
+        <a href={getLocalizedPath('/', lang)} class="nav-logo">Ismael <em>Martinez</em></a>
 
         <button id="menu-toggle" class="menu-toggle" aria-label={t('nav.menuToggle')} aria-controls="nav-links" aria-expanded="false" type="button">
           <span class="menu-icon"></span>
@@ -138,7 +138,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> {t('footer.and')} ☕
         </p>
         <p class="footer-links">
-          <a href={getLocalizedPath('/uses', lang)} class="footer-link">{t('nav.uses')}</a>
+          <a href={getLocalizedPath('/connect', lang)} class="footer-link">{t('cta.connect')}</a>
           <span class="footer-separator">·</span>
           <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">RSS</a>
         </p>
@@ -378,32 +378,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       }
       initReveal();
 
-      // Cursor spotlight: cards glow where the pointer is (document-level, survives swaps).
-      // The hovered card's rect is cached lazily and invalidated on scroll/resize so
-      // pointermove never forces a layout pass (rects are viewport-relative).
-      let spotlightCard: HTMLElement | null = null;
-      let spotlightRect: DOMRect | null = null;
-
-      document.addEventListener('pointerover', (e) => {
-        const card = (e.target as Element | null)?.closest?.('.card, .link-card');
-        const el = card instanceof HTMLElement ? card : null;
-        if (el !== spotlightCard) {
-          spotlightCard = el;
-          spotlightRect = null;
-        }
-      }, { passive: true });
-
-      document.addEventListener('pointermove', (e) => {
-        if (!spotlightCard) return;
-        spotlightRect ??= spotlightCard.getBoundingClientRect();
-        spotlightCard.style.setProperty('--glow-x', `${e.clientX - spotlightRect.left}px`);
-        spotlightCard.style.setProperty('--glow-y', `${e.clientY - spotlightRect.top}px`);
-      }, { passive: true });
-
-      const invalidateSpotlightRect = () => { spotlightRect = null; };
-      document.addEventListener('scroll', invalidateSpotlightRect, { passive: true, capture: true });
-      window.addEventListener('resize', invalidateSpotlightRect, { passive: true });
-
       // Easter egg: type "magic" anywhere for a little sparkle shower ✨
       const magicWord = 'magic';
       let magicProgress = 0;
@@ -454,8 +428,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
       document.addEventListener('astro:after-swap', () => {
         const theme = localStorage.getItem('theme');
         if (theme) document.documentElement.setAttribute('data-theme', theme);
-        spotlightCard = null;
-        spotlightRect = null;
         initThemeToggle();
         initMenuToggle();
         initLogoEasterEgg();
@@ -490,7 +462,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     top: 0;
     z-index: 100;
     background: var(--color-bg);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 3px double var(--color-frame);
     height: var(--nav-height);
   }
 
@@ -502,9 +474,16 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   }
 
   .nav-logo {
-    font-size: 1.25rem;
+    font-family: var(--font-serif);
+    font-size: 1.35rem;
     font-weight: 700;
+    letter-spacing: 0.01em;
     color: var(--color-text);
+  }
+
+  .nav-logo em {
+    font-style: normal;
+    color: var(--color-accent);
   }
 
   .nav-links {
@@ -515,7 +494,10 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
   .nav-links a {
     color: var(--color-text-muted);
-    font-weight: 500;
+    font-weight: 700;
+    font-size: 0.76rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
     transition: color 0.2s ease;
     position: relative;
   }
@@ -527,8 +509,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     right: 0;
     bottom: -4px;
     height: 2px;
-    border-radius: 1px;
-    background: var(--gradient-magic);
+    background: var(--color-accent);
     transform: scaleX(0);
     transform-origin: left;
     transition: transform 0.25s ease;
@@ -563,8 +544,8 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
   .theme-toggle {
     background: none;
-    border: 1px solid var(--color-border);
-    border-radius: 0.25rem;
+    border: 1px solid var(--color-frame);
+    border-radius: var(--radius);
     cursor: pointer;
     padding: var(--space-xs) var(--space-sm);
     color: var(--color-text-muted);
@@ -580,30 +561,33 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     border-color: var(--color-accent);
   }
 
-  /* Show moon in dark mode, sun in light mode */
-  .theme-icon-light { display: none; }
-  .theme-icon-dark { display: inline; }
+  /* Show sun in light mode (default), moon in dark mode */
+  .theme-icon-light { display: inline; }
+  .theme-icon-dark { display: none; }
 
-  :global(:root[data-theme="light"]) .theme-icon-light { display: inline; }
-  :global(:root[data-theme="light"]) .theme-icon-dark { display: none; }
+  :global(:root[data-theme="dark"]) .theme-icon-light { display: none; }
+  :global(:root[data-theme="dark"]) .theme-icon-dark { display: inline; }
 
-  @media (prefers-color-scheme: light) {
-    :global(:root:not([data-theme="dark"])) .theme-icon-light { display: inline; }
-    :global(:root:not([data-theme="dark"])) .theme-icon-dark { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme="light"])) .theme-icon-light { display: none; }
+    :global(:root:not([data-theme="light"])) .theme-icon-dark { display: inline; }
   }
 
   .lang-link {
     padding: var(--space-xs) var(--space-sm);
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
     color: var(--color-text-muted);
-    border-radius: 0.25rem;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
     transition: all 0.2s ease;
   }
 
   .lang-link:hover,
   .lang-link.active {
     color: var(--color-accent);
+    border-color: var(--color-frame);
     background: var(--color-bg-secondary);
   }
 
@@ -653,7 +637,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   }
 
   .footer {
-    border-top: 1px solid var(--color-border);
+    border-top: 3px double var(--color-frame);
     padding: var(--space-xl) 0;
     text-align: center;
     color: var(--color-text-muted);

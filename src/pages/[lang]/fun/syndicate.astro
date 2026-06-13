@@ -1,0 +1,462 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { useTranslations, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+
+const agents = [0, 1, 2, 3];
+---
+
+<Layout title="Syndicate" lang={lang}>
+  <section class="syndicate-section">
+    <div class="container">
+      <div
+        class="game-container"
+        id="syndicate-root"
+        data-t-mission1-name={t('fun.syndicate.mission1Name')}
+        data-t-mission1-brief={t('fun.syndicate.mission1Brief')}
+        data-t-mission2-name={t('fun.syndicate.mission2Name')}
+        data-t-mission2-brief={t('fun.syndicate.mission2Brief')}
+        data-t-mission3-name={t('fun.syndicate.mission3Name')}
+        data-t-mission3-brief={t('fun.syndicate.mission3Brief')}
+        data-t-objective-eliminate={t('fun.syndicate.objectiveEliminate')}
+        data-t-objective-persuade={t('fun.syndicate.objectivePersuade')}
+        data-t-objective-extract={t('fun.syndicate.objectiveExtract')}
+        data-t-objective-assassinate={t('fun.syndicate.objectiveAssassinate')}
+        data-t-mission-complete={t('fun.syndicate.missionComplete')}
+        data-t-next-mission={t('fun.syndicate.nextMission')}
+        data-t-game-over={t('fun.syndicate.gameOver')}
+        data-t-game-over-desc={t('fun.syndicate.gameOverDesc')}
+        data-t-victory={t('fun.syndicate.victory')}
+        data-t-victory-desc={t('fun.syndicate.victoryDesc')}
+        data-t-play-again={t('fun.syndicate.playAgain')}
+        data-t-agent-down={t('fun.syndicate.agentDown')}
+        data-t-joined={t('fun.syndicate.joined')}
+        data-t-weapon-pistol={t('fun.syndicate.weaponPistol')}
+        data-t-weapon-uzi={t('fun.syndicate.weaponUzi')}
+        data-t-weapon-minigun={t('fun.syndicate.weaponMinigun')}
+        data-t-kind-guard={t('fun.syndicate.kindGuard')}
+        data-t-kind-enemy={t('fun.syndicate.kindEnemy')}
+      >
+        <div class="game-header">
+          <h1><span class="syndicate-emoji">🕶️</span> {t('fun.syndicate.title')}</h1>
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label">{t('fun.syndicate.funds')}</span>
+              <span id="money" class="score-value money">£0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.syndicate.followers')}</span>
+              <span id="followers" class="score-value">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.syndicate.mission')}</span>
+              <span id="mission-num" class="score-value">—</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.syndicate.record')}</span>
+              <span id="record" class="score-value">£0</span>
+            </div>
+          </div>
+        </div>
+
+        <p id="objective-text" class="objective">🕶️ {t('fun.syndicate.tagline')}</p>
+
+        <div class="game-area">
+          <div class="canvas-scroll" id="canvas-scroll">
+            <canvas id="game-canvas"></canvas>
+          </div>
+          <div id="toast-area" class="toast-area"></div>
+
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">🕶️</span>
+              <h2 id="brief-title">{t('fun.syndicate.mission1Name')}</h2>
+              <p id="brief-text">{t('fun.syndicate.mission1Brief')}</p>
+              <p class="instructions">{t('fun.syndicate.instructions')}</p>
+              <button id="start-btn" class="btn btn-primary btn-large">
+                {t('fun.syndicate.start')}
+              </button>
+            </div>
+          </div>
+
+          <div id="over-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span id="over-icon" class="play-icon">💼</span>
+              <h2 id="over-title"></h2>
+              <p id="over-desc"></p>
+              <p class="final-stats">
+                {t('fun.syndicate.campaignFunds')}: <strong id="final-cash">£0</strong>
+              </p>
+              <button id="next-btn" class="btn btn-primary btn-large"></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="squad-bar">
+            <button id="select-all" class="squad-btn active" title={t('fun.syndicate.selectAll')}>
+              {t('fun.syndicate.all')}
+            </button>
+            {agents.map(n => (
+              <button class="agent-chip" data-agent={n}>
+                <span class="chip-name">{t('fun.syndicate.agent')} {n + 1}</span>
+                <span class="chip-hp"><span class="chip-hp-fill"></span></span>
+                <span class="chip-weapon">{t('fun.syndicate.weaponPistol')}</span>
+              </button>
+            ))}
+          </div>
+          <button id="boost-btn" class="boost-btn" disabled>
+            <span class="boost-fill"></span>
+            <span class="boost-label">⚡ {t('fun.syndicate.boost')}</span>
+          </button>
+        </div>
+        <p class="hint">{t('fun.syndicate.hint')}</p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import { initSyndicateGame } from '../../../games/syndicate';
+  initSyndicateGame();
+</script>
+
+<style>
+  .syndicate-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .game-container {
+    max-width: 880px;
+    margin: 0 auto;
+  }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-sm);
+  }
+
+  .game-header h1 {
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+  }
+
+  .syndicate-emoji {
+    animation: scan 3s ease-in-out infinite;
+  }
+
+  @keyframes scan {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(3px); }
+  }
+
+  .scores {
+    display: flex;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .score-item {
+    text-align: center;
+  }
+
+  .score-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .score-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #22d3ee;
+  }
+
+  .score-value.money {
+    color: #4ade80;
+  }
+
+  .objective {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    min-height: 1.4em;
+  }
+
+  .game-area {
+    position: relative;
+    background: var(--color-bg-secondary);
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 2px solid var(--color-border);
+  }
+
+  .canvas-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 832 / 498;
+    cursor: crosshair;
+  }
+
+  @media (max-width: 600px) {
+    #game-canvas {
+      min-width: 640px;
+    }
+  }
+
+  .toast-area {
+    position: absolute;
+    bottom: var(--space-md);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    pointer-events: none;
+  }
+
+  .toast-area :global(.toast) {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 0.8rem;
+    padding: var(--space-xs) var(--space-md);
+    border-radius: 999px;
+    animation: toastIn 0.2s ease;
+    white-space: nowrap;
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .game-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(4px);
+    z-index: 2;
+  }
+
+  .overlay-content {
+    text-align: center;
+    padding: var(--space-xl);
+    max-width: 560px;
+  }
+
+  .overlay-content h2 {
+    margin: 0 0 var(--space-sm);
+    color: #22d3ee;
+  }
+
+  .overlay-content p {
+    margin: 0 0 var(--space-md);
+    color: var(--color-text);
+  }
+
+  .overlay-content .instructions {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .play-icon {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: var(--space-md);
+  }
+
+  .final-stats {
+    font-size: 1.1rem;
+  }
+
+  .final-stats strong {
+    color: #4ade80;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: var(--space-lg);
+    margin-top: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .squad-bar {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+  }
+
+  .squad-btn,
+  .agent-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 76px;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 0.7rem;
+  }
+
+  .squad-btn {
+    min-width: 56px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .squad-btn:hover,
+  .agent-chip:hover {
+    border-color: #22d3ee;
+  }
+
+  .squad-btn.active,
+  .agent-chip.active {
+    border-color: #22d3ee;
+    background: rgba(34, 211, 238, 0.12);
+  }
+
+  .agent-chip.down {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .chip-name {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+  }
+
+  .chip-hp {
+    display: block;
+    width: 56px;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .chip-hp-fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #4ade80;
+    transition: width 0.2s ease;
+  }
+
+  .chip-weapon {
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+  }
+
+  .boost-btn {
+    position: relative;
+    overflow: hidden;
+    min-width: 140px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.75rem;
+    transition: all 0.15s ease;
+  }
+
+  .boost-btn:not(:disabled):hover {
+    border-color: #fbbf24;
+  }
+
+  .boost-btn:disabled {
+    cursor: not-allowed;
+  }
+
+  .boost-btn.boosting {
+    border-color: #fbbf24;
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+  }
+
+  .boost-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background: rgba(251, 191, 36, 0.15);
+    transition: width 0.2s linear;
+  }
+
+  .boost-label {
+    position: relative;
+  }
+
+  .hint {
+    margin-top: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  @media (max-width: 600px) {
+    .game-header {
+      justify-content: center;
+      text-align: center;
+    }
+
+    .scores {
+      justify-content: center;
+      gap: var(--space-md);
+    }
+
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .squad-bar {
+      justify-content: center;
+    }
+  }
+</style>

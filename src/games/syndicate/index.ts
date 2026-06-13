@@ -1,0 +1,1 @@
+export { initSyndicateGame } from './game';

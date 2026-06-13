@@ -44,7 +44,7 @@ export type WorldEvent =
   | { type: 'kill'; kind: Unit['kind']; by: 'player' | 'hostile'; x: number; y: number }
   | { type: 'agentDown'; x: number; y: number }
   | { type: 'persuade'; kind: Unit['kind']; x: number; y: number }
-  | { type: 'pickup'; weapon: WeaponId; agentId: number; upgraded: boolean; x: number; y: number };
+  | { type: 'pickup'; weapon: WeaponId; role: 'agent' | 'follower'; upgraded: boolean; x: number; y: number };
 
 export interface World {
   tiles: MapTile[];
@@ -127,6 +127,20 @@ function wander(world: World, unit: Unit, radius: number, idleMin: number, idleM
     if (path) unit.path = path;
   }
   unit.wanderTimer = unit.panic > 0 ? 0.3 : idleMin + world.random() * (idleMax - idleMin);
+}
+
+/** Closest weapon drop within `range` tiles of the unit, or null. */
+function nearestPickup(world: World, unit: Unit, range: number): Pickup | null {
+  let best: Pickup | null = null;
+  let bestDist = range;
+  for (const pickup of world.pickups) {
+    const d = Math.hypot(pickup.x - unit.x, pickup.y - unit.y);
+    if (d < bestDist) {
+      bestDist = d;
+      best = pickup;
+    }
+  }
+  return best;
 }
 
 function follow(world: World, unit: Unit, agents: Unit[]): void {
@@ -234,7 +248,18 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
         if (target) fire(world, unit, target, events);
       }
     } else if (unit.persuaded) {
-      follow(world, unit, agents);
+      // Unarmed followers peel off to loot a nearby weapon; armed ones stick
+      // with the squad and lay down fire — just like the original's mobs.
+      const drop = unit.weapon ? null : nearestPickup(world, unit, 6);
+      if (drop) {
+        if (unit.repathTimer <= 0 || !unit.path.length) {
+          const path = findPath(world.tiles, tileOf(unit), idx(Math.floor(drop.x), Math.floor(drop.y)));
+          if (path) unit.path = path;
+          unit.repathTimer = 0.4;
+        }
+      } else {
+        follow(world, unit, agents);
+      }
       if (unit.weapon && unit.cooldown <= 0) {
         const target = visibleTarget(world, unit, hostiles, WEAPONS[unit.weapon].range);
         if (target) fire(world, unit, target, events);
@@ -275,21 +300,24 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
     }
   }
 
-  // Weapon pickups: the agent walking over a drop claims it if it beats
-  // their current hardware; otherwise the syndicate fences it for cash.
+  // Weapon pickups. Agents claim first — upgrading their kit or fencing the
+  // duplicate for cash. Then unarmed or out-gunned followers grab what's left
+  // and join the firefight.
+  const followers = world.units.filter(u => u.alive && u.persuaded && u.faction === 'player');
   world.pickups = world.pickups.filter(pickup => {
     for (const agent of agents) {
       if (Math.hypot(agent.x - pickup.x, agent.y - pickup.y) > 0.8) continue;
       const upgraded = !agent.weapon || WEAPONS[pickup.weapon].tier > WEAPONS[agent.weapon].tier;
       if (upgraded) agent.weapon = pickup.weapon;
-      events.push({
-        type: 'pickup',
-        weapon: pickup.weapon,
-        agentId: agent.id,
-        upgraded,
-        x: pickup.x,
-        y: pickup.y
-      });
+      events.push({ type: 'pickup', weapon: pickup.weapon, role: 'agent', upgraded, x: pickup.x, y: pickup.y });
+      return false;
+    }
+    for (const follower of followers) {
+      if (Math.hypot(follower.x - pickup.x, follower.y - pickup.y) > 0.8) continue;
+      const upgraded = !follower.weapon || WEAPONS[pickup.weapon].tier > WEAPONS[follower.weapon].tier;
+      if (!upgraded) continue;
+      follower.weapon = pickup.weapon;
+      events.push({ type: 'pickup', weapon: pickup.weapon, role: 'follower', upgraded: true, x: pickup.x, y: pickup.y });
       return false;
     }
     return true;

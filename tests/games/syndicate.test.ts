@@ -199,6 +199,30 @@ describe('simulation', () => {
     expect(world.pickups).toHaveLength(0);
   });
 
+  it('lets a persuaded follower loot a dropped weapon and join the fight', () => {
+    const tiles = openMap();
+    const agent = createUnit(1, 'agent', idx(10, 10), MAP_W, null);
+    const follower = createUnit(2, 'civilian', idx(10, 11), MAP_W);
+    follower.persuaded = true;
+    follower.faction = 'player';
+    const enemy = createUnit(3, 'enemy', idx(13, 11), MAP_W, null);
+    const world = createWorld(tiles, [agent, follower, enemy], seededRandom());
+    world.pickups.push({ x: 10.5, y: 12.5, weapon: 'uzi' });
+
+    let armed = false;
+    let firedAtEnemy = false;
+    for (let step = 0; step < 600 && !firedAtEnemy; step++) {
+      const events = stepWorld(world, 1 / 60);
+      if (!armed && follower.weapon === 'uzi') {
+        armed = true;
+        expect(events).toContainEqual(expect.objectContaining({ type: 'pickup', role: 'follower' }));
+      }
+      if (armed) firedAtEnemy = enemy.hp < enemy.maxHp;
+    }
+    expect(armed).toBe(true);
+    expect(firedAtEnemy).toBe(true);
+  });
+
   it('moves commanded agents toward the ordered tile', () => {
     const tiles = openMap();
     const agent = createUnit(1, 'agent', idx(2, 2), MAP_W, null);

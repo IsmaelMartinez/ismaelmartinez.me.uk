@@ -53,6 +53,36 @@ const PERSUADE_BONUS: Partial<Record<Unit['kind'], number>> = {
   guard: 200,
   enemy: 400
 };
+const SHOT_LIFE = 0.12;
+const RAIN_DROPS = 90;
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+  gravity: number;
+  glow: boolean;
+}
+
+interface Decal {
+  x: number;
+  y: number;
+  r: number;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
+/** Cheap deterministic 0–1 hash so building props stay stable per tile. */
+function hash(i: number, salt: number): number {
+  const n = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
 
 type Phase = 'idle' | 'play' | 'debrief' | 'over';
 
@@ -119,6 +149,18 @@ export function initSyndicateGame(): void {
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
+  // Pre-rendered scanline overlay (cheaper than drawing lines every frame).
+  let scanlines: HTMLCanvasElement | null = null;
+  const scan = document.createElement('canvas');
+  scan.width = CANVAS_W;
+  scan.height = CANVAS_H;
+  const scanCtx = scan.getContext('2d');
+  if (scanCtx) {
+    scanCtx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+    for (let y = 0; y < CANVAS_H; y += 3) scanCtx.fillRect(0, y, CANVAS_W, 1);
+    scanlines = scan;
+  }
+
   let phase: Phase = 'idle';
   let tiles: MapTile[] = generateCity(Math.random);
   let world: World = createWorld(tiles, [], Math.random);
@@ -134,10 +176,61 @@ export function initSyndicateGame(): void {
   let moveMarker: { tile: number; t: number } | null = null;
   let extractionAnnounced = false;
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
+  let particles: Particle[] = [];
+  let decals: Decal[] = [];
+  // Last screen position per unit id, so the renderer can face them and the
+  // gun points the way they walk.
+  const facing = new Map<number, { x: number; y: number; dir: number }>();
+  // Rain streaks in screen space, recycled as they fall off the bottom.
+  const rain = Array.from({ length: RAIN_DROPS }, () => ({
+    x: Math.random() * CANVAS_W,
+    y: Math.random() * CANVAS_H,
+    len: 6 + Math.random() * 8,
+    speed: 320 + Math.random() * 220
+  }));
 
   recordEl.textContent = `£${record}`;
 
   const squad = (): Unit[] => world.units.filter(u => u.kind === 'agent');
+
+  function spawnBurst(
+    sx: number,
+    sy: number,
+    count: number,
+    color: string,
+    opts: { speed?: number; life?: number; size?: number; gravity?: number; glow?: boolean } = {}
+  ) {
+    const speed = opts.speed ?? 60;
+    for (let n = 0; n < count; n++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = speed * (0.4 + Math.random() * 0.6);
+      particles.push({
+        x: sx,
+        y: sy,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v - (opts.gravity ? 20 : 0),
+        life: opts.life ?? 0.5,
+        maxLife: opts.life ?? 0.5,
+        size: opts.size ?? 1.6,
+        color,
+        gravity: opts.gravity ?? 0,
+        glow: opts.glow ?? false
+      });
+    }
+  }
+
+  function spawnDeath(wx: number, wy: number, kind: Unit['kind']) {
+    const p = isoProject(VIEW, wx, wy);
+    const blood = kind === 'agent' ? '#67e8f9' : kind === 'civilian' ? '#fca5a5' : '#f87171';
+    spawnBurst(p.x, p.y - 7, 14, blood, { speed: 90, life: 0.6, size: 1.8, gravity: 1, glow: true });
+    spawnBurst(p.x, p.y - 7, 6, '#fde68a', { speed: 50, life: 0.35, size: 1.2, glow: true });
+    decals.push({ x: wx, y: wy, r: 3.5 + Math.random() * 1.5, color: blood, life: 9, maxLife: 9 });
+  }
+
+  function spawnSparkle(wx: number, wy: number, color = '#67e8f9') {
+    const p = isoProject(VIEW, wx, wy);
+    spawnBurst(p.x, p.y - 10, 10, color, { speed: 40, life: 0.7, size: 1.4, glow: true });
+  }
 
   function showToast(text: string) {
     const toast = document.createElement('div');
@@ -165,6 +258,9 @@ export function initSyndicateGame(): void {
     moveMarker = null;
     extractionAnnounced = false;
     floaters = [];
+    particles = [];
+    decals = [];
+    facing.clear();
     missionEl.textContent = `${index + 1}/${MISSIONS.length}`;
     phase = 'play';
   }
@@ -208,6 +304,7 @@ export function initSyndicateGame(): void {
   function handleEvents(events: ReturnType<typeof stepWorld>) {
     for (const event of events) {
       if (event.type === 'kill') {
+        spawnDeath(event.x, event.y, event.kind);
         if (event.by === 'player') {
           if (event.kind === 'civilian') {
             money -= 100;
@@ -219,16 +316,21 @@ export function initSyndicateGame(): void {
           }
         }
       } else if (event.type === 'agentDown') {
+        spawnDeath(event.x, event.y, 'agent');
         addFloater(event.x, event.y, '☠', '#f87171');
         showToast(`☠️ ${strings.agentDown}`);
       } else if (event.type === 'persuade') {
+        spawnSparkle(event.x, event.y);
         const bonus = PERSUADE_BONUS[event.kind] ?? 0;
         money += bonus;
         addFloater(event.x, event.y, `+£${bonus}`, '#67e8f9');
         const kindName = strings.kinds[event.kind];
         if (kindName) showToast(`🧠 ${kindName} ${strings.joined}`);
       } else if (event.type === 'pickup') {
-        if (event.upgraded) {
+        spawnSparkle(event.x, event.y, '#fde68a');
+        if (event.role === 'follower') {
+          addFloater(event.x, event.y, `🔫 ${strings.weaponNames[event.weapon]}`, '#fde68a');
+        } else if (event.upgraded) {
           showToast(`🔫 ${strings.weaponNames[event.weapon]}!`);
         } else {
           money += 25;
@@ -252,11 +354,38 @@ export function initSyndicateGame(): void {
       f.y -= 16 * dt;
       return f.life > 0;
     });
+    particles = particles.filter(part => {
+      part.life -= dt;
+      part.x += part.vx * dt;
+      part.y += part.vy * dt;
+      part.vy += part.gravity * 120 * dt;
+      return part.life > 0;
+    });
+    decals = decals.filter(d => (d.life -= dt) > 0);
+    for (const drop of rain) {
+      drop.y += drop.speed * dt;
+      drop.x -= drop.speed * 0.25 * dt;
+      if (drop.y > CANVAS_H || drop.x < 0) {
+        drop.y = -drop.len;
+        drop.x = Math.random() * CANVAS_W;
+      }
+    }
     if (moveMarker && (moveMarker.t -= dt) <= 0) moveMarker = null;
     if (phase !== 'play') return;
 
     boostCooldown = Math.max(0, boostCooldown - dt);
     handleEvents(stepWorld(world, dt));
+
+    // Muzzle flashes and impact sparks for shots fired this very step
+    // (brand-new shots still hold their full life before the next tick).
+    for (const shot of world.shots) {
+      if (shot.life < SHOT_LIFE - 1e-6) continue;
+      const from = isoProject(VIEW, shot.fx, shot.fy);
+      const to = isoProject(VIEW, shot.tx, shot.ty);
+      const flash = shot.faction === 'player' ? '#a5f3fc' : '#fecaca';
+      spawnBurst(from.x, from.y - 8, 4, flash, { speed: 70, life: 0.1, size: 1.4, glow: true });
+      spawnBurst(to.x, to.y - 8, 5, '#fde68a', { speed: 80, life: 0.18, size: 1.3, glow: true });
+    }
 
     if (
       spec.objective === 'persuade' &&
@@ -340,77 +469,225 @@ export function initSyndicateGame(): void {
     ctx.globalAlpha = 1;
   }
 
+  /** Tracks heading from frame-to-frame screen motion; +1 faces right. */
+  function headingOf(u: Unit, px: number, py: number): number {
+    const prev = facing.get(u.id);
+    let dir = prev?.dir ?? (u.x + u.y > MAP_W ? -1 : 1);
+    if (prev) {
+      const dx = px - prev.x;
+      if (Math.abs(dx) > 0.15) dir = dx > 0 ? 1 : -1;
+    }
+    facing.set(u.id, { x: px, y: py, dir });
+    return dir;
+  }
+
   function drawUnit(u: Unit) {
     const p = isoProject(VIEW, u.x, u.y);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    const dir = headingOf(u, p.x, p.y);
+    const moving = u.path.length > 0;
+    const stride = moving ? Math.sin(clock * 11 + u.id) * 1.4 : 0;
+
+    // Contact shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y + 1, 5, 2.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y + 1, 4.5, 2.2, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const isSquad = u.kind === 'agent';
-    if (isSquad && selected.has(squad().indexOf(u))) {
-      ctx.strokeStyle = 'rgba(103, 232, 249, 0.9)';
-      ctx.lineWidth = 1.2;
+    if (u.kind === 'agent' && selected.has(squad().indexOf(u))) {
+      ctx.strokeStyle = `rgba(103, 232, 249, ${0.65 + 0.25 * Math.sin(clock * 6)})`;
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
       ctx.ellipse(p.x, p.y + 1, 7, 3.4, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    let body = '#39455e';
-    let head = '#e8c39e';
+    let coat = '#3b4a66';
+    let trim = '#5870a0';
+    let head = '#caa07a';
     let visor: string | null = null;
+    let cap: string | null = null;
     if (u.kind === 'agent') {
-      body = '#39455e';
-      head = '#2b3344';
+      coat = '#37445e';
+      trim = '#5fd0e6';
+      head = '#222a3a';
       visor = '#67e8f9';
     } else if (u.kind === 'enemy') {
-      body = '#4a2330';
-      head = '#2b1722';
+      coat = '#4a2330';
+      trim = '#b34a5c';
+      head = '#241420';
       visor = '#f87171';
     } else if (u.kind === 'guard') {
-      body = '#2f4f8f';
+      coat = '#2f4f8f';
+      trim = '#5b82c8';
+      head = '#caa07a';
+      cap = '#1f3361';
     } else if (u.kind === 'target') {
-      body = '#a8862c';
-      head = '#e8c39e';
+      coat = '#9a7b22';
+      trim = '#f5c84b';
+      head = '#caa07a';
     } else {
-      body = CIVILIAN_TINTS[u.tint % CIVILIAN_TINTS.length];
+      coat = CIVILIAN_TINTS[u.tint % CIVILIAN_TINTS.length];
+      trim = shadeColor(coat, 0.8);
+      head = '#caa07a';
     }
 
-    ctx.fillStyle = shadeColor(body, 0.7);
-    ctx.fillRect(p.x - 2.5, p.y - 4, 5, 4);
-    ctx.fillStyle = body;
-    ctx.fillRect(p.x - 3, p.y - 9, 6, 5.5);
+    // Legs (stride animates when walking)
+    ctx.strokeStyle = shadeColor(coat, 0.55);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(p.x - 1.3, p.y - 3);
+    ctx.lineTo(p.x - 1.3 + stride * 0.4, p.y);
+    ctx.moveTo(p.x + 1.3, p.y - 3);
+    ctx.lineTo(p.x + 1.3 - stride * 0.4, p.y);
+    ctx.stroke();
+
+    // Torso / coat — a tapered silhouette
+    ctx.fillStyle = coat;
+    ctx.beginPath();
+    ctx.moveTo(p.x - 3, p.y - 3.5);
+    ctx.lineTo(p.x + 3, p.y - 3.5);
+    ctx.lineTo(p.x + 2.4, p.y - 9.5);
+    ctx.lineTo(p.x - 2.4, p.y - 9.5);
+    ctx.closePath();
+    ctx.fill();
+    // Lit edge down the facing side
+    ctx.fillStyle = trim;
+    ctx.fillRect(p.x + dir * 2 - 0.5, p.y - 9.5, 1, 6);
+
+    // Weapon arm — armed units level a gun in their heading
+    if (u.weapon) {
+      ctx.strokeStyle = '#1b2230';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 7);
+      ctx.lineTo(p.x + dir * 5, p.y - 6.5);
+      ctx.stroke();
+      ctx.fillStyle = '#11161f';
+      ctx.fillRect(dir > 0 ? p.x + 4 : p.x - 6.5, p.y - 7.4, 2.5, 1.8);
+    }
+
+    // Head
     ctx.fillStyle = head;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 11, 2.4, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y - 11, 2.3, 0, Math.PI * 2);
     ctx.fill();
+    if (cap) {
+      ctx.fillStyle = cap;
+      ctx.fillRect(p.x - 2.3, p.y - 12.6, 4.6, 1.6);
+    }
     if (visor) {
+      ctx.save();
+      ctx.shadowColor = visor;
+      ctx.shadowBlur = 5;
       ctx.fillStyle = visor;
-      ctx.fillRect(p.x - 2, p.y - 11.5, 4, 1.2);
+      ctx.fillRect(p.x - 1.6, p.y - 11.6, 3.2, 1.3);
+      ctx.restore();
     }
 
     if (u.persuaded) {
-      const bob = Math.sin(clock * 5 + u.id) * 1.2;
-      ctx.fillStyle = '#67e8f9';
+      const bob = Math.sin(clock * 5 + u.id) * 1.1;
+      ctx.save();
+      ctx.shadowColor = '#67e8f9';
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = '#a5f3fc';
       ctx.beginPath();
-      ctx.arc(p.x, p.y - 17 + bob, 1.6, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y - 16 + bob, 1.5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
 
-    if (u.hp < u.maxHp) {
+    if (u.kind === 'target') {
+      ctx.font = '8px serif';
+      ctx.fillText('👑', p.x, p.y - 16 + Math.sin(clock * 3) * 1);
+    }
+
+    if (u.hp < u.maxHp && u.alive) {
       const frac = Math.max(0, u.hp / u.maxHp);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(p.x - 5, p.y - 16, 10, 2);
+      ctx.fillRect(p.x - 5, p.y - 17, 10, 1.8);
       ctx.fillStyle = frac > 0.5 ? '#4ade80' : frac > 0.25 ? '#fbbf24' : '#f87171';
-      ctx.fillRect(p.x - 5, p.y - 16, 10 * frac, 2);
+      ctx.fillRect(p.x - 5, p.y - 17, 10 * frac, 1.8);
     }
   }
 
   function drawPickup(pickup: { x: number; y: number }) {
     const p = isoProject(VIEW, pickup.x, pickup.y);
-    const bob = Math.sin(clock * 4 + pickup.x * 3) * 1.5;
-    ctx.font = '9px serif';
+    const bob = Math.sin(clock * 4 + pickup.x * 3) * 1.3;
+    const pulse = 0.5 + 0.5 * Math.sin(clock * 5 + pickup.y);
+    const halo = ctx.createRadialGradient(p.x, p.y - 3, 0, p.x, p.y - 3, 9);
+    halo.addColorStop(0, `rgba(253, 230, 138, ${0.35 + pulse * 0.25})`);
+    halo.addColorStop(1, 'rgba(253, 230, 138, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - 3, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = '10px serif';
     ctx.fillText('🔫', p.x, p.y - 6 + bob);
+  }
+
+  function drawRooftop(x: number, y: number, i: number, height: number, palette: number) {
+    if (height < 18) return;
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
+    const ty = c.y - height;
+    const variant = Math.floor(hash(i, 1) * 3);
+    if (variant === 0) {
+      // Antenna with a blinking aircraft light
+      ctx.strokeStyle = '#0b0f17';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x, ty);
+      ctx.lineTo(c.x, ty - 7);
+      ctx.stroke();
+      if (Math.floor(clock * 1.5 + i) % 2 === 0) {
+        ctx.save();
+        ctx.shadowColor = '#f87171';
+        ctx.shadowBlur = 5;
+        ctx.fillStyle = '#fca5a5';
+        ctx.beginPath();
+        ctx.arc(c.x, ty - 7, 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    } else if (variant === 1) {
+      // Rooftop unit (AC/water tank)
+      ctx.fillStyle = shadeColor(FACADES[palette], 0.5);
+      ctx.fillRect(c.x - 3, ty - 3, 6, 3);
+    } else {
+      // Glowing holo-billboard
+      ctx.save();
+      ctx.shadowColor = NEON[palette];
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = NEON[palette];
+      ctx.globalAlpha = 0.55 + 0.2 * Math.sin(clock * 2 + i);
+      ctx.fillRect(c.x - 2.5, ty - 8, 5, 6);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawLamp(x: number, y: number) {
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
+    const pool = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, VIEW.halfW * 1.3);
+    pool.addColorStop(0, 'rgba(253, 224, 130, 0.16)');
+    pool.addColorStop(1, 'rgba(253, 224, 130, 0)');
+    ctx.fillStyle = pool;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, VIEW.halfW * 1.3, VIEW.halfH * 1.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#0b0f17';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x, c.y - 11);
+    ctx.stroke();
+    ctx.save();
+    ctx.shadowColor = '#fde68a';
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y - 11, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawExtraction() {
@@ -475,6 +752,7 @@ export function initSyndicateGame(): void {
       const tile = tiles[i];
       if (tile.kind === 'road') {
         drawRoad(i, x, y);
+        if (hash(i, 7) < 0.05) drawLamp(x, y);
       } else if (tile.kind === 'pavement') {
         fillTile(ctx, VIEW, x, y, (x + y) % 2 === 0 ? '#30374a' : '#343b4d');
       } else if (tile.kind === 'plaza') {
@@ -484,6 +762,18 @@ export function initSyndicateGame(): void {
         drawBlock(ctx, VIEW, x, y, tile.height, FACADES[tile.palette]);
         drawWindows(x, y, i, tile.height);
         drawNeonTrim(x, y, tile.height, tile.palette);
+        drawRooftop(x, y, i, tile.height, tile.palette);
+      }
+      // Ground decals (blood/scorch) sit on the tile they fell on
+      for (const d of decals) {
+        if (Math.floor(d.x) !== x || Math.floor(d.y) !== y) continue;
+        const dp = isoProject(VIEW, d.x, d.y);
+        ctx.globalAlpha = Math.min(0.5, (d.life / d.maxLife) * 0.5);
+        ctx.fillStyle = d.color;
+        ctx.beginPath();
+        ctx.ellipse(dp.x, dp.y, d.r, d.r * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
       }
       if (moveMarker && moveMarker.tile === i) {
         ctx.globalAlpha = Math.min(1, moveMarker.t / 0.4);
@@ -517,6 +807,26 @@ export function initSyndicateGame(): void {
     }
     ctx.globalAlpha = 1;
 
+    // Particles — sparks, blood, muzzle flashes
+    for (const part of particles) {
+      const a = Math.max(0, part.life / part.maxLife);
+      ctx.globalAlpha = a;
+      if (part.glow) {
+        ctx.save();
+        ctx.shadowColor = part.color;
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = part.color;
+        ctx.beginPath();
+        ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = part.color;
+        ctx.fillRect(part.x - part.size, part.y - part.size, part.size * 2, part.size * 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+
     ctx.font = 'bold 10px monospace';
     for (const f of floaters) {
       ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
@@ -525,7 +835,37 @@ export function initSyndicateGame(): void {
     }
     ctx.globalAlpha = 1;
 
+    drawAtmosphere();
     refreshHud();
+  }
+
+  function drawAtmosphere() {
+    // Rain streaks
+    ctx.strokeStyle = 'rgba(148, 197, 230, 0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const drop of rain) {
+      ctx.moveTo(drop.x, drop.y);
+      ctx.lineTo(drop.x - drop.len * 0.25, drop.y + drop.len);
+    }
+    ctx.stroke();
+
+    // Scanlines for the CRT-arcade feel
+    if (scanlines) ctx.drawImage(scanlines, 0, 0);
+
+    // Vignette
+    const vig = ctx.createRadialGradient(
+      CANVAS_W / 2,
+      CANVAS_H / 2,
+      CANVAS_H * 0.35,
+      CANVAS_W / 2,
+      CANVAS_H / 2,
+      CANVAS_H * 0.85
+    );
+    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   }
 
   function refreshHud() {

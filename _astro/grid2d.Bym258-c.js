@@ -1,0 +1,1 @@
+function u(t,o,h){const a=t%o,r=Math.floor(t/o),s=[];return a>0&&s.push(t-1),a<o-1&&s.push(t+1),r>0&&s.push(t-o),r<h-1&&s.push(t+o),s}function f(t,o,h){return Math.max(Math.abs(t%h-o%h),Math.abs(Math.floor(t/h)-Math.floor(o/h)))}export{f as c,u as g};

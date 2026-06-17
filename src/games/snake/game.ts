@@ -5,7 +5,7 @@
  * loop, and canvas rendering. It expects the markup defined in
  * src/pages/[lang]/fun/snake.astro.
  */
-import { createGameLoop, loadScore, recordHighScore } from '../engine';
+import { createGameLoop, loadScore, recordHighScore, createGameAudio, wireSoundButton } from '../engine';
 import {
   COLS,
   ROWS,
@@ -103,6 +103,23 @@ export function initSnakeGame(): void {
 
   highScoreEl.textContent = highScore.toString();
 
+  // Upbeat, slithery chiptune loop in C major.
+  const audio = createGameAudio({
+    tempo: 132,
+    wave: 'square',
+    melody: [
+      { freq: 523.25, beats: 0.5 },
+      { freq: 659.25, beats: 0.5 },
+      { freq: 783.99, beats: 0.5 },
+      { freq: 659.25, beats: 0.5 },
+      { freq: 587.33, beats: 0.5 },
+      { freq: 698.46, beats: 0.5 },
+      { freq: 880.0, beats: 0.5 },
+      { freq: 0, beats: 0.5 }
+    ]
+  });
+  wireSoundButton(document.getElementById('sound-btn'), audio);
+
   function burst(x: number, y: number, color: string, count: number) {
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -134,6 +151,7 @@ export function initSnakeGame(): void {
     scoreEl.textContent = '0';
     overlay.style.display = 'none';
     gameOverOverlay.style.display = 'none';
+    audio.start();
   }
 
   function die() {
@@ -142,6 +160,8 @@ export function initSnakeGame(): void {
     shake = 0.4;
     const head = state.snake[0];
     burst(px(head.x), px(head.y), '#f87171', 26);
+    audio.playSfx('gameover');
+    audio.stop();
     highScore = recordHighScore(HIGH_SCORE_KEY, state.score);
     highScoreEl.textContent = highScore.toString();
   }
@@ -155,10 +175,12 @@ export function initSnakeGame(): void {
       die();
     } else if (event === 'ate') {
       scoreEl.textContent = state.score.toString();
+      audio.playSfx('score');
       burst(px(foodBefore.x), px(foodBefore.y), '#f87171', 10);
       addFloater(px(foodBefore.x), px(foodBefore.y) - 6, `+${FOOD_POINTS}`, '#4ade80');
     } else if (event === 'ate-bonus') {
       scoreEl.textContent = state.score.toString();
+      audio.playSfx('score');
       burst(px(head.x), px(head.y), '#facc15', 18);
       addFloater(px(head.x), px(head.y) - 6, `+${BONUS_POINTS}`, '#facc15');
     }

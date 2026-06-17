@@ -35,6 +35,13 @@ const weapons = [
       >
         <div class="game-header">
           <h1><span class="tank-emoji">🎯</span> {t('fun.tanks.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
           <div class="scores">
             <div class="score-item">
               <span class="score-label" id="p1-label">{t('fun.tanks.player1')}</span>
@@ -142,6 +149,12 @@ const weapons = [
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+  }
+
+  .sound-btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 1.1rem;
+    line-height: 1;
   }
 
   .tank-emoji {

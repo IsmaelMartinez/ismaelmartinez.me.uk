@@ -46,6 +46,13 @@ const agents = [0, 1, 2, 3];
       >
         <div class="game-header">
           <h1><span class="syndicate-emoji">🕶️</span> {t('fun.syndicate.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.syndicate.funds')}</span>
@@ -154,6 +161,12 @@ const agents = [0, 1, 2, 3];
     align-items: center;
     gap: var(--space-sm);
     margin: 0;
+  }
+
+  .sound-btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 1.1rem;
+    line-height: 1;
   }
 
   .syndicate-emoji {

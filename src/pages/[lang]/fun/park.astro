@@ -38,6 +38,13 @@ const tools = [
       >
         <div class="game-header">
           <h1><span class="park-emoji">🎢</span> {t('fun.park.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.park.money')}</span>
@@ -150,6 +157,12 @@ const tools = [
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+  }
+
+  .sound-btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 1.1rem;
+    line-height: 1;
   }
 
   .park-emoji {

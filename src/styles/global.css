@@ -1,16 +1,16 @@
 :root {
   /* Editorial × Brutalist — paper & ink (light default) */
-  --color-bg: #f6f1e7;
-  --color-bg-secondary: #fffdf7;
-  --color-text: #1c1917;
-  --color-text-muted: #57534e;
-  --color-accent: #c2410c;
-  --color-accent-hover: #9a3412;
-  --color-accent-solid: #c2410c;
-  --color-accent-solid-hover: #9a3412;
-  --color-border: #d8cfbe;
-  --color-frame: #1c1917;
-  --color-shadow: #1c1917;
+  --color-bg: #eaf0f9;
+  --color-bg-secondary: #ffffff;
+  --color-text: #0f1b2e;
+  --color-text-muted: #46566e;
+  --color-accent: #1d4ed8;
+  --color-accent-hover: #1e40af;
+  --color-accent-solid: #1d4ed8;
+  --color-accent-solid-hover: #1e40af;
+  --color-border: #c3d0e2;
+  --color-frame: #0f1b2e;
+  --color-shadow: #0f1b2e;
   --gradient-magic: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
 
   /* Health tier colours */
@@ -52,17 +52,17 @@
 /* Dark mode — system preference (when no manual override) */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-bg: #181512;
-    --color-bg-secondary: #221e19;
-    --color-text: #ece5d8;
-    --color-text-muted: #a8a094;
-    --color-accent: #fb923c;
-    --color-accent-hover: #fdba74;
-    --color-accent-solid: #c2410c;
-    --color-accent-solid-hover: #9a3412;
-    --color-border: #3a342b;
-    --color-frame: #ece5d8;
-    --color-shadow: #0c0a08;
+    --color-bg: #0c1424;
+    --color-bg-secondary: #15213a;
+    --color-text: #e4ebf6;
+    --color-text-muted: #93a3be;
+    --color-accent: #60a5fa;
+    --color-accent-hover: #93c5fd;
+    --color-accent-solid: #2563eb;
+    --color-accent-solid-hover: #1d4ed8;
+    --color-border: #29354f;
+    --color-frame: #e4ebf6;
+    --color-shadow: #05080f;
     --color-tier-gold: #ffd700;
     --color-tier-silver: #c0c0c0;
     --color-tier-bronze: #cd7f32;
@@ -74,17 +74,17 @@
 
 /* Dark mode — manual override */
 :root[data-theme="dark"] {
-  --color-bg: #181512;
-  --color-bg-secondary: #221e19;
-  --color-text: #ece5d8;
-  --color-text-muted: #a8a094;
-  --color-accent: #fb923c;
-  --color-accent-hover: #fdba74;
-  --color-accent-solid: #c2410c;
-  --color-accent-solid-hover: #9a3412;
-  --color-border: #3a342b;
-  --color-frame: #ece5d8;
-  --color-shadow: #0c0a08;
+  --color-bg: #0c1424;
+  --color-bg-secondary: #15213a;
+  --color-text: #e4ebf6;
+  --color-text-muted: #93a3be;
+  --color-accent: #60a5fa;
+  --color-accent-hover: #93c5fd;
+  --color-accent-solid: #2563eb;
+  --color-accent-solid-hover: #1d4ed8;
+  --color-border: #29354f;
+  --color-frame: #e4ebf6;
+  --color-shadow: #05080f;
   --color-tier-gold: #ffd700;
   --color-tier-silver: #c0c0c0;
   --color-tier-bronze: #cd7f32;

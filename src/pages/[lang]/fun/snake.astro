@@ -19,6 +19,13 @@ const t = useTranslations(lang);
       <div class="game-container">
         <div class="game-header">
           <h1><span class="snake-emoji">🐍</span> {t('fun.snake.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.snake.score')}</span>

@@ -15,6 +15,8 @@ import {
   strokeTile,
   drawBlock,
   forEachTileBackToFront,
+  createGameAudio,
+  wireSoundButton,
   type IsoView
 } from '../engine';
 import {
@@ -109,6 +111,23 @@ export function initCityGame(): void {
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
+  // Calm, civic builder loop in F major.
+  const audio = createGameAudio({
+    tempo: 104,
+    wave: 'triangle',
+    melody: [
+      { freq: 349.23, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 523.25, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 392.0, beats: 1 },
+      { freq: 523.25, beats: 1 },
+      { freq: 698.46, beats: 1 },
+      { freq: 523.25, beats: 1 }
+    ]
+  });
+  wireSoundButton(document.getElementById('sound-btn'), audio);
+
   let tiles: CityTile[] = createCity();
   let phase: Phase = 'idle';
   let money = START_MONEY;
@@ -166,10 +185,13 @@ export function initCityGame(): void {
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     refreshDerivedState();
     phase = 'play';
+    audio.start();
   }
 
   function gameOver() {
     phase = 'over';
+    audio.playSfx('gameover');
+    audio.stop();
     finalMonthsEl.textContent = month.toString();
     finalPopEl.textContent = peakPop.toString();
     overOverlay.style.display = 'flex';
@@ -462,6 +484,7 @@ export function initCityGame(): void {
     }
     money -= cost;
     build(tiles, x, y, selectedTool);
+    audio.playSfx('blip');
     refreshDerivedState();
   });
 

@@ -37,6 +37,13 @@ const tools = [
       >
         <div class="game-header">
           <h1><span class="city-emoji">🏙️</span> {t('fun.city.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.city.money')}</span>

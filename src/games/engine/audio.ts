@@ -112,8 +112,11 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     osc.type = type;
     osc.frequency.setValueAtTime(freq, start);
     // Short attack then exponential decay for a plucky chiptune envelope.
+    // Cap the attack to a fraction of the note so very short notes don't
+    // schedule the decay ramp before the attack peak (which glitches Web Audio).
+    const attack = Math.min(0.01, duration * 0.5);
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(peak, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(peak, start + attack);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     osc.connect(gain);
     gain.connect(destination);
@@ -122,12 +125,16 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   }
 
   function scheduleAhead(): void {
-    if (!ctx || !master) return;
+    if (!ctx || !master || options.melody.length === 0) return;
     // Schedule any notes due within the next ~100ms window.
     while (nextNoteTime < ctx.currentTime + 0.1) {
       const note = options.melody[noteIndex];
       const dur = note.beats * secondsPerBeat;
-      playTone(note.freq, nextNoteTime, dur * 0.9, wave, 0.8, master);
+      // When muted, keep the clock advancing but skip oscillator creation so we
+      // don't burn CPU synthesising silent tones; timing stays in sync on unmute.
+      if (!muted) {
+        playTone(note.freq, nextNoteTime, dur * 0.9, wave, 0.8, master);
+      }
       nextNoteTime += dur;
       noteIndex = (noteIndex + 1) % options.melody.length;
     }
@@ -182,6 +189,15 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     const out = context.createGain();
     out.gain.value = 0.6;
     out.connect(context.destination);
+    // Some browsers don't GC gain nodes wired to destination once their sources
+    // stop, so release it shortly after the longest sfx finishes.
+    setTimeout(() => {
+      try {
+        out.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    }, 1000);
 
     switch (name) {
       case 'blip':
@@ -208,6 +224,19 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         playTone(220, now + 0.32, 0.3, 'triangle', 0.5, out);
         break;
     }
+  }
+
+  // Background tabs throttle timers, which would starve the ~100ms lookahead and
+  // make the music stutter. Suspend the context while hidden and resume on return.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (!ctx) return;
+      if (document.hidden) {
+        void ctx.suspend();
+      } else if (running) {
+        void ctx.resume();
+      }
+    });
   }
 
   return {

@@ -350,6 +350,13 @@ html.theme-switching::view-transition-new(root) {
   color: var(--color-text);
 }
 
+/* Shared mute toggle in each arcade game's header. */
+.sound-btn {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 /* Print Stylesheet */
 @media print {
   :root {

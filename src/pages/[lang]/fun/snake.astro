@@ -168,14 +168,17 @@ const t = useTranslations(lang);
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
   }
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
   }
 

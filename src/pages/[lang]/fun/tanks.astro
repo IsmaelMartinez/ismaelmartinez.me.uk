@@ -216,14 +216,17 @@ const weapons = [
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
   }
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
     max-width: 480px;
   }
@@ -382,6 +385,32 @@ const weapons = [
 
     .fire-btn {
       width: 100%;
+    }
+
+    .overlay-content {
+      padding: var(--space-md);
+    }
+
+    .play-icon,
+    .round-emoji {
+      font-size: 2.75rem;
+      margin-bottom: var(--space-sm);
+    }
+
+    .overlay-content p {
+      margin-bottom: var(--space-md);
+    }
+
+    .mode-buttons {
+      flex-direction: column;
+    }
+
+    .mode-buttons .btn-large {
+      width: 100%;
+    }
+
+    .btn-large {
+      padding: var(--space-md) var(--space-lg);
     }
 
     .keys-hint {

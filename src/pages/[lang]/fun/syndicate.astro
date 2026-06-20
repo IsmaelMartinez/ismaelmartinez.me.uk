@@ -268,8 +268,10 @@ const agents = [0, 1, 2, 3];
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.82);
     backdrop-filter: blur(4px);
     z-index: 2;
@@ -277,6 +279,7 @@ const agents = [0, 1, 2, 3];
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
     max-width: 560px;
   }
@@ -464,6 +467,22 @@ const agents = [0, 1, 2, 3];
 
     .squad-bar {
       justify-content: center;
+    }
+
+    /* The briefing overlay carries a lot of text; tighten it so the
+       "Accept Contract" button stays within the frame on phones. */
+    .overlay-content p {
+      margin-bottom: var(--space-sm);
+    }
+
+    .overlay-content .instructions {
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    .play-icon {
+      font-size: 2.25rem;
+      margin-bottom: var(--space-xs);
     }
   }
 </style>

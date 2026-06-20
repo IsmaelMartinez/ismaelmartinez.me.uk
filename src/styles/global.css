@@ -387,6 +387,31 @@ html.theme-switching::view-transition-new(root) {
   line-height: 1;
 }
 
+/* On phones the fixed-aspect canvas is short — too short to fit an overlay's
+   instructions and buttons, so the buttons (e.g. Tank Duel's "2 Players") got
+   clipped behind the frame. Give the play area extra height, but only while a
+   start/result overlay is actually visible (detected via :has + the inline
+   display style the games toggle), so normal gameplay keeps its aspect ratio.
+   The overlay itself also scrolls (overflow-y: auto on .game-overlay) as a
+   final safety net for very small screens. */
+@media (max-width: 600px) {
+  .game-area:has(.game-overlay:not([style*="none"])) {
+    min-height: 30rem;
+  }
+
+  /* Compact the overlay so its instructions and buttons fit the smaller frame.
+     The descendant selectors are deliberately specific enough to win over
+     Astro's per-component scoped rules. */
+  .game-area .game-overlay .overlay-content {
+    padding: var(--space-md);
+  }
+
+  .game-area .game-overlay .play-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-sm);
+  }
+}
+
 /* Print Stylesheet */
 @media print {
   :root {

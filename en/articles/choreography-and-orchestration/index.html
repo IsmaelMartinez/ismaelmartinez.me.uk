@@ -44,14 +44,47 @@
 </ol>
 <h2 id="choosing-the-right-approach">Choosing the Right Approach</h2>
 <p>The choice between choreography and orchestration depends on multiple factors, including the complexity of your system, team expertise/experience, and operational requirements. Here are some key considerations to help guide your decision:</p>
-<p>| Consideration | Choreography | Orchestration |
-|---|---|---|
-| Complexity | Better for simple, decoupled interactions | Better for complex, multi-step workflows |
-| Scalability | Scales independently per service | Centralised bottleneck risk |
-| Debugging | Harder to trace across services | Easier with centralised control |
-| Flexibility | Easier to swap individual services | Requires orchestrator updates |
-| Consistency | Eventual consistency | Stronger consistency guarantees |
-| Resilience | No single point of failure | Orchestrator is a risk point |</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Consideration</th><th>Choreography</th><th>Orchestration</th></tr></thead><tbody><tr><td>Complexity</td><td>Better for simple, decoupled interactions</td><td>Better for complex, multi-step workflows</td></tr><tr><td>Scalability</td><td>Scales independently per service</td><td>Centralised bottleneck risk</td></tr><tr><td>Debugging</td><td>Harder to trace across services</td><td>Easier with centralised control</td></tr><tr><td>Flexibility</td><td>Easier to swap individual services</td><td>Requires orchestrator updates</td></tr><tr><td>Consistency</td><td>Eventual consistency</td><td>Stronger consistency guarantees</td></tr><tr><td>Resilience</td><td>No single point of failure</td><td>Orchestrator is a risk point</td></tr></tbody></table>
 <h2 id="why-not-both">Why not both?</h2>
 <p>You don’t have to choose just one approach — many systems benefit from a hybrid model.</p>
 <p>Personally, I lean towards orchestration for internal flows that require robust control, such as payment processing or user onboarding.</p>

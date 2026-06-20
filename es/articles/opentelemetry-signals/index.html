@@ -57,14 +57,47 @@
 <h2 id="cómo-se-conectan-las-señales">Cómo se conectan las señales</h2>
 <p>Las señales están diseñadas para trabajar juntas, y el trace ID es el hilo que las conecta.</p>
 <p><em>Tabla resumen que muestra cómo se conecta cada señal de OpenTelemetry, qué pregunta responde y a través de qué mecanismo.</em></p>
-<p>| Señal | Pregunta que responde | Se conecta mediante |
-|-------|----------------------|-------------------|
-| Métricas | ¿Algo va mal? | Ventana temporal + atributos compartidos |
-| Traces | ¿Dónde se rompe? | Trace ID, span ID |
-| Logs | ¿Por qué se rompió? | Trace ID, span ID |
-| Baggage | ¿Quién se ve afectado? | Propagación de contexto de petición |
-| Events | ¿Qué acción de negocio ocurrió? | Esquema estructurado |
-| Profiles | ¿Qué código es responsable? | Trace ID, span ID |</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Señal</th><th>Pregunta que responde</th><th>Se conecta mediante</th></tr></thead><tbody><tr><td>Métricas</td><td>¿Algo va mal?</td><td>Ventana temporal + atributos compartidos</td></tr><tr><td>Traces</td><td>¿Dónde se rompe?</td><td>Trace ID, span ID</td></tr><tr><td>Logs</td><td>¿Por qué se rompió?</td><td>Trace ID, span ID</td></tr><tr><td>Baggage</td><td>¿Quién se ve afectado?</td><td>Propagación de contexto de petición</td></tr><tr><td>Events</td><td>¿Qué acción de negocio ocurrió?</td><td>Esquema estructurado</td></tr><tr><td>Profiles</td><td>¿Qué código es responsable?</td><td>Trace ID, span ID</td></tr></tbody></table>
 <p>Individualmente, cada señal te da una vista parcial. Conectadas a través de contexto compartido, te dan el panorama completo. No estás manteniendo múltiples sistemas por el mero hecho de hacerlo.</p>
 <h2 id="conclusión">Conclusión</h2>
 <p>OpenTelemetry nos ha dado un lenguaje compartido para la observabilidad. Cada señal resuelve un problema específico, y juntas proporcionan un nivel de visibilidad que ningún archivo de log único podría igualar.</p>

@@ -57,14 +57,47 @@
 <h2 id="how-signals-connect">How Signals Connect</h2>
 <p>Signals are designed to work together, and the trace ID is the thread that connects them.</p>
 <p><em>Summary table showing how each OpenTelemetry signal connects, what question it answers, and through which mechanism.</em></p>
-<p>| Signal | Question it answers | Connects through |
-|--------|-------------------|-----------------|
-| Metrics | Is something wrong? | Time window + shared attributes |
-| Traces | Where does it break? | Trace ID, span ID |
-| Logs | Why did it break? | Trace ID, span ID |
-| Baggage | Who is affected? | Request context propagation |
-| Events | What business action happened? | Structured schema |
-| Profiles | Which code is responsible? | Trace ID, span ID |</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Signal</th><th>Question it answers</th><th>Connects through</th></tr></thead><tbody><tr><td>Metrics</td><td>Is something wrong?</td><td>Time window + shared attributes</td></tr><tr><td>Traces</td><td>Where does it break?</td><td>Trace ID, span ID</td></tr><tr><td>Logs</td><td>Why did it break?</td><td>Trace ID, span ID</td></tr><tr><td>Baggage</td><td>Who is affected?</td><td>Request context propagation</td></tr><tr><td>Events</td><td>What business action happened?</td><td>Structured schema</td></tr><tr><td>Profiles</td><td>Which code is responsible?</td><td>Trace ID, span ID</td></tr></tbody></table>
 <p>Individually, each signal gives you a partial view. Connected through shared context, they give you the full picture. You are not maintaining multiple systems for the sake of it.</p>
 <h2 id="conclusion">Conclusion</h2>
 <p>OpenTelemetry has given us a shared language for observability. Each signal solves a specific problem, and together they provide a level of visibility that no single log file could match.</p>

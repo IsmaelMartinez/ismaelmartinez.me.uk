@@ -44,14 +44,47 @@
 </ol>
 <h2 id="triar-lenfocament-adequat">Triar l’enfocament adequat</h2>
 <p>L’elecció entre coreografia i orquestració depèn de múltiples factors, incloent-hi la complexitat del vostre sistema, l’experiència de l’equip i els requisits operacionals. Aquí teniu algunes consideracions clau per guiar la vostra decisió:</p>
-<p>| Consideració | Coreografia | Orquestració |
-|---|---|---|
-| Complexitat | Millor per a interaccions simples i desacoblades | Millor per a fluxos de treball complexos i multi-pas |
-| Escalabilitat | Escala de manera independent per servei | Risc de coll d’ampolla centralitzat |
-| Depuració | Més difícil de traçar entre serveis | Més fàcil amb control centralitzat |
-| Flexibilitat | Més fàcil intercanviar serveis individuals | Requereix actualitzacions de l’orquestrador |
-| Consistència | Consistència eventual | Garanties de consistència més fortes |
-| Resiliència | Cap punt únic de fallada | L’orquestrador és un punt de risc |</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Consideració</th><th>Coreografia</th><th>Orquestració</th></tr></thead><tbody><tr><td>Complexitat</td><td>Millor per a interaccions simples i desacoblades</td><td>Millor per a fluxos de treball complexos i multi-pas</td></tr><tr><td>Escalabilitat</td><td>Escala de manera independent per servei</td><td>Risc de coll d’ampolla centralitzat</td></tr><tr><td>Depuració</td><td>Més difícil de traçar entre serveis</td><td>Més fàcil amb control centralitzat</td></tr><tr><td>Flexibilitat</td><td>Més fàcil intercanviar serveis individuals</td><td>Requereix actualitzacions de l’orquestrador</td></tr><tr><td>Consistència</td><td>Consistència eventual</td><td>Garanties de consistència més fortes</td></tr><tr><td>Resiliència</td><td>Cap punt únic de fallada</td><td>L’orquestrador és un punt de risc</td></tr></tbody></table>
 <h2 id="per-què-no-tots-dos">Per què no tots dos?</h2>
 <p>No heu de triar un únic enfocament: molts sistemes es beneficien d’un model híbrid.</p>
 <p>Personalment, m’inclino cap a l’orquestració per a fluxos interns que requereixen un control robust, com ara el processament de pagaments o l’alta d’usuaris.</p>

@@ -15,6 +15,8 @@ import {
   strokeTile,
   drawBlock,
   forEachTileBackToFront,
+  createGameAudio,
+  wireSoundButton,
   type IsoView
 } from '../engine';
 import {
@@ -140,6 +142,23 @@ export function initParkGame(): void {
   // container; start the view centred on the entrance.
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+
+  // Bright, bouncy fairground waltz in G major.
+  const audio = createGameAudio({
+    tempo: 150,
+    wave: 'square',
+    melody: [
+      { freq: 392.0, beats: 0.5 },
+      { freq: 587.33, beats: 0.5 },
+      { freq: 783.99, beats: 0.5 },
+      { freq: 587.33, beats: 0.5 },
+      { freq: 493.88, beats: 0.5 },
+      { freq: 659.25, beats: 0.5 },
+      { freq: 987.77, beats: 0.5 },
+      { freq: 0, beats: 0.5 }
+    ]
+  });
+  wireSoundButton(document.getElementById('sound-btn'), audio);
 
   let { tiles, entrance } = createPark();
   let phase: Phase = 'idle';
@@ -390,6 +409,8 @@ export function initParkGame(): void {
 
   function gameOver() {
     phase = 'over';
+    audio.playSfx('gameover');
+    audio.stop();
     finalDaysEl.textContent = day.toString();
     finalPeakEl.textContent = peakGuests.toString();
     overOverlay.style.display = 'flex';
@@ -408,6 +429,7 @@ export function initParkGame(): void {
     floaters = [];
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     phase = 'play';
+    audio.start();
   }
 
   // --- Rendering ---
@@ -613,6 +635,7 @@ export function initParkGame(): void {
     }
     money -= cost;
     applyTool(tiles, x, y, selectedTool);
+    audio.playSfx('blip');
     invalidateGuests();
   });
 

@@ -5,7 +5,7 @@
  * module owns DOM wiring, the turn state machine, and canvas rendering. It
  * expects the markup defined in src/pages/[lang]/fun/tanks.astro.
  */
-import { createGameLoop, loadScore, saveScore } from '../engine';
+import { createGameLoop, loadScore, saveScore, createGameAudio, wireSoundButton } from '../engine';
 import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
 import {
   launchProjectile,
@@ -144,6 +144,24 @@ export function initTanksGame(): void {
   let victories = loadScore(VICTORIES_KEY);
   victoriesEl.textContent = victories.toString();
 
+  // Tense, martial battle march in A minor.
+  const audio = createGameAudio({
+    tempo: 116,
+    wave: 'sawtooth',
+    volume: 0.1,
+    melody: [
+      { freq: 220.0, beats: 0.75 },
+      { freq: 220.0, beats: 0.25 },
+      { freq: 261.63, beats: 0.5 },
+      { freq: 329.63, beats: 0.5 },
+      { freq: 293.66, beats: 0.75 },
+      { freq: 220.0, beats: 0.25 },
+      { freq: 246.94, beats: 0.5 },
+      { freq: 196.0, beats: 0.5 }
+    ]
+  });
+  wireSoundButton(document.getElementById('sound-btn'), audio);
+
   const stars = Array.from({ length: 60 }, () => ({
     x: Math.random() * WIDTH,
     y: Math.random() * HEIGHT * 0.55,
@@ -254,6 +272,7 @@ export function initTanksGame(): void {
     p2Wins.textContent = '0';
     startOverlay.style.display = 'none';
     roundOverlay.style.display = 'none';
+    audio.start();
     newRound();
   }
 
@@ -287,6 +306,7 @@ export function initTanksGame(): void {
       }
     ];
     muzzleFlash = { x: tip.x, y: tip.y, t: 0.12 };
+    audio.playSfx('blip');
     phase = 'fly';
     syncControls();
   }
@@ -312,6 +332,7 @@ export function initTanksGame(): void {
   function impactAt(x: number, y: number, weaponId: WeaponId) {
     const weapon = WEAPONS[weaponId];
     explosions.push({ x, y, t: 0, radius: weapon.radius });
+    audio.playSfx('explosion');
     carveCrater(ground, HEIGHT, x, y, weapon.radius);
     spawnDirt(x, y, weapon.radius);
     shake = Math.min(0.6, shake + weapon.radius / 160);
@@ -342,6 +363,10 @@ export function initTanksGame(): void {
       (winner === 0 ? p1Wins : p2Wins).textContent = wins[winner].toString();
     }
     const matchOver = winner !== null && wins[winner] >= WINS_PER_MATCH;
+    if (matchOver) {
+      audio.playSfx('gameover');
+      audio.stop();
+    }
     if (matchOver && winner === 0 && mode === 'cpu') {
       victories++;
       saveScore(VICTORIES_KEY, victories);

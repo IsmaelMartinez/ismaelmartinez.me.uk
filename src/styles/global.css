@@ -333,6 +333,30 @@ html.theme-switching::view-transition-new(root) {
   }
 }
 
+/* Arcade games: the canvas play area and its overlays are always dark — the
+   canvas draws its own dark artwork and overlays sit on a hardcoded dark scrim.
+   Pin overlay/HUD text to the dark palette so it stays readable regardless of
+   the site theme. Without this, the themed text variables flip to dark in light
+   mode and produce unreadable dark-on-dark overlay text. */
+.game-area,
+.game-overlay {
+  --color-text: #e5e5e5;
+  --color-text-muted: #a3a3a3;
+  --color-border: #404040;
+  --color-bg-secondary: #1a1a1a;
+  /* Set the concrete color too, not just the variable: overlay text that has no
+     explicit color (e.g. Microcity/Pixel Park instructions) otherwise inherits
+     body's already-resolved color, which is dark in light mode. */
+  color: var(--color-text);
+}
+
+/* Shared mute toggle in each arcade game's header. */
+.sound-btn {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 /* Print Stylesheet */
 @media print {
   :root {

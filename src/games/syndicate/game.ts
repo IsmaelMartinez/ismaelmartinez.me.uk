@@ -17,6 +17,8 @@ import {
   drawBlock,
   forEachTileBackToFront,
   shadeColor,
+  createGameAudio,
+  wireSoundButton,
   type IsoView
 } from '../engine';
 import { MAP_W, MAP_H, generateCity, type MapTile } from './map';
@@ -191,6 +193,25 @@ export function initSyndicateGame(): void {
 
   recordEl.textContent = `£${record}`;
 
+  // Dark, brooding cyber-noir bassline in E minor.
+  const audio = createGameAudio({
+    tempo: 96,
+    wave: 'sawtooth',
+    volume: 0.1,
+    melody: [
+      { freq: 164.81, beats: 1 },
+      { freq: 196.0, beats: 0.5 },
+      { freq: 164.81, beats: 0.5 },
+      { freq: 246.94, beats: 1 },
+      { freq: 196.0, beats: 1 },
+      { freq: 130.81, beats: 1 },
+      { freq: 146.83, beats: 0.5 },
+      { freq: 164.81, beats: 0.5 },
+      { freq: 123.47, beats: 1 }
+    ]
+  });
+  wireSoundButton(document.getElementById('sound-btn'), audio);
+
   const squad = (): Unit[] => world.units.filter(u => u.kind === 'agent');
 
   function spawnBurst(
@@ -263,6 +284,7 @@ export function initSyndicateGame(): void {
     facing.clear();
     missionEl.textContent = `${index + 1}/${MISSIONS.length}`;
     phase = 'play';
+    audio.start();
   }
 
   function rememberWeapons() {
@@ -273,6 +295,8 @@ export function initSyndicateGame(): void {
 
   function endCampaign(victory: boolean) {
     phase = 'over';
+    audio.playSfx('gameover');
+    audio.stop();
     record = recordHighScore(RECORD_KEY, Math.floor(money));
     recordEl.textContent = `£${record}`;
     overIcon.textContent = victory ? '🏆' : '☠️';
@@ -378,6 +402,7 @@ export function initSyndicateGame(): void {
 
     // Muzzle flashes and impact sparks for shots fired this very step
     // (brand-new shots still hold their full life before the next tick).
+    let firedThisStep = false;
     for (const shot of world.shots) {
       if (shot.life < SHOT_LIFE - 1e-6) continue;
       const from = isoProject(VIEW, shot.fx, shot.fy);
@@ -385,7 +410,10 @@ export function initSyndicateGame(): void {
       const flash = shot.faction === 'player' ? '#a5f3fc' : '#fecaca';
       spawnBurst(from.x, from.y - 8, 4, flash, { speed: 70, life: 0.1, size: 1.4, glow: true });
       spawnBurst(to.x, to.y - 8, 5, '#fde68a', { speed: 80, life: 0.18, size: 1.3, glow: true });
+      if (shot.faction === 'player') firedThisStep = true;
     }
+    // One blip per step keeps rapid-fire weapons from machine-gunning the mixer.
+    if (firedThisStep) audio.playSfx('blip');
 
     if (
       spec.objective === 'persuade' &&

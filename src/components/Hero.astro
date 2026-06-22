@@ -10,7 +10,12 @@ const t = useTranslations(lang);
 ---
 
 <section class="hero">
-  <div class="container">
+  <div class="hero-aurora" aria-hidden="true">
+    <span class="aurora-blob aurora-1"></span>
+    <span class="aurora-blob aurora-2"></span>
+    <span class="aurora-blob aurora-3"></span>
+  </div>
+  <div class="container hero-content">
     <p class="hero-greeting">{t('hero.greeting')}</p>
     <h1 class="hero-name">{t('hero.name')}</h1>
     <p class="hero-tagline">{t('hero.tagline')}</p>
@@ -31,6 +36,76 @@ const t = useTranslations(lang);
     padding: var(--space-3xl) 0;
     display: flex;
     align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-aurora {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.22;
+    will-change: transform;
+  }
+
+  .aurora-1 {
+    width: 28rem;
+    height: 28rem;
+    top: -10rem;
+    left: -6rem;
+    background: var(--color-accent);
+    animation: aurora-drift 18s ease-in-out infinite alternate;
+  }
+
+  .aurora-2 {
+    width: 22rem;
+    height: 22rem;
+    top: -4rem;
+    right: -8rem;
+    background: var(--color-magic);
+    animation: aurora-drift 24s ease-in-out infinite alternate-reverse;
+  }
+
+  .aurora-3 {
+    width: 18rem;
+    height: 18rem;
+    bottom: -12rem;
+    left: 35%;
+    background: #14b8a6;
+    animation: aurora-drift 30s ease-in-out infinite alternate;
+  }
+
+  @keyframes aurora-drift {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to { transform: translate3d(4rem, 2.5rem, 0) scale(1.15); }
+  }
+
+  :global(:root[data-theme="light"]) .aurora-blob {
+    opacity: 0.14;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :global(:root:not([data-theme="dark"])) .aurora-blob {
+      opacity: 0.14;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .aurora-blob {
+      animation: none;
+    }
   }
 
   .hero-greeting {
@@ -45,6 +120,47 @@ const t = useTranslations(lang);
     font-weight: 700;
     line-height: 1.2;
     margin-bottom: var(--space-md);
+    background: linear-gradient(
+      110deg,
+      var(--color-text) 0%,
+      var(--color-text) 38%,
+      var(--color-accent) 48%,
+      var(--color-magic) 52%,
+      var(--color-text) 62%,
+      var(--color-text) 100%
+    );
+    background-size: 250% 100%;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: var(--color-text);
+    animation: name-shimmer 7s ease-in-out infinite;
+  }
+
+  @keyframes name-shimmer {
+    0%, 55% { background-position: 100% 0; }
+    85%, 100% { background-position: -100% 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-name {
+      animation: none;
+      background: none;
+      -webkit-text-fill-color: currentColor;
+    }
+  }
+
+  @media print {
+    .hero-name {
+      animation: none;
+      background: none;
+      -webkit-text-fill-color: currentColor;
+    }
+
+    .hero-aurora {
+      display: none;
+    }
   }
 
   .hero-tagline {

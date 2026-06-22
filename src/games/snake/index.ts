@@ -1,0 +1,1 @@
+export { initSnakeGame } from './game';

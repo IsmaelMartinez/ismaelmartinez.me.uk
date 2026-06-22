@@ -1,0 +1,1 @@
+export { initTanksGame } from './game';

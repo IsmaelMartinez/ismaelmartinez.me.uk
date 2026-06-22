@@ -1,0 +1,391 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+
+const weapons = [
+  { id: 'missile', emoji: '🚀', label: t('fun.tanks.weaponMissile') },
+  { id: 'heavy', emoji: '💣', label: t('fun.tanks.weaponHeavy') },
+  { id: 'mirv', emoji: '🎇', label: t('fun.tanks.weaponMirv') }
+];
+---
+
+<Layout title="Tank Duel" lang={lang}>
+  <section class="tanks-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div
+        class="game-container"
+        id="tanks-root"
+        data-t-player1={t('fun.tanks.player1')}
+        data-t-player2={t('fun.tanks.player2')}
+        data-t-cpu={t('fun.tanks.cpu')}
+        data-t-wins-round={t('fun.tanks.winsRound')}
+        data-t-wins-match={t('fun.tanks.winsMatch')}
+        data-t-draw={t('fun.tanks.draw')}
+        data-t-wind={t('fun.tanks.wind')}
+      >
+        <div class="game-header">
+          <h1><span class="tank-emoji">🎯</span> {t('fun.tanks.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label" id="p1-label">{t('fun.tanks.player1')}</span>
+              <span id="p1-wins" class="score-value p1">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label" id="p2-label">{t('fun.tanks.player2')}</span>
+              <span id="p2-wins" class="score-value p2">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.tanks.victories')}</span>
+              <span id="victories" class="score-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-area">
+          <canvas id="game-canvas"></canvas>
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">🎯</span>
+              <p>{t('fun.tanks.instructions')}</p>
+              <div class="mode-buttons">
+                <button id="vs-cpu-btn" class="btn btn-primary btn-large">{t('fun.tanks.vsCpu')}</button>
+                <button id="two-player-btn" class="btn btn-primary btn-large">{t('fun.tanks.twoPlayer')}</button>
+              </div>
+            </div>
+          </div>
+          <div id="round-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span id="round-emoji" class="round-emoji">💥</span>
+              <h2 id="round-message"></h2>
+              <button id="next-round-btn" class="btn btn-primary btn-large">{t('fun.tanks.nextRound')}</button>
+              <button id="play-again-btn" class="btn btn-primary btn-large" style="display: none;">{t('fun.tanks.playAgain')}</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="weapon-bar">
+          {weapons.map((weapon, i) => (
+            <button class={`weapon-btn${i === 0 ? ' active' : ''}`} data-weapon={weapon.id} disabled>
+              <span class="weapon-emoji">{weapon.emoji}</span>
+              <span class="weapon-name">{weapon.label}</span>
+              <span class="weapon-ammo">∞</span>
+            </button>
+          ))}
+        </div>
+
+        <div class="controls">
+          <div class="control-group">
+            <label for="angle-slider">{t('fun.tanks.angle')} <span id="angle-value" class="control-value">60°</span></label>
+            <input type="range" id="angle-slider" min="5" max="175" value="60" />
+          </div>
+          <div class="control-group">
+            <label for="power-slider">{t('fun.tanks.power')} <span id="power-value" class="control-value">55</span></label>
+            <input type="range" id="power-slider" min="10" max="100" value="55" />
+          </div>
+          <button id="fire-btn" class="btn btn-primary fire-btn">{t('fun.tanks.fire')}</button>
+        </div>
+
+        <p class="keys-hint">{t('fun.tanks.keys')}</p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import { initTanksGame } from '../../../games/tanks';
+  initTanksGame();
+</script>
+
+<style>
+  .tanks-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
+  }
+
+  .game-container {
+    max-width: 850px;
+    margin: 0 auto;
+  }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+
+  .game-header h1 {
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .tank-emoji {
+    animation: recoil 2s ease-in-out infinite;
+  }
+
+  @keyframes recoil {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-3px); }
+  }
+
+  .scores {
+    display: flex;
+    gap: var(--space-lg);
+  }
+
+  .score-item {
+    text-align: center;
+  }
+
+  .score-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .score-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f97316;
+  }
+
+  .score-value.p1 {
+    color: #38bdf8;
+  }
+
+  .score-value.p2 {
+    color: #f87171;
+  }
+
+  .game-area {
+    position: relative;
+    background: var(--color-bg-secondary);
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 2px solid var(--color-border);
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    /* Dragging on the battlefield aims the shot, so don't scroll the page */
+    touch-action: none;
+    cursor: crosshair;
+  }
+
+  .game-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+  }
+
+  .overlay-content {
+    text-align: center;
+    padding: var(--space-xl);
+    max-width: 480px;
+  }
+
+  .play-icon,
+  .round-emoji {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: var(--space-lg);
+  }
+
+  .overlay-content h2 {
+    font-size: 1.75rem;
+    color: #f97316;
+    margin-bottom: var(--space-xl);
+  }
+
+  .overlay-content p {
+    margin-bottom: var(--space-xl);
+  }
+
+  .mode-buttons {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-large {
+    padding: var(--space-md) var(--space-2xl);
+    font-size: 1.1rem;
+  }
+
+  .weapon-bar {
+    display: flex;
+    gap: var(--space-xs);
+    margin-top: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .weapon-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .weapon-btn:hover:not(:disabled) {
+    border-color: #f97316;
+  }
+
+  .weapon-btn.active {
+    border-color: #f97316;
+    background: rgba(249, 115, 22, 0.12);
+  }
+
+  .weapon-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .weapon-emoji {
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+
+  .weapon-name {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .weapon-ammo {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #facc15;
+  }
+
+  .controls {
+    display: flex;
+    align-items: end;
+    gap: var(--space-lg);
+    margin-top: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .control-group {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .control-group label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-xs);
+  }
+
+  .control-value {
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .control-group input[type='range'] {
+    width: 100%;
+    accent-color: #f97316;
+  }
+
+  .control-group input[type='range']:disabled {
+    opacity: 0.4;
+  }
+
+  .fire-btn {
+    padding: var(--space-md) var(--space-2xl);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .fire-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .keys-hint {
+    margin-top: var(--space-md);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  @media (max-width: 600px) {
+    .game-header {
+      justify-content: center;
+      text-align: center;
+    }
+
+    .game-header h1 {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .fire-btn {
+      width: 100%;
+    }
+
+    .keys-hint {
+      display: none;
+    }
+  }
+</style>

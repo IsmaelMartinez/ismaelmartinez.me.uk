@@ -1,0 +1,405 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+
+const tools = [
+  { id: 'path', emoji: '🟫', label: t('fun.park.toolPath'), cost: 10 },
+  { id: 'carousel', emoji: '🎠', label: t('fun.park.toolCarousel'), cost: 250 },
+  { id: 'ferris', emoji: '🎡', label: t('fun.park.toolFerris'), cost: 400 },
+  { id: 'food', emoji: '🌭', label: t('fun.park.toolFood'), cost: 150 },
+  { id: 'drink', emoji: '🥤', label: t('fun.park.toolDrink'), cost: 100 },
+  { id: 'toilet', emoji: '🚻', label: t('fun.park.toolToilet'), cost: 120 },
+  { id: 'tree', emoji: '🌳', label: t('fun.park.toolTree'), cost: 25 },
+  { id: 'bulldoze', emoji: '🚜', label: t('fun.park.toolBulldoze'), cost: 0 }
+];
+---
+
+<Layout title="Pixel Park" lang={lang}>
+  <section class="park-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div
+        class="game-container"
+        id="park-root"
+        data-t-day={t('fun.park.day')}
+        data-t-upkeep={t('fun.park.upkeep')}
+        data-t-cant-afford={t('fun.park.cantAfford')}
+        data-t-needs-path={t('fun.park.needsPath')}
+        data-t-blocked={t('fun.park.blocked')}
+      >
+        <div class="game-header">
+          <h1><span class="park-emoji">🎢</span> {t('fun.park.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label">{t('fun.park.money')}</span>
+              <span id="money" class="score-value money">£1500</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.park.guests')}</span>
+              <span id="guest-count" class="score-value">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.park.rating')}</span>
+              <span id="rating" class="score-value">50%</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.park.day')}</span>
+              <span id="day" class="score-value">1</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.park.record')}</span>
+              <span id="record" class="score-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-area">
+          <div class="canvas-scroll" id="canvas-scroll">
+            <canvas id="game-canvas"></canvas>
+          </div>
+          <div id="toast-area" class="toast-area"></div>
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">🎢</span>
+              <p>{t('fun.park.instructions')}</p>
+              <button id="start-btn" class="btn btn-primary btn-large">{t('fun.park.start')}</button>
+            </div>
+          </div>
+          <div id="over-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span class="play-icon">💸</span>
+              <h2>{t('fun.park.gameOver')}</h2>
+              <p>{t('fun.park.gameOverDesc')}</p>
+              <p class="final-stats">
+                {t('fun.park.daysOpen')}: <strong id="final-days">0</strong> ·
+                {t('fun.park.peakGuests')}: <strong id="final-peak">0</strong>
+              </p>
+              <button id="restart-btn" class="btn btn-primary btn-large">{t('fun.park.playAgain')}</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="toolbar">
+            {tools.map((tool, i) => (
+              <button class={`tool-btn${i === 0 ? ' active' : ''}`} data-tool={tool.id}>
+                <span class="tool-emoji">{tool.emoji}</span>
+                <span class="tool-label">{tool.label}</span>
+                <span class="tool-cost">{tool.cost > 0 ? `£${tool.cost}` : '—'}</span>
+              </button>
+            ))}
+          </div>
+          <div class="speed-controls">
+            <button class="speed-btn" data-speed="0">⏸</button>
+            <button class="speed-btn active" data-speed="1">▶</button>
+            <button class="speed-btn" data-speed="3">⏩</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import { initParkGame } from '../../../games/park';
+  initParkGame();
+</script>
+
+<style>
+  .park-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
+  }
+
+  .game-container {
+    max-width: 820px;
+    margin: 0 auto;
+  }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+
+  .game-header h1 {
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .park-emoji {
+    animation: bob 2.5s ease-in-out infinite;
+  }
+
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+
+  .scores {
+    display: flex;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .score-item {
+    text-align: center;
+  }
+
+  .score-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .score-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #ec4899;
+  }
+
+  .score-value.money {
+    color: #4ade80;
+  }
+
+  .game-area {
+    position: relative;
+    background: var(--color-bg-secondary);
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 2px solid var(--color-border);
+  }
+
+  .canvas-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 76 / 45;
+    cursor: pointer;
+  }
+
+  /* Keep tiles tappable on phones: minimum board size + horizontal pan */
+  @media (max-width: 600px) {
+    #game-canvas {
+      min-width: 640px;
+    }
+  }
+
+  .toast-area {
+    position: absolute;
+    bottom: var(--space-md);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    pointer-events: none;
+  }
+
+  .toast-area :global(.toast) {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 0.8rem;
+    padding: var(--space-xs) var(--space-md);
+    border-radius: 999px;
+    animation: toastIn 0.2s ease;
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .game-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+  }
+
+  .overlay-content {
+    text-align: center;
+    padding: var(--space-xl);
+    max-width: 520px;
+  }
+
+  .play-icon {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: var(--space-lg);
+  }
+
+  .overlay-content h2 {
+    font-size: 1.75rem;
+    color: #ef4444;
+    margin-bottom: var(--space-md);
+  }
+
+  .overlay-content p {
+    margin-bottom: var(--space-lg);
+  }
+
+  .final-stats {
+    font-size: 1.1rem;
+  }
+
+  .btn-large {
+    padding: var(--space-md) var(--space-2xl);
+    font-size: 1.1rem;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-top: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+  }
+
+  .tool-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 64px;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tool-btn:hover {
+    border-color: #ec4899;
+  }
+
+  .tool-btn.active {
+    border-color: #ec4899;
+    background: rgba(236, 72, 153, 0.12);
+  }
+
+  .tool-emoji {
+    font-size: 1.3rem;
+    line-height: 1;
+  }
+
+  .tool-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .tool-cost {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #4ade80;
+  }
+
+  .speed-controls {
+    display: flex;
+    gap: var(--space-xs);
+  }
+
+  .speed-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 1.1rem;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .speed-btn:hover,
+  .speed-btn.active {
+    border-color: #ec4899;
+    background: rgba(236, 72, 153, 0.12);
+  }
+
+  @media (max-width: 600px) {
+    .game-header {
+      justify-content: center;
+      text-align: center;
+    }
+
+    .game-header h1 {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .scores {
+      justify-content: center;
+      gap: var(--space-md);
+    }
+
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .toolbar {
+      justify-content: center;
+    }
+
+    .speed-controls {
+      justify-content: center;
+    }
+  }
+</style>

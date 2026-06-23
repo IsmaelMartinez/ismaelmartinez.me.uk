@@ -45,6 +45,13 @@ export interface GameAudio {
   setMuted(muted: boolean): void;
   /** Play a one-shot sound effect. No-op when muted or audio is unavailable. */
   playSfx(name: SfxName): void;
+  /**
+   * Stop the music, drop the lifecycle listeners, and close the AudioContext.
+   * Runs automatically when the page navigates away (the site uses Astro's
+   * ClientRouter, so leaving a game is a DOM swap rather than a full unload and
+   * the music would otherwise keep playing). Safe to call manually; idempotent.
+   */
+  dispose(): void;
 }
 
 /** Reads the shared muted flag (1 = muted). Defaults to enabled (not muted). */
@@ -228,15 +235,34 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
 
   // Background tabs throttle timers, which would starve the ~100ms lookahead and
   // make the music stutter. Suspend the context while hidden and resume on return.
+  function onVisibilityChange(): void {
+    if (!ctx) return;
+    if (document.hidden) {
+      void ctx.suspend();
+    } else if (running) {
+      void ctx.resume();
+    }
+  }
+
+  function dispose(): void {
+    stop();
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('astro:before-swap', dispose);
+    }
+    if (ctx) {
+      void ctx.close();
+      ctx = null;
+      master = null;
+    }
+  }
+
   if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (!ctx) return;
-      if (document.hidden) {
-        void ctx.suspend();
-      } else if (running) {
-        void ctx.resume();
-      }
-    });
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    // Astro's ClientRouter swaps the DOM in place on navigation (including the
+    // browser back button) instead of unloading the page, so without this the
+    // scheduler and AudioContext outlive the game and the music plays forever.
+    document.addEventListener('astro:before-swap', dispose);
   }
 
   return {
@@ -245,6 +271,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     toggleMute,
     isMuted: () => muted,
     setMuted,
-    playSfx
+    playSfx,
+    dispose
   };
 }

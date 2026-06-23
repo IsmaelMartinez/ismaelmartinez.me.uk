@@ -42,12 +42,16 @@ describe('createGameAudio without AudioContext', () => {
     expect(typeof audio.isMuted).toBe('function');
     expect(typeof audio.setMuted).toBe('function');
     expect(typeof audio.playSfx).toBe('function');
+    expect(typeof audio.dispose).toBe('function');
 
     expect(() => {
       audio.start();
       audio.playSfx('blip');
       audio.playSfx('explosion');
       audio.stop();
+      audio.dispose();
+      // Idempotent: a second dispose (or one before any audio existed) is safe.
+      audio.dispose();
     }).not.toThrow();
   });
 
@@ -101,6 +105,31 @@ describe('createGameAudio with a stubbed AudioContext', () => {
     expect(ctor).toHaveBeenCalledTimes(1);
     audio.stop();
   });
+
+  it('dispose closes the AudioContext so the music cannot outlive the page', () => {
+    const ctx = makeFakeContext();
+    // A real constructor (not a vi.fn) so `new AudioContext()` yields our fake:
+    // vitest mocks don't honor an object returned from the implementation when
+    // invoked with `new`, which would leave the synth without a context.
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    const audio = createGameAudio({ melody: MELODY });
+    audio.start();
+    expect(ctx.close).not.toHaveBeenCalled();
+
+    audio.dispose();
+    expect(ctx.close).toHaveBeenCalledTimes(1);
+
+    // A second dispose is a no-op (the context is already gone).
+    audio.dispose();
+    expect(ctx.close).toHaveBeenCalledTimes(1);
+  });
 });
 
 /** A tiny fake just rich enough for the synth scheduling code paths. */
@@ -124,6 +153,8 @@ function makeFakeContext() {
     state: 'running',
     destination: {},
     resume: vi.fn(() => Promise.resolve()),
+    suspend: vi.fn(() => Promise.resolve()),
+    close: vi.fn(() => Promise.resolve()),
     createGain: vi.fn(node),
     createOscillator: vi.fn(node)
   };

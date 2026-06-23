@@ -484,6 +484,9 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   .nav-logo em {
     font-style: normal;
     color: var(--color-accent);
+    /* Keep the whole logo (not the inner <em>) as the click target so the
+       5-click arcade easter egg, which reads e.target, animates the full logo. */
+    pointer-events: none;
   }
 
   .nav-links {

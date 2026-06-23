@@ -1,6 +1,7 @@
 ---
-import { useTranslations } from '../i18n/translations';
+import { useTranslations, getLocalizedPath } from '../i18n/translations';
 import type { Locale } from '../i18n/translations';
+import { socialLinks } from '../data/links';
 
 interface Props {
   lang: Locale;
@@ -8,6 +9,7 @@ interface Props {
 
 const { lang } = Astro.props;
 const t = useTranslations(lang);
+const linkedInUrl = socialLinks.find(link => link.name === 'LinkedIn')?.url ?? 'https://www.linkedin.com/in/ismaelmartinezramos';
 ---
 
 <section class="section cta-section">
@@ -16,9 +18,9 @@ const t = useTranslations(lang);
       <h2 class="cta-title">{t('cta.title')}</h2>
       <p class="cta-description">{t('cta.description')}</p>
       <div class="cta-actions">
-        <a href={`/${lang}/connect`} class="btn btn-primary">{t('cta.connect')} →</a>
+        <a href={getLocalizedPath('/connect', lang)} class="btn btn-primary">{t('cta.connect')} →</a>
         <a
-          href="https://www.linkedin.com/in/ismaelmartinezramos"
+          href={linkedInUrl}
           class="btn btn-outline"
           target="_blank"
           rel="noopener noreferrer"

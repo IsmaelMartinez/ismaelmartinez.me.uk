@@ -4,7 +4,7 @@ import Hero from '../../components/Hero.astro';
 import ProjectCard from '../../components/ProjectCard.astro';
 import ArticleCard from '../../components/ArticleCard.astro';
 import ContactCTA from '../../components/ContactCTA.astro';
-import { useTranslations, locales } from '../../i18n/translations';
+import { useTranslations, locales, getLocalizedPath } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { getFeaturedProjects } from '../../data/projects';
 import { getCollection } from 'astro:content';
@@ -21,7 +21,7 @@ const articles = await getCollection('articles', ({ id, data }) => {
   return id.startsWith(`${lang}/`) && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft);
 });
 
-const latestArticles = articles
+const latestArticles = [...articles]
   .sort((a, b) => b.data.publishedDate.valueOf() - a.data.publishedDate.valueOf())
   .slice(0, 3);
 ---
@@ -52,7 +52,7 @@ const latestArticles = articles
         ))}
       </div>
       <div class="section-footer">
-        <a href={`/${lang}/projects`} class="btn btn-outline">
+        <a href={getLocalizedPath('/projects', lang)} class="btn btn-outline">
           {t('common.viewAll')} →
         </a>
       </div>
@@ -79,7 +79,7 @@ const latestArticles = articles
           ))}
         </div>
         <div class="section-footer">
-          <a href={`/${lang}/writing`} class="btn btn-outline">
+          <a href={getLocalizedPath('/writing', lang)} class="btn btn-outline">
             {t('common.viewAll')} →
           </a>
         </div>

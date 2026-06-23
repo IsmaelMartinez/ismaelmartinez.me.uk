@@ -1,5 +1,5 @@
 ---
-import { useTranslations } from '../i18n/translations';
+import { useTranslations, getLocalizedPath } from '../i18n/translations';
 
 interface Props {
   lang: 'en' | 'es' | 'cat';
@@ -17,10 +17,10 @@ const t = useTranslations(lang);
     </h1>
     <p class="hero-description">{t('hero.description')}</p>
     <div class="hero-actions">
-      <a href={`/${lang}/projects`} class="btn btn-primary">
+      <a href={getLocalizedPath('/projects', lang)} class="btn btn-primary">
         {t('nav.projects')} →
       </a>
-      <a href={`/${lang}/connect`} class="btn btn-outline">
+      <a href={getLocalizedPath('/connect', lang)} class="btn btn-outline">
         {t('cta.connect')}
       </a>
     </div>

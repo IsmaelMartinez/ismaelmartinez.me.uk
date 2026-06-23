@@ -26,7 +26,7 @@ Pages are defined once under `src/pages/[lang]/…` as dynamic routes that use `
 
 ### Content
 
-Static data (projects, links, uses, health, fun) lives in TypeScript files under `src/data/` with inline translations per object. Articles use Astro Content Collections in `src/content/articles/{locale}/` with MDX format. The schema is defined in `src/content.config.ts` (Astro 6's top-level content config location).
+Static data (projects, links, health, fun) lives in TypeScript files under `src/data/` with inline translations per object. Articles use Astro Content Collections in `src/content/articles/{locale}/` with MDX format. The schema is defined in `src/content.config.ts` (Astro 6's top-level content config location).
 
 Articles follow POSSE (Publish Own Site, Syndicate Elsewhere) strategy per ADR 001 in `docs/adr/`. Frontmatter includes `originalUrl` and `originalPlatform` to link back to syndicated copies on Medium/Dev.to.
 

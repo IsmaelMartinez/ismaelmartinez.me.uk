@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Option B — Terminal / Phosphor</title>
+<style>
+  :root {
+    --bg: #0a0e0a;
+    --bg-panel: #0f150f;
+    --green: #4ade80;
+    --green-dim: #22c55e;
+    --amber: #fbbf24;
+    --cyan: #22d3ee;
+    --text: #d1e7d1;
+    --muted: #6b8f6b;
+    --border: #1d2e1d;
+    --mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); line-height: 1.7; font-size: 15px; }
+  body::after { content: ''; position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0px, rgba(0,0,0,0.18) 1px, transparent 1px, transparent 3px); z-index: 999; }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .container { max-width: 980px; margin: 0 auto; padding: 0 1.5rem; }
+
+  nav { border-bottom: 1px solid var(--border); padding: 0.9rem 0; position: sticky; top: 0; background: rgba(10,14,10,0.95); }
+  .nav-inner { display: flex; justify-content: space-between; align-items: center; }
+  .logo { color: var(--green); font-weight: 700; }
+  .logo::before { content: '● '; color: var(--amber); }
+  .nav-links { display: flex; gap: 1.4rem; font-size: 0.84rem; }
+  .nav-links a { color: var(--muted); }
+  .nav-links a:hover, .nav-links a.active { color: var(--green); text-decoration: none; }
+  .nav-links a.active::before { content: '['; } .nav-links a.active::after { content: ']'; }
+
+  .hero { padding: 5rem 0 4rem; }
+  .prompt-line { color: var(--muted); margin-bottom: 0.4rem; }
+  .prompt-line .p { color: var(--green); }
+  .hero h1 { font-size: clamp(1.7rem, 4.6vw, 2.8rem); color: var(--green); font-weight: 700; margin: 0.6rem 0 0.4rem; text-shadow: 0 0 18px rgba(74, 222, 128, 0.35); }
+  .hero h1 .cursor { display: inline-block; width: 0.55em; height: 1.05em; background: var(--green); vertical-align: text-bottom; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .hero .role { color: var(--amber); margin-bottom: 1.4rem; }
+  .hero .out { color: var(--text); max-width: 64ch; }
+  .hero .out em { color: var(--cyan); font-style: normal; }
+  .hero-actions { margin-top: 2.2rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--green-dim); color: var(--green); padding: 0.55rem 1.3rem; font-family: inherit; font-size: 0.88rem; }
+  .btn:hover { background: var(--green-dim); color: #04140a; text-decoration: none; box-shadow: 0 0 22px rgba(74,222,128,0.4); }
+  .btn.alt { border-color: var(--border); color: var(--muted); }
+  .btn.alt:hover { background: transparent; color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 22px rgba(34,211,238,0.25); }
+
+  section { padding: 3.2rem 0; }
+  .sec-title { color: var(--muted); margin-bottom: 1.8rem; font-size: 0.95rem; }
+  .sec-title .p { color: var(--green); }
+  .sec-title .cmd { color: var(--text); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .panel { background: var(--bg-panel); border: 1px solid var(--border); padding: 1.3rem 1.4rem; position: relative; }
+  .panel:hover { border-color: var(--green-dim); box-shadow: 0 0 24px rgba(74,222,128,0.12); }
+  .panel h3 { font-size: 0.98rem; color: var(--green); margin-bottom: 0.6rem; }
+  .panel h3::before { content: '▸ '; color: var(--amber); }
+  .panel p { font-size: 0.86rem; color: var(--text); opacity: 0.85; }
+  .panel .meta { margin-top: 1rem; font-size: 0.74rem; color: var(--muted); }
+  .panel .meta span { border: 1px solid var(--border); padding: 0.1rem 0.5rem; margin-right: 0.4rem; }
+
+  .log { border: 1px solid var(--border); background: var(--bg-panel); }
+  .log-row { display: flex; gap: 1.2rem; padding: 0.95rem 1.2rem; border-bottom: 1px solid var(--border); align-items: baseline; }
+  .log-row:last-child { border-bottom: 0; }
+  .log-row:hover { background: rgba(74,222,128,0.05); }
+  .log-row time { color: var(--muted); font-size: 0.76rem; white-space: nowrap; }
+  .log-row .lvl { color: var(--amber); font-size: 0.76rem; }
+  .log-row a { color: var(--text); font-size: 0.92rem; }
+  .log-row a:hover { color: var(--cyan); }
+
+  .cta-box { border: 1px dashed var(--green-dim); padding: 2.4rem; text-align: center; background: var(--bg-panel); }
+  .cta-box h2 { color: var(--green); font-size: 1.4rem; margin-bottom: 0.8rem; text-shadow: 0 0 18px rgba(74,222,128,0.3); }
+  .cta-box p { color: var(--muted); max-width: 58ch; margin: 0 auto 1.8rem; font-size: 0.9rem; }
+
+  footer { border-top: 1px solid var(--border); padding: 1.4rem 0 2.2rem; font-size: 0.78rem; color: var(--muted); }
+  footer .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem; }
+  .statusbar { display: flex; gap: 1.2rem; }
+  .statusbar .ok { color: var(--green); }
+</style>
+</head>
+<body>
+  <nav>
+    <div class="container nav-inner">
+      <span class="logo">ismael@martinez:~$</span>
+      <div class="nav-links">
+        <a href="#" class="active">home</a><a href="#">about</a><a href="#">projects</a><a href="#">writing</a><a href="#">health</a><a href="#">connect</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <p class="prompt-line"><span class="p">$</span> whoami</p>
+      <h1>Ismael Martinez<span class="cursor"></span></h1>
+      <p class="role">// Principal Software Developer &amp; Open Source Enthusiast</p>
+      <p class="prompt-line" style="margin-top:1.6rem;"><span class="p">$</span> cat mission.txt</p>
+      <p class="out">I build things, write about technology, and contribute to open source. I care deeply about <em>responsible AI</em> — and about how this technology lets us <em>explore problems in entirely new ways</em>.</p>
+      <div class="hero-actions">
+        <a class="btn" href="#">./view-projects</a>
+        <a class="btn alt" href="#">./contact-me</a>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="container">
+      <p class="sec-title"><span class="p">$</span> <span class="cmd">ls ~/projects --featured</span></p>
+      <div class="grid">
+        <div class="panel">
+          <h3>teams-for-linux</h3>
+          <p>Unofficial Microsoft Teams client for Linux. Community-driven, bringing Teams to Linux users.</p>
+          <div class="meta"><span>electron</span><span>javascript</span><span>linux</span></div>
+        </div>
+        <div class="panel">
+          <h3>repo-butler</h3>
+          <p>A portfolio-health agent that analyses GitHub repos, generates dashboards, and proposes improvements.</p>
+          <div class="meta"><span>ai-agent</span><span>automation</span></div>
+        </div>
+        <div class="panel">
+          <h3>sound3fy</h3>
+          <p>Sonification for D3.js — charts made audible and accessible to blind and low-vision users.</p>
+          <div class="meta"><span>d3.js</span><span>a11y</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <p class="sec-title"><span class="p">$</span> <span class="cmd">tail -n 3 ~/writing/articles.log</span></p>
+      <div class="log">
+        <div class="log-row"><time>2026-06</time><span class="lvl">[POST]</span><a href="#">The AI Automation Trap</a></div>
+        <div class="log-row"><time>2026-05</time><span class="lvl">[POST]</span><a href="#">Integrating Agentic Systems into Event-Driven Architectures</a></div>
+        <div class="log-row"><time>2026-04</time><span class="lvl">[POST]</span><a href="#">System Thinking, Governance and GreenOps in the Age of AI</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <div class="cta-box">
+        <h2>$ ping ismael --connect</h2>
+        <p>Whether it's responsible AI, event-driven systems, open source, or just a good problem worth exploring — I'd love to hear from you.</p>
+        <a class="btn" href="#">open-channel --linkedin</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="statusbar"><span class="ok">● online</span><span>built with astro &amp; ☕</span></div>
+      <span>© 2026 · <a href="#">github</a> · <a href="#">linkedin</a> · <a href="#">rss</a> · ↑↑↓↓←→←→BA</span>
+    </div>
+  </footer>
+</body>
+</html>

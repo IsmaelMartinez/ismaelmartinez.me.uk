@@ -802,8 +802,8 @@ const t = useTranslations(lang);
   }
 
   #game-wrapper {
-    --color-powerup: #a855f7;
-    --color-powerup-rgb: 168, 85, 247;
+    --color-powerup: #38bdf8;
+    --color-powerup-rgb: 56, 189, 248;
     width: 100%;
     max-width: 600px;
   }
@@ -837,7 +837,7 @@ const t = useTranslations(lang);
     font-size: 2.5rem;
     font-weight: 800;
     margin-bottom: var(--space-sm);
-    background: linear-gradient(135deg, #8B4513, #D2691E, #8B4513);
+    background: linear-gradient(135deg, #1e40af, #3b82f6, #1e40af);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -867,7 +867,7 @@ const t = useTranslations(lang);
   .stat-value {
     font-size: 1.2rem;
     font-weight: 700;
-    color: #D2691E;
+    color: var(--color-accent);
   }
 
   .btn-game {
@@ -908,7 +908,7 @@ const t = useTranslations(lang);
   .streak {
     font-size: 1.2rem;
     font-weight: 700;
-    color: #f59e0b;
+    color: var(--color-accent);
     animation: streak-pop 0.3s ease;
   }
 
@@ -1168,15 +1168,15 @@ const t = useTranslations(lang);
   .mini-title {
     font-size: 1.5rem;
     margin-bottom: var(--space-lg);
-    color: #f59e0b;
+    color: var(--color-accent);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     animation: neon-glow 1s ease-in-out infinite;
   }
 
   @keyframes neon-glow {
-    0%, 100% { text-shadow: 0 0 5px #f59e0b, 0 0 10px #f59e0b; }
-    50% { text-shadow: 0 0 15px #f59e0b, 0 0 30px #f59e0b; }
+    0%, 100% { text-shadow: 0 0 5px #3b82f6, 0 0 10px #3b82f6; }
+    50% { text-shadow: 0 0 15px #3b82f6, 0 0 30px #3b82f6; }
   }
 
   .mini-game-area {

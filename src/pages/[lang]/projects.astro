@@ -2,6 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import ProjectCard from '../../components/ProjectCard.astro';
 import PortfolioHealthBadge from '../../components/PortfolioHealthBadge.astro';
+import ContactCTA from '../../components/ContactCTA.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { projects } from '../../data/projects';
@@ -33,6 +34,8 @@ const health = await fetchPortfolioHealth();
       </div>
     </div>
   </section>
+
+  <ContactCTA lang={lang} />
 </Layout>
 
 <style>

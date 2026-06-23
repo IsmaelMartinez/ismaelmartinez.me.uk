@@ -169,6 +169,11 @@ const relatedArticles = scoredArticles
           </div>
         )}
 
+        <div class="article-discuss">
+          <span>{t('article.discussPrompt')}</span>
+          <a href={getLocalizedPath('/connect', lang)}>{t('article.discussLink')} →</a>
+        </div>
+
         <a href={getLocalizedPath('/writing', lang)} class="back-link">
           ← {t('article.backToWriting')}
         </a>
@@ -441,6 +446,29 @@ const relatedArticles = scoredArticles
   }
 
   .original-source a:hover {
+    text-decoration: underline;
+  }
+
+  .article-discuss {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--color-bg-secondary);
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-btn);
+    font-size: 0.9375rem;
+    color: var(--color-text-muted);
+    width: fit-content;
+  }
+
+  .article-discuss a {
+    color: var(--color-accent);
+    font-weight: 500;
+  }
+
+  .article-discuss a:hover {
     text-decoration: underline;
   }
 

@@ -1,26 +1,26 @@
 :root {
-  /* Colors (dark default) */
-  --color-bg: #0f0f0f;
-  --color-bg-secondary: #1a1a1a;
-  --color-text: #e5e5e5;
-  --color-text-muted: #a3a3a3;
-  --color-accent: #3b82f6;
-  --color-accent-hover: #60a5fa;
-  --color-accent-solid: #2563eb;
-  --color-accent-solid-hover: #1d4ed8;
-  --color-border: #262626;
-  --color-magic: #8b5cf6;
-  --color-glow: rgba(59, 130, 246, 0.14);
-  --gradient-magic: linear-gradient(90deg, var(--color-accent), var(--color-magic));
+  /* Editorial × Brutalist — paper & ink (light default) */
+  --color-bg: #eaf0f9;
+  --color-bg-secondary: #ffffff;
+  --color-text: #0f1b2e;
+  --color-text-muted: #46566e;
+  --color-accent: #1d4ed8;
+  --color-accent-hover: #1e40af;
+  --color-accent-solid: #1d4ed8;
+  --color-accent-solid-hover: #1e40af;
+  --color-border: #c3d0e2;
+  --color-frame: #0f1b2e;
+  --color-shadow: #0f1b2e;
+  --gradient-magic: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
 
   /* Health tier colours */
-  --color-tier-gold: #ffd700;
-  --color-tier-silver: #c0c0c0;
-  --color-tier-bronze: #cd7f32;
-  --color-tier-none: #525252;
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-danger: #ef4444;
+  --color-tier-gold: #b8860b;
+  --color-tier-silver: #8a8a8a;
+  --color-tier-bronze: #a05a2c;
+  --color-tier-none: #78716c;
+  --color-success: #15803d;
+  --color-warning: #a16207;
+  --color-danger: #b91c1c;
 
   /* Spacing */
   --space-xs: 0.25rem;
@@ -32,42 +32,65 @@
   --space-3xl: 4rem;
 
   /* Typography */
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
 
+  /* Frame & shadow */
+  --radius: 2px;
+  --frame-width: 2px;
+  --shadow-card: 6px 6px 0 var(--color-shadow);
+  --shadow-card-pressed: 2px 2px 0 var(--color-shadow);
+  --shadow-btn: 4px 4px 0 var(--color-shadow);
+  --shadow-btn-pressed: 1px 1px 0 var(--color-shadow);
+
   /* Sizing */
   --max-width: 1200px;
-  --nav-height: 4rem;
+  --nav-height: 4.25rem;
 }
 
-/* Light mode — system preference (when no manual override) */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --color-bg: #fafafa;
-    --color-bg-secondary: #f5f5f5;
-    --color-text: #171717;
-    --color-text-muted: #525252;
-    --color-accent: #2563eb;
-    --color-accent-hover: #1d4ed8;
+/* Dark mode — system preference (when no manual override) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #0c1424;
+    --color-bg-secondary: #15213a;
+    --color-text: #e4ebf6;
+    --color-text-muted: #93a3be;
+    --color-accent: #60a5fa;
+    --color-accent-hover: #93c5fd;
     --color-accent-solid: #2563eb;
     --color-accent-solid-hover: #1d4ed8;
-    --color-border: #e5e5e5;
-    --color-glow: rgba(37, 99, 235, 0.08);
+    --color-border: #29354f;
+    --color-frame: #e4ebf6;
+    --color-shadow: #05080f;
+    --color-tier-gold: #ffd700;
+    --color-tier-silver: #c0c0c0;
+    --color-tier-bronze: #cd7f32;
+    --color-success: #22c55e;
+    --color-warning: #eab308;
+    --color-danger: #ef4444;
   }
 }
 
-/* Light mode — manual override */
-:root[data-theme="light"] {
-  --color-bg: #fafafa;
-  --color-bg-secondary: #f5f5f5;
-  --color-text: #171717;
-  --color-text-muted: #525252;
-  --color-accent: #2563eb;
-  --color-accent-hover: #1d4ed8;
+/* Dark mode — manual override */
+:root[data-theme="dark"] {
+  --color-bg: #0c1424;
+  --color-bg-secondary: #15213a;
+  --color-text: #e4ebf6;
+  --color-text-muted: #93a3be;
+  --color-accent: #60a5fa;
+  --color-accent-hover: #93c5fd;
   --color-accent-solid: #2563eb;
   --color-accent-solid-hover: #1d4ed8;
-  --color-border: #e5e5e5;
-  --color-glow: rgba(37, 99, 235, 0.08);
+  --color-border: #29354f;
+  --color-frame: #e4ebf6;
+  --color-shadow: #05080f;
+  --color-tier-gold: #ffd700;
+  --color-tier-silver: #c0c0c0;
+  --color-tier-bronze: #cd7f32;
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-danger: #ef4444;
 }
 
 /* Reset */
@@ -85,8 +108,15 @@ body {
   font-family: var(--font-sans);
   background-color: var(--color-bg);
   color: var(--color-text);
-  line-height: 1.6;
+  line-height: 1.65;
   min-height: 100vh;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
 }
 
 a {
@@ -126,63 +156,48 @@ img {
 }
 
 .section-title {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 1.75rem;
   margin-bottom: var(--space-sm);
 }
 
 .section-description {
   color: var(--color-text-muted);
   margin-bottom: var(--space-xl);
+  font-style: italic;
+  font-family: var(--font-serif);
+}
+
+/* Eyebrow / kicker label */
+.kicker {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-accent);
 }
 
 /* Card */
 .card {
   background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
+  border: var(--frame-width) solid var(--color-frame);
+  border-radius: var(--radius);
   padding: var(--space-lg);
-  transition: border-color 0.2s ease, transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.card:hover {
-  border-color: var(--color-accent);
-}
-
-/* Cursor spotlight: cards glow where the pointer is (--glow-x/y set by Layout script) */
-.card,
-.link-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.card::before,
-.link-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(320px circle at var(--glow-x, 50%) var(--glow-y, 50%), var(--color-glow), transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.card:hover::before,
-.link-card:hover::before {
-  opacity: 1;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    transform: translate(3px, 3px);
+    box-shadow: var(--shadow-card-pressed);
   }
 }
 
 /* Grid */
 .grid {
   display: grid;
-  gap: var(--space-lg);
+  gap: var(--space-xl);
 }
 
 .grid-2 {
@@ -198,43 +213,55 @@ img {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: 0.5rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: var(--frame-width) solid var(--color-frame);
+  box-shadow: var(--shadow-btn);
   cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-btn-pressed);
 }
 
 .btn-primary {
   background: var(--color-accent-solid);
-  color: white;
+  color: #fff;
 }
 
 .btn-primary:hover {
   background: var(--color-accent-solid-hover);
-  color: white;
+  color: #fff;
 }
 
 .btn-outline {
-  background: transparent;
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
   color: var(--color-text);
 }
 
 .btn-outline:hover {
-  border-color: var(--color-accent);
   color: var(--color-accent);
 }
 
 /* Tags */
 .tag {
   display: inline-block;
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  background: transparent;
+  border: 1px solid var(--color-frame);
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
@@ -245,13 +272,17 @@ img {
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
   background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  transition: border-color 0.2s ease;
+  border: var(--frame-width) solid var(--color-frame);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-.link-card:hover {
-  border-color: var(--color-accent);
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .link-card:hover {
+    transform: translate(3px, 3px);
+    box-shadow: var(--shadow-card-pressed);
+  }
 }
 
 .link-card-icon {
@@ -264,8 +295,7 @@ img {
 }
 
 .link-card-content h3 {
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.05rem;
   margin-bottom: 0.125rem;
 }
 
@@ -357,6 +387,31 @@ html.theme-switching::view-transition-new(root) {
   line-height: 1;
 }
 
+/* On phones the fixed-aspect canvas is short — too short to fit an overlay's
+   instructions and buttons, so the buttons (e.g. Tank Duel's "2 Players") got
+   clipped behind the frame. Give the play area extra height, but only while a
+   start/result overlay is actually visible (detected via :has + the inline
+   display style the games toggle), so normal gameplay keeps its aspect ratio.
+   The overlay itself also scrolls (overflow-y: auto on .game-overlay) as a
+   final safety net for very small screens. */
+@media (max-width: 600px) {
+  .game-area:has(.game-overlay:not([style*="none"])) {
+    min-height: 30rem;
+  }
+
+  /* Compact the overlay so its instructions and buttons fit the smaller frame.
+     The descendant selectors are deliberately specific enough to win over
+     Astro's per-component scoped rules. */
+  .game-area .game-overlay .overlay-content {
+    padding: var(--space-md);
+  }
+
+  .game-area .game-overlay .play-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-sm);
+  }
+}
+
 /* Print Stylesheet */
 @media print {
   :root {
@@ -366,6 +421,9 @@ html.theme-switching::view-transition-new(root) {
     --color-text-muted: #333;
     --color-accent: #000;
     --color-border: #ccc;
+    --color-frame: #000;
+    --shadow-card: none;
+    --shadow-btn: none;
   }
 
   nav,

@@ -1,5 +1,5 @@
 ---
-import { useTranslations } from '../i18n/translations';
+import { useTranslations, getLocalizedPath } from '../i18n/translations';
 
 interface Props {
   lang: 'en' | 'es' | 'cat';
@@ -10,22 +10,18 @@ const t = useTranslations(lang);
 ---
 
 <section class="hero">
-  <div class="hero-aurora" aria-hidden="true">
-    <span class="aurora-blob aurora-1"></span>
-    <span class="aurora-blob aurora-2"></span>
-    <span class="aurora-blob aurora-3"></span>
-  </div>
   <div class="container hero-content">
-    <p class="hero-greeting">{t('hero.greeting')}</p>
-    <h1 class="hero-name">{t('hero.name')}</h1>
-    <p class="hero-tagline">{t('hero.tagline')}</p>
+    <p class="kicker hero-kicker">{t('hero.name')} · {t('hero.tagline')}</p>
+    <h1 class="hero-headline">
+      {t('hero.headline1')}<span class="hero-accent">{t('hero.headlineAccent')}</span>{t('hero.headline2')}
+    </h1>
     <p class="hero-description">{t('hero.description')}</p>
     <div class="hero-actions">
-      <a href={`/${lang}/projects`} class="btn btn-primary">
+      <a href={getLocalizedPath('/projects', lang)} class="btn btn-primary">
         {t('nav.projects')} →
       </a>
-      <a href={`/${lang}/connect`} class="btn btn-outline">
-        {t('nav.connect')}
+      <a href={getLocalizedPath('/connect', lang)} class="btn btn-outline">
+        {t('cta.connect')}
       </a>
     </div>
   </div>
@@ -34,144 +30,43 @@ const t = useTranslations(lang);
 <style>
   .hero {
     padding: var(--space-3xl) 0;
-    display: flex;
-    align-items: center;
-    position: relative;
-    overflow: hidden;
+    border-bottom: 1px solid var(--color-border);
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        transparent 0 34px,
+        color-mix(in srgb, var(--color-frame) 3%, transparent) 34px 35px
+      );
   }
 
-  .hero-content {
-    position: relative;
-    z-index: 1;
+  .hero-kicker {
+    margin-bottom: var(--space-lg);
   }
 
-  .hero-aurora {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    overflow: hidden;
+  .hero-headline {
+    font-size: clamp(2.4rem, 6.5vw, 4.25rem);
+    line-height: 1.08;
+    font-weight: 600;
+    max-width: 19ch;
+    margin-bottom: var(--space-xl);
   }
 
-  .aurora-blob {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.22;
-    will-change: transform;
-  }
-
-  .aurora-1 {
-    width: 28rem;
-    height: 28rem;
-    top: -10rem;
-    left: -6rem;
-    background: var(--color-accent);
-    animation: aurora-drift 18s ease-in-out infinite alternate;
-  }
-
-  .aurora-2 {
-    width: 22rem;
-    height: 22rem;
-    top: -4rem;
-    right: -8rem;
-    background: var(--color-magic);
-    animation: aurora-drift 24s ease-in-out infinite alternate-reverse;
-  }
-
-  .aurora-3 {
-    width: 18rem;
-    height: 18rem;
-    bottom: -12rem;
-    left: 35%;
-    background: #14b8a6;
-    animation: aurora-drift 30s ease-in-out infinite alternate;
-  }
-
-  @keyframes aurora-drift {
-    from { transform: translate3d(0, 0, 0) scale(1); }
-    to { transform: translate3d(4rem, 2.5rem, 0) scale(1.15); }
-  }
-
-  :global(:root[data-theme="light"]) .aurora-blob {
-    opacity: 0.14;
-  }
-
-  @media (prefers-color-scheme: light) {
-    :global(:root:not([data-theme="dark"])) .aurora-blob {
-      opacity: 0.14;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .aurora-blob {
-      animation: none;
-    }
-  }
-
-  .hero-greeting {
-    font-size: 1rem;
-    color: var(--color-text-muted);
-    font-weight: 400;
-    margin-bottom: var(--space-sm);
-  }
-
-  .hero-name {
-    font-size: clamp(2rem, 6vw, 3rem);
-    font-weight: 700;
-    line-height: 1.2;
-    margin-bottom: var(--space-md);
-    background: linear-gradient(
-      110deg,
-      var(--color-text) 0%,
-      var(--color-text) 38%,
-      var(--color-accent) 48%,
-      var(--color-magic) 52%,
-      var(--color-text) 62%,
-      var(--color-text) 100%
-    );
-    background-size: 250% 100%;
-    background-position: 100% 0;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: var(--color-text);
-    animation: name-shimmer 7s ease-in-out infinite;
-  }
-
-  @keyframes name-shimmer {
-    0%, 55% { background-position: 100% 0; }
-    85%, 100% { background-position: -100% 0; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .hero-name {
-      animation: none;
-      background: none;
-      -webkit-text-fill-color: currentColor;
-    }
-  }
-
-  @media print {
-    .hero-name {
-      animation: none;
-      background: none;
-      -webkit-text-fill-color: currentColor;
-    }
-
-    .hero-aurora {
-      display: none;
-    }
-  }
-
-  .hero-tagline {
-    font-size: 1.125rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--space-md);
+  .hero-accent {
+    display: inline-block;
+    background: var(--color-accent-solid);
+    color: #fff;
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    padding: 0 0.45rem;
+    box-shadow: var(--shadow-btn);
+    transform: rotate(-1deg);
   }
 
   .hero-description {
     max-width: 600px;
-    font-size: 1rem;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 1.2rem;
     line-height: 1.7;
     color: var(--color-text-muted);
     margin-bottom: var(--space-xl);

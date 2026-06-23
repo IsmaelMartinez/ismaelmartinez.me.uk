@@ -43,7 +43,7 @@ const BOOST_COOLDOWN = 14;
 const EXTRACTION_RADIUS = 1.5;
 
 const FACADES = ['#3c4566', '#46395c', '#35495c', '#4a3f55'];
-const NEON = ['#22d3ee', '#f472b6', '#a3e635', '#fbbf24'];
+const NEON = ['#22d3ee', '#38bdf8', '#818cf8', '#2dd4bf'];
 const CIVILIAN_TINTS = ['#d8b4fe', '#86efac', '#fca5a5', '#fde68a', '#93c5fd', '#f9a8d4'];
 const KILL_BOUNTY: Partial<Record<Unit['kind'], number>> = {
   enemy: 300,

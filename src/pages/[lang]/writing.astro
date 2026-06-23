@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import ArticleCard from '../../components/ArticleCard.astro';
+import ContactCTA from '../../components/ContactCTA.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { getCollection } from 'astro:content';
@@ -82,6 +83,8 @@ const sortedArticles = articles.sort((a, b) =>
 
     </div>
   </section>
+
+  <ContactCTA lang={lang} />
 </Layout>
 
 <style>

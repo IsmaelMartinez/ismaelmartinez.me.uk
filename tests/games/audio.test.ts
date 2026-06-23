@@ -132,6 +132,43 @@ describe('createGameAudio with a stubbed AudioContext', () => {
   });
 });
 
+describe('navigation teardown via Astro ClientRouter', () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  it('tears down on astro:before-swap so music stops when leaving the page', () => {
+    // The site swaps the DOM in place on navigation (links and the back button
+    // alike) rather than reloading, so the engine must stop the music itself.
+    // A real EventTarget lets us dispatch the actual lifecycle event and prove
+    // the wiring, end to end.
+    const doc = new EventTarget() as unknown as Document & EventTarget;
+    (doc as unknown as { hidden: boolean }).hidden = false;
+    vi.stubGlobal('document', doc);
+
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    const audio = createGameAudio({ melody: MELODY });
+    audio.start();
+    expect(ctx.close).not.toHaveBeenCalled();
+
+    // Astro dispatches this on `document` right before replacing the page.
+    doc.dispatchEvent(new Event('astro:before-swap'));
+    expect(ctx.close).toHaveBeenCalledTimes(1);
+
+    // The handler removed itself, so a later navigation event is inert.
+    doc.dispatchEvent(new Event('astro:before-swap'));
+    expect(ctx.close).toHaveBeenCalledTimes(1);
+  });
+});
+
 /** A tiny fake just rich enough for the synth scheduling code paths. */
 function makeFakeContext() {
   const param = () => ({

@@ -108,12 +108,14 @@ describe('createGameAudio with a stubbed AudioContext', () => {
 
   it('dispose closes the AudioContext so the music cannot outlive the page', () => {
     const ctx = makeFakeContext();
+    let constructed = 0;
     // A real constructor (not a vi.fn) so `new AudioContext()` yields our fake:
     // vitest mocks don't honor an object returned from the implementation when
     // invoked with `new`, which would leave the synth without a context.
     vi.stubGlobal('window', {
       AudioContext: class {
         constructor() {
+          constructed++;
           return ctx;
         }
       }
@@ -121,10 +123,17 @@ describe('createGameAudio with a stubbed AudioContext', () => {
 
     const audio = createGameAudio({ melody: MELODY });
     audio.start();
+    expect(constructed).toBe(1);
     expect(ctx.close).not.toHaveBeenCalled();
 
     audio.dispose();
     expect(ctx.close).toHaveBeenCalledTimes(1);
+
+    // After disposal, start()/playSfx() must not resurrect a leaked context
+    // (its teardown listeners are already gone).
+    audio.start();
+    audio.playSfx('blip');
+    expect(constructed).toBe(1);
 
     // A second dispose is a no-op (the context is already gone).
     audio.dispose();

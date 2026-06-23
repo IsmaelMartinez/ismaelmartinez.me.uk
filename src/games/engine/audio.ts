@@ -82,6 +82,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
 
   let muted = loadMuted();
   let running = false;
+  let disposed = false;
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
   let nextNoteTime = 0;
@@ -90,6 +91,9 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
 
   /** Lazily create the AudioContext on first gesture. Returns null if unsupported. */
   function ensureContext(): AudioContext | null {
+    // Once disposed (the page navigated away) never resurrect a context: its
+    // teardown listeners are gone, so it would play on and leak.
+    if (disposed) return null;
     if (ctx) return ctx;
     const Ctor = getAudioContextCtor();
     if (!Ctor) return null;
@@ -245,6 +249,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   }
 
   function dispose(): void {
+    if (disposed) return;
+    disposed = true;
     stop();
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', onVisibilityChange);

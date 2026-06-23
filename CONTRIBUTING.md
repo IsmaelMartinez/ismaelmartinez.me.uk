@@ -69,7 +69,7 @@ src/
 ├── components/         # Shared components (Hero, ProjectCard, Health*, etc.)
 ├── content/articles/   # MDX articles per locale (en/, es/, cat/)
 ├── content.config.ts   # Astro content collection schema
-├── data/               # Static data (projects, links, uses, health, fun quiz)
+├── data/               # Static data (projects, links, uses, health, fun)
 ├── i18n/               # Translation system
 ├── utils/              # Small helpers (reading-time, …)
 └── styles/             # Global CSS design tokens

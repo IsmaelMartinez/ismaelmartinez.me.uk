@@ -1,0 +1,59 @@
+---
+title: "Codi obert assistit per IA: el flux de treball"
+description: "El flux de treball pràctic darrere del manteniment de teams-for-linux amb IA: des de CLAUDE.md fins a investigació, actualitzacions de dependències, implementació de funcionalitats i controls de qualitat."
+publishedDate: 2026-03-11
+tags: ["IA", "Codi Obert", "Desenvolupament de Software", "Teams for Linux"]
+draft: true
+---
+
+## Dels principis a la pràctica
+
+L'[article complementari](/cat/articles/ai-assisted-open-source-maintenance) va cobrir què canvia la IA en mantenir un projecte de codi obert com teams-for-linux. Aquest és el flux de treball del dia a dia. El patró central sempre és el mateix: jo decideixo, la IA executa, jo reviso. Res d'això és teòric: és el que m'ha quedat després de mesos d'iteració, i continua evolucionant.
+
+## Documentació
+
+Cada interacció comença amb CLAUDE.md (\*) i bona documentació. Ja vaig explicar el perquè de CLAUDE.md, però ell sol no n'hi ha prou.
+
+Aquest projecte té diversos nivells de documentació. Primer, els documents tècnics, com els ADRs per a les decisions arquitectòniques. M'ajuden a no oblidar el perquè de les coses: per què vaig triar aquesta llibreria en lloc d'aquella, o per què alguna cosa no va funcionar i què vam provar.
+
+Després hi ha els documents per al contribuïdor. El clàssic CONTRIBUTING.md, al qual ara li puc treure part de la palla tècnica, que ja viu en aquells altres documents.
+
+També tinc una altra categoria per a la investigació, per als projectes o parts que requereixen una fase d'implementació. De vegades fins i tot pujo els plans d'implementació, encara que aquests dos tipus de document els tracto de manera més efímera: un cop la fase o el projecte s'acaba, actualitzo els altres documents o en creo de nous, i aquests els esborro. Si necessito aquells detalls, sempre puc mirar l'historial de git.
+
+I, finalment, hi ha els documents per als usuaris. Una documentació bona i concisa és essencial quan mantens centenars de milers d'usuaris. No vull que la gent perdi el temps obrint issues al repositori quan hi ha una opció de configuració que resol el seu problema.
+
+Tots aquests documents estan vius, o ho intento, i van millorant a poc a poc amb cada iteració. Potser és la part de la qual menys es parla, però és on la IA ajuda més i amb menys esforç, i de la qual, al meu parer, més depèn. El meu consell és que vagin al gra: concisos i centrats en el que és actual. Així no et confons tu ni confons la IA.
+
+## Investigar abans de programar
+
+Amb aquesta base, el primer que faig sempre és investigar. La IA és molt bona buscant i agregant informació, sobretot si està ben estructurada (i no, no necessites un RAG per a això). Totes les issues i peticions les passo per la IA per veure si ja ho hem resolt o provat. Sovint hi ha alguna cosa al respecte, i això m'estalvia molt de temps: amb la IA analitzo en minuts el que trigaria dies (i que, si no, acabaria deixant per a més tard, o resolent de memòria o a ull).
+
+Si llavors crec que hi ha un bug o que es pot afegir una funcionalitat, faig una investigació. És important centrar sempre les primeres iteracions a investigar, recollir dades i avaluar hipòtesis. Tot això ho delego en l'agent d'IA. Descric el problema ("compartir pantalla falla a Wayland amb la darrera actualització d'Electron") i l'agent investiga el codi rellevant, el registre de canvis i les issues d'upstream, i em porta un informe. El corregeixo si cal i, per al que no tinc clar, li demano un prototip d'usar i llençar que provi la hipòtesi.
+
+De vegades és una sola iteració; altres, diverses sessions. Per això tinc també documents d'investigació al repositori. Quan un enfocament sembla viable, li demano a l'agent que escrigui un pla d'acció. El reviso i obro una altra conversa per reduir riscos i guanyar claredat. Només llavors comença la implementació.
+
+Per al que és senzill, aquesta conversa s'acaba de seguida; en alguns casos, com actualitzar dependències, el procés és gairebé automàtic i no calen prototips ni res semblant. Per al que és complex pot allargar-se diverses sessions, així que el document d'investigació es divideix en fases. Poques vegades les implementem totes: que la IA pugui generar-les sense esforç no vol dir que les necessitis, i això és complexitat regalada. El procés s'adapta; el que no canvia és que entenc què està passant abans de comprometre'm amb un enfocament.
+
+## Funcionalitats i l'hàbit de context net
+
+Quan una funcionalitat rep llum verda, el flux és sempre el mateix: una especificació clara incloent el que *no* s'ha de fer, implementació incremental en trossos revisables, tests escrits en paral·lel (la IA segueix els patrons documentats a CLAUDE.md) i una lectura completa de cada diff. La IA produeix bon codi gairebé sempre, però "gairebé sempre" no és prou per a milers d'usuaris.
+
+Quan la feina acaba, el resultat es converteix en un ADR i la investigació que va portar fins allà s'esborra. Git recorda els carrerons sense sortida; el directori de treball no cal que ho faci. Si guardes documents d'investigació vells, solen confondre la IA més que ajudar-la: es perd menys si li dones el que és actual i deixes els detalls històrics a l'historial de git.
+
+## Mantenir el ritme
+
+Les actualitzacions de dependències són el tipus de sessió més freqüent, però no l'únic. Les sessions de seguretat avaluen i apliquen els pegats dels avisos. Les passades de documentació actualitzen els README i refresquen CLAUDE.md amb els invariants acabats de descobrir. Les sessions de mètriques miren les tendències d'issues, l'activitat dels contribuïdors, els temps de compilació o els canvis en la cobertura de tests. Cadascuna segueix la mateixa forma: jo fixo l'abast, la IA executa, jo reviso.
+
+La més difícil de totes és seguir-li el ritme a l'aplicació web de Teams, que canvia sense avís previ. Programar a la defensiva contra aquests canvis és de les parts més complicades del projecte. Quan alguna cosa es trenca, l'agent m'ajuda a classificar-ho: és una regressió nostra o un canvi d'upstream? Després investiga les diferències al DOM, a la xarxa o a les respostes de l'API. Alguns canvis es poden sortejar; d'altres no. Reconèixer quan un problema no té solució és una decisió humana, i la resposta als usuaris és cosa meva.
+
+Res no es publica sense passar els controls de sempre: CI ha d'estar en verd sense excepcions (el linter, la comprovació de tipus i tota la bateria de tests), cada commit assistit per IA porta la seva etiqueta `Co-authored-by`, cada diff es llegeix a mà, i les notes de la versió es redacten per explicar el *perquè* en lloc de llistar arxius.
+
+Un cop has posat prou restriccions al voltant de la IA (CLAUDE.md, el cicle d'investigar i després prototipar, la revisió manual, els controls de CI), deixes d'usar una eina i passes a dirigir un sistema. El patró és el mateix que aplicaries a qualsevol software que creix: construeixes confiança amb dades, afegeixes solidesa a mesura que avances i simplifiques o treus el que deixa de guanyar-se el seu lloc. La diferència és que aquí els cicles van molt més ràpid. Tracta'l com un equip.
+
+## Reflexió final
+
+Aquest flux de treball no és una plantilla. És el que em funciona a mi en un projecte concret amb un mantenidor concret. La teva versió serà diferent. Però el patró de fons és portable: un humà al començament, un humà al final, l'eina al mig. Salta't qualsevol d'aquests dos extrems i o no estàs aprofitant bé la IA o no estàs mantenint la qualitat que els teus usuaris mereixen.
+
+L'[article de principis](/cat/articles/ai-assisted-open-source-maintenance) va cobrir el perquè. Aquest article va cobrir el com. Junts són la imatge completa.
+
+(\*) Nota: altres sistemes fan servir AGENTS.md i, si algú d'Anthropic llegeix això, crec que ja és hora d'estandarditzar amb la resta.

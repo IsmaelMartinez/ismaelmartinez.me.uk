@@ -1,0 +1,49 @@
+---
+title: "Codi obert assistit per IA: del bot al skill"
+description: "Vaig construir un bot serverless per triar les issues de teams-for-linux, el vaig tenir funcionant mesos i en vaig desmuntar gairebé tot a propòsit: per què ho vaig fer i quina peça va merèixer quedar-se."
+publishedDate: 2026-03-25
+tags: ["IA", "Codi Obert", "Desenvolupament de Software", "Teams for Linux"]
+draft: true
+---
+
+## El bot que vaig construir i després vaig desmuntar
+
+A [el primer article](/cat/articles/ai-assisted-open-source-maintenance) vaig esmentar de passada un bot que vaig construir i després vaig retirar. Aquesta és la seva història. El vaig muntar per ajudar-me a triar les issues de teams-for-linux. Va acabar corrent en serverless a Google Cloud, amb embeddings sobre l'historial d'issues i la documentació, i durant uns mesos va fer més o menys el que li demanava. Després en vaig desmuntar gairebé tot. La part interessant no va ser construir-lo, va ser decidir què treure.
+
+## El que va arribar a ser
+
+El bot va començar petit i per curiositat. A poc a poc va anar creixent. Una primera fase llegia la issue contra la plantilla de bug i marcava el que faltava (passos de reproducció, logs), sense IA pel mig. Una altra buscava a la documentació solucions ja conegudes. Una altra buscava issues semblants a l'historial. I per a les peticions de funcionalitats, reunia el context rellevant: roadmap, ADRs, documents de research. Com que aquest projecte depèn d'Electron, li vaig afegir les issues d'allà per donar-li més context. Així que valia la pena posar-li un RAG i anar afegint les noves issues.
+
+Com que no em refiava de deixar-lo anar a prop de gent real, li vaig anar posant bastides. Primer en mode silenciós, guardant-ho tot en una base de dades i un dashboard per mirar-lo sense que publiqués res. Després uns shadow repos que feien de porta d'aprovació: el bot deixava el seu esborrany allà i jo el promovia o el descartava. A sobre, dues capes de seguretat (un validador i un segon LLM revisant el primer) i una escalada cap a mi si donava massa voltes sense avançar. I al principi fins i tot podia promoure respostes al repo principal i contestar les issues.
+
+I bé, em vaig deixar unes quantes altres features: un MCP, skills (un d'instal·lació i un altre d'ús), un github bot, una action... swagger specs, disaster recovery... i el bo és que es complementaven bé. Tenia fins i tot una especificació a2a per al repo-butler (d'aquest en parlem un altre dia, però en part el butler el va matar, com en una novel·la d'Agatha Christie).
+
+De fet, el vaig deixar anar una setmana i la veritat és que alguna l'encertava, però era un "meh" d'aquests. Que funciona però et dona maldecaps. Així que vaig canviar l'arquitectura i vaig decidir fer servir Google Cloud serverless i Neon DB, perquè... perquè no. Total, són uns quants prompts per aquí i per allà, i fins i tot dashboards, així tinc més visibilitat. I la veritat, m'agradava: funcionava bé i començava a ser força encertat. Li vaig afegir OTel per tenir més observabilitat, i un sistema d'informe d'issues automàtic. Feia servir un LLM per revisar el que generava.
+
+## Per què va deixar de compensar
+
+Semblava que millorava, però molt a poc a poc, i alguna cosa començava a no quadrar. Així que vaig fer el que crec que és el millor: deixar-lo al calaix uns dies i oblidar-me'n. Al cap d'unes setmanes, havent-lo tingut recollint dades i generant issue reports al shadow repo, vaig decidir tornar-li a fer un cop d'ull i analitzar què estava passant.
+
+Clarament m'havia passat, encara que aquests són exercicis d'aprenentatge. T'ho dic, tot encaixava, però com un sistema que fa molt temps que dura, tenia coses que funcionen però que realment no es necessiten.
+
+Els shadow repos es van tornar una murga de mantenir. Cloud Run de vegades trigava a arrencar, i aquella arrencada en fred afegia latència. Hi havia força falsos positius, i part venien del costat d'Electron, versions diferents que s'assemblen en els símptomes però no comparteixen la causa. A més, vaig provar altres bots per trobar issues semblants i donaven massa falsos positius. Es va tornar massa complicat per al que retornava. Una Estrella de la Mort, d'aquelles de les quals parlo en els altres articles.
+
+La idea des del principi era fer-lo créixer orgànicament, i potser algun dia el ressuscito, però m'havia quedat sense coses per construir per millorar-lo. Era facilíssim afegir features, però quan el següent de la llista era home automation vaig pensar que m'havia passat un parell de pobles. L'exercici va durar uns mesos, però havia acumulat la complexitat que normalment s'acumula en anys.
+
+## La part humana que no es podia automatitzar
+
+Però el motiu de fons no va ser tècnic. Quan vam crear el bot, podia promoure coses al repo principal i contestar les issues. Això va generar mal ambient. A la gent no li agradava que un bot intentés contestar les seves issues, encara que en molts casos ho fes millor o més ràpid que jo. No el vaig saber vendre, i potser no hi havia manera de vendre'l.
+
+Així que el vaig tornar a portar per manejar-lo jo. Jo verifico cada esborrany que crea, cada review que fa, i el guio. Aquesta part, el criteri i el tracte amb la gent, no es podia automatitzar, o almenys no ara. És el mateix patró dels altres dos articles, jo decideixo, la IA executa, jo reviso, aplicat al triatge. El bot autònom va acabar sent un skill que condueixo jo.
+
+## L'única cosa que es va guanyar el seu lloc
+
+De tot aquell aparell, l'única cosa que va demostrar guanyar-se el seu lloc van ser els embeddings. Tenir l'historial d'issues vectoritzat i enllaçat sí que ajuda a trobar issues relacionades que d'altra manera se m'escaparien. Aquesta és la peça que conservo.
+
+Ara estic en la transició de treure aquests embeddings del repositori i moure'ls a una cosa més local, amb la configuració o la informació dins del mateix teams-for-linux, conduït des del skill. Aguantarà? No ho sé. Això només es veu amb el temps.
+
+## Reflexió final
+
+Vaig automatitzar la part de construir el triatge i vaig descobrir que el que valia la pena no era la peça que decidia per mi, sinó la que m'ajudava a decidir a mi. El bot no va fracassar: em va ensenyar quina meitat del problema era de debò meva.
+
+La IA busca, compara i resumeix. Jo decideixo, verifico i responc. Igual que a [l'article de principis](/cat/articles/ai-assisted-open-source-maintenance) i al [del flux de treball](/cat/articles/ai-assisted-open-source-workflow), i com vaig escriure a [La trampa de l'automatització amb IA](/cat/articles/the-ai-automation-trap): la IA va treure la restricció de construir, no la de decidir.

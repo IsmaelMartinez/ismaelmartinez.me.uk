@@ -12,27 +12,31 @@ teams-for-linux va començar el 2018. Microsoft no tenia cap client per a Linux 
 
 Aquest nombre de contribuïdors encara em sorprèn. Persones amb qui mai no he parlat apareixen amb una correcció, un informe d'error o una PR per afegir noves funcionalitats. De tant en tant arriba una donació d'algú que no sabia que el feia servir, que sempre és benvinguda. Set anys després, el codi obert encara funciona així, i el poc que ha canviat la IA és que algunes d'aquestes contribucions venen fetes amb l'ajuda de la IA, i en això hi ha qui la fa servir millor que altres, però tots estem aprenent.
 
-El que la IA ha canviat és si una sola persona pot mantenir el ritme amb un projecte d'aquesta mida. Adoptar-la no va ser la història d'origen. El codi, l'arquitectura i les decisions guanyades amb esforç són molt anteriors a les eines; la IA va ser només l'elecció que em permet estar al dia de les exigències sense esgotar-me. La resta d'aquest article mostra com es veu això en la pràctica: què accelera, què no pot tocar i per què hi ha un fitxer CLAUDE.md al repositori. Són dos articles: aquest tracta el perquè, i [el següent](/cat/articles/ai-assisted-open-source-workflow) és el com del dia a dia.
+El que la IA ha canviat és si una sola persona pot seguir el ritme d'un projecte d'aquesta mida. Adoptar-la no va ser la història d'origen. El codi, l'arquitectura i les decisions són anteriors a les eines en anys. Gràcies a la IA puc millorar el suport i la qualitat d'aquest producte mentre la demanda augmenta. La resta d'aquest article mostra com es veu això a la pràctica: què accelera, què no pot tocar i altres detalls com ara per què hi ha un arxiu CLAUDE.md al repositori. Són una sèrie d'articles: aquest tracta el perquè, i [el següent](/cat/articles/ai-assisted-open-source-workflow) és el com del dia a dia.
 
 ## Què és realment CLAUDE.md
 
-Quan la gent veu l'arxiu CLAUDE.md al repositori, alguns assumeixen que significa que el projecte està escrit per IA. Això és un malentès del que fa l'arxiu.
+Comencem per l'elefant a l'habitació. Més d'un m'ha retret tenir un arxiu CLAUDE.md al repositori. Alguns assumeixen que significa que el projecte està escrit per IA, vibe coded i poca cosa més. Això és un malentès del que fa l'arxiu.
 
 CLAUDE.md és un arxiu de configuració, semblant a `.editorconfig` o `tsconfig.json`. Li diu a l'eina d'IA com comportar-se en aquest codi específic. Documenta decisions arquitectòniques, com estan estructurades les coses, com m'agrada treballar amb el codi, requisits i altres coses que es trenquen una vegada i una altra. Bàsicament, el que normalment tinc al cap i aquelles coses que per un motiu o un altre són així.
 
-L'arxiu codifica coneixement específic del projecte perquè l'eina d'IA respecti els patrons existents en lloc d'inventar-ne de nous. Cada codi té regles no escrites. CLAUDE.md les fa explícites. No és un senyal d'autoria per IA. És un senyal de disciplina amb la IA.
+L'arxiu codifica coneixement específic del projecte perquè l'eina d'IA respecti els patrons existents en lloc d'inventar-ne de nous. Cada codi té regles no escrites. CLAUDE.md les fa explícites. En si, no és un senyal d'autoria per IA. És un senyal de disciplina amb la IA.
+
+Un cop tocat aquest punt, mirem on faig servir la IA per accelerar el manteniment d'aquest projecte.
 
 ## Què accelera realment la IA
 
-Les tasques que la IA gestiona bé són les que d'altra manera esgotarien un mantenidor en solitari.
+Les tasques que la IA gestiona bé són les que d'altra manera m'esgotarien com a mantenidor en solitari.
 
 La implementació de funcionalitats ben enteses és el més obvi. Un cop he decidit què construir i com hauria de funcionar, la programació en si (la traducció mecànica d'intenció a codi) va més ràpid amb assistència d'IA. El codi repetitiu, la bastida dels tests i les actualitzacions de documentació cauen en la mateixa categoria. Són feina necessària, però no requereixen criteri creatiu.
 
 Les actualitzacions de dependències i els pegats de seguretat són on l'estalvi de temps realment s'acumula. L'ecosistema npm envia avisos diverses vegades per setmana, i atendre cadascun a mà pot menjar-se la majoria de les hores d'un mantenidor.
 
-Explorar APIs poc familiars és una altra àrea on la IA destaca. La superfície d'API d'Electron és enorme, Wayland té les seves pròpies peculiaritats, i Linux en general no para de sorprendre't. Tenir una eina que pot mostrar ràpidament documentació rellevant i patrons d'ús redueix significativament el temps d'exploració.
+Explorar APIs poc familiars és una altra àrea on la IA destaca. La superfície d'API d'Electron és enorme, Wayland té les seves pròpies peculiaritats, i Linux en general sempre et sorprèn. Tenir una eina que pot digerir ràpidament documentació rellevant, valorar solucions i patrons, redueix significativament el temps d'exploració i planificació.
 
-Ajuda en altres exploracions, com analitzar issues antics, classificar-los i ordenar-los. Bàsicament, donar una resposta millor i més ràpida a qui fa servir l'aplicació, que al cap i a la fi és del que es tracta.
+També m'ajuda a fer una feina de més qualitat. Gràcies a la IA, quan arriba una issue nova, no només he de dependre de la memòria i la intuïció. Puc posar-la a analitzar issues antigues, buscar solucions anteriors i entendre millor el problema. Depèn menys de si és un dilluns al matí o un divendres a les deu de la nit. Bàsicament, donar una resposta millor i més ràpida a qui fa servir l'aplicació, que al cap i a la fi és del que es tracta.
+
+Tot i així, la IA no serveix per a tot. Dona molt i sovint sembla saber-ne més que tu. Però hi ha coses on l'ésser humà encara controla. Mirem-les.
 
 ## Què no pot reemplaçar la IA
 
@@ -52,21 +56,11 @@ I després hi ha dir no a les peticions de funcionalitats. Això és potser la p
 
 teams-for-linux és un projecte d'un sol mantenidor amb centenars de milers d'usuaris actius diaris. Aquesta proporció és el desafiament fonamental.
 
-Sense eines d'IA, les matemàtiques no quadren. Respondre als issues porta més temps. Els llançaments passen amb menys freqüència. Els pegats de seguretat es queden a la cua. Al final, els pendents creixen més ràpid del que una persona pot abordar, i el projecte s'abandona. Això no és hipotètic; és el resultat per defecte per a projectes populars d'un sol mantenidor.
+Sense eines d'IA, els números no surten. Respondre les issues porta més temps. Els llançaments es fan menys sovint. Els pegats de seguretat es queden a la cua. Al final s'acumulen, i o bé el projecte s'abandona o bé els usuaris acaben havent d'esperar anys per veure canvis.
 
-Amb eines d'IA, puc seguir-li el ritme. L'eina s'encarrega de la feina mecànica perquè pugui dedicar el meu temps limitat a les decisions i al tracte amb la comunitat, que és el que de debò requereix un humà.
+Amb eines d'IA, li puc seguir el ritme. Puc mantenir el projecte amb molt pocs bugs oberts (molts d'ells depenen d'altres frameworks o llibreries).
 
-L'alternativa al manteniment assistit per IA no és "escriure-ho tot a mà." És "deixar que els issues s'acumulin i acabar abandonant el projecte." Per a mantenidors de codi obert en solitari, la IA és una eina de sostenibilitat, no una drecera.
-
-## Els marcadors visibles
-
-Cada commit assistit per IA al repositori porta una etiqueta `Co-authored-by`. És una decisió que vaig prendre des del principi, per transparència, igual que pujar l'arxiu CLAUDE.md al repositori on qualsevol pot llegir-lo.
-
-Podria amagar-ho tot fàcilment. Treure les etiquetes de coautoria, eliminar l'arxiu de configuració, i la gent pensaria que soc una mena de superhumà. Vaig triar no fer-ho perquè ser obert sobre les eines em sembla el correcte.
-
-La ironia és que amagar l'ús d'IA és trivialment fàcil i gairebé segur que està generalitzat. Els projectes que són transparents al respecte són els que reben escrutini, mentre que els projectes que ho amaguen no afronten cap pregunta. Aquesta estructura d'incentius està al revés.
-
-La transparència sobre l'ús d'IA s'hauria de normalitzar, no penalitzar, perquè ja fa temps que és el present.
+La realitat és que la IA ha vingut per quedar-se. Per a mantenidors de codi obert en solitari, és una eina de sostenibilitat, no una drecera. Pot ajudar a redreçar aquells projectes amb centenars d'issues obertes, perquè això no agrada a ningú. Ni als mantenidors ni als usuaris.
 
 ## Reflexió final
 

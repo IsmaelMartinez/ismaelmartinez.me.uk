@@ -12,27 +12,31 @@ teams-for-linux started in 2018. Microsoft had no Linux client and the web app d
 
 That contributor number still catches me off guard. People I've never spoken to turn up with a fix, a bug report, or a PR adding new features. Every now and then a donation arrives from someone who didn't know they were using it, always welcome. Seven years in, that's still how open source works, and the little AI has changed is that some of those contributions now come with AI help, and some people use it better than others, but we're all learning.
 
-What AI changed is whether one person can keep up with a project this size. Adopting it wasn't the origin story. The code, the architecture, and the hard-won decisions predate the tools by years; AI was simply the choice that lets me stay on top of the demands without burning out. The rest of this article is what that looks like in practice: what it accelerates, what it can't touch, and why there's a CLAUDE.md file in the repo. It's one of a pair: this one is the why, and [the next](/en/articles/ai-assisted-open-source-workflow) is the day-to-day how.
+What AI changed is whether one person can keep pace with a project this size. Adopting it wasn't the origin story. The code, the architecture, and the decisions predate the tools by years. What AI gives me is the room to improve the support and the quality of this product while demand keeps growing. The rest of this article is what that looks like in practice: what it accelerates, what it can't touch, and other details like why there's a CLAUDE.md file in the repo. It's a series of articles: this one is the why, and [the next](/en/articles/ai-assisted-open-source-workflow) is the day-to-day how.
 
 ## What CLAUDE.md Actually Is
 
-When people spot the CLAUDE.md file in the repository, some assume it means the project is AI-authored. That's a misunderstanding of what the file does.
+Let's start with the elephant in the room. More than one person has taken me to task for having a CLAUDE.md file in the repository. Some assume it means the project is AI-written, vibe coded and little else. That's a misunderstanding of what the file does.
 
 CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, how things are structured, how I like to work with the code, requirements, and other things that get broken again and again. Basically, what I'd normally keep in my head, and the bits that are the way they are for one reason or another.
 
-The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. CLAUDE.md makes them explicit. It's not a sign of AI authorship. It's a sign of AI discipline.
+The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. CLAUDE.md makes them explicit. In itself, it's not a sign of AI authorship. It's a sign of AI discipline.
+
+With that out of the way, let's look at where I use AI to speed up maintaining this project.
 
 ## What AI Actually Accelerates
 
-The tasks AI handles well are the ones that would otherwise burn out a solo maintainer.
+The tasks AI handles well are the ones that would otherwise burn me out as a solo maintainer.
 
 Implementation of well-understood features is the obvious one. Once I've decided what to build and how it should work, the actual coding (the mechanical translation of intent into code) goes faster with AI assistance. Boilerplate, test scaffolding, and documentation updates fall into the same category. They're necessary work, but they don't require creative judgement.
 
 Dependency upgrades and security patches are where the time savings really add up. The npm ecosystem pushes advisories multiple times a week, and handling each one by hand can eat most of a maintainer's hours.
 
-Exploring unfamiliar APIs is another area where AI shines. Electron's API surface is vast, Wayland has its own quirks, and Linux in general never stops surprising you. Having a tool that can quickly surface relevant documentation and usage patterns cuts the exploration time significantly.
+Exploring unfamiliar APIs is another area where AI shines. Electron's API surface is vast, Wayland has its own quirks, and Linux in general never stops surprising you. Having a tool that can quickly digest relevant documentation, weigh up solutions and patterns, cuts the exploration and planning time significantly.
 
-It helps with other kinds of exploration too, like working through old issues, classifying and sorting them. Basically, giving whoever uses the app a better and faster answer, which is what it's all about in the end.
+It also helps me do higher-quality work. Thanks to AI, when a new issue comes in, I don't have to lean on memory and intuition alone. I can set it to analyse old issues, look for earlier solutions, and build up an understanding of the problem. It depends less on whether it's a Monday morning or a Friday at ten at night. Basically, giving whoever uses the app a better and faster answer, which is what it's all about in the end.
+
+But AI isn't good for everything. It gives a lot, and it often seems to know more than you. Yet there are things where the human is still in charge. Let's look at those.
 
 ## What AI Cannot Replace
 
@@ -52,21 +56,11 @@ And then there's saying no to feature requests. That's perhaps the hardest part 
 
 teams-for-linux is a single-maintainer project with hundreds of thousands of daily active users. That ratio is the core challenge.
 
-Without AI tooling, the maths doesn't work. Responding to issues takes longer. Releases happen less frequently. Security patches sit in the queue. Eventually the backlog grows faster than one person can address it, and the project gets abandoned. That's not hypothetical; it's the default outcome for popular single-maintainer projects.
+Without AI tooling, the maths doesn't work. Responding to issues takes longer. Releases happen less often. Security patches sit in the queue. Eventually they pile up, and either the project gets abandoned or users end up waiting years for changes.
 
-With AI tooling, I can keep up. The tool handles the mechanical work so I can spend my limited time on the decisions and community interactions that actually require a human.
+With AI tooling, I can keep up. I can hold the project at very few open bugs (many of them ones that depend on other frameworks or libraries).
 
-The alternative to AI-assisted maintenance isn't "write everything by hand." It's "let issues pile up and eventually walk away." For solo open-source maintainers, AI is a sustainability tool, not a shortcut.
-
-## The Visible Markers
-
-Every AI-assisted commit in the repository carries a `Co-authored-by` tag. It's a decision I made from the start, for transparency, the same as checking the CLAUDE.md file into the repo where anyone can read it.
-
-I could hide all of this easily. Strip the co-author tags, remove the config file, and people would think I'm some kind of superhuman. I chose not to because being open about tooling is the right thing to do.
-
-The irony is that hiding AI use is trivially easy and almost certainly widespread. The projects that are transparent about it are the ones getting scrutinised, while projects that hide it face no questions at all. That incentive structure is backwards.
-
-Transparency about AI use should be normalised, not penalised, because it's been the present for a while now.
+The reality is that AI is here to stay. For solo open-source maintainers, it's a sustainability tool, not a shortcut. It can help turn around those projects sitting on hundreds of open issues, because nobody enjoys that. Not the maintainers, and not the users.
 
 ## Closing Thought
 

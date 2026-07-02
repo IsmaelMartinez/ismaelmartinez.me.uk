@@ -22,8 +22,21 @@ const personJsonLd = {
   "@context": "https://schema.org",
   "@type": "Person",
   "name": "Ismael Martinez",
+  "alternateName": "Ismael Martinez Ramos",
   "url": "https://ismaelmartinez.me.uk",
   "jobTitle": "Principal Software Developer",
+  "worksFor": {
+    "@type": "Organization",
+    "name": "People's Postcode Lottery"
+  },
+  "homeLocation": {
+    "@type": "Place",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Edinburgh",
+      "addressCountry": "GB"
+    }
+  },
   "description": t('about.description'),
   "knowsAbout": ["Software Development", "Responsible AI", "Agentic Systems", "Event-Driven Architecture", "Observability", "Cloud Architecture", "DevOps", "Open Source", "Platform Engineering", "Accessibility", "TypeScript", "JavaScript", "AWS"],
   "sameAs": [

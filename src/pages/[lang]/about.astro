@@ -4,6 +4,7 @@ import ContactCTA from '../../components/ContactCTA.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { socialLinks } from '../../data/links';
+import { personJsonLd, toJsonLd } from '../../data/person';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -18,38 +19,15 @@ const focusAreas = [
   { icon: '🌍', title: t('about.focus3Title'), body: t('about.focus3') },
 ];
 
-const personJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Person",
-  "name": "Ismael Martinez",
-  "alternateName": "Ismael Martinez Ramos",
-  "url": "https://ismaelmartinez.me.uk",
-  "jobTitle": "Principal Software Developer",
-  "worksFor": {
-    "@type": "Organization",
-    "name": "Postcode Lottery"
-  },
-  "homeLocation": {
-    "@type": "Place",
-    "address": {
-      "@type": "PostalAddress",
-      "addressLocality": "Edinburgh",
-      "addressCountry": "GB"
-    }
-  },
+const aboutJsonLd = {
+  ...personJsonLd,
   "description": t('about.description'),
-  "knowsAbout": ["Software Development", "Responsible AI", "Agentic Systems", "Event-Driven Architecture", "Observability", "Cloud Architecture", "DevOps", "Open Source", "Platform Engineering", "Accessibility", "TypeScript", "JavaScript", "AWS"],
-  "sameAs": [
-    "https://github.com/IsmaelMartinez",
-    "https://www.linkedin.com/in/ismaelmartinezramos",
-    "https://medium.com/@ismaelmartinez",
-    "https://dev.to/ismaelmartinez"
-  ]
+  "knowsAbout": ["Software Development", "Responsible AI", "Agentic Systems", "Event-Driven Architecture", "Observability", "Cloud Architecture", "DevOps", "Open Source", "Platform Engineering", "Accessibility", "TypeScript", "JavaScript", "AWS"]
 };
 ---
 
 <Layout title={t('about.title')} description={t('about.description')} lang={lang}>
-  <script slot="head" type="application/ld+json" set:html={JSON.stringify(personJsonLd).replace(/</g, '\\u003c')} />
+  <script slot="head" type="application/ld+json" set:html={toJsonLd(aboutJsonLd)} />
 
   <section class="section">
     <div class="container">

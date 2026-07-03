@@ -8,6 +8,7 @@ import { useTranslations, locales, getLocalizedPath } from '../../i18n/translati
 import type { Locale } from '../../i18n/translations';
 import { getFeaturedProjects } from '../../data/projects';
 import { getCollection } from 'astro:content';
+import { personJsonLd, toJsonLd } from '../../data/person';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -27,32 +28,7 @@ const latestArticles = [...articles]
 ---
 
 <Layout title="Home" lang={lang}>
-  <script slot="head" type="application/ld+json" set:html={JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "Person",
-    "name": "Ismael Martinez",
-    "alternateName": "Ismael Martinez Ramos",
-    "url": "https://ismaelmartinez.me.uk",
-    "jobTitle": "Principal Software Developer",
-    "worksFor": {
-      "@type": "Organization",
-      "name": "Postcode Lottery"
-    },
-    "homeLocation": {
-      "@type": "Place",
-      "address": {
-        "@type": "PostalAddress",
-        "addressLocality": "Edinburgh",
-        "addressCountry": "GB"
-      }
-    },
-    "sameAs": [
-      "https://github.com/IsmaelMartinez",
-      "https://www.linkedin.com/in/ismaelmartinezramos",
-      "https://medium.com/@ismaelmartinez",
-      "https://dev.to/ismaelmartinez"
-    ]
-  })} />
+  <script slot="head" type="application/ld+json" set:html={toJsonLd(personJsonLd)} />
   <Hero lang={lang} />
 
   <section class="section">

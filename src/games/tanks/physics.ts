@@ -68,6 +68,47 @@ export function simulateShot(
   return null;
 }
 
+export const FALL_GRAVITY = 600; // px/s² for tanks dropping into craters
+
+export interface FallBody {
+  /** Vertical position (canvas y, grows downwards). */
+  y: number;
+  /** y where the current fall started, or null when grounded. */
+  fallFrom: number | null;
+  fallVy: number;
+}
+
+/**
+ * Advances a body's gravity drop towards the terrain surface below it.
+ *
+ * A fall in progress always continues until the body actually reaches the
+ * surface — the landing test must not depend on the takeoff threshold, or a
+ * step that ends within that margin of the surface would leave `fallFrom`
+ * set forever (which froze the game while it waited for tanks to settle).
+ *
+ * Returns the total drop height on the step the body lands, otherwise null.
+ */
+export function stepFall(body: FallBody, surface: number, dt: number): number | null {
+  if (body.fallFrom === null) {
+    if (body.y >= surface - 0.5) {
+      // Grounded; track terrain that collapsed by less than the threshold.
+      body.y = surface;
+      return null;
+    }
+    body.fallFrom = body.y;
+    body.fallVy = 0;
+  }
+  body.fallVy += FALL_GRAVITY * dt;
+  body.y = Math.min(surface, body.y + body.fallVy * dt);
+  if (body.y >= surface) {
+    const drop = surface - body.fallFrom;
+    body.fallFrom = null;
+    body.fallVy = 0;
+    return drop;
+  }
+  return null;
+}
+
 /** Linear-falloff blast damage; 0 outside the radius, maxDamage at the centre. */
 export function explosionDamage(
   impactX: number,

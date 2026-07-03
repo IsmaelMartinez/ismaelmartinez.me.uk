@@ -165,7 +165,7 @@ describe('falling', () => {
     expect(body.y).toBe(340);
   });
 
-  it('snaps a grounded body down when the ground collapses by under the threshold', () => {
+  it('snaps a grounded body down when the ground collapses by less than the threshold', () => {
     const body: FallBody = { y: 300, fallFrom: null, fallVy: 0 };
     stepFall(body, 300.4, DT);
     expect(body.y).toBe(300.4);

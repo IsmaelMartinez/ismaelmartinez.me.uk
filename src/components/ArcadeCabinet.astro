@@ -73,13 +73,16 @@ const { id, title, tagline, genre, players, href, color, icon, scoreKey, bestLab
   .arcade-cabinet {
     display: flex;
     flex-direction: column;
-    width: 100%;
-    max-width: 240px;
+    width: 220px;
+    max-width: 100%;
     background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
     border-radius: 12px 12px 8px 8px;
     padding: 12px;
     text-decoration: none;
-    color: var(--color-text);
+    /* The cabinet body is always dark, whatever the site theme, so its text
+       colours are fixed rather than theme tokens (which flip to ink in light
+       mode and vanish against the dark panels). */
+    color: #e4ebf6;
     transition: all 0.3s ease;
     box-shadow:
       0 10px 30px rgba(0, 0, 0, 0.5),
@@ -328,7 +331,7 @@ const { id, title, tagline, genre, players, href, color, icon, scoreKey, bestLab
 
   .game-desc {
     font-size: 0.75rem;
-    color: var(--color-text-muted);
+    color: #a9b4c6;
     margin: 0;
     line-height: 1.4;
   }
@@ -364,7 +367,7 @@ const { id, title, tagline, genre, players, href, color, icon, scoreKey, bestLab
 
   @media (max-width: 600px) {
     .arcade-cabinet {
-      max-width: none;
+      width: 180px;
       padding: 8px;
     }
 

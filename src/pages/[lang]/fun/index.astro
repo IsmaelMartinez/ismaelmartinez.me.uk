@@ -108,7 +108,7 @@ const arcadeGames: ArcadeGame[] = [
     </div>
 
     <div class="arcade-floor">
-      <div class="cabinets-grid">
+      <div class="cabinets-row">
         {arcadeGames.map(game => (
           <ArcadeCabinet
             id={game.id}
@@ -156,12 +156,48 @@ const arcadeGames: ArcadeGame[] = [
 </script>
 
 <style>
+  /* The room follows the site theme: a bright showroom on the light "paper &
+     ink" palette, the neon-dark arcade after dark. Only the room shell reacts —
+     the cabinets are dark physical objects in both. */
   .arcade-room {
+    --room-bg: linear-gradient(180deg, #eaf0f9 0%, #dde7f7 55%, #cfdcf0 100%);
+    --room-grid: rgba(29, 78, 216, 0.08);
+    --sign-main: var(--color-text);
+    --sign-main-glow:
+      0 0 1px rgba(29, 78, 216, 0.5),
+      0 0 14px rgba(37, 99, 235, 0.35),
+      0 0 34px rgba(37, 99, 235, 0.2);
+    --sign-accent: var(--color-accent-solid);
+    --sign-accent-glow:
+      0 0 1px rgba(29, 78, 216, 0.5),
+      0 0 14px rgba(0, 183, 255, 0.45),
+      0 0 34px rgba(0, 183, 255, 0.25);
+
     min-height: calc(100vh - var(--nav-height));
-    background: linear-gradient(180deg, #0a0a12 0%, #1a1a2e 50%, #16213e 100%);
+    background: var(--room-bg);
     position: relative;
     overflow: hidden;
     padding: var(--space-2xl) var(--space-lg);
+  }
+
+  :global(:root[data-theme='dark']) .arcade-room {
+    --room-bg: linear-gradient(180deg, #0a0a12 0%, #1a1a2e 50%, #16213e 100%);
+    --room-grid: rgba(59, 130, 246, 0.04);
+    --sign-main: #fff;
+    --sign-main-glow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #2563eb, 0 0 40px #2563eb, 0 0 80px #2563eb;
+    --sign-accent: #0ff;
+    --sign-accent-glow: 0 0 5px #0ff, 0 0 10px #0ff, 0 0 20px #0ff, 0 0 40px #00b7ff, 0 0 80px #00b7ff;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .arcade-room {
+      --room-bg: linear-gradient(180deg, #0a0a12 0%, #1a1a2e 50%, #16213e 100%);
+      --room-grid: rgba(59, 130, 246, 0.04);
+      --sign-main: #fff;
+      --sign-main-glow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #2563eb, 0 0 40px #2563eb, 0 0 80px #2563eb;
+      --sign-accent: #0ff;
+      --sign-accent-glow: 0 0 5px #0ff, 0 0 10px #0ff, 0 0 20px #0ff, 0 0 40px #00b7ff, 0 0 80px #00b7ff;
+    }
   }
 
   .neon-grid {
@@ -171,8 +207,8 @@ const arcadeGames: ArcadeGame[] = [
     right: 0;
     bottom: 0;
     background-image:
-      linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+      linear-gradient(var(--room-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--room-grid) 1px, transparent 1px);
     background-size: 50px 50px;
     animation: gridMove 20s linear infinite;
   }
@@ -203,24 +239,14 @@ const arcadeGames: ArcadeGame[] = [
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.2em;
-    color: #fff;
-    text-shadow:
-      0 0 5px #fff,
-      0 0 10px #fff,
-      0 0 20px #2563eb,
-      0 0 40px #2563eb,
-      0 0 80px #2563eb;
+    color: var(--sign-main);
+    text-shadow: var(--sign-main-glow);
     animation: neonFlicker 3s ease-in-out infinite;
   }
 
   .neon-text.accent {
-    color: #0ff;
-    text-shadow:
-      0 0 5px #0ff,
-      0 0 10px #0ff,
-      0 0 20px #0ff,
-      0 0 40px #00b7ff,
-      0 0 80px #00b7ff;
+    color: var(--sign-accent);
+    text-shadow: var(--sign-accent-glow);
     animation: neonFlicker 2.5s ease-in-out infinite reverse;
   }
 
@@ -236,7 +262,7 @@ const arcadeGames: ArcadeGame[] = [
   .arcade-subtitle {
     font-family: var(--font-mono);
     font-size: 1rem;
-    color: #888;
+    color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.3em;
     animation: blink 1.5s step-end infinite;
@@ -253,10 +279,12 @@ const arcadeGames: ArcadeGame[] = [
     margin: 0 auto;
   }
 
-  .cabinets-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    justify-items: center;
+  /* flex-wrap centres partial rows, so an orphan pair of cabinets doesn't
+     hang off the left edge the way a grid row would. */
+  .cabinets-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     align-items: stretch;
     gap: var(--space-2xl) var(--space-xl);
     padding: var(--space-xl) 0;
@@ -290,7 +318,7 @@ const arcadeGames: ArcadeGame[] = [
   .arcade-tip p {
     font-family: var(--font-mono);
     font-size: 0.75rem;
-    color: #666;
+    color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
@@ -300,7 +328,7 @@ const arcadeGames: ArcadeGame[] = [
       padding: var(--space-xl) var(--space-md);
     }
 
-    .cabinets-grid {
+    .cabinets-row {
       gap: var(--space-xl) var(--space-lg);
     }
   }
@@ -310,8 +338,7 @@ const arcadeGames: ArcadeGame[] = [
       letter-spacing: 0.1em;
     }
 
-    .cabinets-grid {
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    .cabinets-row {
       gap: var(--space-lg) var(--space-md);
     }
   }

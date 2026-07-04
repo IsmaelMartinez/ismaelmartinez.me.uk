@@ -1,0 +1,1 @@
+import{l as a}from"./storage.D_bLHLZJ.js";function o(){const r=document.querySelectorAll(".best-value[data-score-key]");for(const t of r){const e=t.dataset.scoreKey;e&&(t.textContent=a(e).toString().padStart(6,"0"))}}o();document.addEventListener("astro:after-swap",o);

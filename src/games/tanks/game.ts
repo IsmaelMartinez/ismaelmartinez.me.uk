@@ -10,6 +10,7 @@ import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
 import {
   launchProjectile,
   stepProjectile,
+  stepFall,
   explosionDamage,
   type Projectile
 } from './physics';
@@ -27,7 +28,6 @@ const MAX_WIND = 50;
 const WINS_PER_MATCH = 3;
 const CPU_DIFFICULTY = 0.72;
 const CPU_THINK_TIME = 1.1;
-const FALL_GRAVITY = 600; // px/s² for tanks dropping into craters
 const SAFE_DROP = 30; // px a tank can fall without damage
 const VICTORIES_KEY = 'tanks-victories';
 
@@ -385,23 +385,9 @@ export function initTanksGame(): void {
   /** Tanks above the (possibly freshly cratered) surface fall and take damage. */
   function updateFalls(dt: number) {
     for (const tank of tanks) {
-      const surface = surfaceYAt(ground, tank.x);
-      if (tank.y < surface - 0.5) {
-        if (tank.fallFrom === null) {
-          tank.fallFrom = tank.y;
-          tank.fallVy = 0;
-        }
-        tank.fallVy += FALL_GRAVITY * dt;
-        tank.y = Math.min(surface, tank.y + tank.fallVy * dt);
-        if (tank.y >= surface) {
-          const drop = surface - tank.fallFrom;
-          if (drop > SAFE_DROP) {
-            applyDamage(tank, Math.min(30, Math.round((drop - SAFE_DROP) * 0.5)));
-          }
-          tank.fallFrom = null;
-        }
-      } else if (tank.fallFrom === null && tank.y !== surface) {
-        tank.y = surface;
+      const drop = stepFall(tank, surfaceYAt(ground, tank.x), dt);
+      if (drop !== null && drop > SAFE_DROP) {
+        applyDamage(tank, Math.min(30, Math.round((drop - SAFE_DROP) * 0.5)));
       }
     }
   }

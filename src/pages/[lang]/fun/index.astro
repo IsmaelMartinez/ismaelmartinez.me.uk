@@ -2,63 +2,95 @@
 import Layout from '../../../layouts/Layout.astro';
 import ArcadeCabinet from '../../../components/ArcadeCabinet.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
-import type { Locale } from '../../../i18n/translations';
+import type { Locale, TranslationKey } from '../../../i18n/translations';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
 }
 
 const lang = Astro.params.lang as Locale;
-const _t = useTranslations(lang);
+const t = useTranslations(lang);
 
-const arcadeGames = [
+interface ArcadeGame {
+  id: string;
+  title: string;
+  taglineKey: TranslationKey;
+  genreKey: TranslationKey;
+  twoPlayer: boolean;
+  icon: string;
+  color: string;
+  path: string;
+  scoreKey: string;
+  isNew?: boolean;
+}
+
+const arcadeGames: ArcadeGame[] = [
   {
     id: 'snake',
     title: 'SNAKE',
-    description: 'Classic retro action!',
+    taglineKey: 'fun.snake.description',
+    genreKey: 'fun.arcade.genre.snake',
+    twoPlayer: false,
     icon: '🐍',
     color: '#14b8a6',
-    path: '/fun/snake'
+    path: '/fun/snake',
+    scoreKey: 'snake-high-score'
   },
   {
     id: 'poo-poo-land',
     title: 'POO POO LAND',
-    description: 'Detective poo hunt!',
+    taglineKey: 'fun.pooLand.description',
+    genreKey: 'fun.arcade.genre.pooLand',
+    twoPlayer: false,
     icon: '🔍💩',
     color: '#0ea5e9',
-    path: '/fun/poo-poo-land'
+    path: '/fun/poo-poo-land',
+    scoreKey: 'poo-land-high-score'
   },
   {
     id: 'tanks',
     title: 'TANK DUEL',
-    description: 'Artillery mayhem!',
+    taglineKey: 'fun.tanks.description',
+    genreKey: 'fun.arcade.genre.tanks',
+    twoPlayer: true,
     icon: '🎯',
     color: '#3b82f6',
-    path: '/fun/tanks'
+    path: '/fun/tanks',
+    scoreKey: 'tanks-victories'
   },
   {
     id: 'park',
     title: 'PIXEL PARK',
-    description: 'Build & manage!',
+    taglineKey: 'fun.park.description',
+    genreKey: 'fun.arcade.genre.park',
+    twoPlayer: false,
     icon: '🎢',
     color: '#818cf8',
-    path: '/fun/park'
+    path: '/fun/park',
+    scoreKey: 'park-record-guests'
   },
   {
     id: 'city',
     title: 'MICROCITY',
-    description: 'Zone it, grow it!',
+    taglineKey: 'fun.city.description',
+    genreKey: 'fun.arcade.genre.city',
+    twoPlayer: false,
     icon: '🏙️',
     color: '#38bdf8',
-    path: '/fun/city'
+    path: '/fun/city',
+    scoreKey: 'city-record-pop'
   },
   {
     id: 'syndicate',
     title: 'SYNDICATE',
-    description: 'Squad up, take the city!',
+    taglineKey: 'fun.syndicate.description',
+    genreKey: 'fun.arcade.genre.syndicate',
+    twoPlayer: false,
     icon: '🕶️',
     color: '#22d3ee',
-    path: '/fun/syndicate'
+    path: '/fun/syndicate',
+    scoreKey: 'syndicate-record-cash',
+    isNew: true
   }
 ];
 ---
@@ -72,7 +104,7 @@ const arcadeGames = [
         <span class="neon-text">ISMAEL'S</span>
         <span class="neon-text accent">ARCADE</span>
       </div>
-      <p class="arcade-subtitle">Insert coin to play</p>
+      <p class="arcade-subtitle">{t('fun.arcade.subtitle')}</p>
     </div>
 
     <div class="arcade-floor">
@@ -81,10 +113,15 @@ const arcadeGames = [
           <ArcadeCabinet
             id={game.id}
             title={game.title}
-            description={game.description}
+            tagline={t(game.taglineKey)}
+            genre={t(game.genreKey)}
+            players={game.twoPlayer ? t('fun.arcade.twoPlayers') : t('fun.arcade.onePlayer')}
             icon={game.icon}
             color={game.color}
             href={getLocalizedPath(game.path, lang)}
+            scoreKey={game.scoreKey}
+            bestLabel={t('fun.arcade.best')}
+            newBadge={game.isNew ? t('fun.arcade.new') : undefined}
           />
         ))}
       </div>
@@ -95,18 +132,72 @@ const arcadeGames = [
     </div>
 
     <div class="arcade-tip">
-      <p>Tip: Try the Konami Code anywhere on the site...</p>
+      <p>{t('fun.arcade.konamiTip')}</p>
     </div>
   </div>
 </Layout>
 
+<script>
+  // Fill each cabinet's attract screen with the player's saved best score,
+  // padded like an arcade high-score table. Re-runs after ClientRouter swaps
+  // so scores earned in a game show up when navigating back to the arcade.
+  import { loadScore } from '../../../games/engine/storage';
+
+  function showBestScores() {
+    const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-score-key]');
+    for (const readout of readouts) {
+      const key = readout.dataset.scoreKey;
+      if (key) readout.textContent = loadScore(key).toString().padStart(6, '0');
+    }
+  }
+
+  showBestScores();
+  document.addEventListener('astro:after-swap', showBestScores);
+</script>
+
 <style>
+  /* The room follows the site theme: a bright showroom on the light "paper &
+     ink" palette, the neon-dark arcade after dark. Only the room shell reacts —
+     the cabinets are dark physical objects in both. */
   .arcade-room {
+    --room-bg: linear-gradient(180deg, #eaf0f9 0%, #dde7f7 55%, #cfdcf0 100%);
+    --room-grid: rgba(29, 78, 216, 0.08);
+    --sign-main: var(--color-text);
+    --sign-main-glow:
+      0 0 1px rgba(29, 78, 216, 0.5),
+      0 0 14px rgba(37, 99, 235, 0.35),
+      0 0 34px rgba(37, 99, 235, 0.2);
+    --sign-accent: var(--color-accent-solid);
+    --sign-accent-glow:
+      0 0 1px rgba(29, 78, 216, 0.5),
+      0 0 14px rgba(0, 183, 255, 0.45),
+      0 0 34px rgba(0, 183, 255, 0.25);
+
     min-height: calc(100vh - var(--nav-height));
-    background: linear-gradient(180deg, #0a0a12 0%, #1a1a2e 50%, #16213e 100%);
+    background: var(--room-bg);
     position: relative;
     overflow: hidden;
     padding: var(--space-2xl) var(--space-lg);
+  }
+
+  :global(:root[data-theme='dark']) .arcade-room {
+    --room-bg: linear-gradient(180deg, #0a0a12 0%, #1a1a2e 50%, #16213e 100%);
+    --room-grid: rgba(59, 130, 246, 0.04);
+    --sign-main: #fff;
+    --sign-main-glow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #2563eb, 0 0 40px #2563eb, 0 0 80px #2563eb;
+    --sign-accent: #0ff;
+    --sign-accent-glow: 0 0 5px #0ff, 0 0 10px #0ff, 0 0 20px #0ff, 0 0 40px #00b7ff, 0 0 80px #00b7ff;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .arcade-room {
+      --room-bg: linear-gradient(180deg, #0a0a12 0%, #1a1a2e 50%, #16213e 100%);
+      --room-grid: rgba(59, 130, 246, 0.04);
+      --sign-main: #fff;
+      --sign-main-glow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #2563eb, 0 0 40px #2563eb, 0 0 80px #2563eb;
+      --sign-accent: #0ff;
+      --sign-accent-glow: 0 0 5px #0ff, 0 0 10px #0ff, 0 0 20px #0ff, 0 0 40px #00b7ff, 0 0 80px #00b7ff;
+    }
   }
 
   .neon-grid {
@@ -116,11 +207,9 @@ const arcadeGames = [
     right: 0;
     bottom: 0;
     background-image:
-      linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+      linear-gradient(var(--room-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--room-grid) 1px, transparent 1px);
     background-size: 50px 50px;
-    perspective: 500px;
-    transform-style: preserve-3d;
     animation: gridMove 20s linear infinite;
   }
 
@@ -150,24 +239,14 @@ const arcadeGames = [
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.2em;
-    color: #fff;
-    text-shadow:
-      0 0 5px #fff,
-      0 0 10px #fff,
-      0 0 20px #2563eb,
-      0 0 40px #2563eb,
-      0 0 80px #2563eb;
+    color: var(--sign-main);
+    text-shadow: var(--sign-main-glow);
     animation: neonFlicker 3s ease-in-out infinite;
   }
 
   .neon-text.accent {
-    color: #0ff;
-    text-shadow:
-      0 0 5px #0ff,
-      0 0 10px #0ff,
-      0 0 20px #0ff,
-      0 0 40px #00b7ff,
-      0 0 80px #00b7ff;
+    color: var(--sign-accent);
+    text-shadow: var(--sign-accent-glow);
     animation: neonFlicker 2.5s ease-in-out infinite reverse;
   }
 
@@ -183,7 +262,7 @@ const arcadeGames = [
   .arcade-subtitle {
     font-family: var(--font-mono);
     font-size: 1rem;
-    color: #888;
+    color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.3em;
     animation: blink 1.5s step-end infinite;
@@ -196,15 +275,18 @@ const arcadeGames = [
   .arcade-floor {
     position: relative;
     z-index: 10;
-    max-width: 1200px;
+    max-width: 1100px;
     margin: 0 auto;
   }
 
+  /* flex-wrap centres partial rows, so an orphan pair of cabinets doesn't
+     hang off the left edge the way a grid row would. */
   .cabinets-row {
     display: flex;
-    justify-content: center;
     flex-wrap: wrap;
-    gap: var(--space-2xl);
+    justify-content: center;
+    align-items: stretch;
+    gap: var(--space-2xl) var(--space-xl);
     padding: var(--space-xl) 0;
   }
 
@@ -236,7 +318,7 @@ const arcadeGames = [
   .arcade-tip p {
     font-family: var(--font-mono);
     font-size: 0.75rem;
-    color: #666;
+    color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
@@ -247,7 +329,7 @@ const arcadeGames = [
     }
 
     .cabinets-row {
-      gap: var(--space-xl);
+      gap: var(--space-xl) var(--space-lg);
     }
   }
 
@@ -257,7 +339,7 @@ const arcadeGames = [
     }
 
     .cabinets-row {
-      gap: var(--space-lg);
+      gap: var(--space-lg) var(--space-md);
     }
   }
 </style>

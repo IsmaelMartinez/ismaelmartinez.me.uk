@@ -2,16 +2,35 @@
 interface Props {
   id: string;
   title: string;
-  description: string;
+  /** Translated one-line pitch shown on the cabinet base. */
+  tagline: string;
+  /** Translated genre chip, e.g. "Artillery". */
+  genre: string;
+  /** Translated players chip, e.g. "1–2 players". */
+  players: string;
   href: string;
   color: string;
   icon: string;
+  /** localStorage key of the game's saved best score, shown on the screen. */
+  scoreKey: string;
+  /** Translated label for the best-score readout. */
+  bestLabel: string;
+  /** Translated "New" ribbon text; omit to hide the ribbon. */
+  newBadge?: string;
 }
 
-const { id: _id, title, description, href, color, icon } = Astro.props;
+const { id, title, tagline, genre, players, href, color, icon, scoreKey, bestLabel, newBadge } =
+  Astro.props;
 ---
 
-<a href={href} class="arcade-cabinet" style={`--cabinet-color: ${color}; --cabinet-glow: ${color}40;`}>
+<a
+  href={href}
+  class="arcade-cabinet"
+  data-game={id}
+  style={`--cabinet-color: ${color}; --cabinet-glow: ${color}40;`}
+>
+  {newBadge && <span class="new-ribbon">{newBadge}</span>}
+
   <div class="cabinet-top">
     <div class="cabinet-marquee">
       <span class="marquee-text">{title}</span>
@@ -24,7 +43,9 @@ const { id: _id, title, description, href, color, icon } = Astro.props;
         <div class="screen-scanlines"></div>
         <div class="screen-icon">{icon}</div>
         <div class="screen-text">
-          <p class="insert-coin">INSERT COIN</p>
+          <p class="best-score">
+            {bestLabel} <span class="best-value" data-score-key={scoreKey}>000000</span>
+          </p>
           <p class="blink">PRESS START</p>
         </div>
       </div>
@@ -40,7 +61,11 @@ const { id: _id, title, description, href, color, icon } = Astro.props;
   </div>
 
   <div class="cabinet-base">
-    <p class="game-desc">{description}</p>
+    <p class="game-desc">{tagline}</p>
+    <div class="cabinet-chips">
+      <span class="chip chip-genre">{genre}</span>
+      <span class="chip chip-players">{players}</span>
+    </div>
   </div>
 </a>
 
@@ -49,11 +74,15 @@ const { id: _id, title, description, href, color, icon } = Astro.props;
     display: flex;
     flex-direction: column;
     width: 220px;
+    max-width: 100%;
     background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
     border-radius: 12px 12px 8px 8px;
     padding: 12px;
     text-decoration: none;
-    color: var(--color-text);
+    /* The cabinet body is always dark, whatever the site theme, so its text
+       colours are fixed rather than theme tokens (which flip to ink in light
+       mode and vanish against the dark panels). */
+    color: #e4ebf6;
     transition: all 0.3s ease;
     box-shadow:
       0 10px 30px rgba(0, 0, 0, 0.5),
@@ -75,11 +104,13 @@ const { id: _id, title, description, href, color, icon } = Astro.props;
     transition: opacity 0.3s ease;
   }
 
-  .arcade-cabinet:hover::before {
+  .arcade-cabinet:hover::before,
+  .arcade-cabinet:focus-visible::before {
     opacity: 1;
   }
 
-  .arcade-cabinet:hover {
+  .arcade-cabinet:hover,
+  .arcade-cabinet:focus-visible {
     transform: translateY(-8px) scale(1.02);
     box-shadow:
       0 20px 40px rgba(0, 0, 0, 0.6),
@@ -97,6 +128,24 @@ const { id: _id, title, description, href, color, icon } = Astro.props;
 
   .arcade-cabinet:hover .screen-icon {
     animation: bounce 0.5s ease infinite;
+  }
+
+  .new-ribbon {
+    position: absolute;
+    top: -10px;
+    right: -8px;
+    z-index: 2;
+    padding: 4px 10px;
+    background: linear-gradient(135deg, #fde047, #f59e0b);
+    color: #1a1a1a;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-radius: 999px;
+    box-shadow: 0 0 18px rgba(253, 224, 71, 0.6);
+    transform: rotate(6deg);
   }
 
   .cabinet-top {
@@ -182,13 +231,14 @@ const { id: _id, title, description, href, color, icon } = Astro.props;
     text-align: center;
   }
 
-  .insert-coin {
+  .best-score {
     font-family: var(--font-mono);
     font-size: 0.6rem;
     color: var(--cabinet-color);
     text-shadow: 0 0 5px var(--cabinet-color);
     margin-bottom: 4px;
     letter-spacing: 2px;
+    text-transform: uppercase;
   }
 
   .blink {
@@ -271,13 +321,48 @@ const { id: _id, title, description, href, color, icon } = Astro.props;
 
   .cabinet-base {
     text-align: center;
-    padding: 8px;
+    padding: 8px 4px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    justify-content: space-between;
   }
 
   .game-desc {
     font-size: 0.75rem;
-    color: var(--color-text-muted);
+    color: #a9b4c6;
     margin: 0;
+    line-height: 1.4;
+  }
+
+  .cabinet-chips {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid;
+  }
+
+  .chip-genre {
+    color: var(--cabinet-color);
+    border-color: color-mix(in srgb, var(--cabinet-color) 55%, transparent);
+    background: color-mix(in srgb, var(--cabinet-color) 12%, transparent);
+  }
+
+  .chip-players {
+    color: #999;
+    border-color: #3a3a3a;
+    background: rgba(255, 255, 255, 0.03);
   }
 
   @media (max-width: 600px) {

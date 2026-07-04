@@ -5,7 +5,9 @@ import {
   stepProjectile,
   simulateShot,
   explosionDamage,
-  GRAVITY
+  stepFall,
+  GRAVITY,
+  type FallBody
 } from '../../src/games/tanks/physics';
 import { chooseAiShot } from '../../src/games/tanks/ai';
 import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster } from '../../src/games/tanks/weapons';
@@ -112,6 +114,62 @@ describe('physics', () => {
     const far = explosionDamage(0, 0, 30, 0, 45, 55);
     expect(near).toBeGreaterThan(far);
     expect(far).toBeGreaterThan(0);
+  });
+});
+
+describe('falling', () => {
+  const DT = 1 / 60;
+
+  function settle(body: FallBody, surface: number, maxSteps = 600): number {
+    for (let i = 1; i <= maxSteps; i++) {
+      stepFall(body, surface, DT);
+      if (body.fallFrom === null && body.y === surface) return i;
+    }
+    return -1;
+  }
+
+  it('drops a body onto the surface and clears the fall state', () => {
+    const body: FallBody = { y: 200, fallFrom: null, fallVy: 0 };
+    expect(settle(body, 320)).toBeGreaterThan(0);
+    expect(body.y).toBe(320);
+    expect(body.fallVy).toBe(0);
+  });
+
+  it('reports the drop height on landing and nothing before', () => {
+    const body: FallBody = { y: 250, fallFrom: null, fallVy: 0 };
+    let drop: number | null = null;
+    for (let i = 0; i < 600 && drop === null; i++) {
+      drop = stepFall(body, 300, DT);
+    }
+    expect(drop).toBe(50);
+  });
+
+  it('always lands even when a step ends a hair above the surface', () => {
+    // Regression: a shallow fall used to strand the body inside the last
+    // half-pixel (falling threshold not met, landing test not met either),
+    // leaving fallFrom set forever and freezing the turn state machine.
+    for (let depth = 0.6; depth <= 40; depth += 0.7) {
+      const body: FallBody = { y: 300 - depth, fallFrom: null, fallVy: 0 };
+      expect(settle(body, 300)).toBeGreaterThan(0);
+      expect(body.fallFrom).toBeNull();
+      expect(body.y).toBe(300);
+    }
+  });
+
+  it('keeps a fall in progress alive when the surface recedes mid-drop', () => {
+    const body: FallBody = { y: 260, fallFrom: null, fallVy: 0 };
+    stepFall(body, 280, DT);
+    expect(body.fallFrom).toBe(260);
+    // A crater deepens the ground below while the body is still airborne.
+    expect(settle(body, 340)).toBeGreaterThan(0);
+    expect(body.y).toBe(340);
+  });
+
+  it('snaps a grounded body down when the ground collapses by less than the threshold', () => {
+    const body: FallBody = { y: 300, fallFrom: null, fallVy: 0 };
+    stepFall(body, 300.4, DT);
+    expect(body.y).toBe(300.4);
+    expect(body.fallFrom).toBeNull();
   });
 });
 

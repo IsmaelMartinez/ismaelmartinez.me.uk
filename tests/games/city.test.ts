@@ -198,6 +198,10 @@ describe('city simulation', () => {
     tiles[cityIdx(4, 4)].type = 'water';
     expect(hasNatureNearby(tiles, cityIdx(6, 6))).toBe(true);
     expect(hasNatureNearby(tiles, cityIdx(8, 8))).toBe(false);
+    // Bridging the water keeps the riverfront bonus
+    build(tiles, 4, 4, 'road');
+    expect(tiles[cityIdx(4, 4)].type).toBe('bridge');
+    expect(hasNatureNearby(tiles, cityIdx(6, 6))).toBe(true);
     build(tiles, 10, 10, 'school');
     expect(hasSchoolNearby(tiles, cityIdx(12, 12))).toBe(true);
     expect(hasSchoolNearby(tiles, cityIdx(0, 0))).toBe(false);

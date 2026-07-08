@@ -289,8 +289,9 @@ export function initCityGame(): void {
     }
 
     // Power plants puff smoke while the city runs; fires belch it
+    const burning = new Set(fires.map(f => f.idx));
     tiles.forEach((tile, i) => {
-      const puffs = tile.type === 'power' ? 1.6 : fires.some(f => f.idx === i) ? 3.2 : 0;
+      const puffs = tile.type === 'power' ? 1.6 : burning.has(i) ? 3.2 : 0;
       if (puffs && Math.random() < simDt * puffs) {
         const p = projectWorld((i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.35);
         smoke.push({
@@ -637,6 +638,7 @@ export function initCityGame(): void {
     build(tiles, x, y, selectedTool);
     // Bulldozing a burning tile doubles as a firebreak
     fires = fires.filter(f => isFlammable(tiles[f.idx]));
+    armedTile = -1;
     audio.playSfx('blip');
     refreshDerivedState();
   });

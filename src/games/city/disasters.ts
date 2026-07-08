@@ -81,9 +81,9 @@ export function stepFires(
   const burnedOut: number[] = [];
   const remaining: Fire[] = [];
   for (const fire of alive) {
-    fire.ticks--;
-    if (fire.ticks > 0) {
-      remaining.push(fire);
+    const ticks = fire.ticks - 1;
+    if (ticks > 0) {
+      remaining.push({ idx: fire.idx, ticks });
       continue;
     }
     burnedOut.push(fire.idx);

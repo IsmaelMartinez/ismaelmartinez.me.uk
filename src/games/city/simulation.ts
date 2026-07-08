@@ -74,11 +74,14 @@ export function computeDemand(stats: CityStats, modifier: Partial<Demand> = {}):
   };
 }
 
-/** Parks, forests, and riverfront all count as desirable nature. */
+/**
+ * Parks, forests, and riverfront all count as desirable nature. Bridges
+ * still sit over water, so building one doesn't cost homes their river view.
+ */
 export function hasNatureNearby(tiles: CityTile[], i: number, radius = 3): boolean {
   return tiles.some(
     (tile, j) =>
-      (tile.type === 'park' || tile.type === 'tree' || tile.type === 'water') &&
+      (tile.type === 'park' || tile.type === 'tree' || tile.type === 'water' || tile.type === 'bridge') &&
       chebyshev(i, j, CITY_W) <= radius
   );
 }

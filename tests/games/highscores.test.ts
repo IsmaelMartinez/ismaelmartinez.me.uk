@@ -4,6 +4,7 @@ import {
   sanitizeInitials,
   filterInitials,
   formatScore,
+  removeEntry,
   qualifies,
   insertScore,
   loadTable,
@@ -110,6 +111,23 @@ describe('insertScore', () => {
     const result = insertScore(table, 'ZZZ', 50);
     expect(result.rank).toBe(0);
     expect(result.table).toBe(table);
+  });
+});
+
+describe('removeEntry', () => {
+  it('removes only the highest-ranked matching entry', () => {
+    const table = [entry('AAA', 300), entry('ISM', 200), entry('ISM', 200), entry('BBB', 100)];
+    expect(removeEntry(table, 'ISM', 200)).toEqual([
+      entry('AAA', 300),
+      entry('ISM', 200),
+      entry('BBB', 100)
+    ]);
+  });
+
+  it('returns the table untouched when nothing matches', () => {
+    const table = [entry('AAA', 300)];
+    expect(removeEntry(table, 'ISM', 300)).toBe(table);
+    expect(removeEntry(table, 'AAA', 299)).toBe(table);
   });
 });
 

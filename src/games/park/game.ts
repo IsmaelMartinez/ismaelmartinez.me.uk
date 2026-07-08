@@ -383,6 +383,8 @@ export function initParkGame(): void {
     if (peakGuests > record) {
       record = peakGuests;
       recordEl.textContent = record.toString();
+      // Persist immediately so a mid-run tab close keeps the record.
+      board.stash(peakGuests);
     }
 
     const avg = guests.length

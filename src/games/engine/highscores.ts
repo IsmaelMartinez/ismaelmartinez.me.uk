@@ -76,6 +76,16 @@ export function insertScore(
   return { table: next, rank: index + 1 };
 }
 
+/**
+ * Pure removal of the highest-ranked entry matching `initials`/`score`;
+ * returns the same table when no entry matches. Used to lift a provisional
+ * mid-run entry back out before replacing it with a better one.
+ */
+export function removeEntry(table: ScoreEntry[], initials: string, score: number): ScoreEntry[] {
+  const index = table.findIndex(e => e.initials === initials && e.score === score);
+  return index === -1 ? table : [...table.slice(0, index), ...table.slice(index + 1)];
+}
+
 function isEntry(value: unknown): value is ScoreEntry {
   return (
     typeof value === 'object' &&

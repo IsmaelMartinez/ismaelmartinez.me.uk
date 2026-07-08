@@ -558,9 +558,10 @@ const t = useTranslations(lang);
     board.show(score);
   }
 
-  /** Keeps the menu readout ahead of the table mid-run; the table itself is
-      only written when the run ends. */
+  /** Runs at each level end: keeps the menu readout current and stashes the
+      score so quitting mid-investigation keeps the run on the table. */
   function updateHighScore() {
+    board.stash(score);
     if (score > highScore) {
       highScore = score;
       menuHighScore.textContent = highScore.toString();

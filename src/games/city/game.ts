@@ -251,6 +251,8 @@ export function initCityGame(): void {
       if (peakPop > record) {
         record = peakPop;
         recordEl.textContent = record.toString();
+        // Persist immediately so a mid-run tab close keeps the record.
+        board.stash(peakPop);
       }
       if (milestoneIdx < MILESTONES.length && stats.population >= MILESTONES[milestoneIdx]) {
         showToast(`🏙️ ${strings.milestone} ${MILESTONES[milestoneIdx]}!`);

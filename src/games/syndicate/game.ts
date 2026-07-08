@@ -319,6 +319,9 @@ export function initSyndicateGame(): void {
     phase = 'debrief';
     record = Math.max(record, Math.floor(money));
     recordEl.textContent = `£${record}`;
+    // Persist the campaign's takings at each debrief, like the old record
+    // key did, so quitting mid-campaign keeps the run on the table.
+    board.stash(Math.floor(money));
     overIcon.textContent = '💼';
     overTitle.textContent = `${strings.missionComplete} · +£${spec.reward}`;
     overDesc.textContent = `${strings.missionNames[missionIdx + 1]} — ${strings.missionBriefs[missionIdx + 1]}`;

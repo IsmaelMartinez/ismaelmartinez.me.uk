@@ -4,13 +4,17 @@
  * A game calls `show(score)` from its game-over screen (after making the
  * overlay visible, so the input can take focus): if the score charts, the
  * "enter your initials" form appears; confirming writes the entry and
- * renders the top-10 with the new row lit up. A pending score is never
- * lost — restarting, navigating away, or closing the tab commits it with
- * the last-used initials.
+ * renders the top-10 with the new row lit up. A score is never lost —
+ * restarting, navigating away, or closing the tab commits a pending entry
+ * with the last-used initials, and long-running games can `stash()` the
+ * current run's best as they go so a mid-run tab close keeps it too.
  */
 import {
   loadTable,
+  saveTable,
   qualifies,
+  insertScore,
+  removeEntry,
   submitScore,
   topEntry,
   loadInitials,
@@ -27,6 +31,14 @@ export interface Scoreboard {
   show(score: number): void;
   /** Hide the panel (call when a new game starts); commits any pending entry. */
   hide(): void;
+  /**
+   * Persist the current run's best immediately, as a provisional entry under
+   * the last-used initials. Call whenever a long run's score grows (it
+   * no-ops unless the score charts); the entry is upgraded in place as the
+   * run continues and replaced by the final `show()`/commit entry, so a
+   * mid-run tab close can't lose a record the HUD already displayed.
+   */
+  stash(score: number): void;
   /** Current #1 entry, for "best" HUD readouts. */
   top(): ScoreEntry | null;
 }
@@ -43,7 +55,7 @@ export function initScoreboard(
   // Games stay functional if the panel (or its table identity) is missing.
   const gameId = panel?.dataset.hsGame;
   if (!panel || !gameId) {
-    return { show() {}, hide() {}, top: () => null };
+    return { show() {}, hide() {}, stash() {}, top: () => null };
   }
 
   const form = panel.querySelector<HTMLFormElement>('.hs-entry');
@@ -52,6 +64,13 @@ export function initScoreboard(
   const empty = panel.querySelector<HTMLElement>('.hs-empty');
 
   let pendingScore: number | null = null;
+  // Score of this run's provisional entry already written to the table.
+  let stashedScore: number | null = null;
+
+  /** Lifts this run's provisional entry back out of a loaded table. */
+  function unstash(table: ScoreEntry[]): ScoreEntry[] {
+    return stashedScore === null ? table : removeEntry(table, loadInitials(), stashedScore);
+  }
 
   function renderTable(highlightRank = 0, table = loadTable(gameId!)) {
     if (!list) return;
@@ -120,10 +139,20 @@ export function initScoreboard(
   document.addEventListener('astro:before-swap', commitPending);
 
   return {
+    stash(score: number) {
+      if (stashedScore !== null && score <= stashedScore) return;
+      const table = unstash(loadTable(gameId!));
+      if (!qualifies(table, score)) return;
+      saveTable(gameId!, insertScore(table, loadInitials(), score).table);
+      stashedScore = score;
+    },
     show(score: number) {
       pendingScore = null;
       panel.hidden = false;
-      const table = loadTable(gameId!);
+      // The final entry replaces any provisional one from this run.
+      const table = unstash(loadTable(gameId!));
+      if (stashedScore !== null) saveTable(gameId!, table);
+      stashedScore = null;
       if (qualifies(table, score) && form && input) {
         pendingScore = score;
         form.hidden = false;
@@ -138,6 +167,9 @@ export function initScoreboard(
     },
     hide() {
       commit(false);
+      // A provisional entry from the ending run stays in the table as-is;
+      // the next run must not claim (and later replace) it.
+      stashedScore = null;
       panel.hidden = true;
     },
     top: () => topEntry(gameId!)

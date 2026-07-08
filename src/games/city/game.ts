@@ -105,11 +105,13 @@ export function initCityGame(): void {
   // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
   // re-entry on a root this module has already wired.
   if (root.dataset.gameWired) return;
-  root.dataset.gameWired = 'true';
   const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const startOverlay = el('start-overlay');
@@ -691,9 +693,5 @@ export function initCityGame(): void {
     resetCity();
   });
 
-  const loop = createGameLoop(update, render);
-  // A ClientRouter navigation detaches this game's DOM but not this loop;
-  // stop it so revisits don't stack rAF loops drawing to orphaned canvases.
-  document.addEventListener('astro:before-swap', () => loop.stop(), { once: true });
-  loop.start();
+  createGameLoop(update, render).start();
 }

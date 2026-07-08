@@ -1,26 +1,54 @@
 import { describe, it, expect } from 'vitest';
 import { gridNeighbours, chebyshev } from '../../src/games/engine/grid2d';
+import { rotatedDims, rotateTile, unrotateTile, rotatePoint } from '../../src/games/engine/iso';
 import {
   CITY_W,
   CITY_H,
   MAX_LEVEL,
+  BRIDGE_COST,
   createCity,
   canBuild,
+  buildCost,
   build,
   cityIdx,
   TOOL_COSTS
 } from '../../src/games/city/tiles';
+import { carveRiver, plantForests, generateTerrain } from '../../src/games/city/terrain';
 import {
   computePowered,
+  computeFireCover,
   roadAdjacent,
   cityStats,
   computeDemand,
+  hasNatureNearby,
+  hasSchoolNearby,
   growthStep,
   POWER_RADIUS,
   RESIDENTS_PER_LEVEL
 } from '../../src/games/city/simulation';
 import { monthlyIncome, monthlyExpenses } from '../../src/games/city/budget';
 import { targetCarCount, spawnCar, stepCar } from '../../src/games/city/traffic';
+import {
+  isFlammable,
+  ignitionChance,
+  startFire,
+  stepFires,
+  rollEvent,
+  sumDemandModifiers,
+  CITY_EVENTS,
+  BURN_TICKS,
+  BURN_TICKS_COVERED,
+  EVENT_GRACE_MONTHS,
+  type Fire
+} from '../../src/games/city/disasters';
+
+function seededRandom(seed = 42): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    return state / 4294967296;
+  };
+}
 
 describe('engine grid2d', () => {
   it('respects grid edges for neighbours', () => {
@@ -133,20 +161,259 @@ describe('city simulation', () => {
     expect(tiles[cityIdx(21, 12)].level).toBe(1);
   });
 
-  it('gates top-level residential on a nearby park', () => {
+  it('gates level-2 residential on nearby nature (park, forest, or water)', () => {
     const tiles = createCity();
     build(tiles, 5, 5, 'power');
     build(tiles, 6, 6, 'road');
     build(tiles, 6, 5, 'res');
-    tiles[cityIdx(6, 5)].level = MAX_LEVEL - 1;
+    tiles[cityIdx(6, 5)].level = 1;
     // Big job surplus to guarantee positive res demand
     build(tiles, 7, 6, 'ind');
     tiles[cityIdx(7, 6)].level = 3;
     growthStep(tiles, () => 0);
-    expect(tiles[cityIdx(6, 5)].level).toBe(MAX_LEVEL - 1);
+    expect(tiles[cityIdx(6, 5)].level).toBe(1);
+    tiles[cityIdx(5, 4)].type = 'tree'; // forest counts as nature
+    growthStep(tiles, () => 0);
+    expect(tiles[cityIdx(6, 5)].level).toBe(2);
+  });
+
+  it('gates top-level residential on a nearby school', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'power');
+    build(tiles, 6, 6, 'road');
+    build(tiles, 6, 5, 'res');
     build(tiles, 5, 4, 'park');
+    tiles[cityIdx(6, 5)].level = MAX_LEVEL - 1;
+    build(tiles, 7, 6, 'ind');
+    tiles[cityIdx(7, 6)].level = 3;
+    growthStep(tiles, () => 0);
+    expect(tiles[cityIdx(6, 5)].level).toBe(MAX_LEVEL - 1);
+    build(tiles, 3, 3, 'school');
     growthStep(tiles, () => 0);
     expect(tiles[cityIdx(6, 5)].level).toBe(MAX_LEVEL);
+  });
+
+  it('detects nature and school coverage by radius', () => {
+    const tiles = createCity();
+    tiles[cityIdx(4, 4)].type = 'water';
+    expect(hasNatureNearby(tiles, cityIdx(6, 6))).toBe(true);
+    expect(hasNatureNearby(tiles, cityIdx(8, 8))).toBe(false);
+    build(tiles, 10, 10, 'school');
+    expect(hasSchoolNearby(tiles, cityIdx(12, 12))).toBe(true);
+    expect(hasSchoolNearby(tiles, cityIdx(0, 0))).toBe(false);
+  });
+
+  it('applies event demand modifiers before clamping', () => {
+    const stats = cityStats(createCity());
+    const base = computeDemand(stats);
+    const boosted = computeDemand(stats, { com: 30, ind: -10 });
+    expect(boosted.com).toBe(base.com + 30);
+    expect(boosted.ind).toBe(base.ind - 10);
+    expect(computeDemand(stats, { res: 500 }).res).toBe(50); // still clamped
+  });
+});
+
+describe('city terrain', () => {
+  it('carves a river that reaches both edges without gaps', () => {
+    const tiles = createCity();
+    carveRiver(tiles, seededRandom(7));
+    const waterInColumn = (x: number) =>
+      Array.from({ length: CITY_H }, (_, y) => tiles[cityIdx(x, y)].type).filter(t => t === 'water').length;
+    for (let x = 0; x < CITY_W; x++) expect(waterInColumn(x)).toBeGreaterThan(0);
+  });
+
+  it('plants forests only on empty land', () => {
+    const tiles = createCity();
+    carveRiver(tiles, seededRandom(3));
+    const waterBefore = tiles.filter(t => t.type === 'water').length;
+    plantForests(tiles, seededRandom(9));
+    expect(tiles.filter(t => t.type === 'water').length).toBe(waterBefore);
+    expect(tiles.filter(t => t.type === 'tree').length).toBeGreaterThan(0);
+  });
+
+  it('generates deterministic terrain from a seeded random', () => {
+    const a = createCity();
+    const b = createCity();
+    generateTerrain(a, seededRandom(11));
+    generateTerrain(b, seededRandom(11));
+    expect(a).toEqual(b);
+  });
+});
+
+describe('city bridges', () => {
+  it('allows only roads on water, priced as bridges', () => {
+    const tiles = createCity();
+    tiles[cityIdx(4, 4)].type = 'water';
+    expect(canBuild(tiles, 4, 4, 'res')).toBe(false);
+    expect(canBuild(tiles, 4, 4, 'park')).toBe(false);
+    expect(canBuild(tiles, 4, 4, 'bulldoze')).toBe(false);
+    expect(canBuild(tiles, 4, 4, 'road')).toBe(true);
+    expect(buildCost(tiles, 4, 4, 'road')).toBe(BRIDGE_COST);
+    expect(buildCost(tiles, 5, 4, 'road')).toBe(TOOL_COSTS.road);
+  });
+
+  it('builds bridges over water and restores water when demolished', () => {
+    const tiles = createCity();
+    tiles[cityIdx(4, 4)].type = 'water';
+    build(tiles, 4, 4, 'road');
+    expect(tiles[cityIdx(4, 4)].type).toBe('bridge');
+    expect(roadAdjacent(tiles, cityIdx(5, 4))).toBe(true);
+    build(tiles, 4, 4, 'bulldoze');
+    expect(tiles[cityIdx(4, 4)].type).toBe('water');
+  });
+
+  it('lets cars drive across bridges', () => {
+    const tiles = createCity();
+    build(tiles, 3, 3, 'road');
+    tiles[cityIdx(4, 3)].type = 'bridge';
+    build(tiles, 5, 3, 'road');
+    const random = seededRandom(5);
+    const car = spawnCar(tiles, random)!;
+    expect(car).not.toBeNull();
+    for (let i = 0; i < 100; i++) expect(stepCar(tiles, car, 0.1, random)).toBe(true);
+  });
+});
+
+describe('city disasters', () => {
+  function firePlayground() {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'ind');
+    tiles[cityIdx(5, 5)].level = 2;
+    build(tiles, 6, 5, 'res');
+    tiles[cityIdx(6, 5)].level = 1;
+    tiles[cityIdx(5, 6)].type = 'tree';
+    return tiles;
+  }
+
+  it('classifies flammable tiles', () => {
+    const tiles = firePlayground();
+    expect(isFlammable(tiles[cityIdx(5, 5)])).toBe(true); // developed industry
+    expect(isFlammable(tiles[cityIdx(5, 6)])).toBe(true); // tree
+    expect(isFlammable({ type: 'res', level: 0 })).toBe(false); // undeveloped zone
+    expect(isFlammable({ type: 'road', level: 0 })).toBe(false);
+    expect(isFlammable({ type: 'water', level: 0 })).toBe(false);
+  });
+
+  it('scales ignition chance with flammable tiles, capped', () => {
+    expect(ignitionChance(createCity())).toBe(0);
+    expect(ignitionChance(firePlayground())).toBeCloseTo(3 * 0.0004);
+  });
+
+  it('starts fires on flammable tiles, burning shorter under fire cover', () => {
+    const tiles = firePlayground();
+    const noCover = tiles.map(() => false);
+    const fire = startFire(tiles, noCover, () => 0)!;
+    expect(isFlammable(tiles[fire.idx])).toBe(true);
+    expect(fire.ticks).toBe(BURN_TICKS);
+    const covered = tiles.map(() => true);
+    expect(startFire(tiles, covered, () => 0)!.ticks).toBe(BURN_TICKS_COVERED);
+    expect(startFire(createCity(), noCover, () => 0)).toBeNull();
+  });
+
+  it('spreads to flammable neighbours and burns tiles down', () => {
+    const tiles = firePlayground();
+    const cover = tiles.map(() => false);
+    let fires: Fire[] = [{ idx: cityIdx(5, 5), ticks: 1 }];
+    // random()=0 → guaranteed spread to both flammable neighbours; the
+    // source burns out this tick and leaves rubble.
+    const result = stepFires(tiles, fires, cover, () => 0);
+    expect(result.burnedOut).toEqual([cityIdx(5, 5)]);
+    expect(tiles[cityIdx(5, 5)].type).toBe('rubble');
+    expect(tiles[cityIdx(5, 5)].level).toBe(0);
+    expect(result.spread.sort((a, b) => a - b)).toEqual([cityIdx(6, 5), cityIdx(5, 6)].sort((a, b) => a - b));
+    expect(result.fires).toHaveLength(2);
+
+    // Burn everything down: trees vanish, buildings leave rubble
+    fires = result.fires;
+    for (let i = 0; i < BURN_TICKS + 1; i++) {
+      fires = stepFires(tiles, fires, cover, () => 0.999).fires;
+    }
+    expect(fires).toHaveLength(0);
+    expect(tiles[cityIdx(6, 5)].type).toBe('rubble');
+    expect(tiles[cityIdx(5, 6)].type).toBe('empty');
+  });
+
+  it('never spreads when random rolls high, and drops bulldozed fires', () => {
+    const tiles = firePlayground();
+    const cover = tiles.map(() => false);
+    const result = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 5 }], cover, () => 0.999);
+    expect(result.spread).toEqual([]);
+    expect(result.fires).toHaveLength(1);
+
+    build(tiles, 5, 5, 'bulldoze');
+    const after = stepFires(tiles, result.fires, cover, () => 0);
+    expect(after.fires).toEqual([]);
+    expect(after.burnedOut).toEqual([]);
+  });
+
+  it('rubble blocks building until bulldozed', () => {
+    const tiles = createCity();
+    tiles[cityIdx(2, 2)].type = 'rubble';
+    expect(canBuild(tiles, 2, 2, 'res')).toBe(false);
+    expect(canBuild(tiles, 2, 2, 'bulldoze')).toBe(true);
+    build(tiles, 2, 2, 'bulldoze');
+    expect(canBuild(tiles, 2, 2, 'res')).toBe(true);
+  });
+
+  it('computes fire-station coverage', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'firehouse');
+    const cover = computeFireCover(tiles);
+    expect(cover[cityIdx(5, 5)]).toBe(true);
+    expect(cover[cityIdx(11, 5)]).toBe(true);
+    expect(cover[cityIdx(12, 5)]).toBe(false);
+  });
+
+  it('rolls no events during the grace period, then from the event table', () => {
+    expect(rollEvent(EVENT_GRACE_MONTHS, () => 0)).toBeNull();
+    expect(rollEvent(EVENT_GRACE_MONTHS + 1, () => 0.99)).toBeNull(); // failed chance roll
+    const event = rollEvent(EVENT_GRACE_MONTHS + 1, () => 0);
+    expect(event).toBe(CITY_EVENTS[0]);
+  });
+
+  it('sums demand modifiers across active events', () => {
+    const festival = CITY_EVENTS.find(e => e.id === 'festival')!;
+    const strike = CITY_EVENTS.find(e => e.id === 'strike')!;
+    const total = sumDemandModifiers([
+      { event: festival, monthsLeft: 2 },
+      { event: strike, monthsLeft: 1 }
+    ]);
+    expect(total).toEqual({ res: 15, com: 20, ind: -30 });
+    expect(sumDemandModifiers([])).toEqual({});
+  });
+});
+
+describe('view rotation', () => {
+  it('swaps dimensions on quarter turns', () => {
+    expect(rotatedDims(24, 14, 0)).toEqual({ w: 24, h: 14 });
+    expect(rotatedDims(24, 14, 1)).toEqual({ w: 14, h: 24 });
+    expect(rotatedDims(24, 14, 2)).toEqual({ w: 24, h: 14 });
+    expect(rotatedDims(24, 14, 3)).toEqual({ w: 14, h: 24 });
+  });
+
+  it('rotateTile and unrotateTile are inverses over the whole grid', () => {
+    for (let rot = 0; rot < 4; rot++) {
+      for (let y = 0; y < CITY_H; y++) {
+        for (let x = 0; x < CITY_W; x++) {
+          const v = rotateTile(x, y, CITY_W, CITY_H, rot);
+          const dims = rotatedDims(CITY_W, CITY_H, rot);
+          expect(v.x).toBeGreaterThanOrEqual(0);
+          expect(v.x).toBeLessThan(dims.w);
+          expect(v.y).toBeGreaterThanOrEqual(0);
+          expect(v.y).toBeLessThan(dims.h);
+          expect(unrotateTile(v.x, v.y, CITY_W, CITY_H, rot)).toEqual({ x, y });
+        }
+      }
+    }
+  });
+
+  it('keeps fractional points inside their rotated tile', () => {
+    for (let rot = 0; rot < 4; rot++) {
+      const v = rotateTile(3, 7, CITY_W, CITY_H, rot);
+      const p = rotatePoint(3.25, 7.75, CITY_W, CITY_H, rot);
+      expect(Math.floor(p.tx)).toBe(v.x);
+      expect(Math.floor(p.ty)).toBe(v.y);
+    }
   });
 });
 
@@ -163,6 +430,15 @@ describe('city budget', () => {
     build(tiles, 3, 0, 'park');
     build(tiles, 4, 0, 'res');
     expect(monthlyExpenses(tiles)).toBe(1 + 1 + 40 + 3);
+  });
+
+  it('charges upkeep for services and bridges', () => {
+    const tiles = createCity();
+    build(tiles, 0, 0, 'school');
+    build(tiles, 1, 0, 'firehouse');
+    tiles[cityIdx(2, 0)].type = 'water';
+    build(tiles, 2, 0, 'road'); // becomes a bridge
+    expect(monthlyExpenses(tiles)).toBe(15 + 12 + 3);
   });
 });
 

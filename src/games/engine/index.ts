@@ -13,6 +13,10 @@ export {
   fillTile,
   strokeTile,
   drawBlock,
-  forEachTileBackToFront
+  forEachTileBackToFront,
+  rotatedDims,
+  rotateTile,
+  unrotateTile,
+  rotatePoint
 } from './iso';
-export type { IsoView } from './iso';
+export type { IsoView, Rotation } from './iso';

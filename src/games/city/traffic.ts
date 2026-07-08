@@ -4,7 +4,7 @@
  * wander rules are testable.
  */
 import { gridNeighbours } from '../engine/grid2d';
-import { CITY_W, CITY_H, type CityTile } from './tiles';
+import { CITY_W, CITY_H, isRoad, type CityTile } from './tiles';
 
 export interface Car {
   /** Tile the car is leaving. */
@@ -26,14 +26,14 @@ export function targetCarCount(population: number): number {
 }
 
 function roadNeighbours(tiles: CityTile[], i: number): number[] {
-  return gridNeighbours(i, CITY_W, CITY_H).filter(n => tiles[n].type === 'road');
+  return gridNeighbours(i, CITY_W, CITY_H).filter(n => isRoad(tiles[n].type));
 }
 
 /** Spawns a car on a random road tile that has somewhere to drive to. */
 export function spawnCar(tiles: CityTile[], random: () => number = Math.random): Car | null {
   const candidates: number[] = [];
   tiles.forEach((tile, i) => {
-    if (tile.type === 'road' && roadNeighbours(tiles, i).length > 0) candidates.push(i);
+    if (isRoad(tile.type) && roadNeighbours(tiles, i).length > 0) candidates.push(i);
   });
   if (!candidates.length) return null;
   const from = candidates[Math.floor(random() * candidates.length)];
@@ -57,7 +57,7 @@ export function stepCar(
   dt: number,
   random: () => number = Math.random
 ): boolean {
-  if (tiles[car.to].type !== 'road' || tiles[car.from].type !== 'road') return false;
+  if (!isRoad(tiles[car.to].type) || !isRoad(tiles[car.from].type)) return false;
   car.progress += car.speed * dt;
   while (car.progress >= 1) {
     car.progress -= 1;

@@ -17,6 +17,8 @@ const tools = [
   { id: 'ind', emoji: '🏭', label: t('fun.city.toolInd'), cost: 100 },
   { id: 'power', emoji: '⚡', label: t('fun.city.toolPower'), cost: 500 },
   { id: 'park', emoji: '🌳', label: t('fun.city.toolPark'), cost: 30 },
+  { id: 'school', emoji: '🏫', label: t('fun.city.toolSchool'), cost: 300 },
+  { id: 'firehouse', emoji: '🚒', label: t('fun.city.toolFirehouse'), cost: 250 },
   { id: 'bulldoze', emoji: '🚜', label: t('fun.city.toolBulldoze'), cost: 0 }
 ];
 ---
@@ -34,6 +36,12 @@ const tools = [
         data-t-expenses={t('fun.city.expenses')}
         data-t-cant-afford={t('fun.city.cantAfford')}
         data-t-milestone={t('fun.city.milestone')}
+        data-t-fire-alert={t('fun.city.fireAlert')}
+        data-t-event-grant={t('fun.city.eventGrant')}
+        data-t-event-protest={t('fun.city.eventProtest')}
+        data-t-event-festival={t('fun.city.eventFestival')}
+        data-t-event-strike={t('fun.city.eventStrike')}
+        data-t-event-boom={t('fun.city.eventBoom')}
       >
         <div class="game-header">
           <h1><span class="city-emoji">🏙️</span> {t('fun.city.title')}</h1>
@@ -120,6 +128,8 @@ const tools = [
               </div>
             </div>
             <div class="speed-controls">
+              <button id="rotate-left" class="rotate-btn" aria-label={t('fun.city.rotate')} title={t('fun.city.rotate')}>↺</button>
+              <button id="rotate-right" class="rotate-btn" aria-label={t('fun.city.rotate')} title={t('fun.city.rotate')}>↻</button>
               <button class="speed-btn" data-speed="0">⏸</button>
               <button class="speed-btn active" data-speed="1">▶</button>
               <button class="speed-btn" data-speed="3">⏩</button>
@@ -423,7 +433,8 @@ const tools = [
     gap: var(--space-xs);
   }
 
-  .speed-btn {
+  .speed-btn,
+  .rotate-btn {
     width: 44px;
     height: 44px;
     font-size: 1.1rem;
@@ -436,7 +447,8 @@ const tools = [
   }
 
   .speed-btn:hover,
-  .speed-btn.active {
+  .speed-btn.active,
+  .rotate-btn:hover {
     border-color: #38bdf8;
     background: rgba(56, 189, 248, 0.12);
   }

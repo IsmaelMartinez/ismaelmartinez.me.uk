@@ -102,6 +102,10 @@ export function initCityGame(): void {
   const root = document.getElementById('city-root');
   const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
   if (!root || !canvasEl) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
+  root.dataset.gameWired = 'true';
   const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
@@ -687,5 +691,9 @@ export function initCityGame(): void {
     resetCity();
   });
 
-  createGameLoop(update, render).start();
+  const loop = createGameLoop(update, render);
+  // A ClientRouter navigation detaches this game's DOM but not this loop;
+  // stop it so revisits don't stack rAF loops drawing to orphaned canvases.
+  document.addEventListener('astro:before-swap', () => loop.stop(), { once: true });
+  loop.start();
 }

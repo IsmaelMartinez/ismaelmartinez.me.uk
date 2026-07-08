@@ -185,8 +185,6 @@ export function initCityGame(): void {
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     refreshDerivedState();
     board.hide();
-    record = Math.max(record, board.top()?.score ?? 0);
-    recordEl.textContent = record.toString();
     phase = 'play';
     audio.start();
   }

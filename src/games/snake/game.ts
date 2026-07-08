@@ -223,7 +223,9 @@ export function initSnakeGame(): void {
         finalScoreEl.textContent = state.score.toString();
         gameOverOverlay.style.display = 'flex';
         board.show(state.score);
-        syncHighScore();
+        // The table commits only when initials land, so show the fresh best
+        // in the HUD ourselves meanwhile.
+        highScoreEl.textContent = Math.max(board.top()?.score ?? 0, state.score).toString();
       }
     }
   }

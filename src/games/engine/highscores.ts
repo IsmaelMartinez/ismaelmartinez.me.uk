@@ -7,6 +7,8 @@
  * layer so the rules are unit-testable without a DOM.
  */
 
+import { loadScore } from './storage';
+
 export interface ScoreEntry {
   initials: string;
   score: number;
@@ -35,13 +37,20 @@ const LEGACY_KEYS: Record<string, string> = {
 
 export const tableKey = (gameId: string): string => `${TABLE_PREFIX}${gameId}`;
 
-/** Uppercase A–Z/0–9 only, at most three characters; empty becomes "AAA". */
-export function sanitizeInitials(raw: string): string {
-  const clean = raw
+/** Classic six-digit arcade readout, e.g. 340 → "000340". */
+export const formatScore = (score: number): string => score.toString().padStart(6, '0');
+
+/** The typeable initials alphabet: uppercase A–Z/0–9, at most three characters. */
+export function filterInitials(raw: string): string {
+  return raw
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, INITIALS_LENGTH);
-  return clean || DEFAULT_INITIALS;
+}
+
+/** Like filterInitials, but empty becomes "AAA" so an entry always has a name. */
+export function sanitizeInitials(raw: string): string {
+  return filterInitials(raw) || DEFAULT_INITIALS;
 }
 
 /** True when `score` would earn a spot on the table. */
@@ -77,17 +86,27 @@ function isEntry(value: unknown): value is ScoreEntry {
   );
 }
 
+/**
+ * Re-establishes the module's invariants on data read back from storage
+ * (which the player can hand-edit): entries well-formed, initials at most
+ * three characters, sorted by score with older entries above ties.
+ */
+function normalizeTable(parsed: unknown): ScoreEntry[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter(isEntry)
+    .map(e => ({ initials: e.initials.slice(0, INITIALS_LENGTH), score: e.score }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_ENTRIES);
+}
+
 /** Loads a game's table, seeding it from the pre-table high-score key once. */
 export function loadTable(gameId: string): ScoreEntry[] {
   try {
     const raw = localStorage.getItem(tableKey(gameId));
-    if (raw) {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.filter(isEntry).slice(0, MAX_ENTRIES);
-      return [];
-    }
+    if (raw) return normalizeTable(JSON.parse(raw));
     const legacyKey = LEGACY_KEYS[gameId];
-    const legacy = legacyKey ? parseInt(localStorage.getItem(legacyKey) || '0', 10) || 0 : 0;
+    const legacy = legacyKey ? loadScore(legacyKey) : 0;
     if (legacy > 0) {
       const seeded = [{ initials: '---', score: legacy }];
       saveTable(gameId, seeded);

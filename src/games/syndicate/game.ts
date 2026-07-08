@@ -299,13 +299,14 @@ export function initSyndicateGame(): void {
     audio.stop();
     record = Math.max(record, Math.floor(money));
     recordEl.textContent = `£${record}`;
-    board.show(Math.floor(money));
     overIcon.textContent = victory ? '🏆' : '☠️';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
     overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
     finalCashEl.textContent = `£${Math.floor(money)}`;
     nextBtn.textContent = strings.playAgain;
     overOverlay.style.display = 'flex';
+    // After the overlay is visible, so the initials input can take focus.
+    board.show(Math.floor(money));
   }
 
   function completeMission() {

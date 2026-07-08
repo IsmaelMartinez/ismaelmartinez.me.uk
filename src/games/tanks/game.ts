@@ -19,6 +19,7 @@ import {
   stepProjectile,
   stepFall,
   explosionDamage,
+  matchScore,
   type Projectile
 } from './physics';
 import { chooseAiShot } from './ai';
@@ -378,11 +379,11 @@ export function initTanksGame(): void {
       audio.playSfx('gameover');
       audio.stop();
     }
-    if (matchOver && winner === 0 && mode === 'cpu') {
+    const playerWonMatch = matchOver && winner === 0 && mode === 'cpu';
+    if (playerWonMatch) {
       victories++;
       saveScore(VICTORIES_KEY, victories);
       victoriesEl.textContent = victories.toString();
-      board.show((wins[0] - wins[1]) * 100 + Math.round(tanks[0].hp));
     }
     roundEmoji.textContent = matchOver ? '🏆' : winner === null ? '☠️' : '💥';
     roundMessage.textContent =
@@ -392,6 +393,8 @@ export function initTanksGame(): void {
     nextRoundBtn.style.display = matchOver ? 'none' : 'inline-block';
     playAgainBtn.style.display = matchOver ? 'inline-block' : 'none';
     roundOverlay.style.display = 'flex';
+    // After the overlay is visible, so the initials input can take focus.
+    if (playerWonMatch) board.show(matchScore(wins[0], wins[1], tanks[0].hp));
   }
 
   /** Tanks above the (possibly freshly cratered) surface fall and take damage. */

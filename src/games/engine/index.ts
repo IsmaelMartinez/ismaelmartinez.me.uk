@@ -1,15 +1,7 @@
 export { createGameLoop } from './loop';
 export type { GameLoop } from './loop';
-export { loadScore, saveScore, recordHighScore } from './storage';
-export {
-  loadTable,
-  saveTable,
-  submitScore,
-  topEntry,
-  qualifies,
-  insertScore,
-  sanitizeInitials
-} from './highscores';
+export { loadScore, saveScore } from './storage';
+export { topEntry, formatScore } from './highscores';
 export type { ScoreEntry } from './highscores';
 export { initScoreboard } from './scoreboard';
 export type { Scoreboard, ScoreboardOptions } from './scoreboard';

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   MAX_ENTRIES,
   sanitizeInitials,
+  filterInitials,
+  formatScore,
   qualifies,
   insertScore,
   loadTable,
@@ -48,6 +50,18 @@ describe('sanitizeInitials', () => {
   it('falls back to AAA when nothing usable remains', () => {
     expect(sanitizeInitials('')).toBe('AAA');
     expect(sanitizeInitials('···')).toBe('AAA');
+  });
+
+  it('filterInitials applies the same alphabet without the AAA fallback', () => {
+    expect(filterInitials(' i-2! ')).toBe('I2');
+    expect(filterInitials('')).toBe('');
+  });
+});
+
+describe('formatScore', () => {
+  it('pads to the classic six digits without truncating larger scores', () => {
+    expect(formatScore(340)).toBe('000340');
+    expect(formatScore(1234567)).toBe('1234567');
   });
 });
 
@@ -140,6 +154,15 @@ describe('storage-backed tables', () => {
   it('filters malformed entries out of stored tables', () => {
     store[tableKey('snake')] = JSON.stringify([entry('ISM', 10), { initials: 5 }, 'x', null]);
     expect(loadTable('snake')).toEqual([entry('ISM', 10)]);
+  });
+
+  it('re-sorts and bounds hand-edited stored tables', () => {
+    store[tableKey('snake')] = JSON.stringify([
+      entry('LOW', 10),
+      entry('CHEATER', 900),
+      entry('TOP', 900)
+    ]);
+    expect(loadTable('snake')).toEqual([entry('CHE', 900), entry('TOP', 900), entry('LOW', 10)]);
   });
 
   it('submitScore records qualifying runs and reports the rank', () => {

@@ -1,10 +1,12 @@
 /**
  * Wires the HighScoreTable.astro panel to a game's run-end flow.
  *
- * A game calls `show(score)` from its game-over screen: if the score charts,
- * the "enter your initials" form appears; confirming (or restarting — the
- * pending score is committed with the last-used initials so it is never
- * lost) writes the entry and renders the top-10 with the new row lit up.
+ * A game calls `show(score)` from its game-over screen (after making the
+ * overlay visible, so the input can take focus): if the score charts, the
+ * "enter your initials" form appears; confirming writes the entry and
+ * renders the top-10 with the new row lit up. A pending score is never
+ * lost — restarting, navigating away, or closing the tab commits it with
+ * the last-used initials.
  */
 import {
   loadTable,
@@ -13,6 +15,9 @@ import {
   topEntry,
   loadInitials,
   saveInitials,
+  sanitizeInitials,
+  filterInitials,
+  formatScore,
   INITIALS_LENGTH,
   type ScoreEntry
 } from './highscores';
@@ -31,18 +36,16 @@ export interface ScoreboardOptions {
   onSave?: (entry: ScoreEntry, rank: number) => void;
 }
 
-const formatScore = (score: number): string => score.toString().padStart(6, '0');
-
 export function initScoreboard(
   panel: HTMLElement | null,
   options: ScoreboardOptions = {}
 ): Scoreboard {
-  // Games stay functional if the panel is missing from the page.
-  if (!panel) {
+  // Games stay functional if the panel (or its table identity) is missing.
+  const gameId = panel?.dataset.hsGame;
+  if (!panel || !gameId) {
     return { show() {}, hide() {}, top: () => null };
   }
 
-  const gameId = panel.dataset.hsGame || '';
   const form = panel.querySelector<HTMLFormElement>('.hs-entry');
   const input = panel.querySelector<HTMLInputElement>('.hs-input');
   const list = panel.querySelector<HTMLOListElement>('.hs-list');
@@ -50,16 +53,15 @@ export function initScoreboard(
 
   let pendingScore: number | null = null;
 
-  function renderTable(highlightRank = 0) {
+  function renderTable(highlightRank = 0, table = loadTable(gameId!)) {
     if (!list) return;
-    const table = loadTable(gameId);
     list.textContent = '';
     table.forEach((entry, i) => {
       const row = document.createElement('li');
       row.className = 'hs-row' + (i + 1 === highlightRank ? ' hs-current' : '');
       for (const [cls, text] of [
         ['hs-rank', `${i + 1}.`],
-        ['hs-initials', entry.initials.padEnd(INITIALS_LENGTH, ' ')],
+        ['hs-initials', entry.initials.padEnd(INITIALS_LENGTH, ' ')],
         ['hs-score', formatScore(entry.score)]
       ]) {
         const cell = document.createElement('span');
@@ -74,8 +76,11 @@ export function initScoreboard(
 
   function commit(focusResult: boolean) {
     if (pendingScore === null) return;
-    const initials = input && input.value.trim() ? input.value : loadInitials();
-    const rank = submitScore(gameId, initials, pendingScore);
+    const initials = sanitizeInitials(
+      input && input.value.trim() ? input.value : loadInitials()
+    );
+    const score = pendingScore;
+    const rank = submitScore(gameId!, initials, score);
     pendingScore = null;
     saveInitials(initials);
     if (form) form.hidden = true;
@@ -84,8 +89,7 @@ export function initScoreboard(
       const row = list?.querySelector<HTMLElement>('.hs-current');
       row?.scrollIntoView({ block: 'nearest' });
     }
-    const saved = rank > 0 ? loadTable(gameId)[rank - 1] : null;
-    if (saved) options.onSave?.(saved, rank);
+    if (rank > 0) options.onSave?.({ initials, score }, rank);
   }
 
   if (form) {
@@ -99,32 +103,43 @@ export function initScoreboard(
     // Keep game-wide key handlers (WASD, arrows, pause) away from typing.
     input.addEventListener('keydown', e => e.stopPropagation());
     input.addEventListener('input', () => {
-      const pos = input.selectionStart;
-      input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (pos !== null) input.setSelectionRange(pos, pos);
+      const raw = input.value;
+      const pos = input.selectionStart ?? raw.length;
+      // Restore the caret relative to what survived the filter, so a
+      // rejected character doesn't shove it one slot to the right.
+      const caret = filterInitials(raw.slice(0, pos)).length;
+      input.value = filterInitials(raw);
+      input.setSelectionRange(caret, caret);
     });
   }
+
+  // A pending score must survive leaving the page from the game-over screen
+  // (tab close, back button, or an Astro ClientRouter navigation).
+  const commitPending = () => commit(false);
+  window.addEventListener('pagehide', commitPending);
+  document.addEventListener('astro:before-swap', commitPending);
 
   return {
     show(score: number) {
       pendingScore = null;
       panel.hidden = false;
-      if (qualifies(loadTable(gameId), score) && form && input) {
+      const table = loadTable(gameId!);
+      if (qualifies(table, score) && form && input) {
         pendingScore = score;
         form.hidden = false;
         input.value = loadInitials();
-        renderTable();
+        renderTable(0, table);
         input.focus();
         input.select();
       } else {
         if (form) form.hidden = true;
-        renderTable();
+        renderTable(0, table);
       }
     },
     hide() {
       commit(false);
       panel.hidden = true;
     },
-    top: () => topEntry(gameId)
+    top: () => topEntry(gameId!)
   };
 }

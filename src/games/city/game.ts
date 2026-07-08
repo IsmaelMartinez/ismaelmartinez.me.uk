@@ -323,7 +323,7 @@ export function initCityGame(): void {
           refreshDerivedState();
         }
       }
-      if (Math.random() < ignitionChance(tiles)) {
+      if (Math.random() < ignitionChance(tiles, fireCover)) {
         const fire = startFire(tiles, fireCover, Math.random);
         if (fire && !fires.some(f => f.idx === fire.idx)) {
           fires.push(fire);

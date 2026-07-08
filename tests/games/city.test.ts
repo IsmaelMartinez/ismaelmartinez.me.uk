@@ -298,9 +298,13 @@ describe('city disasters', () => {
     expect(isFlammable({ type: 'water', level: 0 })).toBe(false);
   });
 
-  it('scales ignition chance with flammable tiles, capped', () => {
-    expect(ignitionChance(createCity())).toBe(0);
-    expect(ignitionChance(firePlayground())).toBeCloseTo(3 * 0.0004);
+  it('scales ignition chance with flammable tiles, halved under fire cover', () => {
+    const empty = createCity();
+    expect(ignitionChance(empty, empty.map(() => false))).toBe(0);
+    const tiles = firePlayground();
+    // ind level 2 weighs 3, res level 1 and tree weigh 1 each
+    expect(ignitionChance(tiles, tiles.map(() => false))).toBeCloseTo(5 * 0.0004);
+    expect(ignitionChance(tiles, tiles.map(() => true))).toBeCloseTo(2.5 * 0.0004);
   });
 
   it('starts fires on flammable tiles, burning shorter under fire cover', () => {
@@ -335,6 +339,19 @@ describe('city disasters', () => {
     expect(fires).toHaveLength(0);
     expect(tiles[cityIdx(6, 5)].type).toBe('rubble');
     expect(tiles[cityIdx(5, 6)].type).toBe('empty');
+  });
+
+  it('dampens spread when either side of the boundary has fire cover', () => {
+    const tiles = firePlayground();
+    // Only the burning source tile is covered; neighbours are not
+    const cover = tiles.map((_, i) => i === cityIdx(5, 5));
+    // 0.15 sits between SPREAD_CHANCE_COVERED (0.08) and SPREAD_CHANCE (0.22):
+    // without source-side dampening the fire would jump
+    const result = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 5 }], cover, () => 0.15);
+    expect(result.spread).toEqual([]);
+    const uncovered = tiles.map(() => false);
+    const unprotected = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 5 }], uncovered, () => 0.15);
+    expect(unprotected.spread.length).toBeGreaterThan(0);
   });
 
   it('never spreads when random rolls high, and drops bulldozed fires', () => {

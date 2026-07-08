@@ -25,31 +25,46 @@ export function isFlammable(tile: CityTile): boolean {
 }
 
 /**
- * Chance per sim tick that a new fire breaks out somewhere. Scales with how
- * much burnable city exists, so sleepy hamlets stay safe.
+ * Ignition risk weight of a single tile: industry is three times as
+ * fire-prone as anything else, and fire-station coverage halves the risk.
  */
-export function ignitionChance(tiles: CityTile[]): number {
-  const flammable = tiles.reduce((n, tile) => n + (isFlammable(tile) ? 1 : 0), 0);
-  return Math.min(0.02, flammable * 0.0004);
+export function ignitionWeight(tile: CityTile, covered: boolean): number {
+  if (!isFlammable(tile)) return 0;
+  const base = tile.type === 'ind' ? 3 : 1;
+  return covered ? base * 0.5 : base;
 }
 
 /**
- * Picks a tile for a new fire — industry is three times as fire-prone as
- * anything else. Returns null when nothing can burn.
+ * Chance per sim tick that a new fire breaks out somewhere. Scales with how
+ * much burnable (and how well-protected) city exists, so sleepy hamlets
+ * stay safe and fire stations genuinely reduce outbreaks.
+ */
+export function ignitionChance(tiles: CityTile[], fireCover: boolean[]): number {
+  let total = 0;
+  tiles.forEach((tile, i) => (total += ignitionWeight(tile, fireCover[i])));
+  return Math.min(0.02, total * 0.0004);
+}
+
+/**
+ * Picks a tile for a new fire, proportional to each tile's ignition weight.
+ * Returns null when nothing can burn.
  */
 export function startFire(
   tiles: CityTile[],
   fireCover: boolean[],
   random: () => number = Math.random
 ): Fire | null {
-  const weighted: number[] = [];
-  tiles.forEach((tile, i) => {
-    if (!isFlammable(tile)) return;
-    const weight = tile.type === 'ind' ? 3 : 1;
-    for (let k = 0; k < weight; k++) weighted.push(i);
-  });
-  if (!weighted.length) return null;
-  const idx = weighted[Math.floor(random() * weighted.length)];
+  const weights = tiles.map((tile, i) => ignitionWeight(tile, fireCover[i]));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return null;
+  let roll = random() * total;
+  let idx = -1;
+  for (let i = 0; i < weights.length; i++) {
+    if (weights[i] <= 0) continue;
+    idx = i;
+    roll -= weights[i];
+    if (roll < 0) break;
+  }
   return { idx, ticks: fireCover[idx] ? BURN_TICKS_COVERED : BURN_TICKS };
 }
 
@@ -71,7 +86,9 @@ export function stepFires(
   for (const fire of alive) {
     for (const n of gridNeighbours(fire.idx, CITY_W, CITY_H)) {
       if (burning.has(n) || !isFlammable(tiles[n])) continue;
-      if (random() < (fireCover[n] ? SPREAD_CHANCE_COVERED : SPREAD_CHANCE)) {
+      // Coverage on either side of the boundary dampens the jump
+      const dampened = fireCover[fire.idx] || fireCover[n];
+      if (random() < (dampened ? SPREAD_CHANCE_COVERED : SPREAD_CHANCE)) {
         burning.add(n);
         spread.push(n);
       }

@@ -1,0 +1,59 @@
+---
+title: "Código abierto asistido por IA: el flujo de trabajo"
+description: "El flujo de trabajo práctico detrás del mantenimiento de teams-for-linux con IA: desde CLAUDE.md hasta investigación, actualizaciones de dependencias, implementación de funcionalidades y controles de calidad."
+publishedDate: 2026-03-11
+tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
+draft: true
+---
+
+## De los principios a la práctica
+
+El [artículo complementario](/es/articles/ai-assisted-open-source-maintenance) cubrió qué cambia la IA al mantener un proyecto de código abierto como teams-for-linux. Este es el flujo de trabajo del día a día. El patrón central siempre es el mismo: yo decido, la IA ejecuta, yo reviso. Nada de esto es teórico: es lo que me ha quedado tras meses de iteración, y sigue evolucionando.
+
+## Documentación
+
+Cada interacción empieza con CLAUDE.md (\*) y buena documentación. Ya expliqué el porqué de CLAUDE.md, pero por sí solo no basta.
+
+Este proyecto tiene varios niveles de documentación. Primero, los documentos técnicos, como los ADRs para las decisiones arquitectónicas. Me ayudan a no olvidar el porqué de las cosas: por qué elegí esta librería en vez de aquella, o por qué algo no funcionó y qué probamos.
+
+Luego están los documentos para el contribuidor. El clásico CONTRIBUTING.md, al que ahora le puedo quitar parte de la paja técnica, que ya vive en esos otros documentos.
+
+También tengo otra categoría para la investigación, para esos proyectos o partes que requieren una fase de implementación. A veces incluso subo los planes de implementación, aunque estos dos tipos de documentos los trato de forma más efímera: una vez que la fase o el proyecto se acaba, actualizo los demás documentos o creo nuevos, y los borro. Si necesito esos detalles, siempre puedo mirar el historial de git.
+
+Y, por último, están los documentos para los usuarios. Una documentación buena y concisa es esencial cuando mantienes cientos de miles de usuarios. No quiero que la gente pierda el tiempo abriendo issues en el repositorio cuando hay una opción de configuración que resuelve su problema.
+
+Todos estos documentos están vivos, o lo intento, y van mejorando poco a poco con cada iteración. Quizá sea la parte de la que menos se habla, pero es donde la IA ayuda más y con menos esfuerzo, y de la que, en mi opinión, más depende. Mi consejo es que vayan al grano: concisos y centrados en lo actual. Así no te lías tú ni lías a la IA.
+
+## Investigar antes de programar
+
+Con esta base, lo primero que hago siempre es investigar. La IA es muy buena buscando y reuniendo información, sobre todo si está bien estructurada (y no, no necesitas un RAG para eso). Todas las issues y peticiones las paso por la IA para ver si ya lo hemos resuelto o probado. Muchas veces hay algo al respecto, y eso me ahorra un montón de tiempo: con la IA analizo en minutos lo que tardaría días (y que, si no, acabaría dejando para luego, o resolviendo de memoria o a ojo).
+
+Si entonces creo que hay un bug o que se puede añadir una funcionalidad, hago una investigación. Es importante centrar siempre las primeras iteraciones en investigar, recoger datos y evaluar hipótesis. Todo esto lo delego en el agente de IA. Describo el problema ("compartir pantalla falla en Wayland con la última actualización de Electron") y el agente investiga el código relevante, el registro de cambios y las issues de upstream, y me trae un informe. Lo corrijo si hace falta y, para lo que no tengo claro, le pido un prototipo desechable que pruebe la hipótesis.
+
+A veces es una sola iteración; otras, varias sesiones. Para eso tengo también documentos de investigación en el repositorio. Cuando un enfoque parece viable, le pido al agente que escriba un plan de acción. Lo reviso y abro otra conversación para reducir riesgos y ganar claridad. Solo entonces empieza la implementación.
+
+Para lo sencillo, esa conversación se acaba enseguida; en algunos casos, como actualizar dependencias, el proceso es casi automático y no hacen falta prototipos ni nada de eso. Para lo complejo puede alargarse varias sesiones, así que el documento de investigación se divide en fases. Pocas veces las implementamos todas: que la IA pueda generarlas sin esfuerzo no significa que las necesites, y eso es complejidad regalada. El proceso se adapta; lo que no cambia es que entiendo qué está pasando antes de comprometerme con un enfoque.
+
+## Funcionalidades y el hábito de contexto limpio
+
+Cuando una funcionalidad recibe luz verde, el flujo es siempre el mismo: una especificación clara que incluye lo que *no* hay que hacer, implementación incremental en trozos revisables, tests escritos en paralelo (la IA sigue los patrones documentados en CLAUDE.md) y una lectura completa de cada diff. La IA produce buen código casi siempre, pero "casi siempre" no basta para miles de usuarios.
+
+Cuando el trabajo termina, el resultado se convierte en un ADR y la investigación que llevó hasta él se borra. Git recuerda los callejones sin salida; el directorio de trabajo no tiene por qué. Si guardas documentos de investigación viejos, suelen confundir a la IA más que ayudarla: se pierde menos si le das lo actual y dejas los detalles históricos en el historial de git.
+
+## Mantener el ritmo
+
+Las actualizaciones de dependencias son el tipo de sesión más frecuente, pero no el único. Las sesiones de seguridad evalúan y aplican los parches de los avisos. Las pasadas de documentación actualizan los README y refrescan CLAUDE.md con los invariantes recién descubiertos. Las sesiones de métricas miran las tendencias de issues, la actividad de los contribuidores, los tiempos de compilación o los cambios en la cobertura de tests. Cada una sigue la misma forma: yo fijo el alcance, la IA ejecuta, yo reviso.
+
+La más difícil de todas es seguirle el ritmo a la aplicación web de Teams, que cambia sin previo aviso. Programar a la defensiva contra esos cambios es de lo más complicado del proyecto. Cuando algo se rompe, el agente me ayuda a clasificarlo: ¿es una regresión nuestra o un cambio de upstream? Luego investiga las diferencias en el DOM, en la red o en las respuestas de la API. Algunos cambios se pueden sortear; otros no. Reconocer cuándo un problema no tiene solución es una decisión humana, y la respuesta a los usuarios es cosa mía.
+
+Nada se publica sin pasar los controles de siempre: CI tiene que estar en verde sin excepciones (el linter, la comprobación de tipos y toda la batería de tests), cada commit asistido por IA lleva su etiqueta `Co-authored-by`, cada diff se lee a mano, y las notas de la versión se redactan para explicar el *porqué* en vez de listar archivos.
+
+Cuando ya has puesto suficientes restricciones alrededor de la IA (CLAUDE.md, el ciclo de investigar y luego prototipar, la revisión manual, los controles de CI), dejas de usar una herramienta y pasas a dirigir un sistema. El patrón es el mismo que aplicarías a cualquier software que crece: construyes confianza con datos, añades solidez según avanzas y simplificas o quitas lo que deja de ganarse su sitio. La diferencia es que aquí los ciclos van mucho más rápido. Trátalo como a un equipo.
+
+## Reflexión final
+
+Este flujo de trabajo no es una plantilla. Es lo que me funciona a mí en un proyecto concreto con un mantenedor concreto. Tu versión será distinta. Pero el patrón de fondo es portable: un humano al principio, un humano al final, la herramienta en medio. Sáltate cualquiera de esos dos extremos y o no estás aprovechando bien la IA o no estás manteniendo la calidad que tus usuarios merecen.
+
+El [artículo de principios](/es/articles/ai-assisted-open-source-maintenance) cubrió el porqué. Este artículo cubrió el cómo. Juntos son la imagen completa.
+
+(\*) Nota: otros sistemas usan AGENTS.md y, si alguien de Anthropic lee esto, creo que ya es hora de estandarizar con los demás.

@@ -1,0 +1,49 @@
+---
+title: "AI-Assisted Open Source: From Bot to Skill"
+description: "I built a serverless bot to triage teams-for-linux issues, ran it for months, and dismantled most of it on purpose: why I did it, and which piece earned its place."
+publishedDate: 2026-03-25
+tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
+draft: true
+---
+
+## The Bot I Built and Then Took Apart
+
+In [the first article](/en/articles/ai-assisted-open-source-maintenance) I mentioned in passing a bot I built and later retired. This is its story. I put it together to help me triage teams-for-linux issues. It ended up running serverless on Google Cloud, with embeddings over the issue history and the documentation, and for a few months it did more or less what I asked of it. Then I took most of it apart. The interesting part wasn't building it, it was deciding what to remove.
+
+## What It Grew Into
+
+The bot started small and out of curiosity. Bit by bit it grew. A first phase read the issue against the bug template and flagged what was missing (reproduction steps, logs), with no AI involved. Another searched the documentation for known solutions. Another looked for similar issues in the history. And for feature requests, it gathered the relevant context: roadmap, ADRs, research documents. Since this project depends on Electron, I added the issues from there to give it more context. So it was worth fitting it with a RAG and feeding in the new issues as they came.
+
+Since I didn't trust letting it loose near real people, I kept adding scaffolding. First in silent mode, storing everything in a database and a dashboard so I could watch it without it publishing anything. Then some shadow repos that acted as an approval gate: the bot left its draft there and I promoted it or discarded it. On top of that, two safety layers (a validator and a second LLM reviewing the first) and an escalation to me if it went round in circles without progressing. And at first it could even promote responses to the main repo and reply to issues.
+
+And, well, I let myself add a few more features: an MCP, skills (one for installing it and one for using it), a github bot, an action... swagger specs, disaster recovery... and the good thing is they complemented each other well. I even had an a2a spec for repo-butler (we'll talk about that another day, but the butler partly killed it, like in an Agatha Christie novel).
+
+I actually left it running loose for a week and some of it landed, but it was a "meh" sort of thing. Works, but gives you headaches. So I changed the architecture and decided to use Google Cloud serverless and Neon DB, because... because not. After all, it's just a few prompts here and there, and even dashboards, so I get better visibility. And honestly, I liked it: it worked well and was starting to get pretty accurate. I added OTel for more observability, and an automatic issue-reporting system. It used an LLM to review what was generated.
+
+## Why It Stopped Paying Off
+
+It seemed to be improving, but very slowly, and something was starting not to add up. So I did what I reckon is the best thing: I left it in the drawer for a few days and forgot about it. A few weeks later, having had it collecting data and generating issue reports in the shadow repo, I decided to take another look and work out what was going on.
+
+I'd clearly overdone it, though these are learning exercises. I'm telling you, it all fit together, but like a system that's been around a long time, it had things that work but that you don't really need.
+
+The shadow repos became a pain to maintain. Cloud Run sometimes took a while to start, and that cold start added latency. There were quite a few false positives, and some came from the Electron side, different versions that look alike in the symptoms but don't share the cause. I also tried other bots to find similar issues and they threw too many false positives. It got too complicated for what it gave back. A Death Star, the kind I talk about in the other articles.
+
+The idea from the start was to let it grow organically, and maybe one day I'll revive it, but I'd run out of things to build to make it better. It was dead easy to add features, but when the next thing on the list was home automation, I figured I'd gone a couple of villages too far. The exercise had lasted a few months, but it had piled up the complexity you'd normally pile up over years.
+
+## The Human Part You Couldn't Automate
+
+But the underlying reason wasn't technical. When we created the bot, it could promote things to the main repo and reply to issues. That created bad feeling. People didn't like a bot trying to answer their issues, even when in many cases it did it better or faster than me. I couldn't sell it, and maybe there was no way to sell it.
+
+So I brought it back to run it myself. I verify every draft it creates, every review it does, and I steer it. That part, the judgement and the dealing with people, couldn't be automated, or at least not now. It's the same pattern as the other two articles, I decide, the AI executes, I review, applied to triage. The autonomous bot ended up being a skill that I drive.
+
+## The One Thing That Earned Its Place
+
+Of all that apparatus, the one thing that proved it earned its place was the embeddings. Having the issue history vectorised and linked really does help find related issues that would otherwise slip past me. That's the piece I'm keeping.
+
+Right now I'm in the middle of moving those embeddings out of the data repo and into something more local, with the config or information inside teams-for-linux itself, driven from the skill. Will it hold? I don't know. Only time will tell.
+
+## Closing Thought
+
+I automated the building of triage and found that what was worth keeping wasn't the piece that decided for me, but the one that helped me decide. The bot didn't fail: it taught me which half of the problem was really mine.
+
+The AI searches, compares, and summarises. I decide, verify, and respond. The same as in [the principles article](/en/articles/ai-assisted-open-source-maintenance) and [the workflow one](/en/articles/ai-assisted-open-source-workflow), and as I wrote in [The AI Automation Trap](/en/articles/the-ai-automation-trap): AI removed the building constraint, not the deciding one.

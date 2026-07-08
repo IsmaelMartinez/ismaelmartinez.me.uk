@@ -1,0 +1,55 @@
+---
+title: "Código abierto asistido por IA: del bot al skill"
+description: "Construí un bot serverless para triar los issues de teams-for-linux, lo tuve funcionando meses y desmonté casi todo a propósito: por qué lo hice y qué pieza mereció quedarse."
+publishedDate: 2026-03-25
+tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
+draft: true
+---
+
+## El bot que construí y luego desmonté
+
+En [el primer artículo](/es/articles/ai-assisted-open-source-maintenance) mencioné de pasada un bot que construí y luego retiré. Esta es su historia. Lo monté para ayudarme a triar los issues de teams-for-linux. Acabó corriendo en serverless en Google Cloud, con embeddings sobre el historial de issues y la documentación, y durante unos meses hizo más o menos lo que le pedí. Después desmonté casi todo. La parte interesante no fue construirlo, fue decidir qué quitar.
+
+## Lo que llegó a ser
+
+El bot empezó pequeño y por curiosidad. Poco a poco fue creciendo. Una primera fase leía el issue contra la plantilla de bug y marcaba lo que faltaba (pasos de reproducción, logs), sin IA de por medio. Otra buscaba en la documentación soluciones ya conocidas. Otra buscaba issues parecidos en el historial. Y para las peticiones de funcionalidades, reunía el contexto relevante: roadmap, ADRs, documentos de research. Como este proyecto depende de Electron, le añadí las issues de allí para darle más contexto. Así que merecía la pena meterle un RAG e ir añadiendo las nuevas issues.
+
+Como no me fiaba de soltarlo cerca de gente real, le fui poniendo andamios. Primero en modo silencioso, guardando todo en una base de datos y un dashboard para mirarlo sin que publicara nada. Luego unos shadow repos que hacían de puerta de aprobación: el bot dejaba su borrador ahí y yo lo promovía o lo descartaba. Encima, dos capas de seguridad (un validador y un segundo LLM revisando al primero) y una escalada hacia mí si daba demasiadas vueltas sin avanzar. Y al principio podía incluso promover respuestas al repo principal y contestar a los issues.
+
+Y bueno, me dejé unas cuantas otras features: un MCP, skills (uno de instalación y otro de uso), github bot, action... swagger specs, disaster recovery... y lo bueno es que se complementaban bien. Tenía hasta una especificación a2a para el repo-butler (de ese hablamos otro día, pero en parte el butler lo mató, como en una novela de Agatha Christie).
+
+De hecho, lo dejé ahí suelto una semana y la verdad alguna daba, pero era un meh de esos. Que funciona pero da dolores de cabeza. Así que cambié la arquitectura, y decidí usar Google Cloud serverless y Neon DB, porque... porque no. Si total son unos prompts para aquí y para allá y hasta dashboards, así tengo mejor visibilidad. Y la verdad, me gustaba, funcionaba bien y estaba empezando a ser bastante acertado. Le añadí OTel para que me diera más observabilidad, y un sistema de reporte de issues automático. Usaba un LLM para revisar lo generado.
+
+## Por qué dejó de compensar
+
+Parecía que mejoraba, pero muy poco a poco, y algo empezaba a no cuadrar. Así que hice lo que creo que es lo mejor: dejarlo en el cajón unos días y olvidarme de él. Al cabo de unas semanas, que lo tuve recogiendo datos y generando issue reports en el shadow repo, decidí volver a echarle un vistazo y analizar lo que estaba pasando.
+
+Claramente me había pasado, aunque estos son ejercicios de aprendizaje. Te digo que todo encajaba, pero como un sistema que lleva mucho tiempo, tiene cosas que funcionan pero que realmente no se necesitan.
+
+Los shadow repos se volvieron un incordio de mantener. Cloud Run a veces tardaba en arrancar, y ese arranque en frío añadía una latencia. Había bastantes falsos positivos, y parte venían del lado de Electron, versiones distintas que se parecen en los síntomas pero no comparten la causa. Probé además otros bots para encontrar issues parecidos y daban demasiados falsos positivos. Se volvió demasiado complicado para lo que devolvía. Una Estrella de la Muerte, de esas de las que hablo en los otros artículos.
+
+Desde el principio la idea era hacerlo crecer orgánicamente, y quizá hasta un día lo resucite, pero me había quedado sin cosas que construir para hacerlo mejor. Era muy fácil añadir features, pero cuando lo siguiente era home automation pensé que me había pasado un par de pueblos. El ejercicio fue de unos meses, pero había acumulado la complejidad que normalmente se acumula en años.
+
+## La parte humana que no se podía automatizar
+
+Pero el motivo de fondo no fue técnico. Cuando creamos el bot, podía promover cosas al repo principal y responder a los issues. Eso generó mal ambiente. A la gente no le gustaba que un bot intentara contestar a sus issues, aunque en muchos casos lo hiciera mejor o más rápido que yo. No supe venderlo, y puede que no hubiera forma de venderlo.
+
+Así que lo traje de vuelta para manejarlo yo. Yo verifico cada borrador que crea, cada review que hace, y lo guío. Esa parte, el criterio y el trato con la gente, no se podía automatizar, o al menos no ahora. Es el mismo patrón de los otros dos artículos, yo decido, la IA ejecuta, yo reviso, aplicado al triaje. El bot autónomo acabó siendo un skill que conduzco yo.
+
+## Rehacerlo como un skill
+
+Así que lo rehíce, esta vez como un skill. Empezar más sencillo. Y la verdad, en un par de tardes entrené el skill con toda la información que había acumulado.
+
+El skill no necesita los shadow repos, porque lo llamo yo cuando quiero. Quizá algún día se los dé a un agente, pero de momento no lo necesito. Un skill sin infraestructura detrás no tiene problemas de latencia, y el comando gh issue list tampoco funciona tan mal y da mejores resultados. Y esto se aplica también a las issues de Electron.
+
+## Lo único que se ganó su sitio
+
+De todo aquel aparato, lo único que demostró ganarse su sitio fueron los embeddings. Tener el historial de issues vectorizado y enlazado sí ayuda a encontrar issues relacionados que de otra forma se me escaparían. Esa es la pieza que conservo.
+
+Ahora estoy en la transición de sacar esos embeddings del repositorio y moverlos a algo más local, con la configuración o la información dentro del propio teams-for-linux, conducido desde el skill. ¿Aguantará? No lo sé. Eso solo se ve con el tiempo.
+
+## Reflexión final
+
+Automaticé la parte de construir el triaje y descubrí que lo que valía la pena no era la pieza que decidía por mí, sino la que me ayudaba a decidir a mí. El bot no fracasó: me enseñó qué mitad del problema era de verdad mía.
+
+La IA busca, compara y resume. Yo decido, verifico y respondo. Igual que en [el artículo de principios](/es/articles/ai-assisted-open-source-maintenance) y en [el del flujo de trabajo](/es/articles/ai-assisted-open-source-workflow), y como escribí en [La trampa de la automatización con IA](/es/articles/the-ai-automation-trap): la IA quitó la restricción de construir, no la de decidir.

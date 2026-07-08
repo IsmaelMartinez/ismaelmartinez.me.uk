@@ -64,12 +64,14 @@ export function initScoreboard(
   const empty = panel.querySelector<HTMLElement>('.hs-empty');
 
   let pendingScore: number | null = null;
-  // Score of this run's provisional entry already written to the table.
-  let stashedScore: number | null = null;
+  // This run's provisional entry already written to the table — kept whole
+  // (not just the score) so it is still found if the saved initials change
+  // in the meantime, e.g. via a commit in another tab.
+  let stashed: ScoreEntry | null = null;
 
   /** Lifts this run's provisional entry back out of a loaded table. */
   function unstash(table: ScoreEntry[]): ScoreEntry[] {
-    return stashedScore === null ? table : removeEntry(table, loadInitials(), stashedScore);
+    return stashed === null ? table : removeEntry(table, stashed.initials, stashed.score);
   }
 
   function renderTable(highlightRank = 0, table = loadTable(gameId!)) {
@@ -148,19 +150,20 @@ export function initScoreboard(
 
   return {
     stash(score: number) {
-      if (stashedScore !== null && score <= stashedScore) return;
+      if (stashed !== null && score <= stashed.score) return;
       const table = unstash(loadTable(gameId!));
       if (!qualifies(table, score)) return;
-      saveTable(gameId!, insertScore(table, loadInitials(), score).table);
-      stashedScore = score;
+      const initials = loadInitials();
+      saveTable(gameId!, insertScore(table, initials, score).table);
+      stashed = { initials, score };
     },
     show(score: number) {
       pendingScore = null;
       panel.hidden = false;
       // The final entry replaces any provisional one from this run.
       const table = unstash(loadTable(gameId!));
-      if (stashedScore !== null) saveTable(gameId!, table);
-      stashedScore = null;
+      if (stashed !== null) saveTable(gameId!, table);
+      stashed = null;
       if (qualifies(table, score) && form && input) {
         pendingScore = score;
         form.hidden = false;
@@ -177,7 +180,7 @@ export function initScoreboard(
       commit(false);
       // A provisional entry from the ending run stays in the table as-is;
       // the next run must not claim (and later replace) it.
-      stashedScore = null;
+      stashed = null;
       panel.hidden = true;
     },
     top: () => topEntry(gameId!)

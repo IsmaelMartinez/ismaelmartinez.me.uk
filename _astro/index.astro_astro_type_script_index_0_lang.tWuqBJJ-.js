@@ -1,0 +1,1 @@
+import{t as r,f as o}from"./highscores.CPx9ptGU.js";function a(){const s=document.querySelectorAll(".best-value[data-game-id]");for(const t of s){const e=t.dataset.gameId?r(t.dataset.gameId):null;t.textContent=e?`${e.initials} ${o(e.score)}`:o(0)}}a();document.addEventListener("astro:after-swap",a);

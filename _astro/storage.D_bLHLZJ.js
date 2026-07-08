@@ -1,1 +1,0 @@
-function n(t){try{return parseInt(localStorage.getItem(t)||"0",10)||0}catch{return 0}}function o(t,r){try{localStorage.setItem(t,r.toString())}catch{}}function a(t,r){const e=n(t);return r>e?(o(t,r),r):e}export{n as l,a as r,o as s};

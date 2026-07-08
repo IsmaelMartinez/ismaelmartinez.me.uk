@@ -90,7 +90,8 @@ export function initScoreboard(
       }
       list.appendChild(row);
     });
-    if (empty) empty.hidden = table.length > 0;
+    // The "no scores yet" nudge makes no sense under an open initials form.
+    if (empty) empty.hidden = table.length > 0 || !(form?.hidden ?? true);
   }
 
   function commit(focusResult: boolean) {
@@ -133,10 +134,17 @@ export function initScoreboard(
   }
 
   // A pending score must survive leaving the page from the game-over screen
-  // (tab close, back button, or an Astro ClientRouter navigation).
+  // (tab close, back button, or an Astro ClientRouter navigation). A swap
+  // replaces this board's DOM, so it also retires both listeners — otherwise
+  // each visit to a game would leave a stale closure behind.
   const commitPending = () => commit(false);
+  const onSwap = () => {
+    commitPending();
+    document.removeEventListener('astro:before-swap', onSwap);
+    window.removeEventListener('pagehide', commitPending);
+  };
   window.addEventListener('pagehide', commitPending);
-  document.addEventListener('astro:before-swap', commitPending);
+  document.addEventListener('astro:before-swap', onSwap);
 
   return {
     stash(score: number) {

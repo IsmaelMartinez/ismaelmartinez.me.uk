@@ -144,8 +144,12 @@ const tools = [
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initCityGame no-ops on pages without a fresh game root.
   import { initCityGame } from '../../../games/city';
   initCityGame();
+  document.addEventListener('astro:after-swap', initCityGame);
 </script>
 
 <style>

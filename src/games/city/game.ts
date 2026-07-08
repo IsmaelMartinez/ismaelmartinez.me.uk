@@ -1,9 +1,9 @@
 /**
  * Microcity — a pocket SimCity-style zoning sim.
  *
- * Pure rules live in tiles.ts / simulation.ts / budget.ts; this module owns
- * DOM wiring, the simulation loop, and canvas rendering. It expects the
- * markup defined in src/pages/[lang]/fun/city.astro.
+ * Pure rules live in tiles.ts / simulation.ts / budget.ts / terrain.ts /
+ * disasters.ts; this module owns DOM wiring, the simulation loop, and canvas
+ * rendering. It expects the markup defined in src/pages/[lang]/fun/city.astro.
  */
 import {
   createGameLoop,
@@ -15,29 +15,59 @@ import {
   strokeTile,
   drawBlock,
   forEachTileBackToFront,
+  rotatedDims,
+  rotateTile,
+  unrotateTile,
+  rotatePoint,
   createGameAudio,
   wireSoundButton,
-  type IsoView
+  type IsoView,
+  type Rotation
 } from '../engine';
 import {
   CITY_W,
   CITY_H,
-  TOOL_COSTS,
+  cityIdx,
   createCity,
   canBuild,
+  buildCost,
   build,
   isZone,
+  isRoad,
   type CityTile,
   type CityTool,
   type ZoneType
 } from './tiles';
-import { computePowered, roadAdjacent, cityStats, computeDemand, growthStep } from './simulation';
+import { generateTerrain } from './terrain';
+import {
+  computePowered,
+  computeFireCover,
+  roadAdjacent,
+  cityStats,
+  computeDemand,
+  growthStep
+} from './simulation';
 import { monthlyIncome, monthlyExpenses } from './budget';
 import { targetCarCount, spawnCar, stepCar, type Car } from './traffic';
+import {
+  isFlammable,
+  ignitionChance,
+  startFire,
+  stepFires,
+  rollEvent,
+  sumDemandModifiers,
+  type Fire,
+  type ActiveEvent,
+  type CityEventId
+} from './disasters';
 
-const VIEW: IsoView = { halfW: 20, halfH: 10, originX: CITY_H * 20, originY: 60 };
-const CANVAS_W = (CITY_W + CITY_H) * VIEW.halfW;
-const CANVAS_H = (CITY_W + CITY_H) * VIEW.halfH + VIEW.originY + 10;
+const HALF_W = 20;
+const HALF_H = 10;
+const ORIGIN_Y = 60;
+// Quarter-turn rotations swap the grid's width and height, but W+H — and so
+// the projected canvas size — stays put.
+const CANVAS_W = (CITY_W + CITY_H) * HALF_W;
+const CANVAS_H = (CITY_W + CITY_H) * HALF_H + ORIGIN_Y + 10;
 const START_MONEY = 2500;
 const MONTH_LENGTH = 20; // seconds of game time
 const GROWTH_INTERVAL = 1.2;
@@ -62,6 +92,11 @@ const ZONE_BLOCK: Record<ZoneType, string> = {
 };
 const LEVEL_FONT = [0, 12, 15, 18];
 const zoneHeight = (level: number) => 6 + level * 7;
+const buildingHeight = (tile: CityTile): number => {
+  if (tile.type === 'power') return 22;
+  if (tile.type === 'school' || tile.type === 'firehouse') return 14;
+  return isZone(tile.type) ? zoneHeight(tile.level) : 0;
+};
 
 type Phase = 'idle' | 'play' | 'over';
 
@@ -100,7 +135,15 @@ export function initCityGame(): void {
     income: root.dataset.tIncome || 'Taxes',
     expenses: root.dataset.tExpenses || 'Upkeep',
     cantAfford: root.dataset.tCantAfford || 'Not enough funds!',
-    milestone: root.dataset.tMilestone || 'Population'
+    milestone: root.dataset.tMilestone || 'Population',
+    fireAlert: root.dataset.tFireAlert || 'Fire has broken out!',
+    events: {
+      grant: root.dataset.tEventGrant || 'Government grant awarded',
+      protest: root.dataset.tEventProtest || 'Tax protest at the town hall',
+      festival: root.dataset.tEventFestival || 'Street festival draws crowds',
+      strike: root.dataset.tEventStrike || 'Factory workers on strike',
+      boom: root.dataset.tEventBoom || 'Business is booming'
+    } satisfies Record<CityEventId, string>
   };
 
   canvas.width = CANVAS_W;
@@ -128,6 +171,13 @@ export function initCityGame(): void {
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
 
+  const makeView = (rot: Rotation): IsoView => ({
+    halfW: HALF_W,
+    halfH: HALF_H,
+    originX: rotatedDims(CITY_W, CITY_H, rot).h * HALF_W,
+    originY: ORIGIN_Y
+  });
+
   let tiles: CityTile[] = createCity();
   let phase: Phase = 'idle';
   let money = START_MONEY;
@@ -139,20 +189,32 @@ export function initCityGame(): void {
   let selectedTool: CityTool = 'road';
   let speedMult = 1;
   let hoverTile = -1;
+  let armedTile = -1;
   let clock = 0;
+  let rotation: Rotation = 0;
+  let VIEW = makeView(rotation);
   let cars: Car[] = [];
+  let fires: Fire[] = [];
+  let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
   let record = loadScore(RECORD_KEY);
   let powered = computePowered(tiles);
+  let fireCover = computeFireCover(tiles);
   let stats = cityStats(tiles);
   let demand = computeDemand(stats);
 
   recordEl.textContent = record.toString();
 
+  /** Projects fractional world-tile coordinates through the current rotation. */
+  function projectWorld(tx: number, ty: number): { x: number; y: number } {
+    const p = rotatePoint(tx, ty, CITY_W, CITY_H, rotation);
+    return isoProject(VIEW, p.tx, p.ty);
+  }
+
   function addFloater(i: number, text: string, color: string) {
-    const p = isoProject(VIEW, (i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.5);
-    floaters.push({ x: p.x, y: p.y - zoneHeight(tiles[i].level) - 8, text, color, life: 1 });
+    const p = projectWorld((i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.5);
+    floaters.push({ x: p.x, y: p.y - buildingHeight(tiles[i]) - 8, text, color, life: 1 });
   }
 
   function showToast(text: string) {
@@ -166,12 +228,14 @@ export function initCityGame(): void {
 
   function refreshDerivedState() {
     powered = computePowered(tiles);
+    fireCover = computeFireCover(tiles);
     stats = cityStats(tiles);
-    demand = computeDemand(stats);
+    demand = computeDemand(stats, sumDemandModifiers(activeEvents));
   }
 
   function resetCity() {
     tiles = createCity();
+    generateTerrain(tiles);
     money = START_MONEY;
     month = 1;
     monthTimer = 0;
@@ -180,6 +244,8 @@ export function initCityGame(): void {
     milestoneIdx = 0;
     speedMult = 1;
     cars = [];
+    fires = [];
+    activeEvents = [];
     smoke = [];
     floaters = [];
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
@@ -222,13 +288,15 @@ export function initCityGame(): void {
       if (car) cars.push(car);
     }
 
-    // Power plants puff smoke while the city runs
+    // Power plants puff smoke while the city runs; fires belch it
+    const burning = new Set(fires.map(f => f.idx));
     tiles.forEach((tile, i) => {
-      if (tile.type === 'power' && Math.random() < simDt * 1.6) {
-        const p = isoProject(VIEW, (i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.35);
+      const puffs = tile.type === 'power' ? 1.6 : burning.has(i) ? 3.2 : 0;
+      if (puffs && Math.random() < simDt * puffs) {
+        const p = projectWorld((i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.35);
         smoke.push({
           x: p.x + (Math.random() - 0.5) * 4,
-          y: p.y - 24,
+          y: p.y - (tile.type === 'power' ? 24 : buildingHeight(tile) + 4),
           vx: 3 + Math.random() * 5,
           r: 1.5 + Math.random() * 1.5,
           life: 1.6 + Math.random() * 0.8,
@@ -240,10 +308,30 @@ export function initCityGame(): void {
     growthTimer += simDt;
     if (growthTimer >= GROWTH_INTERVAL) {
       growthTimer -= GROWTH_INTERVAL;
-      const result = growthStep(tiles);
+      const result = growthStep(tiles, Math.random, sumDemandModifiers(activeEvents));
       if (result.grown.length || result.decayed.length) refreshDerivedState();
       for (const i of result.grown) addFloater(i, '▲', '#4ade80');
       for (const i of result.decayed) addFloater(i, '▼', '#f87171');
+
+      // Chaos: active fires spread and burn down; new ones spark up
+      if (fires.length) {
+        const burnt = stepFires(tiles, fires, fireCover, Math.random);
+        fires = burnt.fires;
+        for (const i of burnt.spread) addFloater(i, '🔥', '#fb923c');
+        if (burnt.burnedOut.length) {
+          audio.playSfx('explosion');
+          refreshDerivedState();
+        }
+      }
+      if (Math.random() < ignitionChance(tiles, fireCover)) {
+        const fire = startFire(tiles, fireCover, Math.random);
+        if (fire && !fires.some(f => f.idx === fire.idx)) {
+          fires.push(fire);
+          addFloater(fire.idx, '🔥', '#fb923c');
+          showToast(`🔥 ${strings.fireAlert}`);
+          audio.playSfx('hit');
+        }
+      }
 
       peakPop = Math.max(peakPop, stats.population);
       if (peakPop > record) {
@@ -264,37 +352,63 @@ export function initCityGame(): void {
       const expenses = monthlyExpenses(tiles);
       money += income - expenses;
       showToast(`${strings.month} ${month} · ${strings.income} +£${income} · ${strings.expenses} -£${expenses}`);
+
+      // Politics: expire old events, maybe roll a fresh one
+      activeEvents.forEach(a => a.monthsLeft--);
+      activeEvents = activeEvents.filter(a => a.monthsLeft > 0);
+      const event = rollEvent(month, Math.random);
+      if (event) {
+        money += event.money;
+        if (event.months > 0) activeEvents.push({ event, monthsLeft: event.months });
+        const delta = event.money ? ` ${event.money > 0 ? '+' : '−'}£${Math.abs(event.money)}` : '';
+        showToast(`${event.emoji} ${strings.events[event.id]}${delta}`);
+      }
+      refreshDerivedState();
       if (money < 0) gameOver();
     }
   }
 
   // --- Rendering ---
+  // The world grid never moves; rendering walks the *view* grid (rotated
+  // dimensions) back-to-front and maps each view tile to its world tile.
 
-  function drawRoad(i: number, x: number, y: number) {
-    fillTile(ctx, VIEW, x, y, '#3a4150');
+  function drawWater(x: number, y: number, vx: number, vy: number) {
+    fillTile(ctx, VIEW, vx, vy, '#14456e');
+    // Drifting sparkle keyed to world coords so it flows, not flickers
+    if ((x * 5 + y * 3 + Math.floor(clock * 2)) % 9 === 0) {
+      fillTile(ctx, VIEW, vx, vy, 'rgba(125, 211, 252, 0.14)');
+    }
+  }
+
+  function drawRoad(i: number, vx: number, vy: number, dims: { w: number; h: number }) {
+    if (tiles[i].type === 'bridge') {
+      drawWater(i % CITY_W, Math.floor(i / CITY_W), vx, vy);
+      fillTile(ctx, VIEW, vx, vy, 'rgba(94, 82, 60, 0.85)');
+    } else {
+      fillTile(ctx, VIEW, vx, vy, '#3a4150');
+    }
     ctx.strokeStyle = 'rgba(226, 232, 240, 0.35)';
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
-    const centre = isoProject(VIEW, x + 0.5, y + 0.5);
-    const connections: Array<[boolean, number, number]> = [
-      [x > 0 && tiles[i - 1].type === 'road', x, y + 0.5],
-      [x < CITY_W - 1 && tiles[i + 1].type === 'road', x + 1, y + 0.5],
-      [y > 0 && tiles[i - CITY_W].type === 'road', x + 0.5, y],
-      [y < CITY_H - 1 && tiles[i + CITY_W].type === 'road', x + 0.5, y + 1]
-    ];
+    const centre = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    const dirs: Array<[number, number]> = [[-1, 0], [1, 0], [0, -1], [0, 1]];
     let any = false;
-    for (const [connected, tx, ty] of connections) {
-      if (!connected) continue;
+    for (const [dx, dy] of dirs) {
+      const nvx = vx + dx;
+      const nvy = vy + dy;
+      if (nvx < 0 || nvx >= dims.w || nvy < 0 || nvy >= dims.h) continue;
+      const n = unrotateTile(nvx, nvy, CITY_W, CITY_H, rotation);
+      if (!isRoad(tiles[cityIdx(n.x, n.y)].type)) continue;
       any = true;
-      const edge = isoProject(VIEW, tx, ty);
+      const edge = isoProject(VIEW, vx + 0.5 + dx * 0.5, vy + 0.5 + dy * 0.5);
       ctx.beginPath();
       ctx.moveTo(centre.x, centre.y);
       ctx.lineTo(edge.x, edge.y);
       ctx.stroke();
     }
     if (!any) {
-      const a = isoProject(VIEW, x + 0.2, y + 0.5);
-      const b = isoProject(VIEW, x + 0.8, y + 0.5);
+      const a = isoProject(VIEW, vx + 0.2, vy + 0.5);
+      const b = isoProject(VIEW, vx + 0.8, vy + 0.5);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -304,11 +418,11 @@ export function initCityGame(): void {
   }
 
   /** Lit windows on the two visible faces of a developed zone block. */
-  function drawWindows(x: number, y: number, i: number, level: number, height: number) {
+  function drawWindows(vx: number, vy: number, i: number, level: number, height: number) {
     const inset = 0.08;
-    const w = isoProject(VIEW, x + inset, y + 1 - inset);
-    const s = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
-    const e = isoProject(VIEW, x + 1 - inset, y + inset);
+    const w = isoProject(VIEW, vx + inset, vy + 1 - inset);
+    const s = isoProject(VIEW, vx + 1 - inset, vy + 1 - inset);
+    const e = isoProject(VIEW, vx + 1 - inset, vy + inset);
     const faces: [{ x: number; y: number }, { x: number; y: number }][] = [[w, s], [s, e]];
     faces.forEach(([a, b], f) => {
       for (let r = 0; r < level; r++) {
@@ -325,7 +439,7 @@ export function initCityGame(): void {
     });
   }
 
-  function carPos(car: Car): { x: number; y: number } {
+  function carWorldPos(car: Car): { x: number; y: number } {
     const fx = (car.from % CITY_W) + 0.5;
     const fy = Math.floor(car.from / CITY_W) + 0.5;
     const tx = (car.to % CITY_W) + 0.5;
@@ -334,8 +448,8 @@ export function initCityGame(): void {
   }
 
   function drawCar(car: Car) {
-    const pos = carPos(car);
-    const p = isoProject(VIEW, pos.x, pos.y);
+    const pos = carWorldPos(car);
+    const p = projectWorld(pos.x, pos.y);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.fillRect(p.x - 2.5, p.y - 1, 5, 2.5);
     ctx.fillStyle = car.color;
@@ -351,57 +465,91 @@ export function initCityGame(): void {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Cars draw interleaved with their diagonal so blocks occlude them correctly
+    const dims = rotatedDims(CITY_W, CITY_H, rotation);
+    const burning = new Set(fires.map(f => f.idx));
+
+    // Cars draw interleaved with their view diagonal so blocks occlude them
     const carsByDiag: Car[][] = Array.from({ length: CITY_W + CITY_H - 1 }, () => []);
     for (const car of cars) {
-      const pos = carPos(car);
+      const pos = carWorldPos(car);
+      const vp = rotatePoint(pos.x, pos.y, CITY_W, CITY_H, rotation);
       const d = Math.min(
         CITY_W + CITY_H - 2,
-        Math.max(0, Math.floor(pos.x) + Math.floor(pos.y))
+        Math.max(0, Math.floor(vp.tx) + Math.floor(vp.ty))
       );
       carsByDiag[d].push(car);
     }
 
     let lastDiag = -1;
-    forEachTileBackToFront(CITY_W, CITY_H, (x, y, i, diag) => {
+    forEachTileBackToFront(dims.w, dims.h, (vx, vy, _vi, diag) => {
       if (diag !== lastDiag) {
         if (lastDiag >= 0) carsByDiag[lastDiag].forEach(drawCar);
         lastDiag = diag;
       }
+      const { x, y } = unrotateTile(vx, vy, CITY_W, CITY_H, rotation);
+      const i = cityIdx(x, y);
       const tile = tiles[i];
-      const top = isoProject(VIEW, x + 0.5, y + 0.5);
+      const top = isoProject(VIEW, vx + 0.5, vy + 0.5);
 
-      if (tile.type === 'road') {
-        drawRoad(i, x, y);
-        return;
-      }
+      if (isRoad(tile.type)) {
+        drawRoad(i, vx, vy, dims);
+      } else if (tile.type === 'water') {
+        drawWater(x, y, vx, vy);
+      } else {
+        fillTile(ctx, VIEW, vx, vy, (x + y) % 2 === 0 ? '#171e29' : '#1a2230');
 
-      fillTile(ctx, VIEW, x, y, (x + y) % 2 === 0 ? '#171e29' : '#1a2230');
-
-      if (tile.type === 'power') {
-        drawBlock(ctx, VIEW, x, y, 22, '#5b4a7a');
-        ctx.font = '15px serif';
-        ctx.fillText('⚡', top.x, top.y - 22);
-      } else if (tile.type === 'park') {
-        fillTile(ctx, VIEW, x, y, '#22543d');
-        ctx.font = '14px serif';
-        ctx.fillText('🌳', top.x, top.y - 5);
-      } else if (isZone(tile.type)) {
-        if (tile.level === 0) {
-          fillTile(ctx, VIEW, x, y, ZONE_TINT[tile.type]);
-          strokeTile(ctx, VIEW, x, y, ZONE_BORDER[tile.type], 1);
-        } else {
-          const height = zoneHeight(tile.level);
-          drawBlock(ctx, VIEW, x, y, height, ZONE_BLOCK[tile.type]);
-          drawWindows(x, y, i, tile.level, height);
-          ctx.font = `${LEVEL_FONT[tile.level]}px serif`;
-          ctx.fillText(ZONE_EMOJI[tile.type], top.x, top.y - height);
-          // Unserviced developed zones flash a warning above the roof
-          if ((!powered[i] || !roadAdjacent(tiles, i)) && Math.floor(clock * 2) % 2 === 0) {
-            ctx.font = '11px serif';
-            ctx.fillText('⚠️', top.x, top.y - height - 14);
+        if (tile.type === 'power') {
+          drawBlock(ctx, VIEW, vx, vy, 22, '#5b4a7a');
+          ctx.font = '15px serif';
+          ctx.fillText('⚡', top.x, top.y - 22);
+        } else if (tile.type === 'park') {
+          fillTile(ctx, VIEW, vx, vy, '#22543d');
+          ctx.font = '14px serif';
+          ctx.fillText('🌳', top.x, top.y - 5);
+        } else if (tile.type === 'tree') {
+          fillTile(ctx, VIEW, vx, vy, '#16301f');
+          ctx.font = '13px serif';
+          ctx.fillText('🌲', top.x, top.y - 5);
+        } else if (tile.type === 'rubble') {
+          fillTile(ctx, VIEW, vx, vy, '#31302c');
+          ctx.font = '11px serif';
+          ctx.fillText('🪨', top.x, top.y - 3);
+        } else if (tile.type === 'school') {
+          drawBlock(ctx, VIEW, vx, vy, 14, '#b9813e');
+          ctx.font = '13px serif';
+          ctx.fillText('🏫', top.x, top.y - 14);
+        } else if (tile.type === 'firehouse') {
+          drawBlock(ctx, VIEW, vx, vy, 14, '#a34141');
+          ctx.font = '13px serif';
+          ctx.fillText('🚒', top.x, top.y - 14);
+        } else if (isZone(tile.type)) {
+          if (tile.level === 0) {
+            fillTile(ctx, VIEW, vx, vy, ZONE_TINT[tile.type]);
+            strokeTile(ctx, VIEW, vx, vy, ZONE_BORDER[tile.type], 1);
+          } else {
+            const height = zoneHeight(tile.level);
+            drawBlock(ctx, VIEW, vx, vy, height, ZONE_BLOCK[tile.type]);
+            drawWindows(vx, vy, i, tile.level, height);
+            ctx.font = `${LEVEL_FONT[tile.level]}px serif`;
+            ctx.fillText(ZONE_EMOJI[tile.type], top.x, top.y - height);
+            // Unserviced developed zones flash a warning above the roof
+            if (
+              !burning.has(i) &&
+              (!powered[i] || !roadAdjacent(tiles, i)) &&
+              Math.floor(clock * 2) % 2 === 0
+            ) {
+              ctx.font = '11px serif';
+              ctx.fillText('⚠️', top.x, top.y - height - 14);
+            }
           }
         }
+      }
+
+      if (burning.has(i)) {
+        fillTile(ctx, VIEW, vx, vy, 'rgba(251, 146, 60, 0.28)');
+        const flicker = Math.floor(clock * 6) % 2;
+        ctx.font = `${13 + flicker * 2}px serif`;
+        ctx.fillText('🔥', top.x, top.y - buildingHeight(tile) - 4);
       }
     });
     if (lastDiag >= 0) carsByDiag[lastDiag].forEach(drawCar);
@@ -418,8 +566,9 @@ export function initCityGame(): void {
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % CITY_W;
       const y = Math.floor(hoverTile / CITY_W);
-      const valid = canBuild(tiles, x, y, selectedTool) && TOOL_COSTS[selectedTool] <= money;
-      strokeTile(ctx, VIEW, x, y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
+      const v = rotateTile(x, y, CITY_W, CITY_H, rotation);
+      const valid = canBuild(tiles, x, y, selectedTool) && buildCost(tiles, x, y, selectedTool) <= money;
+      strokeTile(ctx, VIEW, v.x, v.y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
 
     ctx.font = 'bold 10px monospace';
@@ -447,7 +596,11 @@ export function initCityGame(): void {
     const rect = canvas.getBoundingClientRect();
     const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
     const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
-    return isoTileFromPoint(VIEW, sx, sy, CITY_W, CITY_H);
+    const dims = rotatedDims(CITY_W, CITY_H, rotation);
+    const vi = isoTileFromPoint(VIEW, sx, sy, dims.w, dims.h);
+    if (vi < 0) return -1;
+    const { x, y } = unrotateTile(vi % dims.w, Math.floor(vi / dims.w), CITY_W, CITY_H, rotation);
+    return cityIdx(x, y);
   }
 
   canvas.addEventListener('mousemove', e => {
@@ -460,7 +613,6 @@ export function initCityGame(): void {
   // Touch taps can't hover-preview, so the first tap arms a tile (showing
   // the placement highlight) and a second tap on the same tile confirms.
   let coarsePointer = false;
-  let armedTile = -1;
   canvas.addEventListener('pointerdown', e => {
     coarsePointer = e.pointerType !== 'mouse';
   });
@@ -477,13 +629,16 @@ export function initCityGame(): void {
     const x = i % CITY_W;
     const y = Math.floor(i / CITY_W);
     if (!canBuild(tiles, x, y, selectedTool)) return;
-    const cost = TOOL_COSTS[selectedTool];
+    const cost = buildCost(tiles, x, y, selectedTool);
     if (cost > money) {
       showToast(strings.cantAfford);
       return;
     }
     money -= cost;
     build(tiles, x, y, selectedTool);
+    // Bulldozing a burning tile doubles as a firebreak
+    fires = fires.filter(f => isFlammable(tiles[f.idx]));
+    armedTile = -1;
     audio.playSfx('blip');
     refreshDerivedState();
   });
@@ -501,6 +656,22 @@ export function initCityGame(): void {
       speedMult = parseInt(btn.dataset.speed || '1', 10);
       speedButtons.forEach(b => b.classList.toggle('active', b === btn));
     });
+  });
+
+  function setRotation(rot: Rotation) {
+    rotation = rot;
+    VIEW = makeView(rotation);
+    hoverTile = -1;
+    armedTile = -1;
+    // Screen-space particles were projected under the old rotation
+    smoke = [];
+    floaters = [];
+  }
+  document.getElementById('rotate-left')?.addEventListener('click', () => {
+    setRotation(((rotation + 3) % 4) as Rotation);
+  });
+  document.getElementById('rotate-right')?.addEventListener('click', () => {
+    setRotation(((rotation + 1) % 4) as Rotation);
   });
 
   startBtn.addEventListener('click', () => {

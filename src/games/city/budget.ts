@@ -9,8 +9,11 @@ export const TAX_PER_JOB = 1;
 
 const UPKEEP: Partial<Record<CityTileType, number>> = {
   road: 1,
+  bridge: 3,
   power: 40,
-  park: 3
+  park: 3,
+  school: 15,
+  firehouse: 12
 };
 
 export function monthlyIncome(stats: CityStats): number {

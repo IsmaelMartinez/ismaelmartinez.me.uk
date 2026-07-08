@@ -1,6 +1,6 @@
 /**
  * Microcity tile model: zones (which develop in levels), infrastructure,
- * costs, and placement rules. Flat W×H grid; index = y * CITY_W + x.
+ * terrain, costs, and placement rules. Flat W×H grid; index = y * CITY_W + x.
  */
 
 export const CITY_W = 24;
@@ -8,8 +8,19 @@ export const CITY_H = 14;
 export const MAX_LEVEL = 3;
 
 export type ZoneType = 'res' | 'com' | 'ind';
-export type CityTileType = 'empty' | 'road' | 'power' | 'park' | ZoneType;
-export type CityTool = Exclude<CityTileType, 'empty'> | 'bulldoze';
+export type CityTileType =
+  | 'empty'
+  | 'road'
+  | 'bridge'
+  | 'power'
+  | 'park'
+  | 'school'
+  | 'firehouse'
+  | 'water'
+  | 'tree'
+  | 'rubble'
+  | ZoneType;
+export type CityTool = 'road' | 'power' | 'park' | 'school' | 'firehouse' | 'bulldoze' | ZoneType;
 
 export interface CityTile {
   type: CityTileType;
@@ -24,13 +35,23 @@ export const TOOL_COSTS: Record<CityTool, number> = {
   ind: 100,
   power: 500,
   park: 30,
+  school: 300,
+  firehouse: 250,
   bulldoze: 0
 };
+
+/** Roads laid over water become bridges, at a premium. */
+export const BRIDGE_COST = 50;
 
 export const cityIdx = (x: number, y: number): number => y * CITY_W + x;
 
 export function isZone(type: CityTileType): type is ZoneType {
   return type === 'res' || type === 'com' || type === 'ind';
+}
+
+/** Bridges carry traffic and service zones exactly like roads. */
+export function isRoad(type: CityTileType): boolean {
+  return type === 'road' || type === 'bridge';
 }
 
 export function createCity(): CityTile[] {
@@ -40,12 +61,26 @@ export function createCity(): CityTile[] {
 export function canBuild(tiles: CityTile[], x: number, y: number, tool: CityTool): boolean {
   if (x < 0 || x >= CITY_W || y < 0 || y >= CITY_H) return false;
   const tile = tiles[cityIdx(x, y)];
-  if (tool === 'bulldoze') return tile.type !== 'empty';
+  if (tool === 'bulldoze') return tile.type !== 'empty' && tile.type !== 'water';
+  if (tile.type === 'water') return tool === 'road';
   return tile.type === 'empty';
+}
+
+/** Cost of applying `tool` at a spot; roads over water price as bridges. */
+export function buildCost(tiles: CityTile[], x: number, y: number, tool: CityTool): number {
+  if (tool === 'road' && tiles[cityIdx(x, y)].type === 'water') return BRIDGE_COST;
+  return TOOL_COSTS[tool];
 }
 
 export function build(tiles: CityTile[], x: number, y: number, tool: CityTool): void {
   const tile = tiles[cityIdx(x, y)];
-  tile.type = tool === 'bulldoze' ? 'empty' : tool;
+  if (tool === 'bulldoze') {
+    // Demolished bridges give the river back.
+    tile.type = tile.type === 'bridge' ? 'water' : 'empty';
+  } else if (tool === 'road' && tile.type === 'water') {
+    tile.type = 'bridge';
+  } else {
+    tile.type = tool;
+  }
   tile.level = 0;
 }

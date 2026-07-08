@@ -146,6 +146,82 @@ export function drawBlock(
 }
 
 /**
+ * View rotation in quarter turns (0–3, counting clockwise). Rotation is
+ * purely a rendering concern: world tiles stay put, and these helpers map
+ * between world coordinates and rotated view coordinates.
+ */
+export type Rotation = 0 | 1 | 2 | 3;
+
+/** Grid dimensions as seen from a rotated view (quarter turns swap them). */
+export function rotatedDims(w: number, h: number, rot: number): { w: number; h: number } {
+  return rot % 2 ? { w: h, h: w } : { w, h };
+}
+
+/** World tile (x, y) → view tile under `rot` quarter turns. */
+export function rotateTile(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rot: number
+): { x: number; y: number } {
+  switch (((rot % 4) + 4) % 4) {
+    case 1:
+      return { x: h - 1 - y, y: x };
+    case 2:
+      return { x: w - 1 - x, y: h - 1 - y };
+    case 3:
+      return { x: y, y: w - 1 - x };
+    default:
+      return { x, y };
+  }
+}
+
+/** View tile → world tile: the inverse of rotateTile. */
+export function unrotateTile(
+  vx: number,
+  vy: number,
+  w: number,
+  h: number,
+  rot: number
+): { x: number; y: number } {
+  switch (((rot % 4) + 4) % 4) {
+    case 1:
+      return { x: vy, y: h - 1 - vx };
+    case 2:
+      return { x: w - 1 - vx, y: h - 1 - vy };
+    case 3:
+      return { x: w - 1 - vy, y: vx };
+    default:
+      return { x: vx, y: vy };
+  }
+}
+
+/**
+ * Continuous variant of rotateTile for fractional positions (cars, smoke,
+ * floaters). Consistent with rotateTile: a point inside world tile (x, y)
+ * lands inside its rotated view tile.
+ */
+export function rotatePoint(
+  tx: number,
+  ty: number,
+  w: number,
+  h: number,
+  rot: number
+): { tx: number; ty: number } {
+  switch (((rot % 4) + 4) % 4) {
+    case 1:
+      return { tx: h - ty, ty: tx };
+    case 2:
+      return { tx: w - tx, ty: h - ty };
+    case 3:
+      return { tx: ty, ty: w - tx };
+    default:
+      return { tx, ty };
+  }
+}
+
+/**
  * Visits every tile back-to-front (by x+y diagonal) — the painter's order
  * that keeps extruded blocks correctly layered.
  */

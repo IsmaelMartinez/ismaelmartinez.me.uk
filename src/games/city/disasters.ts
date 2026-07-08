@@ -20,8 +20,19 @@ export const BURN_TICKS_COVERED = 3;
 export const SPREAD_CHANCE = 0.22;
 export const SPREAD_CHANCE_COVERED = 0.08;
 
+/**
+ * What can catch fire: nature, developed zones, and civic buildings.
+ * Power plants are deliberately fireproof — losing the whole grid to a
+ * single spark would be too brutal for the game's scale.
+ */
 export function isFlammable(tile: CityTile): boolean {
-  return tile.type === 'tree' || tile.type === 'park' || (isZone(tile.type) && tile.level > 0);
+  return (
+    tile.type === 'tree' ||
+    tile.type === 'park' ||
+    tile.type === 'school' ||
+    tile.type === 'firehouse' ||
+    (isZone(tile.type) && tile.level > 0)
+  );
 }
 
 /**

@@ -293,9 +293,21 @@ describe('city disasters', () => {
     const tiles = firePlayground();
     expect(isFlammable(tiles[cityIdx(5, 5)])).toBe(true); // developed industry
     expect(isFlammable(tiles[cityIdx(5, 6)])).toBe(true); // tree
+    expect(isFlammable({ type: 'school', level: 0 })).toBe(true);
+    expect(isFlammable({ type: 'firehouse', level: 0 })).toBe(true);
     expect(isFlammable({ type: 'res', level: 0 })).toBe(false); // undeveloped zone
     expect(isFlammable({ type: 'road', level: 0 })).toBe(false);
     expect(isFlammable({ type: 'water', level: 0 })).toBe(false);
+    expect(isFlammable({ type: 'power', level: 0 })).toBe(false); // fireproof by design
+  });
+
+  it('burns civic buildings down to rubble', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'school');
+    const cover = tiles.map(() => false);
+    const result = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 1 }], cover, () => 0.999);
+    expect(result.burnedOut).toEqual([cityIdx(5, 5)]);
+    expect(tiles[cityIdx(5, 5)].type).toBe('rubble');
   });
 
   it('scales ignition chance with flammable tiles, halved under fire cover', () => {

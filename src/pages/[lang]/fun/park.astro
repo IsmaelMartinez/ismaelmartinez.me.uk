@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -90,6 +91,7 @@ const tools = [
                 {t('fun.park.daysOpen')}: <strong id="final-days">0</strong> ·
                 {t('fun.park.peakGuests')}: <strong id="final-peak">0</strong>
               </p>
+              <HighScoreTable gameId="park" lang={lang} accent="#818cf8" />
               <button id="restart-btn" class="btn btn-primary btn-large">{t('fun.park.playAgain')}</button>
             </div>
           </div>

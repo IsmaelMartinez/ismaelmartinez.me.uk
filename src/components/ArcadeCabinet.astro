@@ -11,15 +11,13 @@ interface Props {
   href: string;
   color: string;
   icon: string;
-  /** localStorage key of the game's saved best score, shown on the screen. */
-  scoreKey: string;
   /** Translated label for the best-score readout. */
   bestLabel: string;
   /** Translated "New" ribbon text; omit to hide the ribbon. */
   newBadge?: string;
 }
 
-const { id, title, tagline, genre, players, href, color, icon, scoreKey, bestLabel, newBadge } =
+const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBadge } =
   Astro.props;
 ---
 
@@ -44,7 +42,7 @@ const { id, title, tagline, genre, players, href, color, icon, scoreKey, bestLab
         <div class="screen-icon">{icon}</div>
         <div class="screen-text">
           <p class="best-score">
-            {bestLabel} <span class="best-value" data-score-key={scoreKey}>000000</span>
+            {bestLabel} <span class="best-value" data-game-id={id}>000000</span>
           </p>
           <p class="blink">PRESS START</p>
         </div>

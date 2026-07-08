@@ -6,6 +6,7 @@ import {
   simulateShot,
   explosionDamage,
   stepFall,
+  matchScore,
   GRAVITY,
   type FallBody
 } from '../../src/games/tanks/physics';
@@ -114,6 +115,23 @@ describe('physics', () => {
     const far = explosionDamage(0, 0, 30, 0, 45, 55);
     expect(near).toBeGreaterThan(far);
     expect(far).toBeGreaterThan(0);
+  });
+});
+
+describe('matchScore', () => {
+  it('scores 100 per round of margin plus remaining armour', () => {
+    expect(matchScore(3, 0, 100)).toBe(400);
+    expect(matchScore(3, 2, 40)).toBe(140);
+  });
+
+  it('ranks a wider round margin above a narrower one', () => {
+    // hp is capped at 100 and the match winner always survives with hp > 0,
+    // so even a battered sweep outranks a full-health narrower win.
+    expect(matchScore(3, 0, 1)).toBeGreaterThan(matchScore(3, 1, 100));
+  });
+
+  it('clamps negative armour', () => {
+    expect(matchScore(3, 2, -5)).toBe(100);
   });
 });
 

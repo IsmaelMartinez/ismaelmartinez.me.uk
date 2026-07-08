@@ -7,8 +7,7 @@
  */
 import {
   createGameLoop,
-  loadScore,
-  recordHighScore,
+  initScoreboard,
   isoProject,
   isoTileFromPoint,
   fillTile,
@@ -51,7 +50,6 @@ const START_MONEY = 1500;
 const DAY_LENGTH = 24; // seconds of game time per day
 const GUEST_SPEED = 2.4; // tiles per second
 const MAX_GUESTS = 60;
-const RECORD_KEY = 'park-record-guests';
 
 const TILE_EMOJI: Partial<Record<TileType, string>> = {
   entrance: '🎟️',
@@ -174,7 +172,9 @@ export function initParkGame(): void {
   let hoverTile = -1;
   let clock = 0;
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
-  let record = loadScore(RECORD_KEY);
+  const board = initScoreboard(document.getElementById('highscores'));
+  // The record readout shows the table's best, beaten live by the current run.
+  let record = board.top()?.score ?? 0;
 
   recordEl.textContent = record.toString();
 
@@ -381,8 +381,10 @@ export function initParkGame(): void {
     guests = guests.filter(guest => updateGuest(guest, simDt));
     peakGuests = Math.max(peakGuests, guests.length);
     if (peakGuests > record) {
-      record = recordHighScore(RECORD_KEY, peakGuests);
+      record = peakGuests;
       recordEl.textContent = record.toString();
+      // Persist immediately so a mid-run tab close keeps the record.
+      board.stash(peakGuests);
     }
 
     const avg = guests.length
@@ -414,6 +416,7 @@ export function initParkGame(): void {
     finalDaysEl.textContent = day.toString();
     finalPeakEl.textContent = peakGuests.toString();
     overOverlay.style.display = 'flex';
+    board.show(peakGuests);
   }
 
   function resetPark() {
@@ -428,6 +431,7 @@ export function initParkGame(): void {
     speedMult = 1;
     floaters = [];
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
+    board.hide();
     phase = 'play';
     audio.start();
   }

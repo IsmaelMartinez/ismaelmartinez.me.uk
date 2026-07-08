@@ -7,8 +7,7 @@
  */
 import {
   createGameLoop,
-  loadScore,
-  recordHighScore,
+  initScoreboard,
   isoProject,
   isoTileFromPoint,
   fillTile,
@@ -72,7 +71,6 @@ const START_MONEY = 2500;
 const MONTH_LENGTH = 20; // seconds of game time
 const GROWTH_INTERVAL = 1.2;
 const MILESTONES = [100, 250, 500, 1000, 2000];
-const RECORD_KEY = 'city-record-pop';
 
 const ZONE_EMOJI: Record<ZoneType, string> = { res: '🏠', com: '🏬', ind: '🏭' };
 const ZONE_TINT: Record<ZoneType, string> = {
@@ -198,7 +196,9 @@ export function initCityGame(): void {
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
-  let record = loadScore(RECORD_KEY);
+  const board = initScoreboard(document.getElementById('highscores'));
+  // The record readout shows the table's best, beaten live by the current run.
+  let record = board.top()?.score ?? 0;
   let powered = computePowered(tiles);
   let fireCover = computeFireCover(tiles);
   let stats = cityStats(tiles);
@@ -250,6 +250,7 @@ export function initCityGame(): void {
     floaters = [];
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     refreshDerivedState();
+    board.hide();
     phase = 'play';
     audio.start();
   }
@@ -261,6 +262,7 @@ export function initCityGame(): void {
     finalMonthsEl.textContent = month.toString();
     finalPopEl.textContent = peakPop.toString();
     overOverlay.style.display = 'flex';
+    board.show(peakPop);
   }
 
   function update(dt: number) {
@@ -335,8 +337,10 @@ export function initCityGame(): void {
 
       peakPop = Math.max(peakPop, stats.population);
       if (peakPop > record) {
-        record = recordHighScore(RECORD_KEY, peakPop);
+        record = peakPop;
         recordEl.textContent = record.toString();
+        // Persist immediately so a mid-run tab close keeps the record.
+        board.stash(peakPop);
       }
       if (milestoneIdx < MILESTONES.length && stats.population >= MILESTONES[milestoneIdx]) {
         showToast(`🏙️ ${strings.milestone} ${MILESTONES[milestoneIdx]}!`);

@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -97,6 +98,7 @@ const tools = [
                 {t('fun.city.monthsLabel')}: <strong id="final-months">0</strong> ·
                 {t('fun.city.peakPop')}: <strong id="final-pop">0</strong>
               </p>
+              <HighScoreTable gameId="city" lang={lang} accent="#38bdf8" />
               <button id="restart-btn" class="btn btn-primary btn-large">{t('fun.city.playAgain')}</button>
             </div>
           </div>

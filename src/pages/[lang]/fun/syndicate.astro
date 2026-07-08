@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
 import { useTranslations, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -101,6 +102,7 @@ const agents = [0, 1, 2, 3];
               <p class="final-stats">
                 {t('fun.syndicate.campaignFunds')}: <strong id="final-cash">£0</strong>
               </p>
+              <HighScoreTable gameId="syndicate" lang={lang} accent="#22d3ee" />
               <button id="next-btn" class="btn btn-primary btn-large"></button>
             </div>
           </div>

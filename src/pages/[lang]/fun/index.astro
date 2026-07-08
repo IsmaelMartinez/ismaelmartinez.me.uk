@@ -20,7 +20,6 @@ interface ArcadeGame {
   icon: string;
   color: string;
   path: string;
-  scoreKey: string;
   isNew?: boolean;
 }
 
@@ -33,8 +32,7 @@ const arcadeGames: ArcadeGame[] = [
     twoPlayer: false,
     icon: '🐍',
     color: '#14b8a6',
-    path: '/fun/snake',
-    scoreKey: 'snake-high-score'
+    path: '/fun/snake'
   },
   {
     id: 'poo-poo-land',
@@ -44,8 +42,7 @@ const arcadeGames: ArcadeGame[] = [
     twoPlayer: false,
     icon: '🔍💩',
     color: '#0ea5e9',
-    path: '/fun/poo-poo-land',
-    scoreKey: 'poo-land-high-score'
+    path: '/fun/poo-poo-land'
   },
   {
     id: 'tanks',
@@ -55,8 +52,7 @@ const arcadeGames: ArcadeGame[] = [
     twoPlayer: true,
     icon: '🎯',
     color: '#3b82f6',
-    path: '/fun/tanks',
-    scoreKey: 'tanks-victories'
+    path: '/fun/tanks'
   },
   {
     id: 'park',
@@ -66,8 +62,7 @@ const arcadeGames: ArcadeGame[] = [
     twoPlayer: false,
     icon: '🎢',
     color: '#818cf8',
-    path: '/fun/park',
-    scoreKey: 'park-record-guests'
+    path: '/fun/park'
   },
   {
     id: 'city',
@@ -77,8 +72,7 @@ const arcadeGames: ArcadeGame[] = [
     twoPlayer: false,
     icon: '🏙️',
     color: '#38bdf8',
-    path: '/fun/city',
-    scoreKey: 'city-record-pop'
+    path: '/fun/city'
   },
   {
     id: 'syndicate',
@@ -89,7 +83,6 @@ const arcadeGames: ArcadeGame[] = [
     icon: '🕶️',
     color: '#22d3ee',
     path: '/fun/syndicate',
-    scoreKey: 'syndicate-record-cash',
     isNew: true
   }
 ];
@@ -119,7 +112,6 @@ const arcadeGames: ArcadeGame[] = [
             icon={game.icon}
             color={game.color}
             href={getLocalizedPath(game.path, lang)}
-            scoreKey={game.scoreKey}
             bestLabel={t('fun.arcade.best')}
             newBadge={game.isNew ? t('fun.arcade.new') : undefined}
           />
@@ -138,16 +130,19 @@ const arcadeGames: ArcadeGame[] = [
 </Layout>
 
 <script>
-  // Fill each cabinet's attract screen with the player's saved best score,
-  // padded like an arcade high-score table. Re-runs after ClientRouter swaps
-  // so scores earned in a game show up when navigating back to the arcade.
-  import { loadScore } from '../../../games/engine/storage';
+  // Fill each cabinet's attract screen with the top of the game's high-score
+  // table, initials and all (loading a table migrates the game's pre-table
+  // best automatically). Re-runs after ClientRouter swaps so scores earned
+  // in a game show up when navigating back to the arcade.
+  import { topEntry, formatScore } from '../../../games/engine/highscores';
 
   function showBestScores() {
-    const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-score-key]');
+    const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-game-id]');
     for (const readout of readouts) {
-      const key = readout.dataset.scoreKey;
-      if (key) readout.textContent = loadScore(key).toString().padStart(6, '0');
+      const top = readout.dataset.gameId ? topEntry(readout.dataset.gameId) : null;
+      readout.textContent = top
+        ? `${top.initials} ${formatScore(top.score)}`
+        : formatScore(0);
     }
   }
 

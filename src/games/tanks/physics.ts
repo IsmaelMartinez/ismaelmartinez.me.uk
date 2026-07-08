@@ -27,6 +27,17 @@ export function launchProjectile(
   return { x, y, vx: Math.cos(rad) * speed, vy: -Math.sin(rad) * speed };
 }
 
+/**
+ * High-score-table score for a match won against the CPU: each round of
+ * winning margin is worth 100 points, plus the armour the player's tank
+ * finished on. Assumes hp is on the 0–100 scale tanks spawn with — a clean
+ * sweep on full health must outrank a narrower win, so keep the margin
+ * step above the hp cap if tank durability ever changes.
+ */
+export function matchScore(roundsWon: number, roundsLost: number, hp: number): number {
+  return (roundsWon - roundsLost) * 100 + Math.round(Math.max(0, hp));
+}
+
 /** Advances a projectile by dt seconds. Wind is a horizontal acceleration. */
 export function stepProjectile(p: Projectile, wind: number, dt: number): void {
   p.vx += wind * dt;

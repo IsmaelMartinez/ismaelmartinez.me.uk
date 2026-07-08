@@ -5,13 +5,21 @@
  * module owns DOM wiring, the turn state machine, and canvas rendering. It
  * expects the markup defined in src/pages/[lang]/fun/tanks.astro.
  */
-import { createGameLoop, loadScore, saveScore, createGameAudio, wireSoundButton } from '../engine';
+import {
+  createGameLoop,
+  loadScore,
+  saveScore,
+  initScoreboard,
+  createGameAudio,
+  wireSoundButton
+} from '../engine';
 import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
 import {
   launchProjectile,
   stepProjectile,
   stepFall,
   explosionDamage,
+  matchScore,
   type Projectile
 } from './physics';
 import { chooseAiShot } from './ai';
@@ -143,6 +151,10 @@ export function initTanksGame(): void {
   let cpuShotPending = false;
   let victories = loadScore(VICTORIES_KEY);
   victoriesEl.textContent = victories.toString();
+
+  // High-score table for matches won against the CPU: round margin plus the
+  // armour the player's tank finished on, so a clean sweep outranks a scrape.
+  const board = initScoreboard(document.getElementById('highscores'));
 
   // Tense, martial battle march in A minor.
   const audio = createGameAudio({
@@ -367,7 +379,8 @@ export function initTanksGame(): void {
       audio.playSfx('gameover');
       audio.stop();
     }
-    if (matchOver && winner === 0 && mode === 'cpu') {
+    const playerWonMatch = matchOver && winner === 0 && mode === 'cpu';
+    if (playerWonMatch) {
       victories++;
       saveScore(VICTORIES_KEY, victories);
       victoriesEl.textContent = victories.toString();
@@ -380,6 +393,8 @@ export function initTanksGame(): void {
     nextRoundBtn.style.display = matchOver ? 'none' : 'inline-block';
     playAgainBtn.style.display = matchOver ? 'inline-block' : 'none';
     roundOverlay.style.display = 'flex';
+    // After the overlay is visible, so the initials input can take focus.
+    if (playerWonMatch) board.show(matchScore(wins[0], wins[1], tanks[0].hp));
   }
 
   /** Tanks above the (possibly freshly cratered) surface fall and take damage. */
@@ -783,6 +798,7 @@ export function initTanksGame(): void {
   });
   playAgainBtn.addEventListener('click', () => {
     roundOverlay.style.display = 'none';
+    board.hide();
     startOverlay.style.display = 'flex';
     phase = 'idle';
   });

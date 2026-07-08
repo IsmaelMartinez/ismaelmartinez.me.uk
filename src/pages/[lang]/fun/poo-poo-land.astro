@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -121,6 +122,7 @@ const t = useTranslations(lang);
                 <span class="result-stat-value" id="go-score"></span>
               </div>
             </div>
+            <HighScoreTable gameId="poo-poo-land" lang={lang} accent="#0ea5e9" />
             <button id="restart-btn" class="btn btn-primary btn-game"></button>
           </div>
         </div>
@@ -130,6 +132,8 @@ const t = useTranslations(lang);
 </Layout>
 
 <script>
+  import { initScoreboard } from '../../../games/engine';
+
   // ── DOM Refs ──────────────────────────────────────────────────
   const wrapper = document.getElementById('game-wrapper')!;
   const menuScreen = document.getElementById('menu-screen')!;
@@ -221,14 +225,12 @@ const t = useTranslations(lang);
   let streak = 0;
   let powerUps = 0;
   let timerInterval: ReturnType<typeof setInterval> | null = null;
-  let highScore = (() => {
-    try {
-      return Number(localStorage.getItem('poo-land-high-score')) || 0;
-    } catch {
-      return 0;
-    }
-  })();
   let miniGamePending = false;
+
+  // updateHighScore keeps `highScore` ahead of anything the board can
+  // commit, so the board never needs to push updates back.
+  const board = initScoreboard(document.getElementById('highscores'));
+  let highScore = board.top()?.score ?? 0;
 
   menuHighScore.textContent = highScore.toString();
 
@@ -553,16 +555,15 @@ const t = useTranslations(lang);
 
     updateHighScore();
     showScreen(gameOverScreen);
+    board.show(score);
   }
 
+  /** Runs at each level end: keeps the menu readout current and stashes the
+      score so quitting mid-investigation keeps the run on the table. */
   function updateHighScore() {
+    board.stash(score);
     if (score > highScore) {
       highScore = score;
-      try {
-        localStorage.setItem('poo-land-high-score', highScore.toString());
-      } catch {
-        // localStorage unavailable
-      }
       menuHighScore.textContent = highScore.toString();
     }
   }
@@ -760,6 +761,7 @@ const t = useTranslations(lang);
   // ── Event Listeners ───────────────────────────────────────────
   startBtn.addEventListener('click', startGame);
   restartBtn.addEventListener('click', () => {
+    board.hide();
     showScreen(menuScreen);
     menuHighScore.textContent = highScore.toString();
   });

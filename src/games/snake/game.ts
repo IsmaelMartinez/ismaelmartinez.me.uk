@@ -5,7 +5,7 @@
  * loop, and canvas rendering. It expects the markup defined in
  * src/pages/[lang]/fun/snake.astro.
  */
-import { createGameLoop, loadScore, recordHighScore, createGameAudio, wireSoundButton } from '../engine';
+import { createGameLoop, initScoreboard, createGameAudio, wireSoundButton } from '../engine';
 import {
   COLS,
   ROWS,
@@ -23,7 +23,6 @@ import {
 const CELL = 20;
 const WIDTH = COLS * CELL;
 const HEIGHT = ROWS * CELL;
-const HIGH_SCORE_KEY = 'snake-high-score';
 const DEATH_DELAY = 0.9; // seconds between dying and the game-over overlay
 
 const DIRECTIONS: Record<string, Vec> = {
@@ -99,9 +98,14 @@ export function initSnakeGame(): void {
   let shake = 0;
   let particles: Particle[] = [];
   let floaters: Floater[] = [];
-  let highScore = loadScore(HIGH_SCORE_KEY);
 
-  highScoreEl.textContent = highScore.toString();
+  const syncHighScore = () => {
+    highScoreEl.textContent = (board.top()?.score ?? 0).toString();
+  };
+  const board = initScoreboard(document.getElementById('highscores'), {
+    onSave: syncHighScore
+  });
+  syncHighScore();
 
   // Upbeat, slithery chiptune loop in C major.
   const audio = createGameAudio({
@@ -151,6 +155,7 @@ export function initSnakeGame(): void {
     scoreEl.textContent = '0';
     overlay.style.display = 'none';
     gameOverOverlay.style.display = 'none';
+    board.hide();
     audio.start();
   }
 
@@ -162,8 +167,6 @@ export function initSnakeGame(): void {
     burst(px(head.x), px(head.y), '#f87171', 26);
     audio.playSfx('gameover');
     audio.stop();
-    highScore = recordHighScore(HIGH_SCORE_KEY, state.score);
-    highScoreEl.textContent = highScore.toString();
   }
 
   function advance() {
@@ -219,6 +222,8 @@ export function initSnakeGame(): void {
         phase = 'over';
         finalScoreEl.textContent = state.score.toString();
         gameOverOverlay.style.display = 'flex';
+        board.show(state.score);
+        syncHighScore();
       }
     }
   }

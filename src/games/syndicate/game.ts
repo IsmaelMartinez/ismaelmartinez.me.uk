@@ -8,8 +8,7 @@
  */
 import {
   createGameLoop,
-  loadScore,
-  recordHighScore,
+  initScoreboard,
   isoProject,
   isoTileFromPoint,
   fillTile,
@@ -37,7 +36,6 @@ import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus, type MissionSpec } f
 const VIEW: IsoView = { halfW: 16, halfH: 8, originX: MAP_H * 16, originY: 70 };
 const CANVAS_W = (MAP_W + MAP_H) * VIEW.halfW;
 const CANVAS_H = (MAP_W + MAP_H) * VIEW.halfH + VIEW.originY + 12;
-const RECORD_KEY = 'syndicate-record-cash';
 const BOOST_DURATION = 4;
 const BOOST_COOLDOWN = 14;
 const EXTRACTION_RADIUS = 1.5;
@@ -170,7 +168,9 @@ export function initSyndicateGame(): void {
   let spec: MissionSpec = MISSIONS[0];
   let extraction = -1;
   let money = 0;
-  let record = loadScore(RECORD_KEY);
+  const board = initScoreboard(document.getElementById('highscores'));
+  // The record readout shows the table's best, beaten live by the current campaign.
+  let record = board.top()?.score ?? 0;
   let agentWeapons: WeaponId[] = Array(SQUAD_SIZE).fill('pistol');
   let selected = new Set<number>([0, 1, 2, 3]);
   let boostCooldown = 0;
@@ -297,8 +297,9 @@ export function initSyndicateGame(): void {
     phase = 'over';
     audio.playSfx('gameover');
     audio.stop();
-    record = recordHighScore(RECORD_KEY, Math.floor(money));
+    record = Math.max(record, Math.floor(money));
     recordEl.textContent = `£${record}`;
+    board.show(Math.floor(money));
     overIcon.textContent = victory ? '🏆' : '☠️';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
     overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
@@ -315,7 +316,7 @@ export function initSyndicateGame(): void {
       return;
     }
     phase = 'debrief';
-    record = recordHighScore(RECORD_KEY, Math.floor(money));
+    record = Math.max(record, Math.floor(money));
     recordEl.textContent = `£${record}`;
     overIcon.textContent = '💼';
     overTitle.textContent = `${strings.missionComplete} · +£${spec.reward}`;
@@ -998,6 +999,7 @@ export function initSyndicateGame(): void {
 
   nextBtn.addEventListener('click', () => {
     overOverlay.style.display = 'none';
+    board.hide();
     if (phase === 'debrief') {
       startMission(missionIdx + 1);
     } else {

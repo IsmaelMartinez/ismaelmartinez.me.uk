@@ -138,16 +138,20 @@ const arcadeGames: ArcadeGame[] = [
 </Layout>
 
 <script>
-  // Fill each cabinet's attract screen with the player's saved best score,
-  // padded like an arcade high-score table. Re-runs after ClientRouter swaps
-  // so scores earned in a game show up when navigating back to the arcade.
+  // Fill each cabinet's attract screen with the top of the game's high-score
+  // table, initials and all — falling back to the legacy single-number key
+  // until a table entry exists. Re-runs after ClientRouter swaps so scores
+  // earned in a game show up when navigating back to the arcade.
   import { loadScore } from '../../../games/engine/storage';
+  import { topEntry } from '../../../games/engine/highscores';
 
   function showBestScores() {
-    const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-score-key]');
+    const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-game-id]');
     for (const readout of readouts) {
-      const key = readout.dataset.scoreKey;
-      if (key) readout.textContent = loadScore(key).toString().padStart(6, '0');
+      const top = readout.dataset.gameId ? topEntry(readout.dataset.gameId) : null;
+      const score = top?.score ?? (readout.dataset.scoreKey ? loadScore(readout.dataset.scoreKey) : 0);
+      const padded = score.toString().padStart(6, '0');
+      readout.textContent = top ? `${top.initials} ${padded}` : padded;
     }
   }
 

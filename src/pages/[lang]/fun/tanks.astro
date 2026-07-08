@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -74,6 +75,7 @@ const weapons = [
             <div class="overlay-content">
               <span id="round-emoji" class="round-emoji">💥</span>
               <h2 id="round-message"></h2>
+              <HighScoreTable gameId="tanks" lang={lang} accent="#3b82f6" />
               <button id="next-round-btn" class="btn btn-primary btn-large">{t('fun.tanks.nextRound')}</button>
               <button id="play-again-btn" class="btn btn-primary btn-large" style="display: none;">{t('fun.tanks.playAgain')}</button>
             </div>

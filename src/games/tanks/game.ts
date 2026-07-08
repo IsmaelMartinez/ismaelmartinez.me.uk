@@ -5,7 +5,14 @@
  * module owns DOM wiring, the turn state machine, and canvas rendering. It
  * expects the markup defined in src/pages/[lang]/fun/tanks.astro.
  */
-import { createGameLoop, loadScore, saveScore, createGameAudio, wireSoundButton } from '../engine';
+import {
+  createGameLoop,
+  loadScore,
+  saveScore,
+  initScoreboard,
+  createGameAudio,
+  wireSoundButton
+} from '../engine';
 import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
 import {
   launchProjectile,
@@ -143,6 +150,10 @@ export function initTanksGame(): void {
   let cpuShotPending = false;
   let victories = loadScore(VICTORIES_KEY);
   victoriesEl.textContent = victories.toString();
+
+  // High-score table for matches won against the CPU: round margin plus the
+  // armour the player's tank finished on, so a clean sweep outranks a scrape.
+  const board = initScoreboard(document.getElementById('highscores'));
 
   // Tense, martial battle march in A minor.
   const audio = createGameAudio({
@@ -371,6 +382,7 @@ export function initTanksGame(): void {
       victories++;
       saveScore(VICTORIES_KEY, victories);
       victoriesEl.textContent = victories.toString();
+      board.show((wins[0] - wins[1]) * 100 + Math.round(tanks[0].hp));
     }
     roundEmoji.textContent = matchOver ? '🏆' : winner === null ? '☠️' : '💥';
     roundMessage.textContent =
@@ -783,6 +795,7 @@ export function initTanksGame(): void {
   });
   playAgainBtn.addEventListener('click', () => {
     roundOverlay.style.display = 'none';
+    board.hide();
     startOverlay.style.display = 'flex';
     phase = 'idle';
   });

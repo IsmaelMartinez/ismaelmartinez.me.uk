@@ -243,6 +243,12 @@ const t = useTranslations(lang);
       intervals.add(id);
       return id;
     };
+    const untrack = (id: ReturnType<typeof setInterval> | null) => {
+      if (id !== null) {
+        clearInterval(id);
+        intervals.delete(id);
+      }
+    };
     document.addEventListener(
       'astro:before-swap',
       () => {
@@ -496,10 +502,8 @@ const t = useTranslations(lang);
     }
 
     function stopTimer() {
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-      }
+      untrack(timerInterval);
+      timerInterval = null;
       timerDisplay.classList.remove('timer-danger');
     }
 
@@ -701,8 +705,8 @@ const t = useTranslations(lang);
         timeLeft--;
         timerEl.textContent = `⏱️ ${timeLeft}`;
         if (timeLeft <= 0) {
-          clearInterval(timer);
-          clearInterval(spawnInterval);
+          untrack(timer);
+          untrack(spawnInterval);
           setTimeout(() => onComplete(miniScore), 500);
         }
       }, 1000));
@@ -780,7 +784,7 @@ const t = useTranslations(lang);
         timeLeft--;
         timerEl.textContent = `⏱️ ${timeLeft}`;
         if (timeLeft <= 0) {
-          clearInterval(timer);
+          untrack(timer);
           pooBtn.disabled = true;
           notBtn.disabled = true;
           setTimeout(() => onComplete(miniScore), 500);

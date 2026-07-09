@@ -35,22 +35,22 @@ describe('park grid', () => {
   });
 
   it('allows paths on any grass but requires adjacency for buildings', () => {
-    const { tiles, heights } = createPark();
+    const { tiles, heights, tunnels } = createPark();
     // Far corner: grass, no path nearby
-    expect(canPlace(tiles, heights, 0, 0, 'path')).toBe(true);
-    expect(canPlace(tiles, heights, 0, 0, 'carousel')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, 0, 0, 'path')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, 0, 0, 'carousel')).toBe(false);
     // Next to the starter path stub
     const ex = Math.floor(GRID_W / 2);
-    expect(canPlace(tiles, heights, ex - 1, GRID_H - 2, 'carousel')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'carousel')).toBe(true);
   });
 
   it('never allows building over occupied tiles or the entrance', () => {
-    const { tiles, heights, entrance } = createPark();
+    const { tiles, heights, tunnels, entrance } = createPark();
     const ex = entrance % GRID_W;
-    expect(canPlace(tiles, heights, ex, GRID_H - 1, 'path')).toBe(false);
-    expect(canPlace(tiles, heights, ex, GRID_H - 1, 'bulldoze')).toBe(false);
-    expect(canPlace(tiles, heights, ex, GRID_H - 2, 'path')).toBe(false); // existing path
-    expect(canPlace(tiles, heights, ex, GRID_H - 2, 'bulldoze')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, ex, GRID_H - 1, 'path')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, ex, GRID_H - 1, 'bulldoze')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, ex, GRID_H - 2, 'path')).toBe(false); // existing path
+    expect(canPlace(tiles, heights, tunnels, ex, GRID_H - 2, 'bulldoze')).toBe(true);
   });
 
   it('bulldozing restores grass', () => {
@@ -73,22 +73,22 @@ describe('park grid', () => {
 describe('park terrain', () => {
   it('raises and lowers land within bounds, one step at a time', () => {
     const { tiles, heights, tunnels } = createPark();
-    expect(canPlace(tiles, heights, 5, 5, 'raiseLand')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(true);
     applyTool(tiles, heights, tunnels, 5, 5, 'raiseLand');
     expect(heights[idx(5, 5)]).toBe(1);
-    expect(canPlace(tiles, heights, 5, 5, 'lowerLand')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'lowerLand')).toBe(true);
     applyTool(tiles, heights, tunnels, 5, 5, 'lowerLand');
     expect(heights[idx(5, 5)]).toBe(0);
     // Can't lower below sea level.
-    expect(canPlace(tiles, heights, 5, 5, 'lowerLand')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'lowerLand')).toBe(false);
   });
 
   it('refuses to raise a tile more than one step above its neighbours', () => {
     const { tiles, heights, tunnels } = createPark();
-    expect(canPlace(tiles, heights, 5, 5, 'raiseLand')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(true);
     applyTool(tiles, heights, tunnels, 5, 5, 'raiseLand'); // height 1, flat neighbours: diff 1, fine
     // A second raise would make it height 2 next to flat (0) neighbours: a 2-step cliff.
-    expect(canPlace(tiles, heights, 5, 5, 'raiseLand')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(false);
     // Raising every neighbour to close the gap makes it possible again.
     for (const [x, y] of [
       [4, 5],
@@ -98,11 +98,11 @@ describe('park terrain', () => {
     ]) {
       applyTool(tiles, heights, tunnels, x, y, 'raiseLand');
     }
-    expect(canPlace(tiles, heights, 5, 5, 'raiseLand')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(true);
   });
 
   it('caps height at MAX_HEIGHT', () => {
-    const { tiles, heights } = createPark();
+    const { tiles, heights, tunnels } = createPark();
     heights[idx(5, 5)] = MAX_HEIGHT;
     for (const [x, y] of [
       [4, 5],
@@ -112,34 +112,34 @@ describe('park terrain', () => {
     ]) {
       heights[idx(x, y)] = MAX_HEIGHT;
     }
-    expect(canPlace(tiles, heights, 5, 5, 'raiseLand')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(false);
   });
 
   it('cannot terraform under a building', () => {
-    const { tiles, heights } = createPark();
+    const { tiles, heights, tunnels } = createPark();
     tiles[idx(5, 5)] = 'carousel';
-    expect(canPlace(tiles, heights, 5, 5, 'raiseLand')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(false);
   });
 });
 
 describe('park water', () => {
   it('places water only on flat grass', () => {
     const { tiles, heights, tunnels } = createPark();
-    expect(canPlace(tiles, heights, 3, 3, 'water')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, 3, 3, 'water')).toBe(true);
     applyTool(tiles, heights, tunnels, 3, 3, 'water');
     expect(tiles[idx(3, 3)]).toBe('water');
 
     applyTool(tiles, heights, tunnels, 10, 10, 'raiseLand');
-    expect(canPlace(tiles, heights, 10, 10, 'water')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, 10, 10, 'water')).toBe(false);
   });
 
   it('gates the Log Flume on an adjacent water tile', () => {
     const { tiles, heights, tunnels, entrance } = createPark();
     const ex = entrance % GRID_W;
     const site = idx(ex - 1, GRID_H - 2); // beside the starter path
-    expect(canPlace(tiles, heights, ex - 1, GRID_H - 2, 'flume')).toBe(false); // no water yet
+    expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'flume')).toBe(false); // no water yet
     applyTool(tiles, heights, tunnels, ex - 2, GRID_H - 2, 'water');
-    expect(canPlace(tiles, heights, ex - 1, GRID_H - 2, 'flume')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'flume')).toBe(true);
     applyTool(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'flume');
     expect(tiles[site]).toBe('flume');
   });
@@ -150,11 +150,19 @@ describe('park tunnels', () => {
     const { tiles, heights, tunnels } = createPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'path');
     // No raised neighbour yet — nothing to tunnel into.
-    expect(canPlace(tiles, heights, 5, 5, 'digTunnel')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'digTunnel')).toBe(false);
     applyTool(tiles, heights, tunnels, 6, 5, 'raiseLand');
-    expect(canPlace(tiles, heights, 5, 5, 'digTunnel')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'digTunnel')).toBe(true);
     applyTool(tiles, heights, tunnels, 5, 5, 'digTunnel');
     expect(tunnels[idx(5, 5)]).toBe(true);
+  });
+
+  it('refuses to dig a tunnel that already exists', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 5, 5, 'path');
+    applyTool(tiles, heights, tunnels, 6, 5, 'raiseLand');
+    applyTool(tiles, heights, tunnels, 5, 5, 'digTunnel');
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'digTunnel')).toBe(false);
   });
 
   it('bulldozing a tunnelled path clears the tunnel flag', () => {
@@ -183,10 +191,10 @@ describe('park building gates', () => {
   it('requires height 2+ for the Sky Tower', () => {
     const { tiles, heights, tunnels, entrance } = createPark();
     const ex = entrance % GRID_W;
-    expect(canPlace(tiles, heights, ex - 1, GRID_H - 2, 'skytower')).toBe(false);
+    expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'skytower')).toBe(false);
     applyTool(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'raiseLand');
     applyTool(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'raiseLand');
-    expect(canPlace(tiles, heights, ex - 1, GRID_H - 2, 'skytower')).toBe(true);
+    expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'skytower')).toBe(true);
   });
 });
 

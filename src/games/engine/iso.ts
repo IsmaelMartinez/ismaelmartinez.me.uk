@@ -156,8 +156,8 @@ export function drawBlock(
   ctx.stroke();
   ctx.strokeStyle = shadeColor(baseColor, 0.85);
   ctx.beginPath();
-  ctx.moveTo(s.x, s.y - height);
-  ctx.lineTo(s.x, s.y);
+  ctx.moveTo(s.x, s.y - top);
+  ctx.lineTo(s.x, s.y - zOffset);
   ctx.stroke();
 }
 

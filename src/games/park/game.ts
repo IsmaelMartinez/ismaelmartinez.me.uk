@@ -9,7 +9,7 @@ import {
   createGameLoop,
   initScoreboard,
   isoProject,
-  isoTileFromPoint,
+  isoUnproject,
   fillTile,
   strokeTile,
   drawBlock,
@@ -645,7 +645,7 @@ export function initParkGame(): void {
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;
       const y = Math.floor(hoverTile / GRID_W);
-      const valid = canPlace(tiles, heights, x, y, selectedTool) && toolCost(selectedTool) <= money;
+      const valid = canPlace(tiles, heights, tunnels, x, y, selectedTool) && toolCost(selectedTool) <= money;
       strokeTile(
         ctx,
         VIEW,
@@ -673,11 +673,39 @@ export function initParkGame(): void {
 
   // --- Input wiring ---
 
+  /**
+   * Screen point → tile index, accounting for terrain lift. Raised tiles
+   * render higher on screen than sea level (see TERRAIN_STEP), so naive
+   * height-0 unprojection drifts towards the near corner on hills — this
+   * tests each tile against its own lifted position instead, preferring the
+   * tallest (frontmost) match where a raised tile's face overlaps a
+   * neighbour's picking region.
+   */
+  function pickTile(sx: number, sy: number): number {
+    let best = -1;
+    let bestScore = -Infinity;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        const i = y * GRID_W + x;
+        const liftPx = heights[i] * TERRAIN_STEP;
+        const { tx, ty } = isoUnproject(VIEW, sx, sy + liftPx);
+        if (Math.floor(tx) === x && Math.floor(ty) === y) {
+          const score = heights[i] * 1000 + (x + y);
+          if (score > bestScore) {
+            bestScore = score;
+            best = i;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
   function tileFromEvent(e: MouseEvent): number {
     const rect = canvas.getBoundingClientRect();
     const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
     const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
-    return isoTileFromPoint(VIEW, sx, sy, GRID_W, GRID_H);
+    return pickTile(sx, sy);
   }
 
   canvas.addEventListener('mousemove', e => {
@@ -716,7 +744,7 @@ export function initParkGame(): void {
         return;
       }
     }
-    if (!canPlace(tiles, heights, x, y, selectedTool)) {
+    if (!canPlace(tiles, heights, tunnels, x, y, selectedTool)) {
       const def = BUILDINGS[selectedTool as TileType];
       if (def && tiles[i] === 'grass') {
         const hasPathNextDoor = neighbours(i).some(n => isWalkable(tiles[n]));

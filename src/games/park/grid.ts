@@ -123,6 +123,7 @@ export function neighbours(i: number): number[] {
 export function canPlace(
   tiles: TileType[],
   heights: number[],
+  tunnels: boolean[],
   x: number,
   y: number,
   tool: Tool
@@ -142,7 +143,7 @@ export function canPlace(
   }
 
   if (tool === 'digTunnel') {
-    if (tiles[i] !== 'path' || heights[i] !== MIN_HEIGHT) return false;
+    if (tiles[i] !== 'path' || heights[i] !== MIN_HEIGHT || tunnels[i]) return false;
     // Only cuts into an existing hillside — a tunnel mouth needs a hill to
     // enter, not a hole in flat ground.
     return neighbours(i).some(n => heights[n] >= 1);

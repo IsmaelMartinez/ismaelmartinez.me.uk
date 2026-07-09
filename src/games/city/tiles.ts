@@ -20,13 +20,19 @@ export type CityTileType =
   | 'tree'
   | 'rubble'
   | ZoneType;
-export type CityTool = 'road' | 'power' | 'park' | 'school' | 'firehouse' | 'bulldoze' | ZoneType;
+export type CityTool = 'road' | 'power' | 'park' | 'school' | 'firehouse' | 'bulldoze' | 'fill' | ZoneType;
 
 export interface CityTile {
   type: CityTileType;
   /** Development level for zones (0 = undeveloped); always 0 otherwise. */
   level: number;
 }
+
+/** Roads laid over water become bridges, at a premium. */
+export const BRIDGE_COST = 50;
+
+/** Permanently converts a water tile to buildable land. */
+export const FILL_COST = 60;
 
 export const TOOL_COSTS: Record<CityTool, number> = {
   road: 10,
@@ -37,11 +43,9 @@ export const TOOL_COSTS: Record<CityTool, number> = {
   park: 30,
   school: 300,
   firehouse: 250,
-  bulldoze: 0
+  bulldoze: 0,
+  fill: FILL_COST
 };
-
-/** Roads laid over water become bridges, at a premium. */
-export const BRIDGE_COST = 50;
 
 export const cityIdx = (x: number, y: number): number => y * CITY_W + x;
 
@@ -62,6 +66,7 @@ export function canBuild(tiles: CityTile[], x: number, y: number, tool: CityTool
   if (x < 0 || x >= CITY_W || y < 0 || y >= CITY_H) return false;
   const tile = tiles[cityIdx(x, y)];
   if (tool === 'bulldoze') return tile.type !== 'empty' && tile.type !== 'water';
+  if (tool === 'fill') return tile.type === 'water';
   if (tile.type === 'water') return tool === 'road';
   return tile.type === 'empty';
 }
@@ -79,6 +84,10 @@ export function build(tiles: CityTile[], x: number, y: number, tool: CityTool): 
     tile.type = tile.type === 'bridge' ? 'water' : 'empty';
   } else if (tool === 'road' && tile.type === 'water') {
     tile.type = 'bridge';
+  } else if (tool === 'fill') {
+    // Filled land is indistinguishable from any other empty tile — no
+    // reverting on bulldoze, unlike a bridge.
+    tile.type = 'empty';
   } else {
     tile.type = tool;
   }

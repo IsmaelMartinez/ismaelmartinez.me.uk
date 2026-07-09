@@ -6,6 +6,7 @@ import {
   CITY_H,
   MAX_LEVEL,
   BRIDGE_COST,
+  FILL_COST,
   createCity,
   canBuild,
   buildCost,
@@ -275,6 +276,24 @@ describe('city bridges', () => {
     const car = spawnCar(tiles, random)!;
     expect(car).not.toBeNull();
     for (let i = 0; i < 100; i++) expect(stepCar(tiles, car, 0.1, random)).toBe(true);
+  });
+
+  it('only allows filling water, priced flat', () => {
+    const tiles = createCity();
+    tiles[cityIdx(4, 4)].type = 'water';
+    expect(canBuild(tiles, 4, 4, 'fill')).toBe(true);
+    expect(canBuild(tiles, 5, 4, 'fill')).toBe(false); // empty land, nothing to fill
+    expect(buildCost(tiles, 4, 4, 'fill')).toBe(FILL_COST);
+  });
+
+  it('permanently converts filled water to empty land', () => {
+    const tiles = createCity();
+    tiles[cityIdx(4, 4)].type = 'water';
+    build(tiles, 4, 4, 'fill');
+    expect(tiles[cityIdx(4, 4)].type).toBe('empty');
+    expect(canBuild(tiles, 4, 4, 'res')).toBe(true);
+    // Unlike a bridge, bulldozing filled land does not bring the river back
+    expect(canBuild(tiles, 4, 4, 'bulldoze')).toBe(false);
   });
 });
 

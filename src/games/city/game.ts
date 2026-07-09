@@ -13,6 +13,7 @@ import {
   fillTile,
   strokeTile,
   drawBlock,
+  shadeColor,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,
@@ -197,6 +198,9 @@ export function initCityGame(): void {
   let clock = 0;
   let rotation: Rotation = 0;
   let VIEW = makeView(rotation);
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const ROTATE_ANIM_DURATION = 0.32; // seconds
+  let rotAnim: { t: number; dir: 1 | -1; swapped: boolean } | null = null;
   let cars: Car[] = [];
   let fires: Fire[] = [];
   let activeEvents: ActiveEvent[] = [];
@@ -272,6 +276,25 @@ export function initCityGame(): void {
   }
 
   function update(dt: number) {
+    if (rotAnim) {
+      rotAnim.t += dt;
+      const t = Math.min(1, rotAnim.t / ROTATE_ANIM_DURATION);
+      // First half spins the current view edge-on; at the midpoint (an
+      // imperceptible sliver) the underlying rotation swaps and the second
+      // half spins the new view back in from the opposite edge.
+      if (t >= 0.5 && !rotAnim.swapped) {
+        rotAnim.swapped = true;
+        setRotation(((rotation + (rotAnim.dir === 1 ? 1 : 3)) % 4) as Rotation);
+      }
+      const half = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+      const angle = t < 0.5 ? rotAnim.dir * 90 * half : rotAnim.dir * -90 * (1 - half);
+      canvas.style.transform = `rotateY(${angle}deg)`;
+      if (t >= 1) {
+        canvas.style.transform = '';
+        rotAnim = null;
+      }
+    }
+
     floaters = floaters.filter(f => {
       f.life -= dt;
       f.y -= 14 * dt;
@@ -383,17 +406,71 @@ export function initCityGame(): void {
   // dimensions) back-to-front and maps each view tile to its world tile.
 
   function drawWater(x: number, y: number, vx: number, vy: number) {
-    fillTile(ctx, VIEW, vx, vy, '#14456e');
-    // Drifting sparkle keyed to world coords so it flows, not flickers
-    if ((x * 5 + y * 3 + Math.floor(clock * 2)) % 9 === 0) {
-      fillTile(ctx, VIEW, vx, vy, 'rgba(125, 211, 252, 0.14)');
+    fillTile(ctx, VIEW, vx, vy, '#123c5f');
+    // Slow diagonal current bands drifting with time
+    const wave = Math.sin((x + y) * 0.9 - clock * 1.6);
+    if (wave > 0.35) {
+      fillTile(ctx, VIEW, vx, vy, `rgba(30, 92, 138, ${0.35 + wave * 0.25})`);
     }
+    // Smoothly pulsing sparkle rather than an on/off flicker
+    const sparkle = Math.sin(x * 12.9 + y * 7.3 + clock * 2.2) * 0.5 + 0.5;
+    if (sparkle > 0.82) {
+      fillTile(ctx, VIEW, vx, vy, `rgba(186, 230, 253, ${(sparkle - 0.82) * 2.2})`);
+    }
+  }
+
+  /** Stable per-tile flecks that fake a grassy/dirt texture on bare ground. */
+  function drawGroundFlecks(vx: number, vy: number, x: number, y: number) {
+    const hash = (x * 928371 + y * 12345) >>> 0;
+    for (let k = 0; k < 3; k++) {
+      const h = (hash >> (k * 5)) & 31;
+      if (h % 4 !== 0) continue;
+      const fx = 0.15 + ((h * 7) % 70) / 100;
+      const fy = 0.2 + ((h * 13) % 60) / 100;
+      const p = isoProject(VIEW, vx + fx, vy + fy);
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.07)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /** Soft grounding shadow so flat emoji tiles don't look like stickers. */
+  function drawFlatShadow(top: { x: number; y: number }, rx: number, ry: number) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(top.x, top.y + 3, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawRoofRidge(vx: number, vy: number, height: number, color: string) {
+    const n = isoProject(VIEW, vx + 0.08, vy + 0.08);
+    const s = isoProject(VIEW, vx + 0.92, vy + 0.92);
+    const peak = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    ctx.fillStyle = shadeColor(color, 1.2);
+    ctx.beginPath();
+    ctx.moveTo(n.x, n.y - height);
+    ctx.lineTo(peak.x, peak.y - height - 6);
+    ctx.lineTo(s.x, s.y - height);
+    ctx.closePath();
+    ctx.fill();
   }
 
   function drawRoad(i: number, vx: number, vy: number, dims: { w: number; h: number }) {
     if (tiles[i].type === 'bridge') {
       drawWater(i % CITY_W, Math.floor(i / CITY_W), vx, vy);
       fillTile(ctx, VIEW, vx, vy, 'rgba(94, 82, 60, 0.85)');
+      // Wooden plank texture across the deck
+      ctx.strokeStyle = 'rgba(40, 32, 20, 0.5)';
+      ctx.lineWidth = 1;
+      for (let p = 0.2; p < 1; p += 0.28) {
+        const a = isoProject(VIEW, vx + p, vy);
+        const b = isoProject(VIEW, vx + p + 0.12, vy + 1);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
     } else {
       fillTile(ctx, VIEW, vx, vy, '#3a4150');
     }
@@ -507,17 +584,26 @@ export function initCityGame(): void {
         drawWater(x, y, vx, vy);
       } else {
         fillTile(ctx, VIEW, vx, vy, (x + y) % 2 === 0 ? '#171e29' : '#1a2230');
+        if (tile.type === 'empty') drawGroundFlecks(vx, vy, x, y);
 
         if (tile.type === 'power') {
           drawBlock(ctx, VIEW, vx, vy, 22, '#5b4a7a');
+          // A slim smokestack reads as "power plant" even without the emoji
+          const stack = isoProject(VIEW, vx + 0.62, vy + 0.28);
+          ctx.fillStyle = shadeColor('#3d3252', 0.7);
+          ctx.fillRect(stack.x - 3, stack.y - 22 - 14, 6, 14);
+          ctx.fillStyle = shadeColor('#3d3252', 1.15);
+          ctx.fillRect(stack.x - 3, stack.y - 22 - 16, 6, 3);
           ctx.font = '15px serif';
           ctx.fillText('⚡', top.x, top.y - 22);
         } else if (tile.type === 'park') {
           fillTile(ctx, VIEW, vx, vy, '#22543d');
+          drawFlatShadow(top, 6, 2.5);
           ctx.font = '14px serif';
           ctx.fillText('🌳', top.x, top.y - 5);
         } else if (tile.type === 'tree') {
           fillTile(ctx, VIEW, vx, vy, '#16301f');
+          drawFlatShadow(top, 5, 2);
           ctx.font = '13px serif';
           ctx.fillText('🌲', top.x, top.y - 5);
         } else if (tile.type === 'rubble') {
@@ -526,16 +612,31 @@ export function initCityGame(): void {
           ctx.fillText('🪨', top.x, top.y - 3);
         } else if (tile.type === 'school') {
           drawBlock(ctx, VIEW, vx, vy, 14, '#b9813e');
+          drawRoofRidge(vx, vy, 14, '#8a5f2c');
           ctx.font = '13px serif';
           ctx.fillText('🏫', top.x, top.y - 14);
         } else if (tile.type === 'firehouse') {
           drawBlock(ctx, VIEW, vx, vy, 14, '#a34141');
+          drawRoofRidge(vx, vy, 14, '#7a2e2e');
           ctx.font = '13px serif';
           ctx.fillText('🚒', top.x, top.y - 14);
         } else if (isZone(tile.type)) {
           if (tile.level === 0) {
             fillTile(ctx, VIEW, vx, vy, ZONE_TINT[tile.type]);
             strokeTile(ctx, VIEW, vx, vy, ZONE_BORDER[tile.type], 1);
+            // Diagonal survey hatch marks the plot as vacant, not derelict
+            ctx.strokeStyle = ZONE_BORDER[tile.type];
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.35;
+            for (let p = 0.25; p <= 0.75; p += 0.25) {
+              const a = isoProject(VIEW, vx + p, vy + 0.1);
+              const b = isoProject(VIEW, vx + p - 0.15, vy + 0.9);
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
           } else {
             const height = zoneHeight(tile.level);
             drawBlock(ctx, VIEW, vx, vy, height, ZONE_BLOCK[tile.type]);
@@ -677,12 +778,16 @@ export function initCityGame(): void {
     smoke = [];
     floaters = [];
   }
-  document.getElementById('rotate-left')?.addEventListener('click', () => {
-    setRotation(((rotation + 3) % 4) as Rotation);
-  });
-  document.getElementById('rotate-right')?.addEventListener('click', () => {
-    setRotation(((rotation + 1) % 4) as Rotation);
-  });
+  function startRotate(dir: 1 | -1) {
+    if (rotAnim) return; // ignore taps while a turn is already animating
+    if (reduceMotion) {
+      setRotation(((rotation + (dir === 1 ? 1 : 3)) % 4) as Rotation);
+      return;
+    }
+    rotAnim = { t: 0, dir, swapped: false };
+  }
+  document.getElementById('rotate-left')?.addEventListener('click', () => startRotate(-1));
+  document.getElementById('rotate-right')?.addEventListener('click', () => startRotate(1));
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

@@ -13,6 +13,7 @@ const t = useTranslations(lang);
 
 const tools = [
   { id: 'road', emoji: '🛣️', label: t('fun.city.toolRoad'), cost: 10 },
+  { id: 'fill', emoji: '🧱', label: t('fun.city.toolFill'), cost: 60 },
   { id: 'res', emoji: '🏠', label: t('fun.city.toolRes'), cost: 50 },
   { id: 'com', emoji: '🏬', label: t('fun.city.toolCom'), cost: 75 },
   { id: 'ind', emoji: '🏭', label: t('fun.city.toolInd'), cost: 100 },
@@ -238,6 +239,7 @@ const tools = [
   .canvas-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    perspective: 1200px;
   }
 
   #game-canvas {
@@ -246,6 +248,7 @@ const tools = [
     height: auto;
     aspect-ratio: 76 / 45;
     cursor: pointer;
+    backface-visibility: hidden;
   }
 
   /* Keep tiles tappable on phones: minimum board size + horizontal pan */

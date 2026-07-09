@@ -84,9 +84,10 @@ export function strokeTile(
   x: number,
   y: number,
   color: string,
-  lineWidth = 2
+  lineWidth = 2,
+  lift = 0
 ): void {
-  diamondPath(ctx, view, x, y, 0);
+  diamondPath(ctx, view, x, y, lift);
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidth;
   ctx.stroke();
@@ -94,7 +95,10 @@ export function strokeTile(
 
 /**
  * Extruded block on tile (x, y): lit top, shaded south-west and south-east
- * faces. `inset` shrinks the footprint within the tile (0–0.5).
+ * faces. `inset` shrinks the footprint within the tile (0–0.5). `zOffset`
+ * lifts the whole block by that many pixels before drawing height — terrain
+ * stacks use it to sit tiles at `height * step`, and buildings placed on
+ * raised terrain reuse it so they sit on the hill instead of at sea level.
  */
 export function drawBlock(
   ctx: CanvasRenderingContext2D,
@@ -103,7 +107,8 @@ export function drawBlock(
   y: number,
   height: number,
   baseColor: string,
-  inset = 0.08
+  inset = 0.08,
+  zOffset = 0
 ): void {
   const x0 = x + inset;
   const y0 = y + inset;
@@ -113,34 +118,35 @@ export function drawBlock(
   const e = isoProject(view, x1, y0);
   const s = isoProject(view, x1, y1);
   const w = isoProject(view, x0, y1);
+  const top = height + zOffset;
 
   // South-west face (between W and S corners)
   ctx.fillStyle = shadeColor(baseColor, 0.62);
   ctx.beginPath();
-  ctx.moveTo(w.x, w.y - height);
-  ctx.lineTo(s.x, s.y - height);
-  ctx.lineTo(s.x, s.y);
-  ctx.lineTo(w.x, w.y);
+  ctx.moveTo(w.x, w.y - top);
+  ctx.lineTo(s.x, s.y - top);
+  ctx.lineTo(s.x, s.y - zOffset);
+  ctx.lineTo(w.x, w.y - zOffset);
   ctx.closePath();
   ctx.fill();
 
   // South-east face (between S and E corners)
   ctx.fillStyle = shadeColor(baseColor, 0.45);
   ctx.beginPath();
-  ctx.moveTo(s.x, s.y - height);
-  ctx.lineTo(e.x, e.y - height);
-  ctx.lineTo(e.x, e.y);
-  ctx.lineTo(s.x, s.y);
+  ctx.moveTo(s.x, s.y - top);
+  ctx.lineTo(e.x, e.y - top);
+  ctx.lineTo(e.x, e.y - zOffset);
+  ctx.lineTo(s.x, s.y - zOffset);
   ctx.closePath();
   ctx.fill();
 
   // Top face
   ctx.fillStyle = shadeColor(baseColor, 1.05);
   ctx.beginPath();
-  ctx.moveTo(n.x, n.y - height);
-  ctx.lineTo(e.x, e.y - height);
-  ctx.lineTo(s.x, s.y - height);
-  ctx.lineTo(w.x, w.y - height);
+  ctx.moveTo(n.x, n.y - top);
+  ctx.lineTo(e.x, e.y - top);
+  ctx.lineTo(s.x, s.y - top);
+  ctx.lineTo(w.x, w.y - top);
   ctx.closePath();
   ctx.fill();
 }

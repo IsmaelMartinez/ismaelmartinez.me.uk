@@ -22,6 +22,7 @@ import {
 import {
   GRID_W,
   GRID_H,
+  MIN_HEIGHT,
   MAX_HEIGHT,
   BUILDINGS,
   createPark,
@@ -465,6 +466,17 @@ export function initParkGame(): void {
   }
 
   /**
+   * Whether tile `i` still reads as a tunnel: the flag alone isn't enough,
+   * since raising/lowering a *neighbouring* hillside back to flat leaves
+   * `tunnels[i]` stale (raiseLand/lowerLand only clears the flag on the
+   * tile it directly touches). Deriving it from current state means guests
+   * only vanish where there's still a hill to vanish into.
+   */
+  function isTunnelActive(i: number): boolean {
+    return tunnels[i] && heights[i] === MIN_HEIGHT && neighbours(i).some(n => heights[n] >= 1);
+  }
+
+  /**
    * 1 = fully visible, 0 = hidden underground. Cross-fades across the tile
    * boundary while walking into/out of a tunnel instead of popping at the
    * halfway point, and is fully binary while a guest stands still.
@@ -474,13 +486,13 @@ export function initParkGame(): void {
       (guest.state === 'walking' || guest.state === 'leaving') &&
       guest.step < guest.path.length
     ) {
-      const fromHidden = tunnels[guest.path[guest.step - 1] ?? guest.tile];
-      const toHidden = tunnels[guest.path[guest.step]];
+      const fromHidden = isTunnelActive(guest.path[guest.step - 1] ?? guest.tile);
+      const toHidden = isTunnelActive(guest.path[guest.step]);
       if (fromHidden === toHidden) return fromHidden ? 0 : 1;
       const t = Math.min(1, Math.max(0, (guest.progress - 0.3) / 0.4));
       return fromHidden ? t : 1 - t;
     }
-    return tunnels[guest.tile] ? 0 : 1;
+    return isTunnelActive(guest.tile) ? 0 : 1;
   }
 
   function guestPos(guest: Guest): { x: number; y: number; z: number } {
@@ -602,7 +614,7 @@ export function initParkGame(): void {
             strokeTile(ctx, VIEW, x, y, 'rgba(0, 0, 0, 0.2)', 1);
           }
         }
-        if (tunnels[i]) {
+        if (isTunnelActive(i)) {
           // Dark archway where this dug-in path meets each raised neighbour.
           for (const n of neighbours(i)) {
             if (heights[n] < 1) continue;
@@ -756,7 +768,13 @@ export function initParkGame(): void {
           showToast(strings.needsHeight);
         }
       } else if (selectedTool === 'raiseLand' || selectedTool === 'lowerLand') {
-        showToast(strings.tooSteep);
+        // canPlace also rejects raising/lowering water, buildings, or a tile
+        // already at MIN_HEIGHT/MAX_HEIGHT — "too steep" would be misleading
+        // for those, so only show it for an actual smoothing violation.
+        const terraformable = tiles[i] === 'grass' || tiles[i] === 'path';
+        const next = heights[i] + (selectedTool === 'raiseLand' ? 1 : -1);
+        const withinRange = next >= MIN_HEIGHT && next <= MAX_HEIGHT;
+        if (terraformable && withinRange) showToast(strings.tooSteep);
       }
       return;
     }

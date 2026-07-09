@@ -191,9 +191,13 @@ describe('park building gates', () => {
   it('requires height 2+ for the Sky Tower', () => {
     const { tiles, heights, tunnels, entrance } = createPark();
     const ex = entrance % GRID_W;
+    const site = idx(ex - 1, GRID_H - 2);
     expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'skytower')).toBe(false);
-    applyTool(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'raiseLand');
-    applyTool(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'raiseLand');
+    // Set the height directly rather than via two chained raiseLand calls:
+    // a real second raise would be rejected by the smoothing rule while its
+    // neighbours are still flat (see the "refuses to raise..." test above).
+    // This test is only about the height gate, not a realistic build order.
+    heights[site] = 2;
     expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'skytower')).toBe(true);
   });
 });

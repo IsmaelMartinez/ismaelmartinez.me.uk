@@ -1,8 +1,8 @@
 # Pixel Park Overhaul: Terrain, Water, Tunnels & a Real Coaster Editor
 
 Date: 2026-07-09
-Status: Terrain elevation, water, and tunnels shipped. Theme zones and the
-coaster track editor designed but not built.
+Status: Terrain elevation, water, tunnels, and theme zones shipped. The
+coaster track editor is designed but not built.
 
 ## Context
 
@@ -76,32 +76,43 @@ same v1 simplification the base game already makes for ride capacity/queues)
 — but combined with a hill it reads exactly like a coaster or path ducking
 under the landscape.
 
-## Designed, not built: theme zones
+## Shipped this pass: theme zones
 
-**Model.** Three unlockable zones — Fairytale, Adventure/Jungle, and
-Pirate/Water — gated by park rating + cash thresholds (matching the existing
-`parkRating` idle-at-50 curve, e.g. Adventure at rating ≥60 & £3000 banked,
-Pirate at rating ≥75 & £6000, roughly the pacing of a 10–15 minute run).
+**Model.** Three zones — Fairytale (unlocked from the start), Adventure/
+Jungle (rating ≥60 & £3000 banked), and Pirate/Water (rating ≥75 & £6000) —
+gated by park rating + cash thresholds, matching the existing `parkRating`
+idle-at-50 curve and the pacing of a 10–15 minute run. `zoneUnlocked` in
+`grid.ts` evaluates the thresholds live against current rating/cash, the same
+way every other placement gate (water adjacency, minimum height) is checked,
+rather than latching permanently once crossed.
+
 Rather than a painted zone overlay (extra per-tile state + UI), a zone is
-"claimed" by placing a **Zone Gate** decoration; the nearest gate (Chebyshev
-distance, reusing `engine/grid2d.ts`) determines a tile's theme for rendering
-purposes only:
+"claimed" by placing a **Zone Gate** decoration (`gateFairytale` /
+`gateAdventure` / `gatePirate`, buildable like any other grass decoration
+once unlocked). `zoneAt(tiles, i)` finds the nearest placed gate by
+Chebyshev distance (reusing `engine/grid2d.ts`'s `chebyshev`) and returns
+its zone, or `null` if no gate exists yet — a pure Voronoi partition with no
+influence radius, so a single gate anywhere claims the whole map until a
+second gate splits it. This determines a tile's theme for rendering purposes
+only (guest pathing and building rules are unaffected):
 
-- Ground tint (grass → mossy green / jungle green / sandy tan).
-- Reskinned emoji + palette for existing buildings when built inside a zone's
-  influence (e.g. a carousel inside Fairytale renders as a merry-go-round
-  with pastel blocks; the same `carousel` tile inside Pirate renders as a
-  cannon-deck spin ride) — purely cosmetic, so `BUILDINGS` economics don't
-  fork per zone.
-- A small (~10%) price/upkeep discount for placing a zone's "native"
-  attraction inside its own influence, to reward planning coherent areas
-  instead of scattering buildings — this is the one economic change, and it's
-  additive to `toolCost`/`dailyUpkeep`, not a new pricing table.
+- Ground tint on grass tiles (Fairytale → mossy green, Adventure → jungle
+  green, Pirate → sandy tan), blended with the existing checkerboard shading.
+- Reskinned emoji + block colour for existing buildings when built inside a
+  zone's influence (e.g. a carousel inside Fairytale renders pastel-pink,
+  the same `carousel` tile inside Pirate renders as a cannon-deck spin ride)
+  — purely cosmetic (`ZONE_BUILDING_STYLE` in `game.ts`), so `BUILDINGS`
+  economics don't fork per zone.
+- A 10% price/upkeep discount (`zoneDiscountFactor` in `grid.ts`) for placing
+  a zone's native attraction (Fairytale → Carousel, Adventure → Log Flume,
+  Pirate → Big Wheel) inside its own influence, additive to
+  `toolCost`/`dailyUpkeep` rather than a new pricing table.
 
-**Why not this pass.** It's mostly content (new emoji sets, palettes, i18n
-strings ×3 zones ×3 locales) rather than new mechanics, but it's still a full
-UI feature (gate placement tool, unlock toasts, zone legend) — cleaner as its
-own follow-up than bolted onto the terrain/water/tunnel change.
+Pure logic (`zoneUnlocked`, `zoneAt`, `zoneDiscountFactor`, the discounted
+`toolCost`/`dailyUpkeep`) is unit-tested in `tests/games/park.test.ts`
+exactly like terrain/water/tunnels; rendering lives in `game.ts`; toolbar
+entries and strings (locked-zone toast, gate labels) are in `park.astro` and
+`translations.ts` across en/es/cat.
 
 ## Designed, not built: drag-to-build coaster track editor
 
@@ -160,7 +171,7 @@ session rather than folding it into a broader pass.
 1. ~~Terrain elevation (heights, raise/lower, slope rendering)~~ (shipped)
 2. ~~Water tiles + Log Flume~~ (shipped)
 3. ~~Tunnels (dig, hidden-underground guests) + Sky Tower~~ (shipped)
-4. Theme zones (gates, ground tint, cosmetic reskins, native-attraction discount)
+4. ~~Theme zones (gates, ground tint, cosmetic reskins, native-attraction discount)~~ (shipped)
 5. Coaster track editor (biggest remaining effort — new data model, build UI,
    cart entity, `thrill` need)
 

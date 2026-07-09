@@ -1,7 +1,7 @@
 /**
  * Park economy: rating, guest spawn rate, and daily upkeep.
  */
-import { BUILDINGS, type TileType } from './grid';
+import { BUILDINGS, zoneDiscountFactor, type TileType } from './grid';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -21,11 +21,13 @@ export function spawnInterval(rating: number): number {
   return clamp(9 - rating * 0.075, 1.5, 9);
 }
 
-/** Daily running costs across all placed buildings. */
+/** Daily running costs across all placed buildings, discounted for a zone's native attraction. */
 export function dailyUpkeep(tiles: TileType[]): number {
   let total = 0;
-  for (const tile of tiles) {
-    total += BUILDINGS[tile]?.upkeep ?? 0;
-  }
+  tiles.forEach((tile, i) => {
+    const def = BUILDINGS[tile];
+    if (!def) return;
+    total += Math.round(def.upkeep * zoneDiscountFactor(tiles, i, tile));
+  });
   return total;
 }

@@ -8,7 +8,12 @@ import {
   applyTool,
   toolCost,
   idx,
-  BUILDINGS
+  BUILDINGS,
+  ZONES,
+  zoneUnlocked,
+  zoneAt,
+  zoneDiscountFactor,
+  gateZone
 } from '../../src/games/park/grid';
 import { findPath, bfsFrom, nearestReachable, adjacentWalkable } from '../../src/games/park/pathfind';
 import {
@@ -202,6 +207,83 @@ describe('park building gates', () => {
   });
 });
 
+describe('park theme zones', () => {
+  it('maps each gate tile to its zone', () => {
+    expect(gateZone('gateFairytale')).toBe('fairytale');
+    expect(gateZone('gateAdventure')).toBe('adventure');
+    expect(gateZone('gatePirate')).toBe('pirate');
+    expect(gateZone('carousel')).toBeNull();
+    expect(gateZone('grass')).toBeNull();
+  });
+
+  it('unlocks Fairytale from the start and gates Adventure/Pirate on rating + cash', () => {
+    expect(zoneUnlocked('fairytale', 0, 0)).toBe(true);
+    expect(zoneUnlocked('adventure', 59, 3000)).toBe(false);
+    expect(zoneUnlocked('adventure', 60, 2999)).toBe(false);
+    expect(zoneUnlocked('adventure', 60, 3000)).toBe(true);
+    expect(zoneUnlocked('pirate', 74, 6000)).toBe(false);
+    expect(zoneUnlocked('pirate', 75, 5999)).toBe(false);
+    expect(zoneUnlocked('pirate', 75, 6000)).toBe(true);
+  });
+
+  it('has no zone influence anywhere until a gate is placed', () => {
+    const { tiles } = createPark();
+    expect(zoneAt(tiles, idx(5, 5))).toBeNull();
+    expect(zoneAt(tiles, idx(0, 0))).toBeNull();
+  });
+
+  it('claims influence around a placed gate', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 2, 2, 'gateFairytale');
+    expect(tiles[idx(2, 2)]).toBe('gateFairytale');
+    expect(zoneAt(tiles, idx(3, 3))).toBe('fairytale');
+    // Far side of the map still has no gate nearby, but the whole map is
+    // partitioned by nearest gate once at least one exists.
+    expect(zoneAt(tiles, idx(20, 10))).toBe('fairytale');
+  });
+
+  it('splits influence between two gates by Chebyshev distance', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 1, 1, 'gateFairytale');
+    applyTool(tiles, heights, tunnels, GRID_W - 2, GRID_H - 2, 'gateAdventure');
+    expect(zoneAt(tiles, idx(2, 2))).toBe('fairytale');
+    expect(zoneAt(tiles, idx(GRID_W - 3, GRID_H - 3))).toBe('adventure');
+  });
+
+  it('discounts a zone native attraction inside its own influence, but not other buildings', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 5, 5, 'gateFairytale');
+    // Fairytale's native attraction is the carousel — the sole gate on the
+    // map claims the whole grid, so the discount reaches even a far tile.
+    expect(zoneDiscountFactor(tiles, idx(6, 5), 'carousel')).toBe(0.9);
+    expect(zoneDiscountFactor(tiles, idx(20, 10), 'carousel')).toBe(0.9);
+    expect(zoneDiscountFactor(tiles, idx(6, 5), 'ferris')).toBe(1);
+  });
+
+  it('gives no discount anywhere before any gate is placed', () => {
+    const { tiles } = createPark();
+    expect(zoneDiscountFactor(tiles, idx(5, 5), 'carousel')).toBe(1);
+  });
+
+  it('applies the discount to toolCost when a location is given', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 5, 5, 'gateFairytale');
+    const base = BUILDINGS.carousel!.cost;
+    expect(toolCost('carousel')).toBe(base);
+    expect(toolCost('carousel', tiles, idx(6, 5))).toBe(Math.round(base * 0.9));
+    expect(toolCost('ferris', tiles, idx(6, 5))).toBe(BUILDINGS.ferris!.cost);
+  });
+
+  it('prices every zone gate and matches the ZONES catalogue', () => {
+    expect(toolCost('gateFairytale')).toBeGreaterThan(0);
+    expect(toolCost('gateAdventure')).toBeGreaterThan(0);
+    expect(toolCost('gatePirate')).toBeGreaterThan(0);
+    expect(ZONES.fairytale.native).toBe('carousel');
+    expect(ZONES.adventure.native).toBe('flume');
+    expect(ZONES.pirate.native).toBe('ferris');
+  });
+});
+
 describe('park pathfinding', () => {
   it('finds the shortest route along a corridor', () => {
     const { tiles, entrance } = createPark();
@@ -303,5 +385,15 @@ describe('park economy', () => {
     applyTool(tiles, heights, tunnels, 0, 0, 'carousel');
     applyTool(tiles, heights, tunnels, 1, 0, 'toilet');
     expect(dailyUpkeep(tiles)).toBe(BUILDINGS.carousel!.upkeep + BUILDINGS.toilet!.upkeep);
+  });
+
+  it('discounts upkeep for a zone native attraction inside its own influence', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 0, 0, 'gateFairytale');
+    applyTool(tiles, heights, tunnels, 1, 0, 'carousel'); // native to Fairytale
+    applyTool(tiles, heights, tunnels, 2, 0, 'toilet'); // not a native attraction anywhere
+    const expected =
+      Math.round(BUILDINGS.carousel!.upkeep * 0.9) + BUILDINGS.toilet!.upkeep;
+    expect(dailyUpkeep(tiles)).toBe(expected);
   });
 });

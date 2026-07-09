@@ -90,10 +90,16 @@ export function initSyndicateGame(): void {
   const root = document.getElementById('syndicate-root');
   const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
   if (!root || !canvasEl) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
   const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const startOverlay = el('start-overlay');
@@ -984,7 +990,7 @@ export function initSyndicateGame(): void {
   }
   boostBtn.addEventListener('click', triggerBoost);
 
-  window.addEventListener('keydown', e => {
+  const onKeydown = (e: KeyboardEvent) => {
     if (phase !== 'play') return;
     if (e.key >= '1' && e.key <= '4') selectAgent(parseInt(e.key, 10) - 1);
     else if (e.key === '0' || e.key.toLowerCase() === 'a') selectAgent('all');
@@ -992,7 +998,15 @@ export function initSyndicateGame(): void {
       e.preventDefault();
       triggerBoost();
     }
-  });
+  };
+  window.addEventListener('keydown', onKeydown);
+  // Window-level listeners outlive a ClientRouter swap; each wiring retires
+  // its own handler so re-inits don't stack keyboard handlers forever.
+  document.addEventListener(
+    'astro:before-swap',
+    () => window.removeEventListener('keydown', onKeydown),
+    { once: true }
+  );
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

@@ -95,10 +95,16 @@ export function initTanksGame(): void {
   const root = document.getElementById('tanks-root');
   const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
   if (!root || !canvasEl) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
   const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const startOverlay = el('start-overlay');
@@ -755,7 +761,7 @@ export function initTanksGame(): void {
       target.isContentEditable ||
       (target instanceof HTMLInputElement && target.type !== 'range'));
 
-  document.addEventListener('keydown', e => {
+  const onKeydown = (e: KeyboardEvent) => {
     if (!isHumanTurn() || isTextEntry(e.target)) return;
     if (gameKeys.has(e.key)) e.preventDefault();
     const tank = tanks[current];
@@ -788,7 +794,15 @@ export function initTanksGame(): void {
         return;
     }
     syncControls();
-  });
+  };
+  document.addEventListener('keydown', onKeydown);
+  // Document-level listeners outlive a ClientRouter swap; each wiring retires
+  // its own handler so re-inits don't stack keyboard handlers forever.
+  document.addEventListener(
+    'astro:before-swap',
+    () => document.removeEventListener('keydown', onKeydown),
+    { once: true }
+  );
 
   vsCpuBtn.addEventListener('click', () => startMatch('cpu'));
   twoPlayerBtn.addEventListener('click', () => startMatch('2p'));

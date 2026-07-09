@@ -70,11 +70,20 @@ type Phase = 'idle' | 'play' | 'dying' | 'over';
 const px = (cell: number) => cell * CELL + CELL / 2;
 
 export function initSnakeGame(): void {
+  // The root check keeps this init from grabbing another arcade page's
+  // #game-canvas when the after-swap listener fires on a non-Snake page.
+  const root = document.getElementById('snake-root');
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!canvas) return;
+  if (!root || !canvas) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const overlay = el('game-overlay');
@@ -381,7 +390,7 @@ export function initSnakeGame(): void {
 
   const gameKeys = new Set(Object.keys(KEY_DIRECTIONS));
 
-  document.addEventListener('keydown', e => {
+  const onKeydown = (e: KeyboardEvent) => {
     if (gameKeys.has(e.key)) e.preventDefault();
     if (phase !== 'play') return;
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
@@ -391,7 +400,15 @@ export function initSnakeGame(): void {
     if (paused) return;
     const dir = KEY_DIRECTIONS[e.key];
     if (dir) queueDirection(state, dir);
-  });
+  };
+  document.addEventListener('keydown', onKeydown);
+  // Document-level listeners outlive a ClientRouter swap; each wiring retires
+  // its own handler so re-inits don't stack keyboard handlers forever.
+  document.addEventListener(
+    'astro:before-swap',
+    () => document.removeEventListener('keydown', onKeydown),
+    { once: true }
+  );
 
   document.querySelectorAll<HTMLElement>('.control-btn').forEach(btn => {
     btn.addEventListener('click', () => {

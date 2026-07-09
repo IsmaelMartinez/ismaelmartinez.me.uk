@@ -119,8 +119,12 @@ const tools = [
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initParkGame no-ops on pages without a fresh game root.
   import { initParkGame } from '../../../games/park';
   initParkGame();
+  document.addEventListener('astro:after-swap', initParkGame);
 </script>
 
 <style>

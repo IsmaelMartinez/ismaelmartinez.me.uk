@@ -111,8 +111,12 @@ const weapons = [
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initTanksGame no-ops on pages without a fresh game root.
   import { initTanksGame } from '../../../games/tanks';
   initTanksGame();
+  document.addEventListener('astro:after-swap', initTanksGame);
 </script>
 
 <style>

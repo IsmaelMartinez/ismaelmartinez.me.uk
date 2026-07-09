@@ -34,13 +34,15 @@ allowed under grass and path, so paths can be sculpted into ramps as the land
 rises.
 
 **Rendering.** `engine/iso.ts`'s `drawBlock` gained a `zOffset` parameter
-(pixels to lift the whole block before drawing — terrain stacks use it to sit
-at `heights[i] * TERRAIN_STEP`, and buildings placed on raised land reuse the
-same offset so they sit on top of the hill instead of at sea level).
-Terrain itself draws as a stack of `heights[i]` unit blocks with a grass top
-and dirt-brown sides — visually a stepped hill, not a smooth slope; that's
-consistent with the game's existing blocky-iso look and far cheaper than
-true slope geometry.
+(pixels to lift a block's base before drawing its own height on top). Terrain
+itself doesn't use `zOffset` — a raised tile is one `drawBlock` call with
+`height = heights[i] * TERRAIN_STEP` and `zOffset = 0`, so it draws as a
+single extruded block from sea level up to the tile's height (a stepped hill,
+not a smooth slope; consistent with the game's existing blocky-iso look and
+far cheaper than true slope geometry). `zOffset` is for what sits *on* that
+terrain: a building on a raised tile is drawn with its own height and
+`zOffset = heights[i] * TERRAIN_STEP`, so its base starts at the hill's
+surface instead of at sea level.
 
 **Gameplay hook.** A new attraction, **Sky Tower** (🗼), requires the tile it
 sits on to be at height ≥2 — the first building that rewards terraforming

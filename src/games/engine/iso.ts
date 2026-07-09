@@ -96,9 +96,10 @@ export function strokeTile(
 /**
  * Extruded block on tile (x, y): lit top, shaded south-west and south-east
  * faces. `inset` shrinks the footprint within the tile (0–0.5). `zOffset`
- * lifts the whole block by that many pixels before drawing height — terrain
- * stacks use it to sit tiles at `height * step`, and buildings placed on
- * raised terrain reuse it so they sit on the hill instead of at sea level.
+ * lifts the block's *base* by that many pixels before drawing `height` on
+ * top of it — e.g. a building on a raised tile passes the terrain's own
+ * lift as `zOffset` so its base sits on the hill's surface instead of at
+ * sea level, while `height` stays just the building's own height.
  */
 export function drawBlock(
   ctx: CanvasRenderingContext2D,

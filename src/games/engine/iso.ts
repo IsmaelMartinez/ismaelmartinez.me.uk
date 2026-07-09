@@ -149,6 +149,16 @@ export function drawBlock(
   ctx.lineTo(w.x, w.y - top);
   ctx.closePath();
   ctx.fill();
+  // Crisp rim on the top edge, and a highlight down the near vertical
+  // edge, so the block reads as solid geometry rather than a flat cutout.
+  ctx.strokeStyle = shadeColor(baseColor, 1.4);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.strokeStyle = shadeColor(baseColor, 0.85);
+  ctx.beginPath();
+  ctx.moveTo(s.x, s.y - height);
+  ctx.lineTo(s.x, s.y);
+  ctx.stroke();
 }
 
 /**

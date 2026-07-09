@@ -179,10 +179,15 @@ export function applyTool(
   }
   if (tool === 'raiseLand') {
     heights[i] += 1;
+    // Reshaping the land under a dug tunnel closes it — a tunnel flag is
+    // only meaningful at height 0, and canPlace doesn't otherwise stop a
+    // path tile from being raised.
+    tunnels[i] = false;
     return;
   }
   if (tool === 'lowerLand') {
     heights[i] -= 1;
+    tunnels[i] = false;
     return;
   }
   if (tool === 'digTunnel') {

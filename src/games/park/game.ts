@@ -464,15 +464,23 @@ export function initParkGame(): void {
     return { x: (i % GRID_W) + 0.5, y: Math.floor(i / GRID_W) + 0.5 };
   }
 
-  /** The tile a guest currently occupies, for height lookups and tunnel hiding. */
-  function guestCurrentTile(guest: Guest): number {
+  /**
+   * 1 = fully visible, 0 = hidden underground. Cross-fades across the tile
+   * boundary while walking into/out of a tunnel instead of popping at the
+   * halfway point, and is fully binary while a guest stands still.
+   */
+  function tunnelVisibility(guest: Guest): number {
     if (
       (guest.state === 'walking' || guest.state === 'leaving') &&
       guest.step < guest.path.length
     ) {
-      return guest.progress < 0.5 ? (guest.path[guest.step - 1] ?? guest.tile) : guest.path[guest.step];
+      const fromHidden = tunnels[guest.path[guest.step - 1] ?? guest.tile];
+      const toHidden = tunnels[guest.path[guest.step]];
+      if (fromHidden === toHidden) return fromHidden ? 0 : 1;
+      const t = Math.min(1, Math.max(0, (guest.progress - 0.3) / 0.4));
+      return fromHidden ? t : 1 - t;
     }
-    return guest.tile;
+    return tunnels[guest.tile] ? 0 : 1;
   }
 
   function guestPos(guest: Guest): { x: number; y: number; z: number } {
@@ -502,10 +510,13 @@ export function initParkGame(): void {
   }
 
   function drawGuest(guest: Guest) {
-    if (tunnels[guestCurrentTile(guest)]) return; // hidden underground
+    const visibility = tunnelVisibility(guest);
+    if (visibility <= 0) return;
     const pos = guestPos(guest);
     const p = isoProject(VIEW, pos.x, pos.y);
     p.y -= Math.max(0, pos.z) * TERRAIN_STEP;
+    ctx.save();
+    ctx.globalAlpha = visibility;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
     ctx.ellipse(p.x, p.y, 5, 2.5, 0, 0, Math.PI * 2);
@@ -538,6 +549,7 @@ export function initParkGame(): void {
       ctx.font = '9px serif';
       ctx.fillText(thought, p.x, by + 1);
     }
+    ctx.restore();
   }
 
   function render() {

@@ -166,6 +166,17 @@ describe('park tunnels', () => {
     expect(tiles[idx(5, 5)]).toBe('grass');
     expect(tunnels[idx(5, 5)]).toBe(false);
   });
+
+  it('raising or lowering a tunnelled tile closes the tunnel', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 5, 5, 'path');
+    applyTool(tiles, heights, tunnels, 6, 5, 'raiseLand');
+    applyTool(tiles, heights, tunnels, 5, 5, 'digTunnel');
+    expect(tunnels[idx(5, 5)]).toBe(true);
+    applyTool(tiles, heights, tunnels, 5, 5, 'raiseLand');
+    expect(tunnels[idx(5, 5)]).toBe(false);
+    expect(heights[idx(5, 5)]).toBe(1);
+  });
 });
 
 describe('park building gates', () => {

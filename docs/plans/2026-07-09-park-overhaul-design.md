@@ -60,17 +60,19 @@ one means digging a small pond next to your path network.
 
 ## Shipped this pass: tunnels
 
-A path tile's height may additionally go to **-1**, but only via the new
-`digTunnel` tool and only where the smoothing rule's mirror holds: at least
-one orthogonal neighbour must be at height ≥1 (you're cutting into a hillside,
-not digging a pit in flat ground). Rendered as a dark arch cut into the
-hill's face on the side(s) facing raised neighbours. Guests standing on a
-height <0 tile are skipped in `drawGuest` — they visually vanish into the
-tunnel and reappear when they step onto a height ≥0 tile. This is a rendering
-trick, not a real underground layer (pathfinding is unaffected, same v1
-simplification the base game already makes for ride capacity/queues) — but
-combined with a hill it reads exactly like a coaster or path ducking under
-the landscape.
+A flat (height 0) path tile can be flagged via a parallel `tunnels: boolean[]`
+array, set by the new `digTunnel` tool. It only applies where the smoothing
+rule's mirror holds: at least one orthogonal neighbour must be at height ≥1
+(you're cutting into a hillside, not digging a pit in flat ground) — raising
+or lowering that tile's own land afterwards clears the flag again, since a
+tunnel is only meaningful at height 0. Rendered as a dark arch cut into the
+hill's face on the side(s) facing raised neighbours. Guests standing on (or
+crossing into/out of) a tunnelled tile are faded out in `drawGuest` — they
+visually vanish into the tunnel and reappear on the far side. This is a
+rendering trick, not a real underground layer (pathfinding is unaffected,
+same v1 simplification the base game already makes for ride capacity/queues)
+— but combined with a hill it reads exactly like a coaster or path ducking
+under the landscape.
 
 ## Designed, not built: theme zones
 

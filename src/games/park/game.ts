@@ -9,10 +9,10 @@ import {
   createGameLoop,
   initScoreboard,
   isoProject,
-  isoTileFromPoint,
   fillTile,
   strokeTile,
   drawBlock,
+  shadeColor,
   forEachTileBackToFront,
   createGameAudio,
   wireSoundButton,
@@ -21,6 +21,8 @@ import {
 import {
   GRID_W,
   GRID_H,
+  MIN_HEIGHT,
+  MAX_HEIGHT,
   BUILDINGS,
   createPark,
   canPlace,
@@ -42,10 +44,15 @@ import {
 } from './guests';
 import { parkRating, spawnInterval, dailyUpkeep } from './economy';
 
-const VIEW: IsoView = { halfW: 20, halfH: 10, originX: GRID_H * 20, originY: 60 };
+const BLOCK_HEIGHT = 16;
+/** Pixels a single terrain height step lifts a tile. */
+const TERRAIN_STEP = 12;
+const MAX_TERRAIN_LIFT = MAX_HEIGHT * TERRAIN_STEP;
+// originY carries extra headroom so a max-height hill (with a tall building
+// on top) never clips off the canvas top, even at the near corner.
+const VIEW: IsoView = { halfW: 20, halfH: 10, originX: GRID_H * 20, originY: 60 + MAX_TERRAIN_LIFT };
 const CANVAS_W = (GRID_W + GRID_H) * VIEW.halfW;
 const CANVAS_H = (GRID_W + GRID_H) * VIEW.halfH + VIEW.originY + 10;
-const BLOCK_HEIGHT = 16;
 const START_MONEY = 1500;
 const DAY_LENGTH = 24; // seconds of game time per day
 const GUEST_SPEED = 2.4; // tiles per second
@@ -58,7 +65,9 @@ const TILE_EMOJI: Partial<Record<TileType, string>> = {
   food: '🌭',
   drink: '🥤',
   toilet: '🚻',
-  tree: '🌳'
+  tree: '🌳',
+  flume: '🪵',
+  skytower: '🗼'
 };
 
 /** Per-building block colour and height so each attraction reads distinctly. */
@@ -67,7 +76,9 @@ const BUILDING_STYLE: Partial<Record<TileType, { color: string; height: number }
   ferris: { color: '#5a67c0', height: 26 },
   food: { color: '#a8632c', height: 11 },
   drink: { color: '#2f7fb0', height: 11 },
-  toilet: { color: '#5e6a72', height: 9 }
+  toilet: { color: '#5e6a72', height: 9 },
+  flume: { color: '#1f8a9e', height: 13 },
+  skytower: { color: '#8892a6', height: 40 }
 };
 
 /** Spin rates (radians/s) for rides: gentle idle, lively while in use. */
@@ -136,7 +147,10 @@ export function initParkGame(): void {
     upkeep: root.dataset.tUpkeep || 'Upkeep',
     cantAfford: root.dataset.tCantAfford || 'Not enough cash!',
     needsPath: root.dataset.tNeedsPath || 'Needs a path next to it!',
-    blocked: root.dataset.tBlocked || 'A guest is in the way!'
+    blocked: root.dataset.tBlocked || 'A guest is in the way!',
+    needsWater: root.dataset.tNeedsWater || 'Needs water next to it!',
+    needsHeight: root.dataset.tNeedsHeight || 'Needs higher ground!',
+    tooSteep: root.dataset.tTooSteep || "Can't shape the land that steeply!"
   };
 
   canvas.width = CANVAS_W;
@@ -164,7 +178,7 @@ export function initParkGame(): void {
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
 
-  let { tiles, entrance } = createPark();
+  let { tiles, heights, tunnels, entrance } = createPark();
   let phase: Phase = 'idle';
   let money = START_MONEY;
   let day = 1;
@@ -187,7 +201,9 @@ export function initParkGame(): void {
   function addFloater(tile: number, text: string, color: string) {
     const c = tileCenter(tile);
     const p = isoProject(VIEW, c.x, c.y);
-    floaters.push({ x: p.x, y: p.y - BLOCK_HEIGHT - 6, text, color, life: 1 });
+    p.y -= heights[tile] * TERRAIN_STEP;
+    const buildingHeight = BUILDING_STYLE[tiles[tile]]?.height ?? BLOCK_HEIGHT;
+    floaters.push({ x: p.x, y: p.y - buildingHeight - 6, text, color, life: 1 });
   }
 
   function showToast(text: string) {
@@ -426,7 +442,7 @@ export function initParkGame(): void {
   }
 
   function resetPark() {
-    ({ tiles, entrance } = createPark());
+    ({ tiles, heights, tunnels, entrance } = createPark());
     money = START_MONEY;
     day = 1;
     dayTimer = 0;
@@ -449,30 +465,70 @@ export function initParkGame(): void {
     return { x: (i % GRID_W) + 0.5, y: Math.floor(i / GRID_W) + 0.5 };
   }
 
-  function guestPos(guest: Guest): { x: number; y: number } {
+  /**
+   * Whether tile `i` still reads as a tunnel: the flag alone isn't enough,
+   * since raising/lowering a *neighbouring* hillside back to flat leaves
+   * `tunnels[i]` stale (raiseLand/lowerLand only clears the flag on the
+   * tile it directly touches). Deriving it from current state means guests
+   * only vanish where there's still a hill to vanish into.
+   */
+  function isTunnelActive(i: number): boolean {
+    return tunnels[i] && heights[i] === MIN_HEIGHT && neighbours(i).some(n => heights[n] >= 1);
+  }
+
+  /**
+   * 1 = fully visible, 0 = hidden underground. Cross-fades across the tile
+   * boundary while walking into/out of a tunnel instead of popping at the
+   * halfway point, and is fully binary while a guest stands still.
+   */
+  function tunnelVisibility(guest: Guest): number {
     if (
       (guest.state === 'walking' || guest.state === 'leaving') &&
       guest.step < guest.path.length
     ) {
-      const from = tileCenter(guest.path[guest.step - 1] ?? guest.tile);
-      const to = tileCenter(guest.path[guest.step]);
+      const fromHidden = isTunnelActive(guest.path[guest.step - 1] ?? guest.tile);
+      const toHidden = isTunnelActive(guest.path[guest.step]);
+      if (fromHidden === toHidden) return fromHidden ? 0 : 1;
+      const t = Math.min(1, Math.max(0, (guest.progress - 0.3) / 0.4));
+      return fromHidden ? t : 1 - t;
+    }
+    return isTunnelActive(guest.tile) ? 0 : 1;
+  }
+
+  function guestPos(guest: Guest): { x: number; y: number; z: number } {
+    if (
+      (guest.state === 'walking' || guest.state === 'leaving') &&
+      guest.step < guest.path.length
+    ) {
+      const fromTile = guest.path[guest.step - 1] ?? guest.tile;
+      const toTile = guest.path[guest.step];
+      const from = tileCenter(fromTile);
+      const to = tileCenter(toTile);
       return {
         x: from.x + (to.x - from.x) * guest.progress,
-        y: from.y + (to.y - from.y) * guest.progress
+        y: from.y + (to.y - from.y) * guest.progress,
+        z: heights[fromTile] + (heights[toTile] - heights[fromTile]) * guest.progress
       };
     }
     const pos = tileCenter(guest.tile);
+    let z = heights[guest.tile];
     if (guest.state === 'using' && guest.targetBuilding !== null) {
       const building = tileCenter(guest.targetBuilding);
       pos.x += (building.x - pos.x) * 0.4;
       pos.y += (building.y - pos.y) * 0.4;
+      z = heights[guest.targetBuilding];
     }
-    return pos;
+    return { ...pos, z };
   }
 
   function drawGuest(guest: Guest) {
+    const visibility = tunnelVisibility(guest);
+    if (visibility <= 0) return;
     const pos = guestPos(guest);
     const p = isoProject(VIEW, pos.x, pos.y);
+    p.y -= Math.max(0, pos.z) * TERRAIN_STEP;
+    ctx.save();
+    ctx.globalAlpha = visibility;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
     ctx.ellipse(p.x, p.y, 5, 2.5, 0, 0, Math.PI * 2);
@@ -505,6 +561,7 @@ export function initParkGame(): void {
       ctx.font = '9px serif';
       ctx.fillText(thought, p.x, by + 1);
     }
+    ctx.restore();
   }
 
   function render() {
@@ -536,14 +593,46 @@ export function initParkGame(): void {
         lastDiag = diag;
       }
       const tile = tiles[i];
-      if (tile === 'path' || tile === 'entrance') {
-        fillTile(ctx, VIEW, x, y, '#8a7a5c');
-        strokeTile(ctx, VIEW, x, y, 'rgba(0, 0, 0, 0.2)', 1);
+      const h = heights[i];
+      const liftPx = h * TERRAIN_STEP;
+
+      if (tile === 'water') {
+        const ripple = 0.85 + 0.25 * Math.sin(clock * 1.5 + (x + y) * 0.6);
+        fillTile(ctx, VIEW, x, y, shadeColor('#1f6fa8', ripple));
       } else {
-        fillTile(ctx, VIEW, x, y, (x + y) % 2 === 0 ? '#1d3b24' : '#1f4028');
+        const groundColor =
+          tile === 'path' || tile === 'entrance'
+            ? '#8a7a5c'
+            : (x + y) % 2 === 0
+              ? '#1d3b24'
+              : '#1f4028';
+        if (h > 0) {
+          drawBlock(ctx, VIEW, x, y, liftPx, groundColor, 0);
+        } else {
+          fillTile(ctx, VIEW, x, y, groundColor);
+          if (tile === 'path' || tile === 'entrance') {
+            strokeTile(ctx, VIEW, x, y, 'rgba(0, 0, 0, 0.2)', 1);
+          }
+        }
+        if (isTunnelActive(i)) {
+          // Dark archway where this dug-in path meets each raised neighbour.
+          for (const n of neighbours(i)) {
+            if (heights[n] < 1) continue;
+            const nx = n % GRID_W;
+            const ny = Math.floor(n / GRID_W);
+            const mx = x + 0.5 + (nx - x) * 0.5;
+            const my = y + 0.5 + (ny - y) * 0.5;
+            const mouth = isoProject(VIEW, mx, my);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+            ctx.beginPath();
+            ctx.ellipse(mouth.x, mouth.y - 3, 9, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
       }
 
       const top = isoProject(VIEW, x + 0.5, y + 0.5);
+      top.y -= liftPx;
       if (tile === 'entrance') {
         ctx.font = '13px serif';
         ctx.fillText('🎟️', top.x, top.y);
@@ -552,13 +641,13 @@ export function initParkGame(): void {
         ctx.fillText('🌳', top.x, top.y - 7);
       } else if (BUILDINGS[tile]) {
         const style = BUILDING_STYLE[tile] ?? { color: '#44447a', height: BLOCK_HEIGHT };
-        drawBlock(ctx, VIEW, x, y, style.height, style.color);
+        drawBlock(ctx, VIEW, x, y, style.height, style.color, 0.08, liftPx);
         const spin = RIDE_SPIN[tile];
         const busy = inUse.has(i);
         ctx.save();
         ctx.translate(top.x, top.y - style.height - (busy ? 2 : 0));
         if (spin) ctx.rotate((clock * (busy ? spin.busy : spin.idle)) % (Math.PI * 2));
-        ctx.font = `${tile === 'ferris' ? 16 : 14}px serif`;
+        ctx.font = `${tile === 'ferris' || tile === 'skytower' ? 16 : 14}px serif`;
         ctx.fillText(TILE_EMOJI[tile] ?? '', 0, 0);
         ctx.restore();
       }
@@ -568,8 +657,16 @@ export function initParkGame(): void {
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;
       const y = Math.floor(hoverTile / GRID_W);
-      const valid = canPlace(tiles, x, y, selectedTool) && toolCost(selectedTool) <= money;
-      strokeTile(ctx, VIEW, x, y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
+      const valid = canPlace(tiles, heights, tunnels, x, y, selectedTool) && toolCost(selectedTool) <= money;
+      strokeTile(
+        ctx,
+        VIEW,
+        x,
+        y,
+        valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)',
+        2,
+        heights[hoverTile] * TERRAIN_STEP
+      );
     }
 
     ctx.font = 'bold 11px monospace';
@@ -588,11 +685,43 @@ export function initParkGame(): void {
 
   // --- Input wiring ---
 
+  /**
+   * Screen point → tile index, accounting for terrain lift. Raised tiles
+   * render higher on screen than sea level (see TERRAIN_STEP), so naive
+   * height-0 unprojection drifts towards the near corner on hills — this
+   * tests each tile against its own lifted position instead, preferring the
+   * tallest (frontmost) match where a raised tile's face overlaps a
+   * neighbour's picking region.
+   */
+  function pickTile(sx: number, sy: number): number {
+    // Inlines isoUnproject's math instead of calling it, to avoid an object
+    // allocation per tile — this runs the full grid on every mousemove.
+    const a = (sx - VIEW.originX) / VIEW.halfW;
+    let best = -1;
+    let bestScore = -Infinity;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        const i = y * GRID_W + x;
+        const b = (sy + heights[i] * TERRAIN_STEP - VIEW.originY) / VIEW.halfH;
+        const tx = (a + b) / 2;
+        const ty = (b - a) / 2;
+        if (Math.floor(tx) === x && Math.floor(ty) === y) {
+          const score = heights[i] * 1000 + (x + y);
+          if (score > bestScore) {
+            bestScore = score;
+            best = i;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
   function tileFromEvent(e: MouseEvent): number {
     const rect = canvas.getBoundingClientRect();
     const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
     const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
-    return isoTileFromPoint(VIEW, sx, sy, GRID_W, GRID_H);
+    return pickTile(sx, sy);
   }
 
   canvas.addEventListener('mousemove', e => {
@@ -631,10 +760,25 @@ export function initParkGame(): void {
         return;
       }
     }
-    if (!canPlace(tiles, x, y, selectedTool)) {
-      if (BUILDINGS[selectedTool as TileType] && tiles[i] === 'grass') {
+    if (!canPlace(tiles, heights, tunnels, x, y, selectedTool)) {
+      const def = BUILDINGS[selectedTool as TileType];
+      if (def && tiles[i] === 'grass') {
         const hasPathNextDoor = neighbours(i).some(n => isWalkable(tiles[n]));
-        if (!hasPathNextDoor) showToast(strings.needsPath);
+        if (!hasPathNextDoor) {
+          showToast(strings.needsPath);
+        } else if (def.needsWater && !neighbours(i).some(n => tiles[n] === 'water')) {
+          showToast(strings.needsWater);
+        } else if (def.minHeight !== undefined && heights[i] < def.minHeight) {
+          showToast(strings.needsHeight);
+        }
+      } else if (selectedTool === 'raiseLand' || selectedTool === 'lowerLand') {
+        // canPlace also rejects raising/lowering water, buildings, or a tile
+        // already at MIN_HEIGHT/MAX_HEIGHT — "too steep" would be misleading
+        // for those, so only show it for an actual smoothing violation.
+        const terraformable = tiles[i] === 'grass' || tiles[i] === 'path';
+        const next = heights[i] + (selectedTool === 'raiseLand' ? 1 : -1);
+        const withinRange = next >= MIN_HEIGHT && next <= MAX_HEIGHT;
+        if (terraformable && withinRange) showToast(strings.tooSteep);
       }
       return;
     }
@@ -644,7 +788,7 @@ export function initParkGame(): void {
       return;
     }
     money -= cost;
-    applyTool(tiles, x, y, selectedTool);
+    applyTool(tiles, heights, tunnels, x, y, selectedTool);
     audio.playSfx('blip');
     invalidateGuests();
   });

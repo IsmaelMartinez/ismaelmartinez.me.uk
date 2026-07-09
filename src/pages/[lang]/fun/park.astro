@@ -15,10 +15,16 @@ const tools = [
   { id: 'path', emoji: '🟫', label: t('fun.park.toolPath'), cost: 10 },
   { id: 'carousel', emoji: '🎠', label: t('fun.park.toolCarousel'), cost: 250 },
   { id: 'ferris', emoji: '🎡', label: t('fun.park.toolFerris'), cost: 400 },
+  { id: 'flume', emoji: '🪵', label: t('fun.park.toolFlume'), cost: 350 },
+  { id: 'skytower', emoji: '🗼', label: t('fun.park.toolSkytower'), cost: 600 },
   { id: 'food', emoji: '🌭', label: t('fun.park.toolFood'), cost: 150 },
   { id: 'drink', emoji: '🥤', label: t('fun.park.toolDrink'), cost: 100 },
   { id: 'toilet', emoji: '🚻', label: t('fun.park.toolToilet'), cost: 120 },
   { id: 'tree', emoji: '🌳', label: t('fun.park.toolTree'), cost: 25 },
+  { id: 'water', emoji: '💧', label: t('fun.park.toolWater'), cost: 15 },
+  { id: 'raiseLand', emoji: '⛰️', label: t('fun.park.toolRaiseLand'), cost: 20 },
+  { id: 'lowerLand', emoji: '⛏️', label: t('fun.park.toolLowerLand'), cost: 20 },
+  { id: 'digTunnel', emoji: '🕳️', label: t('fun.park.toolDigTunnel'), cost: 30 },
   { id: 'bulldoze', emoji: '🚜', label: t('fun.park.toolBulldoze'), cost: 0 }
 ];
 ---
@@ -36,6 +42,9 @@ const tools = [
         data-t-cant-afford={t('fun.park.cantAfford')}
         data-t-needs-path={t('fun.park.needsPath')}
         data-t-blocked={t('fun.park.blocked')}
+        data-t-needs-water={t('fun.park.needsWater')}
+        data-t-needs-height={t('fun.park.needsHeight')}
+        data-t-too-steep={t('fun.park.tooSteep')}
       >
         <div class="game-header">
           <h1><span class="park-emoji">🎢</span> {t('fun.park.title')}</h1>

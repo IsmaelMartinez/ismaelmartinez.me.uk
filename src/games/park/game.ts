@@ -9,7 +9,6 @@ import {
   createGameLoop,
   initScoreboard,
   isoProject,
-  isoUnproject,
   fillTile,
   strokeTile,
   drawBlock,
@@ -694,13 +693,17 @@ export function initParkGame(): void {
    * neighbour's picking region.
    */
   function pickTile(sx: number, sy: number): number {
+    // Inlines isoUnproject's math instead of calling it, to avoid an object
+    // allocation per tile — this runs the full grid on every mousemove.
+    const a = (sx - VIEW.originX) / VIEW.halfW;
     let best = -1;
     let bestScore = -Infinity;
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         const i = y * GRID_W + x;
-        const liftPx = heights[i] * TERRAIN_STEP;
-        const { tx, ty } = isoUnproject(VIEW, sx, sy + liftPx);
+        const b = (sy + heights[i] * TERRAIN_STEP - VIEW.originY) / VIEW.halfH;
+        const tx = (a + b) / 2;
+        const ty = (b - a) / 2;
         if (Math.floor(tx) === x && Math.floor(ty) === y) {
           const score = heights[i] * 1000 + (x + y);
           if (score > bestScore) {

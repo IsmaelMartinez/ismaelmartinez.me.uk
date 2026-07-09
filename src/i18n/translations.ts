@@ -153,7 +153,7 @@ export const translations = {
     'fun.park.blocked': 'A guest is in the way!',
     'fun.park.needsWater': 'Needs water next to it!',
     'fun.park.needsHeight': 'Needs higher ground!',
-    'fun.park.tooSteep': "Can't shape the land that steeply!",
+    'fun.park.tooSteep': 'Can\'t shape the land that steeply!',
     'fun.park.gameOver': 'Bankrupt!',
     'fun.park.gameOverDesc': 'The park ran out of money.',
     'fun.park.daysOpen': 'Days open',

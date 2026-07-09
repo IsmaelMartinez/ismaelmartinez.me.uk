@@ -134,645 +134,685 @@ const t = useTranslations(lang);
 <script>
   import { initScoreboard } from '../../../games/engine';
 
-  // ── DOM Refs ──────────────────────────────────────────────────
-  const wrapper = document.getElementById('game-wrapper')!;
-  const menuScreen = document.getElementById('menu-screen')!;
-  const gameScreen = document.getElementById('game-screen')!;
-  const levelCompleteScreen = document.getElementById('level-complete-screen')!;
-  const miniGameScreen = document.getElementById('mini-game-screen')!;
-  const gameOverScreen = document.getElementById('game-over-screen')!;
+  // The whole game lives inside this init so a ClientRouter swap can
+  // re-run it: swaps don't re-execute an already-loaded module, so the
+  // module-level version of this script left a dead board on return.
+  function initPooPooLand(): void {
+    // ── DOM Refs ──────────────────────────────────────────────────
+    const wrapper = document.getElementById('game-wrapper');
+    // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+    // re-entry on a root this module has already wired.
+    if (!wrapper || wrapper.dataset.gameWired) return;
+    wrapper.dataset.gameWired = 'true';
+    const menuScreen = document.getElementById('menu-screen')!;
+    const gameScreen = document.getElementById('game-screen')!;
+    const levelCompleteScreen = document.getElementById('level-complete-screen')!;
+    const miniGameScreen = document.getElementById('mini-game-screen')!;
+    const gameOverScreen = document.getElementById('game-over-screen')!;
 
-  const menuHighScore = document.getElementById('menu-high-score')!;
-  const startBtn = document.getElementById('start-btn')!;
+    const menuHighScore = document.getElementById('menu-high-score')!;
+    const startBtn = document.getElementById('start-btn')!;
 
-  const levelDisplay = document.getElementById('level-display')!;
-  const rankDisplay = document.getElementById('rank-display')!;
-  const pooCounter = document.getElementById('poo-counter')!;
-  const scoreDisplay = document.getElementById('score-display')!;
-  const timerDisplay = document.getElementById('timer-display')!;
-  const gameGrid = document.getElementById('game-grid')!;
-  const streakDisplay = document.getElementById('streak-display')!;
+    const levelDisplay = document.getElementById('level-display')!;
+    const rankDisplay = document.getElementById('rank-display')!;
+    const pooCounter = document.getElementById('poo-counter')!;
+    const scoreDisplay = document.getElementById('score-display')!;
+    const timerDisplay = document.getElementById('timer-display')!;
+    const gameGrid = document.getElementById('game-grid')!;
+    const streakDisplay = document.getElementById('streak-display')!;
 
-  const nextLevelBtn = document.getElementById('next-level-btn')!;
-  const restartBtn = document.getElementById('restart-btn')!;
-  const powerUpBtn = document.getElementById('powerup-btn')! as HTMLButtonElement;
-  const powerUpCount = document.getElementById('powerup-count')!;
+    const nextLevelBtn = document.getElementById('next-level-btn')!;
+    const restartBtn = document.getElementById('restart-btn')!;
+    const powerUpBtn = document.getElementById('powerup-btn')! as HTMLButtonElement;
+    const powerUpCount = document.getElementById('powerup-count')!;
 
-  // ── Translations ──────────────────────────────────────────────
-  const T = {
-    level: wrapper.dataset.tLevel || 'Level',
-    score: wrapper.dataset.tScore || 'Score',
-    levelComplete: wrapper.dataset.tLevelComplete || 'Case Closed!',
-    accuracy: wrapper.dataset.tAccuracy || 'Accuracy',
-    timeBonus: wrapper.dataset.tTimeBonus || 'Time Bonus',
-    nextLevel: wrapper.dataset.tNextLevel || 'Next Case',
-    gameOver: wrapper.dataset.tGameOver || 'Investigation Over!',
-    totalPoos: wrapper.dataset.tTotalPoos || 'Poos Found',
-    playAgain: wrapper.dataset.tPlayAgain || 'New Investigation',
-    bonusRound: wrapper.dataset.tBonusRound || 'BONUS ROUND!',
-    highScore: wrapper.dataset.tHighScore || 'High Score',
-    miniPoo: wrapper.dataset.tMiniPoo || 'POO!',
-    miniNot: wrapper.dataset.tMiniNot || 'NOT POO!',
-    powerUp: wrapper.dataset.tPowerUp || 'Sniff',
-  };
+    // ── Translations ──────────────────────────────────────────────
+    const T = {
+      level: wrapper.dataset.tLevel || 'Level',
+      score: wrapper.dataset.tScore || 'Score',
+      levelComplete: wrapper.dataset.tLevelComplete || 'Case Closed!',
+      accuracy: wrapper.dataset.tAccuracy || 'Accuracy',
+      timeBonus: wrapper.dataset.tTimeBonus || 'Time Bonus',
+      nextLevel: wrapper.dataset.tNextLevel || 'Next Case',
+      gameOver: wrapper.dataset.tGameOver || 'Investigation Over!',
+      totalPoos: wrapper.dataset.tTotalPoos || 'Poos Found',
+      playAgain: wrapper.dataset.tPlayAgain || 'New Investigation',
+      bonusRound: wrapper.dataset.tBonusRound || 'BONUS ROUND!',
+      highScore: wrapper.dataset.tHighScore || 'High Score',
+      miniPoo: wrapper.dataset.tMiniPoo || 'POO!',
+      miniNot: wrapper.dataset.tMiniNot || 'NOT POO!',
+      powerUp: wrapper.dataset.tPowerUp || 'Sniff',
+    };
 
-  // ── Constants ─────────────────────────────────────────────────
-  const THEMES = [
-    ['🌳','🌲','🌿','🌺','🌻','🪨','🍄','🪴','🌵','🎋','🌾','🍀'],
-    ['🍳','🥘','🍲','🧁','🎂','🍩','🥧','🍪','🍰','🧇','🥞','🍕'],
-    ['🐚','🦀','🪸','⛱️','🧊','🪣','🐠','🦐','🐡','🪼','🐢','🦑'],
-    ['🏢','🚗','🗑️','📫','🚧','🧱','🏠','🚲','🪑','📦','🛒','🚌'],
-    ['🦊','🐿️','🦉','🐻','🦌','🐺','🐇','🍂','🍁','🪵','🌲','🐛'],
-    ['🚀','🛸','⭐','🌙','☄️','🪐','👾','🤖','🛰️','🌍','🔭','💫'],
-    ['🎸','🎹','🎺','🥁','🎻','🎷','🎤','🎵','🎶','📻','🎧','🪘'],
-    ['🏀','⚽','🎾','🏈','🏐','🎱','🏓','🥊','🏋️','⛷️','🏄','🚴'],
-  ];
+    // ── Constants ─────────────────────────────────────────────────
+    const THEMES = [
+      ['🌳','🌲','🌿','🌺','🌻','🪨','🍄','🪴','🌵','🎋','🌾','🍀'],
+      ['🍳','🥘','🍲','🧁','🎂','🍩','🥧','🍪','🍰','🧇','🥞','🍕'],
+      ['🐚','🦀','🪸','⛱️','🧊','🪣','🐠','🦐','🐡','🪼','🐢','🦑'],
+      ['🏢','🚗','🗑️','📫','🚧','🧱','🏠','🚲','🪑','📦','🛒','🚌'],
+      ['🦊','🐿️','🦉','🐻','🦌','🐺','🐇','🍂','🍁','🪵','🌲','🐛'],
+      ['🚀','🛸','⭐','🌙','☄️','🪐','👾','🤖','🛰️','🌍','🔭','💫'],
+      ['🎸','🎹','🎺','🥁','🎻','🎷','🎤','🎵','🎶','📻','🎧','🪘'],
+      ['🏀','⚽','🎾','🏈','🏐','🎱','🏓','🥊','🏋️','⛷️','🏄','🚴'],
+    ];
 
-  const RANKS = [
-    { threshold: 0, name: 'Rookie', emoji: '🔰' },
-    { threshold: 500, name: 'Tracker', emoji: '👃' },
-    { threshold: 1500, name: 'Sniffer', emoji: '🐕' },
-    { threshold: 3000, name: 'Inspector', emoji: '🕵️' },
-    { threshold: 6000, name: 'Master', emoji: '🎖️' },
-    { threshold: 10000, name: 'Legend', emoji: '👑' },
-  ];
+    const RANKS = [
+      { threshold: 0, name: 'Rookie', emoji: '🔰' },
+      { threshold: 500, name: 'Tracker', emoji: '👃' },
+      { threshold: 1500, name: 'Sniffer', emoji: '🐕' },
+      { threshold: 3000, name: 'Inspector', emoji: '🕵️' },
+      { threshold: 6000, name: 'Master', emoji: '🎖️' },
+      { threshold: 10000, name: 'Legend', emoji: '👑' },
+    ];
 
-  const MINI_GAME_EMOJIS = ['💩','🍫','🍩','🧁','🍮','🌰','🥜','🍠','🪵','🍂','🐻','🏈','🥔','🫘','🧆'];
-  const MINI_GAME_DECOYS = MINI_GAME_EMOJIS.slice(1);
-  const BASE_POO_POINTS = 100;
-  const MAX_STREAK_MULTIPLIER = 5;
-  const TIME_BONUS_MULTIPLIER = 10;
-  const STREAK_FOR_POWERUP = 2;
-  const HINT_DURATION_MS = 1500;
+    const MINI_GAME_EMOJIS = ['💩','🍫','🍩','🧁','🍮','🌰','🥜','🍠','🪵','🍂','🐻','🏈','🥔','🫘','🧆'];
+    const MINI_GAME_DECOYS = MINI_GAME_EMOJIS.slice(1);
+    const BASE_POO_POINTS = 100;
+    const MAX_STREAK_MULTIPLIER = 5;
+    const TIME_BONUS_MULTIPLIER = 10;
+    const STREAK_FOR_POWERUP = 2;
+    const HINT_DURATION_MS = 1500;
 
-  // ── State ─────────────────────────────────────────────────────
-  interface Cell {
-    isPoo: boolean;
-    emoji: string;
-    adjacentPoos: number;
-    revealed: boolean;
-  }
-
-  let level = 1;
-  let score = 0;
-  let totalPoosFound = 0;
-  let poosFoundThisLevel = 0;
-  let clicksThisLevel = 0;
-  let poosToFind = 0;
-  let timeLeft = 0;
-  let grid: Cell[] = [];
-  let gridSize = 4;
-  let streak = 0;
-  let powerUps = 0;
-  let timerInterval: ReturnType<typeof setInterval> | null = null;
-  let miniGamePending = false;
-
-  // updateHighScore keeps `highScore` ahead of anything the board can
-  // commit, so the board never needs to push updates back.
-  const board = initScoreboard(document.getElementById('highscores'));
-  let highScore = board.top()?.score ?? 0;
-
-  menuHighScore.textContent = highScore.toString();
-
-  // ── Level Config ──────────────────────────────────────────────
-  function getLevelConfig(lvl: number) {
-    const gs = Math.min(4 + Math.floor((lvl - 1) / 3), 8);
-    const np = Math.min(2 + Math.floor((lvl) / 2), Math.floor(gs * gs * 0.25));
-    const tl = Math.max(20, 60 - (lvl - 1) * 3);
-    return { gridSize: gs, numPoos: Math.max(2, np), timeLimit: tl };
-  }
-
-  // ── Grid Generation ───────────────────────────────────────────
-  function generateGrid(gs: number, numPoos: number): Cell[] {
-    const totalCells = gs * gs;
-    const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
-
-    const pooPositions = new Set<number>();
-    while (pooPositions.size < numPoos) {
-      pooPositions.add(Math.floor(Math.random() * totalCells));
+    // ── State ─────────────────────────────────────────────────────
+    interface Cell {
+      isPoo: boolean;
+      emoji: string;
+      adjacentPoos: number;
+      revealed: boolean;
     }
 
-    const cells: Cell[] = [];
-    for (let i = 0; i < totalCells; i++) {
-      cells.push({
-        isPoo: pooPositions.has(i),
-        emoji: theme[Math.floor(Math.random() * theme.length)],
-        adjacentPoos: 0,
-        revealed: false,
-      });
+    let level = 1;
+    let score = 0;
+    let totalPoosFound = 0;
+    let poosFoundThisLevel = 0;
+    let clicksThisLevel = 0;
+    let poosToFind = 0;
+    let timeLeft = 0;
+    let grid: Cell[] = [];
+    let gridSize = 4;
+    let streak = 0;
+    let powerUps = 0;
+    let timerInterval: ReturnType<typeof setInterval> | null = null;
+    // A swap tears the page out from under any running timers: every
+    // setInterval is tracked here and cleared on astro:before-swap, and
+    // `disposed` stops in-flight timeouts from restarting timers or touching
+    // elements that left with the old page.
+    let disposed = false;
+    const intervals = new Set<ReturnType<typeof setInterval>>();
+    const track = (id: ReturnType<typeof setInterval>) => {
+      intervals.add(id);
+      return id;
+    };
+    const untrack = (id: ReturnType<typeof setInterval> | null) => {
+      if (id !== null) {
+        clearInterval(id);
+        intervals.delete(id);
+      }
+    };
+    document.addEventListener(
+      'astro:before-swap',
+      () => {
+        disposed = true;
+        intervals.forEach(id => clearInterval(id));
+        intervals.clear();
+      },
+      { once: true }
+    );
+    let miniGamePending = false;
+
+    // updateHighScore keeps `highScore` ahead of anything the board can
+    // commit, so the board never needs to push updates back.
+    const board = initScoreboard(document.getElementById('highscores'));
+    let highScore = board.top()?.score ?? 0;
+
+    menuHighScore.textContent = highScore.toString();
+
+    // ── Level Config ──────────────────────────────────────────────
+    function getLevelConfig(lvl: number) {
+      const gs = Math.min(4 + Math.floor((lvl - 1) / 3), 8);
+      const np = Math.min(2 + Math.floor((lvl) / 2), Math.floor(gs * gs * 0.25));
+      const tl = Math.max(20, 60 - (lvl - 1) * 3);
+      return { gridSize: gs, numPoos: Math.max(2, np), timeLimit: tl };
     }
 
-    // Calculate adjacency
-    for (let i = 0; i < totalCells; i++) {
-      if (cells[i].isPoo) continue;
-      const row = Math.floor(i / gs);
-      const col = i % gs;
-      let count = 0;
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const r = row + dr;
-          const c = col + dc;
-          if (r >= 0 && r < gs && c >= 0 && c < gs) {
-            if (cells[r * gs + c].isPoo) count++;
+    // ── Grid Generation ───────────────────────────────────────────
+    function generateGrid(gs: number, numPoos: number): Cell[] {
+      const totalCells = gs * gs;
+      const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
+
+      const pooPositions = new Set<number>();
+      while (pooPositions.size < numPoos) {
+        pooPositions.add(Math.floor(Math.random() * totalCells));
+      }
+
+      const cells: Cell[] = [];
+      for (let i = 0; i < totalCells; i++) {
+        cells.push({
+          isPoo: pooPositions.has(i),
+          emoji: theme[Math.floor(Math.random() * theme.length)],
+          adjacentPoos: 0,
+          revealed: false,
+        });
+      }
+
+      // Calculate adjacency
+      for (let i = 0; i < totalCells; i++) {
+        if (cells[i].isPoo) continue;
+        const row = Math.floor(i / gs);
+        const col = i % gs;
+        let count = 0;
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const r = row + dr;
+            const c = col + dc;
+            if (r >= 0 && r < gs && c >= 0 && c < gs) {
+              if (cells[r * gs + c].isPoo) count++;
+            }
           }
         }
+        cells[i].adjacentPoos = count;
       }
-      cells[i].adjacentPoos = count;
+
+      return cells;
     }
 
-    return cells;
-  }
-
-  // ── Screen Management ─────────────────────────────────────────
-  function showScreen(screen: HTMLElement) {
-    [menuScreen, gameScreen, levelCompleteScreen, miniGameScreen, gameOverScreen].forEach(s => {
-      s.style.display = 'none';
-    });
-    screen.style.display = 'flex';
-  }
-
-  // ── Rank ──────────────────────────────────────────────────────
-  function getRank(s: number) {
-    let rank = RANKS[0];
-    for (const r of RANKS) {
-      if (s >= r.threshold) rank = r;
+    // ── Screen Management ─────────────────────────────────────────
+    function showScreen(screen: HTMLElement) {
+      [menuScreen, gameScreen, levelCompleteScreen, miniGameScreen, gameOverScreen].forEach(s => {
+        s.style.display = 'none';
+      });
+      screen.style.display = 'flex';
     }
-    return rank;
-  }
 
-  // ── Render Grid ───────────────────────────────────────────────
-  function renderGrid() {
-    gameGrid.innerHTML = '';
-    gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, minmax(0, 1fr))`;
+    // ── Rank ──────────────────────────────────────────────────────
+    function getRank(s: number) {
+      let rank = RANKS[0];
+      for (const r of RANKS) {
+        if (s >= r.threshold) rank = r;
+      }
+      return rank;
+    }
 
-    grid.forEach((cell, index) => {
-      const tile = document.createElement('button');
-      tile.className = 'tile';
-      tile.dataset.index = index.toString();
-      tile.setAttribute('aria-label', `Tile ${index + 1}`);
+    // ── Render Grid ───────────────────────────────────────────────
+    function renderGrid() {
+      gameGrid.innerHTML = '';
+      gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, minmax(0, 1fr))`;
 
-      if (cell.revealed) {
-        if (cell.isPoo) {
-          tile.textContent = '💩';
-          tile.classList.add('tile-found');
+      grid.forEach((cell, index) => {
+        const tile = document.createElement('button');
+        tile.className = 'tile';
+        tile.dataset.index = index.toString();
+        tile.setAttribute('aria-label', `Tile ${index + 1}`);
+
+        if (cell.revealed) {
+          if (cell.isPoo) {
+            tile.textContent = '💩';
+            tile.classList.add('tile-found');
+          } else {
+            tile.textContent = cell.adjacentPoos > 0 ? cell.adjacentPoos.toString() : '';
+            tile.classList.add('tile-searched');
+            if (cell.adjacentPoos >= 3) tile.classList.add('tile-hot');
+            else if (cell.adjacentPoos >= 1) tile.classList.add('tile-warm');
+            else tile.classList.add('tile-cold');
+          }
         } else {
-          tile.textContent = cell.adjacentPoos > 0 ? cell.adjacentPoos.toString() : '';
-          tile.classList.add('tile-searched');
-          if (cell.adjacentPoos >= 3) tile.classList.add('tile-hot');
-          else if (cell.adjacentPoos >= 1) tile.classList.add('tile-warm');
-          else tile.classList.add('tile-cold');
+          tile.textContent = cell.emoji;
+          tile.classList.add('tile-hidden');
         }
+
+        gameGrid.appendChild(tile);
+      });
+    }
+
+    gameGrid.addEventListener('click', (event) => {
+      const tile = (event.target as HTMLElement).closest('.tile') as HTMLElement | null;
+      if (tile?.dataset.index) {
+        handleTileClick(Number(tile.dataset.index));
+      }
+    });
+
+    // ── HUD Update ────────────────────────────────────────────────
+    function updateHUD() {
+      levelDisplay.textContent = `${T.level} ${level}`;
+      const rank = getRank(score);
+      rankDisplay.textContent = `${rank.emoji} ${rank.name}`;
+      pooCounter.textContent = `💩 ${poosFoundThisLevel}/${poosToFind}`;
+      scoreDisplay.textContent = `${T.score}: ${score}`;
+      timerDisplay.textContent = `⏱️ ${timeLeft}`;
+
+      if (streak >= 2) {
+        streakDisplay.textContent = `🔥 x${streak}`;
+        streakDisplay.style.display = 'inline';
       } else {
-        tile.textContent = cell.emoji;
-        tile.classList.add('tile-hidden');
+        streakDisplay.style.display = 'none';
       }
-
-      gameGrid.appendChild(tile);
-    });
-  }
-
-  gameGrid.addEventListener('click', (event) => {
-    const tile = (event.target as HTMLElement).closest('.tile') as HTMLElement | null;
-    if (tile?.dataset.index) {
-      handleTileClick(Number(tile.dataset.index));
-    }
-  });
-
-  // ── HUD Update ────────────────────────────────────────────────
-  function updateHUD() {
-    levelDisplay.textContent = `${T.level} ${level}`;
-    const rank = getRank(score);
-    rankDisplay.textContent = `${rank.emoji} ${rank.name}`;
-    pooCounter.textContent = `💩 ${poosFoundThisLevel}/${poosToFind}`;
-    scoreDisplay.textContent = `${T.score}: ${score}`;
-    timerDisplay.textContent = `⏱️ ${timeLeft}`;
-
-    if (streak >= 2) {
-      streakDisplay.textContent = `🔥 x${streak}`;
-      streakDisplay.style.display = 'inline';
-    } else {
-      streakDisplay.style.display = 'none';
-    }
-  }
-
-  // ── Power-Up ────────────────────────────────────────────────
-  function updatePowerUpButton() {
-    powerUpCount.textContent = powerUps.toString();
-    powerUpBtn.disabled = powerUps <= 0;
-    powerUpBtn.classList.toggle('powerup-available', powerUps > 0);
-  }
-
-  function usePowerUp() {
-    if (powerUps <= 0) return;
-
-    const hiddenPoos = grid
-      .map((cell, i) => ({ cell, i }))
-      .filter(({ cell }) => cell.isPoo && !cell.revealed);
-
-    if (hiddenPoos.length === 0) return;
-
-    powerUps--;
-    updatePowerUpButton();
-
-    // Pick a random hidden poo and briefly show the 💩 emoji on it
-    const target = hiddenPoos[Math.floor(Math.random() * hiddenPoos.length)];
-    const tiles = gameGrid.querySelectorAll('.tile');
-    const tile = tiles[target.i] as HTMLElement;
-    if (tile) {
-      const originalEmoji = tile.textContent || '';
-      tile.textContent = '💩';
-      tile.classList.add('tile-hint');
-      setTimeout(() => {
-        tile.textContent = originalEmoji;
-        tile.classList.remove('tile-hint');
-      }, HINT_DURATION_MS);
-    }
-  }
-
-  powerUpBtn.addEventListener('click', usePowerUp);
-
-  // ── Tile Click ────────────────────────────────────────────────
-  function handleTileClick(index: number) {
-    const cell = grid[index];
-    if (cell.revealed) return;
-
-    cell.revealed = true;
-    clicksThisLevel++;
-
-    if (cell.isPoo) {
-      poosFoundThisLevel++;
-      totalPoosFound++;
-      streak++;
-      const multiplier = Math.min(streak, MAX_STREAK_MULTIPLIER);
-      const points = BASE_POO_POINTS * level * multiplier;
-      score += points;
-
-      let floatingText = `+${points}`;
-      if (streak >= STREAK_FOR_POWERUP) {
-        powerUps++;
-        updatePowerUpButton();
-        floatingText += ' 🐕+1';
-      }
-      showFloatingText(index, floatingText, '#22c55e');
-
-      if (poosFoundThisLevel >= poosToFind) {
-        stopTimer();
-        const timeBonus = timeLeft * TIME_BONUS_MULTIPLIER;
-        score += timeBonus;
-        renderGrid();
-        updateHUD();
-
-        const prevMilestone = Math.floor((totalPoosFound - poosFoundThisLevel) / 10);
-        const currentMilestone = Math.floor(totalPoosFound / 10);
-        miniGamePending = currentMilestone > prevMilestone;
-
-        setTimeout(() => showLevelComplete(timeBonus), 600);
-        return;
-      }
-    } else {
-      streak = 0;
     }
 
-    renderGrid();
-    updateHUD();
-  }
-
-  // ── Floating Text ─────────────────────────────────────────────
-  function showFloatingText(index: number, text: string, color: string) {
-    const tiles = gameGrid.querySelectorAll('.tile');
-    const tile = tiles[index];
-    if (!tile) return;
-
-    const float = document.createElement('span');
-    float.className = 'float-text';
-    float.textContent = text;
-    float.style.color = color;
-    tile.appendChild(float);
-    setTimeout(() => float.remove(), 800);
-  }
-
-  // ── Timer ─────────────────────────────────────────────────────
-  function startTimer() {
-    stopTimer();
-    timerInterval = setInterval(() => {
-      timeLeft--;
-      updateHUD();
-      if (timeLeft <= 10) {
-        timerDisplay.classList.add('timer-danger');
-      }
-      if (timeLeft <= 0) {
-        stopTimer();
-        showGameOver();
-      }
-    }, 1000);
-  }
-
-  function stopTimer() {
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
+    // ── Power-Up ────────────────────────────────────────────────
+    function updatePowerUpButton() {
+      powerUpCount.textContent = powerUps.toString();
+      powerUpBtn.disabled = powerUps <= 0;
+      powerUpBtn.classList.toggle('powerup-available', powerUps > 0);
     }
-    timerDisplay.classList.remove('timer-danger');
-  }
 
-  // ── Game Flow ─────────────────────────────────────────────────
-  function startGame() {
-    level = 1;
-    score = 0;
-    totalPoosFound = 0;
-    streak = 0;
-    powerUps = 0;
-    updatePowerUpButton();
-    startLevel();
-  }
+    function usePowerUp() {
+      if (powerUps <= 0) return;
 
-  function startLevel() {
-    const config = getLevelConfig(level);
-    gridSize = config.gridSize;
-    poosToFind = config.numPoos;
-    timeLeft = config.timeLimit;
-    poosFoundThisLevel = 0;
-    clicksThisLevel = 0;
-    streak = 0;
+      const hiddenPoos = grid
+        .map((cell, i) => ({ cell, i }))
+        .filter(({ cell }) => cell.isPoo && !cell.revealed);
 
-    grid = generateGrid(gridSize, poosToFind);
+      if (hiddenPoos.length === 0) return;
 
-    showScreen(gameScreen);
-    renderGrid();
-    updateHUD();
-    startTimer();
-  }
+      powerUps--;
+      updatePowerUpButton();
 
-  function showLevelComplete(timeBonus: number) {
-    const lcTitle = document.getElementById('level-complete-title')!;
-    const lcAccLabel = document.getElementById('lc-accuracy-label')!;
-    const lcAcc = document.getElementById('lc-accuracy')!;
-    const lcTimeLabel = document.getElementById('lc-time-label')!;
-    const lcTime = document.getElementById('lc-time')!;
-    const lcScoreLabel = document.getElementById('lc-score-label')!;
-    const lcScore = document.getElementById('lc-score')!;
-
-    lcTitle.textContent = `${T.levelComplete} ${T.level} ${level}`;
-
-    const accuracy = clicksThisLevel > 0
-      ? Math.round((poosFoundThisLevel / clicksThisLevel) * 100)
-      : 100;
-    lcAccLabel.textContent = T.accuracy;
-    lcAcc.textContent = `${accuracy}%`;
-
-    lcTimeLabel.textContent = T.timeBonus;
-    lcTime.textContent = `+${timeBonus}`;
-
-    lcScoreLabel.textContent = T.score;
-    lcScore.textContent = score.toString();
-
-    nextLevelBtn.textContent = miniGamePending
-      ? `🎰 ${T.bonusRound}`
-      : T.nextLevel;
-
-    updateHighScore();
-    showScreen(levelCompleteScreen);
-  }
-
-  function showGameOver() {
-    const goTitle = document.getElementById('game-over-title')!;
-    const goLevelLabel = document.getElementById('go-level-label')!;
-    const goLevel = document.getElementById('go-level')!;
-    const goPoosLabel = document.getElementById('go-poos-label')!;
-    const goPoos = document.getElementById('go-poos')!;
-    const goScoreLabel = document.getElementById('go-score-label')!;
-    const goScore = document.getElementById('go-score')!;
-
-    goTitle.textContent = T.gameOver;
-    goLevelLabel.textContent = T.level;
-    goLevel.textContent = level.toString();
-    goPoosLabel.textContent = T.totalPoos;
-    goPoos.textContent = totalPoosFound.toString();
-    goScoreLabel.textContent = T.score;
-    goScore.textContent = score.toString();
-    restartBtn.textContent = T.playAgain;
-
-    updateHighScore();
-    showScreen(gameOverScreen);
-    board.show(score);
-  }
-
-  /** Runs at each level end: keeps the menu readout current and stashes the
-      score so quitting mid-investigation keeps the run on the table. */
-  function updateHighScore() {
-    board.stash(score);
-    if (score > highScore) {
-      highScore = score;
-      menuHighScore.textContent = highScore.toString();
-    }
-  }
-
-  // ── Mini-Games ────────────────────────────────────────────────
-  function startMiniGame() {
-    miniGamePending = false;
-    const types = ['whack', 'quicksniff'];
-    const type = types[Math.floor(Math.random() * types.length)];
-
-    const title = document.getElementById('mini-game-title')!;
-    const area = document.getElementById('mini-game-area')!;
-    const miniScoreEl = document.getElementById('mini-score')!;
-    const miniTimerEl = document.getElementById('mini-timer')!;
-
-    title.textContent = T.bonusRound;
-    area.innerHTML = '';
-    showScreen(miniGameScreen);
-
-    const miniTime = 15;
-    miniScoreEl.textContent = `${T.score}: 0`;
-    miniTimerEl.textContent = `⏱️ ${miniTime}`;
-
-    if (type === 'whack') {
-      runWhackAPoo(area, miniScoreEl, miniTimerEl, miniTime, (finalScore: number) => {
-        score += finalScore;
-        level++;
-        startLevel();
-      });
-    } else {
-      runQuickSniff(area, miniScoreEl, miniTimerEl, miniTime, (finalScore: number) => {
-        score += finalScore;
-        level++;
-        startLevel();
-      });
-    }
-  }
-
-  // ── Whack-a-Poo Mini-Game ─────────────────────────────────────
-  function runWhackAPoo(
-    area: HTMLElement,
-    scoreEl: HTMLElement,
-    timerEl: HTMLElement,
-    duration: number,
-    onComplete: (score: number) => void
-  ) {
-    let miniScore = 0;
-    let timeLeft = duration;
-
-    // Create 3x3 grid of holes
-    area.innerHTML = '';
-    area.className = 'mini-game-area whack-grid';
-    const holes: HTMLElement[] = [];
-    for (let i = 0; i < 9; i++) {
-      const hole = document.createElement('div');
-      hole.className = 'whack-hole';
-      const mole = document.createElement('span');
-      mole.className = 'whack-mole';
-      mole.textContent = '';
-      hole.appendChild(mole);
-      area.appendChild(hole);
-      holes.push(hole);
-
-      hole.addEventListener('click', () => {
-        const moleEl = hole.querySelector('.whack-mole') as HTMLElement;
-        if (!moleEl.textContent) return;
-        if (moleEl.textContent === '💩') {
-          miniScore += 100;
-          hole.classList.add('whack-hit');
-        } else {
-          miniScore = Math.max(0, miniScore - 50);
-          hole.classList.add('whack-miss');
-        }
-        moleEl.textContent = '';
-        moleEl.classList.remove('whack-up');
-        scoreEl.textContent = `${T.score}: ${miniScore}`;
+      // Pick a random hidden poo and briefly show the 💩 emoji on it
+      const target = hiddenPoos[Math.floor(Math.random() * hiddenPoos.length)];
+      const tiles = gameGrid.querySelectorAll('.tile');
+      const tile = tiles[target.i] as HTMLElement;
+      if (tile) {
+        const originalEmoji = tile.textContent || '';
+        tile.textContent = '💩';
+        tile.classList.add('tile-hint');
         setTimeout(() => {
-          hole.classList.remove('whack-hit', 'whack-miss');
-        }, 300);
-      });
+          tile.textContent = originalEmoji;
+          tile.classList.remove('tile-hint');
+        }, HINT_DURATION_MS);
+      }
     }
 
-    // Spawn poos/decoys
-    const spawnInterval = setInterval(() => {
-      const available = holes.filter(h => {
-        const m = h.querySelector('.whack-mole') as HTMLElement;
-        return !m.textContent;
-      });
-      if (available.length === 0) return;
+    powerUpBtn.addEventListener('click', usePowerUp);
 
-      const hole = available[Math.floor(Math.random() * available.length)];
-      const moleEl = hole.querySelector('.whack-mole') as HTMLElement;
-      const isPoo = Math.random() < 0.65;
-      moleEl.textContent = isPoo ? '💩' : MINI_GAME_EMOJIS[Math.floor(Math.random() * (MINI_GAME_EMOJIS.length - 1)) + 1];
-      moleEl.classList.add('whack-up');
+    // ── Tile Click ────────────────────────────────────────────────
+    function handleTileClick(index: number) {
+      const cell = grid[index];
+      if (cell.revealed) return;
 
-      setTimeout(() => {
-        moleEl.textContent = '';
-        moleEl.classList.remove('whack-up');
-      }, 1200);
-    }, 700);
+      cell.revealed = true;
+      clicksThisLevel++;
 
-    // Timer
-    const timer = setInterval(() => {
-      timeLeft--;
-      timerEl.textContent = `⏱️ ${timeLeft}`;
-      if (timeLeft <= 0) {
-        clearInterval(timer);
-        clearInterval(spawnInterval);
-        setTimeout(() => onComplete(miniScore), 500);
-      }
-    }, 1000);
-  }
+      if (cell.isPoo) {
+        poosFoundThisLevel++;
+        totalPoosFound++;
+        streak++;
+        const multiplier = Math.min(streak, MAX_STREAK_MULTIPLIER);
+        const points = BASE_POO_POINTS * level * multiplier;
+        score += points;
 
-  // ── Quick Sniff Mini-Game ─────────────────────────────────────
-  function runQuickSniff(
-    area: HTMLElement,
-    scoreEl: HTMLElement,
-    timerEl: HTMLElement,
-    duration: number,
-    onComplete: (score: number) => void
-  ) {
-    let miniScore = 0;
-    let timeLeft = duration;
-    let currentEmoji = '';
-    let currentIsPoo = false;
-    let answered = false;
+        let floatingText = `+${points}`;
+        if (streak >= STREAK_FOR_POWERUP) {
+          powerUps++;
+          updatePowerUpButton();
+          floatingText += ' 🐕+1';
+        }
+        showFloatingText(index, floatingText, '#22c55e');
 
-    area.innerHTML = '';
-    area.className = 'mini-game-area sniff-area';
+        if (poosFoundThisLevel >= poosToFind) {
+          stopTimer();
+          const timeBonus = timeLeft * TIME_BONUS_MULTIPLIER;
+          score += timeBonus;
+          renderGrid();
+          updateHUD();
 
-    const emojiDisplay = document.createElement('div');
-    emojiDisplay.className = 'sniff-emoji';
-    area.appendChild(emojiDisplay);
+          const prevMilestone = Math.floor((totalPoosFound - poosFoundThisLevel) / 10);
+          const currentMilestone = Math.floor(totalPoosFound / 10);
+          miniGamePending = currentMilestone > prevMilestone;
 
-    const btnRow = document.createElement('div');
-    btnRow.className = 'sniff-buttons';
-
-    const pooBtn = document.createElement('button');
-    pooBtn.className = 'btn btn-primary sniff-btn sniff-yes';
-    pooBtn.textContent = `💩 ${T.miniPoo}`;
-    btnRow.appendChild(pooBtn);
-
-    const notBtn = document.createElement('button');
-    notBtn.className = 'btn btn-outline sniff-btn sniff-no';
-    notBtn.textContent = `❌ ${T.miniNot}`;
-    btnRow.appendChild(notBtn);
-
-    area.appendChild(btnRow);
-
-    function showNext() {
-      answered = false;
-      currentIsPoo = Math.random() < 0.4;
-      if (currentIsPoo) {
-        currentEmoji = '💩';
+          setTimeout(() => showLevelComplete(timeBonus), 600);
+          return;
+        }
       } else {
-        currentEmoji = MINI_GAME_DECOYS[Math.floor(Math.random() * MINI_GAME_DECOYS.length)];
+        streak = 0;
       }
-      emojiDisplay.textContent = currentEmoji;
-      emojiDisplay.className = 'sniff-emoji sniff-appear';
+
+      renderGrid();
+      updateHUD();
     }
 
-    function answer(saidPoo: boolean) {
-      if (answered) return;
-      answered = true;
-      const correct = saidPoo === currentIsPoo;
-      if (correct) {
-        miniScore += 100;
-        emojiDisplay.classList.add('sniff-correct');
-      } else {
-        miniScore = Math.max(0, miniScore - 50);
-        emojiDisplay.classList.add('sniff-wrong');
-      }
-      scoreEl.textContent = `${T.score}: ${miniScore}`;
-      setTimeout(showNext, 600);
+    // ── Floating Text ─────────────────────────────────────────────
+    function showFloatingText(index: number, text: string, color: string) {
+      const tiles = gameGrid.querySelectorAll('.tile');
+      const tile = tiles[index];
+      if (!tile) return;
+
+      const float = document.createElement('span');
+      float.className = 'float-text';
+      float.textContent = text;
+      float.style.color = color;
+      tile.appendChild(float);
+      setTimeout(() => float.remove(), 800);
     }
 
-    pooBtn.addEventListener('click', () => answer(true));
-    notBtn.addEventListener('click', () => answer(false));
+    // ── Timer ─────────────────────────────────────────────────────
+    function startTimer() {
+      stopTimer();
+      timerInterval = track(setInterval(() => {
+        timeLeft--;
+        updateHUD();
+        if (timeLeft <= 10) {
+          timerDisplay.classList.add('timer-danger');
+        }
+        if (timeLeft <= 0) {
+          stopTimer();
+          showGameOver();
+        }
+      }, 1000));
+    }
 
-    showNext();
+    function stopTimer() {
+      untrack(timerInterval);
+      timerInterval = null;
+      timerDisplay.classList.remove('timer-danger');
+    }
 
-    const timer = setInterval(() => {
-      timeLeft--;
-      timerEl.textContent = `⏱️ ${timeLeft}`;
-      if (timeLeft <= 0) {
-        clearInterval(timer);
-        pooBtn.disabled = true;
-        notBtn.disabled = true;
-        setTimeout(() => onComplete(miniScore), 500);
-      }
-    }, 1000);
-  }
-
-  // ── Event Listeners ───────────────────────────────────────────
-  startBtn.addEventListener('click', startGame);
-  restartBtn.addEventListener('click', () => {
-    board.hide();
-    showScreen(menuScreen);
-    menuHighScore.textContent = highScore.toString();
-  });
-  nextLevelBtn.addEventListener('click', () => {
-    if (miniGamePending) {
-      startMiniGame();
-    } else {
-      level++;
+    // ── Game Flow ─────────────────────────────────────────────────
+    function startGame() {
+      level = 1;
+      score = 0;
+      totalPoosFound = 0;
+      streak = 0;
+      powerUps = 0;
+      updatePowerUpButton();
       startLevel();
     }
-  });
+
+    function startLevel() {
+      if (disposed) return;
+      const config = getLevelConfig(level);
+      gridSize = config.gridSize;
+      poosToFind = config.numPoos;
+      timeLeft = config.timeLimit;
+      poosFoundThisLevel = 0;
+      clicksThisLevel = 0;
+      streak = 0;
+
+      grid = generateGrid(gridSize, poosToFind);
+
+      showScreen(gameScreen);
+      renderGrid();
+      updateHUD();
+      startTimer();
+    }
+
+    function showLevelComplete(timeBonus: number) {
+      if (disposed) return;
+      const lcTitle = document.getElementById('level-complete-title')!;
+      const lcAccLabel = document.getElementById('lc-accuracy-label')!;
+      const lcAcc = document.getElementById('lc-accuracy')!;
+      const lcTimeLabel = document.getElementById('lc-time-label')!;
+      const lcTime = document.getElementById('lc-time')!;
+      const lcScoreLabel = document.getElementById('lc-score-label')!;
+      const lcScore = document.getElementById('lc-score')!;
+
+      lcTitle.textContent = `${T.levelComplete} ${T.level} ${level}`;
+
+      const accuracy = clicksThisLevel > 0
+        ? Math.round((poosFoundThisLevel / clicksThisLevel) * 100)
+        : 100;
+      lcAccLabel.textContent = T.accuracy;
+      lcAcc.textContent = `${accuracy}%`;
+
+      lcTimeLabel.textContent = T.timeBonus;
+      lcTime.textContent = `+${timeBonus}`;
+
+      lcScoreLabel.textContent = T.score;
+      lcScore.textContent = score.toString();
+
+      nextLevelBtn.textContent = miniGamePending
+        ? `🎰 ${T.bonusRound}`
+        : T.nextLevel;
+
+      updateHighScore();
+      showScreen(levelCompleteScreen);
+    }
+
+    function showGameOver() {
+      if (disposed) return;
+      const goTitle = document.getElementById('game-over-title')!;
+      const goLevelLabel = document.getElementById('go-level-label')!;
+      const goLevel = document.getElementById('go-level')!;
+      const goPoosLabel = document.getElementById('go-poos-label')!;
+      const goPoos = document.getElementById('go-poos')!;
+      const goScoreLabel = document.getElementById('go-score-label')!;
+      const goScore = document.getElementById('go-score')!;
+
+      goTitle.textContent = T.gameOver;
+      goLevelLabel.textContent = T.level;
+      goLevel.textContent = level.toString();
+      goPoosLabel.textContent = T.totalPoos;
+      goPoos.textContent = totalPoosFound.toString();
+      goScoreLabel.textContent = T.score;
+      goScore.textContent = score.toString();
+      restartBtn.textContent = T.playAgain;
+
+      updateHighScore();
+      showScreen(gameOverScreen);
+      board.show(score);
+    }
+
+    /** Runs at each level end: keeps the menu readout current and stashes the
+        score so quitting mid-investigation keeps the run on the table. */
+    function updateHighScore() {
+      board.stash(score);
+      if (score > highScore) {
+        highScore = score;
+        menuHighScore.textContent = highScore.toString();
+      }
+    }
+
+    // ── Mini-Games ────────────────────────────────────────────────
+    function startMiniGame() {
+      miniGamePending = false;
+      const types = ['whack', 'quicksniff'];
+      const type = types[Math.floor(Math.random() * types.length)];
+
+      const title = document.getElementById('mini-game-title')!;
+      const area = document.getElementById('mini-game-area')!;
+      const miniScoreEl = document.getElementById('mini-score')!;
+      const miniTimerEl = document.getElementById('mini-timer')!;
+
+      title.textContent = T.bonusRound;
+      area.innerHTML = '';
+      showScreen(miniGameScreen);
+
+      const miniTime = 15;
+      miniScoreEl.textContent = `${T.score}: 0`;
+      miniTimerEl.textContent = `⏱️ ${miniTime}`;
+
+      if (type === 'whack') {
+        runWhackAPoo(area, miniScoreEl, miniTimerEl, miniTime, (finalScore: number) => {
+          score += finalScore;
+          level++;
+          startLevel();
+        });
+      } else {
+        runQuickSniff(area, miniScoreEl, miniTimerEl, miniTime, (finalScore: number) => {
+          score += finalScore;
+          level++;
+          startLevel();
+        });
+      }
+    }
+
+    // ── Whack-a-Poo Mini-Game ─────────────────────────────────────
+    function runWhackAPoo(
+      area: HTMLElement,
+      scoreEl: HTMLElement,
+      timerEl: HTMLElement,
+      duration: number,
+      onComplete: (score: number) => void
+    ) {
+      let miniScore = 0;
+      let timeLeft = duration;
+
+      // Create 3x3 grid of holes
+      area.innerHTML = '';
+      area.className = 'mini-game-area whack-grid';
+      const holes: HTMLElement[] = [];
+      for (let i = 0; i < 9; i++) {
+        const hole = document.createElement('div');
+        hole.className = 'whack-hole';
+        const mole = document.createElement('span');
+        mole.className = 'whack-mole';
+        mole.textContent = '';
+        hole.appendChild(mole);
+        area.appendChild(hole);
+        holes.push(hole);
+
+        hole.addEventListener('click', () => {
+          const moleEl = hole.querySelector('.whack-mole') as HTMLElement;
+          if (!moleEl.textContent) return;
+          if (moleEl.textContent === '💩') {
+            miniScore += 100;
+            hole.classList.add('whack-hit');
+          } else {
+            miniScore = Math.max(0, miniScore - 50);
+            hole.classList.add('whack-miss');
+          }
+          moleEl.textContent = '';
+          moleEl.classList.remove('whack-up');
+          scoreEl.textContent = `${T.score}: ${miniScore}`;
+          setTimeout(() => {
+            hole.classList.remove('whack-hit', 'whack-miss');
+          }, 300);
+        });
+      }
+
+      // Spawn poos/decoys
+      const spawnInterval = track(setInterval(() => {
+        const available = holes.filter(h => {
+          const m = h.querySelector('.whack-mole') as HTMLElement;
+          return !m.textContent;
+        });
+        if (available.length === 0) return;
+
+        const hole = available[Math.floor(Math.random() * available.length)];
+        const moleEl = hole.querySelector('.whack-mole') as HTMLElement;
+        const isPoo = Math.random() < 0.65;
+        moleEl.textContent = isPoo ? '💩' : MINI_GAME_EMOJIS[Math.floor(Math.random() * (MINI_GAME_EMOJIS.length - 1)) + 1];
+        moleEl.classList.add('whack-up');
+
+        setTimeout(() => {
+          moleEl.textContent = '';
+          moleEl.classList.remove('whack-up');
+        }, 1200);
+      }, 700));
+
+      // Timer
+      const timer = track(setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = `⏱️ ${timeLeft}`;
+        if (timeLeft <= 0) {
+          untrack(timer);
+          untrack(spawnInterval);
+          setTimeout(() => onComplete(miniScore), 500);
+        }
+      }, 1000));
+    }
+
+    // ── Quick Sniff Mini-Game ─────────────────────────────────────
+    function runQuickSniff(
+      area: HTMLElement,
+      scoreEl: HTMLElement,
+      timerEl: HTMLElement,
+      duration: number,
+      onComplete: (score: number) => void
+    ) {
+      let miniScore = 0;
+      let timeLeft = duration;
+      let currentEmoji = '';
+      let currentIsPoo = false;
+      let answered = false;
+
+      area.innerHTML = '';
+      area.className = 'mini-game-area sniff-area';
+
+      const emojiDisplay = document.createElement('div');
+      emojiDisplay.className = 'sniff-emoji';
+      area.appendChild(emojiDisplay);
+
+      const btnRow = document.createElement('div');
+      btnRow.className = 'sniff-buttons';
+
+      const pooBtn = document.createElement('button');
+      pooBtn.className = 'btn btn-primary sniff-btn sniff-yes';
+      pooBtn.textContent = `💩 ${T.miniPoo}`;
+      btnRow.appendChild(pooBtn);
+
+      const notBtn = document.createElement('button');
+      notBtn.className = 'btn btn-outline sniff-btn sniff-no';
+      notBtn.textContent = `❌ ${T.miniNot}`;
+      btnRow.appendChild(notBtn);
+
+      area.appendChild(btnRow);
+
+      function showNext() {
+        answered = false;
+        currentIsPoo = Math.random() < 0.4;
+        if (currentIsPoo) {
+          currentEmoji = '💩';
+        } else {
+          currentEmoji = MINI_GAME_DECOYS[Math.floor(Math.random() * MINI_GAME_DECOYS.length)];
+        }
+        emojiDisplay.textContent = currentEmoji;
+        emojiDisplay.className = 'sniff-emoji sniff-appear';
+      }
+
+      function answer(saidPoo: boolean) {
+        if (answered) return;
+        answered = true;
+        const correct = saidPoo === currentIsPoo;
+        if (correct) {
+          miniScore += 100;
+          emojiDisplay.classList.add('sniff-correct');
+        } else {
+          miniScore = Math.max(0, miniScore - 50);
+          emojiDisplay.classList.add('sniff-wrong');
+        }
+        scoreEl.textContent = `${T.score}: ${miniScore}`;
+        setTimeout(showNext, 600);
+      }
+
+      pooBtn.addEventListener('click', () => answer(true));
+      notBtn.addEventListener('click', () => answer(false));
+
+      showNext();
+
+      const timer = track(setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = `⏱️ ${timeLeft}`;
+        if (timeLeft <= 0) {
+          untrack(timer);
+          pooBtn.disabled = true;
+          notBtn.disabled = true;
+          setTimeout(() => onComplete(miniScore), 500);
+        }
+      }, 1000));
+    }
+
+    // ── Event Listeners ───────────────────────────────────────────
+    startBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', () => {
+      board.hide();
+      showScreen(menuScreen);
+      menuHighScore.textContent = highScore.toString();
+    });
+    nextLevelBtn.addEventListener('click', () => {
+      if (miniGamePending) {
+        startMiniGame();
+      } else {
+        level++;
+        startLevel();
+      }
+    });
+  }
+
+  initPooPooLand();
+  // Re-init after every swap; initPooPooLand no-ops on pages without a
+  // fresh game root.
+  document.addEventListener('astro:after-swap', initPooPooLand);
 </script>
 
 <style>

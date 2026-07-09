@@ -104,10 +104,16 @@ export function initParkGame(): void {
   const root = document.getElementById('park-root');
   const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
   if (!root || !canvasEl) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
   const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const startOverlay = el('start-overlay');

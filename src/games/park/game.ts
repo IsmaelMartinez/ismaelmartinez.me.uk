@@ -202,7 +202,8 @@ export function initParkGame(): void {
     const c = tileCenter(tile);
     const p = isoProject(VIEW, c.x, c.y);
     p.y -= heights[tile] * TERRAIN_STEP;
-    floaters.push({ x: p.x, y: p.y - BLOCK_HEIGHT - 6, text, color, life: 1 });
+    const buildingHeight = BUILDING_STYLE[tiles[tile]]?.height ?? BLOCK_HEIGHT;
+    floaters.push({ x: p.x, y: p.y - buildingHeight - 6, text, color, life: 1 });
   }
 
   function showToast(text: string) {

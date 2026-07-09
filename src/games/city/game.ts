@@ -198,7 +198,8 @@ export function initCityGame(): void {
   let clock = 0;
   let rotation: Rotation = 0;
   let VIEW = makeView(rotation);
-  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const reduceMotion =
+    typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
   const ROTATE_ANIM_DURATION = 0.32; // seconds
   let rotAnim: { t: number; dir: 1 | -1; swapped: boolean } | null = null;
   let cars: Car[] = [];
@@ -420,14 +421,14 @@ export function initCityGame(): void {
   }
 
   /** Stable per-tile flecks that fake a grassy/dirt texture on bare ground. */
-  function drawGroundFlecks(vx: number, vy: number, x: number, y: number) {
+  function drawGroundFlecks(x: number, y: number) {
     const hash = (x * 928371 + y * 12345) >>> 0;
     for (let k = 0; k < 3; k++) {
       const h = (hash >> (k * 5)) & 31;
       if (h % 4 !== 0) continue;
       const fx = 0.15 + ((h * 7) % 70) / 100;
       const fy = 0.2 + ((h * 13) % 60) / 100;
-      const p = isoProject(VIEW, vx + fx, vy + fy);
+      const p = projectWorld(x + fx, y + fy);
       ctx.fillStyle = 'rgba(148, 163, 184, 0.07)';
       ctx.beginPath();
       ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
@@ -584,7 +585,7 @@ export function initCityGame(): void {
         drawWater(x, y, vx, vy);
       } else {
         fillTile(ctx, VIEW, vx, vy, (x + y) % 2 === 0 ? '#171e29' : '#1a2230');
-        if (tile.type === 'empty') drawGroundFlecks(vx, vy, x, y);
+        if (tile.type === 'empty') drawGroundFlecks(x, y);
 
         if (tile.type === 'power') {
           drawBlock(ctx, VIEW, vx, vy, 22, '#5b4a7a');

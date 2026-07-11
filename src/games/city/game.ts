@@ -27,6 +27,7 @@ import {
 import {
   CITY_W,
   CITY_H,
+  MAX_LEVEL,
   cityIdx,
   createCity,
   canBuild,
@@ -84,17 +85,32 @@ const ZONE_BORDER: Record<ZoneType, string> = {
   com: 'rgba(96, 165, 250, 0.5)',
   ind: 'rgba(250, 204, 21, 0.5)'
 };
-const ZONE_BLOCK: Record<ZoneType, string> = {
-  res: '#3fae6e',
-  com: '#4f86d6',
-  ind: '#c8a23c'
+/** Wall colour keeps the type recognisable (green/blue/yellow); roof/trim
+ *  are accent colours for the per-level architectural details. */
+const ZONE_PALETTE: Record<ZoneType, { wall: string; roof: string; trim: string }> = {
+  res: { wall: '#3fae6e', roof: '#8a4a2e', trim: '#f4ede0' },
+  com: { wall: '#4f86d6', roof: '#22406b', trim: '#f6f8ff' },
+  ind: { wall: '#c8a23c', roof: '#5a5a5a', trim: '#3a3a3a' }
 };
-const LEVEL_FONT = [0, 12, 15, 18];
-const zoneHeight = (level: number) => 6 + level * 7;
+const ZONE_ICON_FONT = 13;
+/** Rooftop mechanical units (AC boxes, tower plant) share one light grey so
+ *  they read as equipment, not as a dark hole punched in the roofline. */
+const ROOFTOP_UNIT = '#c9ced6';
+/** Overall silhouette height per (type, level) — tallest architectural
+ *  feature — so floaters/warnings/emoji sit above the actual building. */
+const ZONE_TOP_HEIGHT: Record<ZoneType, number[]> = {
+  res: [0, 10, 14, 22],
+  com: [0, 7, 16, 25],
+  ind: [0, 8, 15, 26]
+};
 const buildingHeight = (tile: CityTile): number => {
-  if (tile.type === 'power') return 22;
-  if (tile.type === 'school' || tile.type === 'firehouse') return 14;
-  return isZone(tile.type) ? zoneHeight(tile.level) : 0;
+  // These include the smokestack/gable-roof-peak flourish drawn on top of
+  // the base block, so fire icons and smoke line up above the whole shape.
+  if (tile.type === 'power') return 38;
+  if (tile.type === 'school' || tile.type === 'firehouse') return 20;
+  if (!isZone(tile.type)) return 0;
+  const level = Math.min(Math.max(tile.level, 0), MAX_LEVEL);
+  return ZONE_TOP_HEIGHT[tile.type][level];
 };
 
 type Phase = 'idle' | 'play' | 'over';
@@ -444,17 +460,104 @@ export function initCityGame(): void {
     ctx.fill();
   }
 
-  function drawRoofRidge(vx: number, vy: number, height: number, color: string) {
-    const n = isoProject(VIEW, vx + 0.08, vy + 0.08);
-    const s = isoProject(VIEW, vx + 0.92, vy + 0.92);
-    const peak = isoProject(VIEW, vx + 0.5, vy + 0.5);
-    ctx.fillStyle = shadeColor(color, 1.2);
+  /**
+   * Extruded box between explicit fractional tile-space corners, elevated
+   * from zBase to zTop. Generalises drawBlock's fixed full-tile inset so
+   * buildings can combine several offset, non-centred volumes instead of
+   * one block that just gets taller.
+   */
+  function drawBox(x0: number, y0: number, x1: number, y1: number, zBase: number, zTop: number, baseColor: string) {
+    const n = isoProject(VIEW, x0, y0);
+    const e = isoProject(VIEW, x1, y0);
+    const s = isoProject(VIEW, x1, y1);
+    const w = isoProject(VIEW, x0, y1);
+
+    ctx.fillStyle = shadeColor(baseColor, 0.62);
     ctx.beginPath();
-    ctx.moveTo(n.x, n.y - height);
-    ctx.lineTo(peak.x, peak.y - height - 6);
-    ctx.lineTo(s.x, s.y - height);
+    ctx.moveTo(w.x, w.y - zTop);
+    ctx.lineTo(s.x, s.y - zTop);
+    ctx.lineTo(s.x, s.y - zBase);
+    ctx.lineTo(w.x, w.y - zBase);
     ctx.closePath();
     ctx.fill();
+
+    ctx.fillStyle = shadeColor(baseColor, 0.45);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y - zTop);
+    ctx.lineTo(e.x, e.y - zTop);
+    ctx.lineTo(e.x, e.y - zBase);
+    ctx.lineTo(s.x, s.y - zBase);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = shadeColor(baseColor, 1.05);
+    ctx.beginPath();
+    ctx.moveTo(n.x, n.y - zTop);
+    ctx.lineTo(e.x, e.y - zTop);
+    ctx.lineTo(s.x, s.y - zTop);
+    ctx.lineTo(w.x, w.y - zTop);
+    ctx.closePath();
+    ctx.fill();
+    // Crisp rim on the top edge, and a highlight down the near vertical
+    // edge, so the block reads as solid geometry rather than a flat cutout.
+    ctx.strokeStyle = shadeColor(baseColor, 1.4);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.strokeStyle = shadeColor(baseColor, 0.85);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y - zTop);
+    ctx.lineTo(s.x, s.y - zBase);
+    ctx.stroke();
+  }
+
+  /** Pitched-roof ridge silhouette over an explicit footprint, sitting on
+   *  top of a box whose roofline is at zBase. */
+  function drawGableRoof(x0: number, y0: number, x1: number, y1: number, zBase: number, peakRise: number, color: string) {
+    const n = isoProject(VIEW, x0, y0);
+    const s = isoProject(VIEW, x1, y1);
+    const peak = isoProject(VIEW, (x0 + x1) / 2, (y0 + y1) / 2);
+    ctx.fillStyle = shadeColor(color, 1.2);
+    ctx.beginPath();
+    ctx.moveTo(n.x, n.y - zBase);
+    ctx.lineTo(peak.x, peak.y - zBase - peakRise);
+    ctx.lineTo(s.x, s.y - zBase);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawRoofRidge(vx: number, vy: number, height: number, color: string) {
+    drawGableRoof(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, height, 6, color);
+  }
+
+  /** Pointed cap (silo lid, rooftop dome) rising to a single peak above a
+   *  footprint, built from the same two visible faces as drawBox. */
+  function drawPyramidCap(x0: number, y0: number, x1: number, y1: number, zBase: number, peakRise: number, color: string) {
+    const e = isoProject(VIEW, x1, y0);
+    const s = isoProject(VIEW, x1, y1);
+    const w = isoProject(VIEW, x0, y1);
+    const peakXY = isoProject(VIEW, (x0 + x1) / 2, (y0 + y1) / 2);
+    const apex = { x: peakXY.x, y: peakXY.y - zBase - peakRise };
+    ctx.fillStyle = shadeColor(color, 0.75);
+    ctx.beginPath();
+    ctx.moveTo(w.x, w.y - zBase);
+    ctx.lineTo(s.x, s.y - zBase);
+    ctx.lineTo(apex.x, apex.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = shadeColor(color, 0.55);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y - zBase);
+    ctx.lineTo(e.x, e.y - zBase);
+    ctx.lineTo(apex.x, apex.y);
+    ctx.closePath();
+    ctx.fill();
+    // Ridge between the two visible (front) faces, not the back one — the
+    // back ridge would be occluded and shouldn't be drawn over them.
+    ctx.strokeStyle = shadeColor(color, 1.3);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y - zBase);
+    ctx.lineTo(apex.x, apex.y);
+    ctx.stroke();
   }
 
   function drawRoad(i: number, vx: number, vy: number, dims: { w: number; h: number }) {
@@ -505,27 +608,200 @@ export function initCityGame(): void {
     ctx.setLineDash([]);
   }
 
-  /** Lit windows on the two visible faces of a developed zone block. */
-  function drawWindows(vx: number, vy: number, i: number, level: number, height: number) {
-    const inset = 0.08;
-    const w = isoProject(VIEW, vx + inset, vy + 1 - inset);
-    const s = isoProject(VIEW, vx + 1 - inset, vy + 1 - inset);
-    const e = isoProject(VIEW, vx + 1 - inset, vy + inset);
+  /** Lit windows on the two visible faces of an explicit footprint box. */
+  function drawWindows(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    i: number,
+    rows: number,
+    zBase: number,
+    zTop: number,
+    salt = 0
+  ) {
+    const w = isoProject(VIEW, x0, y1);
+    const s = isoProject(VIEW, x1, y1);
+    const e = isoProject(VIEW, x1, y0);
     const faces: [{ x: number; y: number }, { x: number; y: number }][] = [[w, s], [s, e]];
+    const rise = zTop - zBase;
     faces.forEach(([a, b], f) => {
-      for (let r = 0; r < level; r++) {
+      for (let r = 0; r < rows; r++) {
         for (let c = 0; c < 2; c++) {
           const t = 0.3 + c * 0.4;
           const bx = a.x + (b.x - a.x) * t;
-          const by = a.y + (b.y - a.y) * t - height * ((r + 0.5) / level);
+          const by = a.y + (b.y - a.y) * t - zBase - rise * ((r + 0.5) / rows);
           // Stable per-window pattern: most lit, some dark
-          const lit = (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
+          const lit = (i * 31 + f * 17 + r * 7 + c * 13 + salt * 19) % 5 < 3;
           ctx.fillStyle = lit ? 'rgba(254, 240, 138, 0.85)' : 'rgba(2, 6, 23, 0.5)';
           ctx.fillRect(bx - 1, by - 1.5, 2, 3.5);
         }
       }
     });
   }
+
+  /** Small ledge accents (balconies, AC units) protruding from a face at a
+   *  given row height — reuses the window face geometry but wider/flatter. */
+  function drawLedges(x0: number, y0: number, x1: number, y1: number, rows: number, zBase: number, zTop: number, color: string) {
+    const w = isoProject(VIEW, x0, y1);
+    const s = isoProject(VIEW, x1, y1);
+    const e = isoProject(VIEW, x1, y0);
+    const faces: [{ x: number; y: number }, { x: number; y: number }][] = [[w, s], [s, e]];
+    const rise = zTop - zBase;
+    ctx.fillStyle = color;
+    faces.forEach(([a, b]) => {
+      for (let r = 0; r < rows; r++) {
+        const by = a.y + (b.y - a.y) * 0.5 - zBase - rise * ((r + 0.5) / rows);
+        const bx = a.x + (b.x - a.x) * 0.5;
+        ctx.fillRect(bx - 5, by + 1, 10, 1.5);
+      }
+    });
+  }
+
+  /** House (res L1): small gabled cottage, footprint well inside the tile. */
+  function drawResLevel1(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.res;
+    const x0 = vx + 0.27, y0 = vy + 0.24, x1 = vx + 0.73, y1 = vy + 0.7;
+    drawBox(x0, y0, x1, y1, 0, 6, p.wall);
+    drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof);
+    drawWindows(x0, y0, x1, y1, i, 1, 0, 6);
+  }
+
+  /** Res L2: the L1 cottage enlarged, plus a lower extension massed off to
+   *  one side rather than centred — reads as "someone built onto the house". */
+  function drawResLevel2(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.res;
+    const mx0 = vx + 0.18, my0 = vy + 0.16, mx1 = vx + 0.66, my1 = vy + 0.7;
+    drawBox(mx0, my0, mx1, my1, 0, 10, p.wall);
+    drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof);
+    drawWindows(mx0, my0, mx1, my1, i, 2, 0, 10);
+
+    // Touches the main block's east wall (mx1) without overlapping its
+    // footprint, so the two full-height volumes don't paint over each other.
+    const ex0 = mx1, ey0 = vy + 0.5, ex1 = vx + 0.95, ey1 = vy + 0.92;
+    drawBox(ex0, ey0, ex1, ey1, 0, 6, p.wall);
+    drawWindows(ex0, ey0, ex1, ey1, i, 1, 0, 6, 1);
+  }
+
+  /** Res L3: a proper apartment block — flat roof, balcony ledges, and a
+   *  couple of rooftop AC units instead of one more storey of the cottage. */
+  function drawResLevel3(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.res;
+    const x0 = vx + 0.12, y0 = vy + 0.12, x1 = vx + 0.88, y1 = vy + 0.88;
+    drawBox(x0, y0, x1, y1, 0, 20, p.wall);
+    drawWindows(x0, y0, x1, y1, i, 4, 0, 20);
+    drawLedges(x0, y0, x1, y1, 4, 0, 20, 'rgba(226, 232, 240, 0.55)');
+    drawBox(vx + 0.2, vy + 0.2, vx + 0.34, vy + 0.34, 20, 22, ROOFTOP_UNIT);
+    drawBox(vx + 0.55, vy + 0.6, vx + 0.72, vy + 0.75, 20, 21.5, ROOFTOP_UNIT);
+  }
+
+  function drawResZone(vx: number, vy: number, i: number, level: number) {
+    if (level === 1) drawResLevel1(vx, vy, i);
+    else if (level === 2) drawResLevel2(vx, vy, i);
+    else drawResLevel3(vx, vy, i);
+  }
+
+  /** Shop (com L1): flat-roofed box with a canopy/awning strip out front. */
+  function drawComLevel1(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.com;
+    const x0 = vx + 0.2, y0 = vy + 0.2, x1 = vx + 0.8, y1 = vy + 0.8;
+    drawBox(x0, y0, x1, y1, 0, 7, p.wall);
+    drawWindows(x0, y0, x1, y1, i, 1, 0, 7);
+    // Thin awning strip flush with the front wall, overhanging it slightly.
+    drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, '#c0503a');
+  }
+
+  /** Com L2: taller storefront with more window rows and a sign board
+   *  standing proud of the roofline. */
+  function drawComLevel2(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.com;
+    const x0 = vx + 0.15, y0 = vy + 0.15, x1 = vx + 0.85, y1 = vy + 0.85;
+    drawBox(x0, y0, x1, y1, 0, 12, p.wall);
+    drawWindows(x0, y0, x1, y1, i, 2, 0, 12);
+    drawBox(vx + 0.3, vy + 0.58, vx + 0.7, vy + 0.78, 12, 16, p.trim);
+  }
+
+  /** Com L3: a small tower — main block, a setback top floor, and a
+   *  rooftop mechanical unit, instead of one taller box. */
+  function drawComLevel3(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.com;
+    const x0 = vx + 0.18, y0 = vy + 0.18, x1 = vx + 0.82, y1 = vy + 0.82;
+    drawBox(x0, y0, x1, y1, 0, 19, p.wall);
+    drawWindows(x0, y0, x1, y1, i, 3, 0, 19);
+    // No windows here — the setback floor is too small a face for the
+    // fixed-size window marks to read as anything but a dark smear.
+    const tx0 = vx + 0.3, ty0 = vy + 0.3, tx1 = vx + 0.7, ty1 = vy + 0.7;
+    drawBox(tx0, ty0, tx1, ty1, 19, 23, '#7fb0f0');
+    drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 23, 25, ROOFTOP_UNIT);
+  }
+
+  function drawComZone(vx: number, vy: number, i: number, level: number) {
+    if (level === 1) drawComLevel1(vx, vy, i);
+    else if (level === 2) drawComLevel2(vx, vy, i);
+    else drawComLevel3(vx, vy, i);
+  }
+
+  /** Shed (ind L1): squat low warehouse with a couple of roof vents. */
+  function drawIndLevel1(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.ind;
+    const x0 = vx + 0.1, y0 = vy + 0.25, x1 = vx + 0.9, y1 = vy + 0.85;
+    drawBox(x0, y0, x1, y1, 0, 5, p.wall);
+    drawWindows(x0, y0, x1, y1, i, 1, 0, 5);
+    drawBox(vx + 0.28, vy + 0.34, vx + 0.37, vy + 0.43, 5, 8, p.roof);
+    drawBox(vx + 0.55, vy + 0.55, vx + 0.64, vy + 0.64, 5, 7.5, p.roof);
+  }
+
+  /** Ind L2: the shed plus a tall silo and a low loading dock, offset
+   *  beside it rather than one bigger shed. */
+  function drawIndLevel2(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.ind;
+    const sx0 = vx + 0.12, sy0 = vy + 0.3, sx1 = vx + 0.6, sy1 = vy + 0.9;
+    drawBox(sx0, sy0, sx1, sy1, 0, 7, p.wall);
+    drawWindows(sx0, sy0, sx1, sy1, i, 1, 0, 7);
+
+    // Silo sits further back in the tile than the dock, so it must paint
+    // first for the painter's algorithm to let the dock occlude its base.
+    const silo = '#aab0b8';
+    const six0 = vx + 0.66, siy0 = vy + 0.12, six1 = vx + 0.9, siy1 = vy + 0.38;
+    drawBox(six0, siy0, six1, siy1, 0, 12, silo);
+    drawPyramidCap(six0, siy0, six1, siy1, 12, 3, silo);
+
+    const lox0 = vx + 0.6, loy0 = vy + 0.62, lox1 = vx + 0.94, loy1 = vy + 0.92;
+    drawBox(lox0, loy0, lox1, loy1, 0, 3, p.roof);
+  }
+
+  /** Ind L3: a larger complex — two offset stacked volumes plus a tall
+   *  smokestack, rather than a single bigger shed. */
+  function drawIndLevel3(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.ind;
+    const hx0 = vx + 0.1, hy0 = vy + 0.35, hx1 = vx + 0.62, hy1 = vy + 0.92;
+    drawBox(hx0, hy0, hx1, hy1, 0, 9, p.wall);
+    drawWindows(hx0, hy0, hx1, hy1, i, 1, 0, 9);
+
+    // Concrete/steel tone rather than a tint of the wall — the wall's
+    // yellow shades to near-black on its own shadowed face at this scale.
+    const bx0 = vx + 0.62, by0 = vy + 0.12, bx1 = vx + 0.92, by1 = vy + 0.55;
+    drawBox(bx0, by0, bx1, by1, 0, 13, '#7d8a94');
+    drawWindows(bx0, by0, bx1, by1, i, 1, 0, 13, 3);
+
+    const stack = isoProject(VIEW, vx + 0.78, vy + 0.3);
+    ctx.fillStyle = shadeColor(p.roof, 0.7);
+    ctx.fillRect(stack.x - 2.5, stack.y - 13 - 11, 5, 11);
+    ctx.fillStyle = shadeColor(p.roof, 1.15);
+    ctx.fillRect(stack.x - 2.5, stack.y - 13 - 13, 5, 3);
+  }
+
+  function drawIndZone(vx: number, vy: number, i: number, level: number) {
+    if (level === 1) drawIndLevel1(vx, vy, i);
+    else if (level === 2) drawIndLevel2(vx, vy, i);
+    else drawIndLevel3(vx, vy, i);
+  }
+
+  const ZONE_DRAW: Record<ZoneType, (vx: number, vy: number, i: number, level: number) => void> = {
+    res: drawResZone,
+    com: drawComZone,
+    ind: drawIndZone
+  };
 
   function carWorldPos(car: Car): { x: number; y: number } {
     const fx = (car.from % CITY_W) + 0.5;
@@ -639,11 +915,12 @@ export function initCityGame(): void {
             }
             ctx.globalAlpha = 1;
           } else {
-            const height = zoneHeight(tile.level);
-            drawBlock(ctx, VIEW, vx, vy, height, ZONE_BLOCK[tile.type]);
-            drawWindows(vx, vy, i, tile.level, height);
-            ctx.font = `${LEVEL_FONT[tile.level]}px serif`;
-            ctx.fillText(ZONE_EMOJI[tile.type], top.x, top.y - height);
+            const height = buildingHeight(tile);
+            ZONE_DRAW[tile.type](vx, vy, i, tile.level);
+            ctx.font = `${ZONE_ICON_FONT}px serif`;
+            // A gap above the tallest architectural feature (gable, sign,
+            // stack…) so the type icon doesn't collide with the new roofs.
+            ctx.fillText(ZONE_EMOJI[tile.type], top.x, top.y - height - 6);
             // Unserviced developed zones flash a warning above the roof
             if (
               !burning.has(i) &&

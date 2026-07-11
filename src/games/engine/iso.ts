@@ -163,6 +163,43 @@ export function drawBlock(
 }
 
 /**
+ * A thin sloped quad spanning one tile whose four corners can each sit at a
+ * different pixel height — generalizes drawBlock's flat-topped corner math
+ * (one uniform height per tile) to bridge two different heights, e.g. a
+ * coaster track climbing a hillside between two adjacent terrain steps.
+ */
+export function drawRamp(
+  ctx: CanvasRenderingContext2D,
+  view: IsoView,
+  x: number,
+  y: number,
+  cornerLift: { n: number; e: number; s: number; w: number },
+  color: string,
+  inset = 0.08
+): void {
+  const x0 = x + inset;
+  const y0 = y + inset;
+  const x1 = x + 1 - inset;
+  const y1 = y + 1 - inset;
+  const n = isoProject(view, x0, y0);
+  const e = isoProject(view, x1, y0);
+  const s = isoProject(view, x1, y1);
+  const w = isoProject(view, x0, y1);
+
+  ctx.fillStyle = shadeColor(color, 1.05);
+  ctx.beginPath();
+  ctx.moveTo(n.x, n.y - cornerLift.n);
+  ctx.lineTo(e.x, e.y - cornerLift.e);
+  ctx.lineTo(s.x, s.y - cornerLift.s);
+  ctx.lineTo(w.x, w.y - cornerLift.w);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = shadeColor(color, 1.4);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+/**
  * View rotation in quarter turns (0–3, counting clockwise). Rotation is
  * purely a rendering concern: world tiles stay put, and these helpers map
  * between world coordinates and rotated view coordinates.

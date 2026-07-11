@@ -397,7 +397,13 @@ describe('guest needs', () => {
   });
 
   it('decays thrill slower than fun, so an un-built coaster is less punishing than an un-built ride', () => {
+    // Equalize the starting values first — createNeeds gives thrill a
+    // higher starting range than fun, which would make this assertion pass
+    // regardless of decay rate. Comparing the loss from the same baseline
+    // isolates the rate itself.
     const needs = createNeeds(() => 0.5);
+    needs.fun = 80;
+    needs.thrill = 80;
     decayNeeds(needs, 5);
     expect(needs.thrill).toBeGreaterThan(needs.fun);
   });

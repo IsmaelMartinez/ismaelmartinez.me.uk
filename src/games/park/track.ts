@@ -87,7 +87,7 @@ export type TrackResult = { ok: true } | { ok: false; error: TrackErrorCode };
 /**
  * Validates a drafted loop purely from its own segment data plus the park's
  * terrain heights — no world `tiles` access (tile occupancy is a placement
- * concern, handled separately by `canPlaceTrack` in grid.ts).
+ * concern, handled separately by `canPlaceTrack` below).
  */
 export function validateTrack(segments: Segment[], heights: number[]): TrackResult {
   if (segments.length < MIN_TRACK_LENGTH) return { ok: false, error: 'tooShort' };

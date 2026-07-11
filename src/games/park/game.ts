@@ -270,7 +270,8 @@ export function initParkGame(): void {
     trackNotClosed: root.dataset.tTrackNotClosed || "Track pieces don't connect correctly!",
     trackTooSteep: root.dataset.tTrackTooSteep || 'Two climbs/drops in a row — add a flat between them!',
     trackStatusEmpty: root.dataset.tTrackStatusEmpty || 'Tap a grass tile to start laying track',
-    trackStatusDrafting: root.dataset.tTrackStatusDrafting || 'pieces — tap the start tile to close the loop',
+    trackStatusDrafting:
+      root.dataset.tTrackStatusDrafting || 'Track length: {n} — tap the start tile to close the loop',
     trackStatusClosed: root.dataset.tTrackStatusClosed || 'Loop closed — Test Track to open it'
   };
 
@@ -644,7 +645,7 @@ export function initParkGame(): void {
     } else if (trackClosed) {
       trackStatusEl.textContent = strings.trackStatusClosed;
     } else {
-      trackStatusEl.textContent = `${trackDraft.length} ${strings.trackStatusDrafting}`;
+      trackStatusEl.textContent = strings.trackStatusDrafting.replace('{n}', String(trackDraft.length));
     }
     trackTestBtn.disabled = !trackClosed;
   }

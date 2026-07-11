@@ -9,16 +9,24 @@ export interface Needs {
   hunger: number;
   thirst: number;
   bladder: number;
+  /** Satisfied only by riding a coaster; see track.ts. */
+  thrill: number;
 }
 
-export const NEED_KEYS: NeedKey[] = ['fun', 'hunger', 'thirst', 'bladder'];
+export const NEED_KEYS: NeedKey[] = ['fun', 'hunger', 'thirst', 'bladder', 'thrill'];
 
-/** Points lost per second per need. Fun decays fastest — it's a theme park. */
+/**
+ * Points lost per second per need. Fun decays fastest — it's a theme park.
+ * Thrill decays slowest: a coaster is a much bigger build than any single
+ * stall, so a park without one yet shouldn't tank happiness the way an
+ * un-built toilet or food stall would.
+ */
 export const NEED_DECAY: Record<NeedKey, number> = {
   fun: 3,
   hunger: 1.6,
   thirst: 2,
-  bladder: 1.2
+  bladder: 1.2,
+  thrill: 0.6
 };
 
 /** A need below this starts driving guest decisions. */
@@ -29,7 +37,8 @@ export function createNeeds(random: () => number = Math.random): Needs {
     fun: 55 + random() * 25,
     hunger: 70 + random() * 30,
     thirst: 70 + random() * 30,
-    bladder: 80 + random() * 20
+    bladder: 80 + random() * 20,
+    thrill: 70 + random() * 30
   };
 }
 
@@ -56,5 +65,5 @@ export function satisfyNeed(needs: Needs, key: NeedKey, boost: number): void {
 
 /** Overall guest happiness, 0–100. */
 export function happiness(needs: Needs): number {
-  return (needs.fun + needs.hunger + needs.thirst + needs.bladder) / 4;
+  return (needs.fun + needs.hunger + needs.thirst + needs.bladder + needs.thrill) / 5;
 }

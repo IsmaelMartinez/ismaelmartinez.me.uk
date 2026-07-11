@@ -17,6 +17,7 @@ export {
   fillTile,
   strokeTile,
   drawBlock,
+  drawRamp,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,

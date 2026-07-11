@@ -29,7 +29,8 @@ export type TileType =
   | 'skytower'
   | 'gateFairytale'
   | 'gateAdventure'
-  | 'gatePirate';
+  | 'gatePirate'
+  | 'track';
 
 export type Tool =
   | Exclude<TileType, 'grass' | 'entrance'>
@@ -38,7 +39,7 @@ export type Tool =
   | 'lowerLand'
   | 'digTunnel';
 
-export type NeedKey = 'fun' | 'hunger' | 'thirst' | 'bladder';
+export type NeedKey = 'fun' | 'hunger' | 'thirst' | 'bladder' | 'thrill';
 
 export interface BuildingDef {
   cost: number;
@@ -77,7 +78,8 @@ const SIMPLE_COSTS: Partial<Record<Tool, number>> = {
   digTunnel: 30,
   gateFairytale: 150,
   gateAdventure: 250,
-  gatePirate: 350
+  gatePirate: 350,
+  track: 40
 };
 
 /**

@@ -1,8 +1,8 @@
 # Pixel Park Overhaul: Terrain, Water, Tunnels & a Real Coaster Editor
 
 Date: 2026-07-09
-Status: Terrain elevation, water, tunnels, and theme zones shipped. The
-coaster track editor is designed but not built.
+Status: Terrain elevation, water, tunnels, theme zones, and the coaster
+track editor are all shipped.
 
 ## Context
 
@@ -114,67 +114,82 @@ exactly like terrain/water/tunnels; rendering lives in `game.ts`; toolbar
 entries and strings (locked-zone toast, gate labels) are in `park.astro` and
 `translations.ts` across en/es/cat.
 
-## Designed, not built: drag-to-build coaster track editor
+## Shipped this pass: drag-to-build coaster track editor
 
-This is the biggest remaining piece — comparable to or larger than Critter
-Rescue's bitmap-terrain FSM effort — because it's a genuinely different
-interaction model from every other tool in the game (single-tile stamp).
+This was the biggest remaining piece — a genuinely different interaction
+model from every other tool in the game (single-tile stamp).
 
 **Data model.** A track is an ordered list of segments,
 `{ tile: number; dir: 0|1|2|3; kind: 'flat' | 'up' | 'down' | 'turnL' |
-'turnR' | 'tunnelIn' | 'tunnelOut' | 'station' }`, forming a loop: each
-segment's exit must match the next segment's entry tile/direction, and
-exactly one `station` segment must exist (the load/unload point). A pure
-`track.ts` module validates loop closure, minimum length, and max
-"steepness" (no two consecutive `up`/`down` segments without a `flat` between
-them — keeps the cart's speed model sane) — fully unit-testable against a
-plain segment array, no canvas involved, mirroring how `bitmap.ts` /
-`critter.ts` stay DOM-free for Critter Rescue.
+'turnR' | 'tunnelIn' | 'tunnelOut' | 'station' }`, forming a loop. `dir` is
+recorded empirically — the direction from this segment's tile to the next
+one, i.e. whichever neighbour the player tapped next — rather than derived
+from `kind`; `kind` is validated against the observed `dir`/height sequence
+afterwards, not the other way round. The pure `track.ts` module's
+`validateTrack` checks minimum length (`MIN_TRACK_LENGTH = 6` — the smallest
+rectangle that can fit a straight, station-eligible segment; a 2×2 loop is
+all corners), no revisited tiles, exactly one `station` segment, loop
+closure (each segment's `dir` must actually reach the next tile, and must
+match what its `kind` implies — a turn rotates the incoming direction, a
+straight piece continues it), each segment's height delta matching its kind
+(`up`/`down` against the real terrain `heights[]`, everything else flat),
+and "steepness" (no two consecutive `up`/`down` segments without a flat
+between them). `rotateToStation` then rotates a validated loop so the
+station is always index 0, so the runtime cart's progress `u ∈
+[0, segments.length)` has the station fixed at `u = 0` — "wrapped past 0"
+directly means "back at the station". All of this is fully unit-tested
+against plain segment arrays built by a small geometric `rectLoop` test
+helper, no canvas involved, in `tests/games/park.test.ts`.
 
 **Build interaction.** A dedicated "Track" tool switches the canvas into
-track-laying mode: tap a tile adjacent to the current track head to extend
-it with the currently selected piece type (a small sub-palette of the 7 kinds
-above appears above the toolbar), tap the head again to undo the last piece,
-"Close Loop" once back at the start, then "Test Track" runs validation and
-either opens the coaster (spawns a cart) or reports why it failed
-(`needsStation`, `notClosed`, `tooSteep`). This is pointer-only, consistent
-with every other tool, but it's stateful across multiple taps instead of one
-tap = one placement, so it needs its own small UI state machine in `game.ts`
-(`trackDraft: Segment[] | null`) rather than reusing the existing
-select-tool → click-tile flow.
+track-laying mode (bypassing the touch arm-then-confirm pattern every other
+tool uses, since drafting is already its own tap-by-tap flow): tap a tile
+adjacent to the current draft head to extend it with the selected piece
+type from an 8-button sub-palette, tap the head's own tile again to undo the
+last piece, tap back at the start tile to close the loop (once it's at
+least `MIN_TRACK_LENGTH`), then "Test Track" runs `validateTrack` +
+`canPlaceTrack` (every segment tile still grass) and either commits the
+loop (`£40`/tile, deducted in one lump sum) and opens the coaster, or
+toasts why it failed. This lives entirely in `game.ts` as a small state
+machine (`trackDraft: Segment[] | null`, `trackClosed: boolean`) rather than
+reusing the existing select-tool → click-tile flow; the sub-palette,
+status line, and Close Loop/Test Track/Cancel controls are new markup in
+`park.astro`.
 
-**Cart & guests.** A cart is a single entity per open coaster with a
-progress `u ∈ [0, loopLength)` and a `speed` derived each tick from the local
-segment's `kind` (accelerate downhill, decelerate uphill, small constant drag
-on flats/turns) — a simplified energy model, not real physics, same spirit as
-Tank Duel's `simulateShot`. Guests queue at the station tile (a new `queue:
-number[]` per coaster, capped), board when the cart is at the station and
-empty, ride the full loop, then satisfy a new `thrill` need scaled by the
-coaster's total height drop and loop length — meaning taller hills and longer
-tracks make objectively better coasters, which is the payoff for the terrain
-system this pass ships.
+**Cart & guests.** A cart is a single entity per open `Coaster`, cycling
+`loading` (boarding up to `CAR_CAPACITY` queued guests, paying
+`TRACK_RIDE_PRICE` per boarding) → `running` (progress `u` advances each
+tick via `advanceU`, `speed` updated via `nextCartSpeed` — accelerate
+downhill, decelerate but never stall uphill, drag toward cruise speed on
+flats/turns/tunnels/the station; a simplified energy model, not real
+physics, same spirit as Tank Duel's `simulateShot`) → back to `loading` once
+`u` wraps past the station. Guests get a new `thrill` need (decaying slower
+than the other four, since a coaster is a much bigger build than any single
+stall) driving them to queue at a coaster's station via `chooseAction`;
+riding guests aren't drawn individually — the cart stands in for them, with
+a rider-count badge — and disembarking pays out `thrillBoost(segments,
+heights)`, scaled by total height drop and loop length, so taller hills and
+longer tracks make an objectively better coaster. Bulldozing any one tile of
+a built coaster tears down the whole loop and cart, returning queued/riding
+guests to idle.
 
-**Rendering.** Track segments need angled connector art (not just flat
-diamonds/blocks) — the `up`/`down` pieces in particular need to visually
-bridge two different terrain heights, which is new geometry in `iso.ts`
-(a "ramp quad" helper, generalizing `drawBlock`'s corner math to unequal
-corner heights) reusable by nothing else in the game today.
+**Rendering.** `engine/iso.ts` gained `drawRamp`, generalizing `drawBlock`'s
+one-uniform-height-per-tile corner math to four independently-liftable
+corners, used for `up`/`down` segments bridging two different terrain
+heights; every other segment kind renders as a flat rail-coloured diamond
+with a small directional/kind icon on top. The in-progress draft renders
+live at reduced opacity so a player can see exactly what they're laying
+before committing it.
 
-**Scope estimate.** New pure module (`track.ts`, unit tested), new renderer
-geometry (ramp quads), new stateful build-UI, new entity type (cart) with its
-own tick, new guest need (`thrill`) threaded through `guests.ts` and
-`chooseAction`. Roughly on par with Critter Rescue — plan it as its own
-session rather than folding it into a broader pass.
+## Build order (all shipped)
 
-## Suggested build order
+1. ~~Terrain elevation (heights, raise/lower, slope rendering)~~
+2. ~~Water tiles + Log Flume~~
+3. ~~Tunnels (dig, hidden-underground guests) + Sky Tower~~
+4. ~~Theme zones (gates, ground tint, cosmetic reskins, native-attraction discount)~~
+5. ~~Coaster track editor (data model, build UI, cart entity, `thrill` need)~~
 
-1. ~~Terrain elevation (heights, raise/lower, slope rendering)~~ (shipped)
-2. ~~Water tiles + Log Flume~~ (shipped)
-3. ~~Tunnels (dig, hidden-underground guests) + Sky Tower~~ (shipped)
-4. ~~Theme zones (gates, ground tint, cosmetic reskins, native-attraction discount)~~ (shipped)
-5. Coaster track editor (biggest remaining effort — new data model, build UI,
-   cart entity, `thrill` need)
-
-Each lands the same way the base game did: pure modules + tests in
-`tests/games/park.test.ts`, translation keys across en/es/cat, no new runtime
-dependencies.
+Each landed the same way the base game did: pure modules + tests in
+`tests/games/park.test.ts`, translation keys across en/es/cat, no new
+runtime dependencies. This closes out the overhaul described in this
+document; further Pixel Park work should start a new design doc.

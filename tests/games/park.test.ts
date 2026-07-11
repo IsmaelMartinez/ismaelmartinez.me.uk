@@ -26,6 +26,24 @@ import {
   NEED_KEYS
 } from '../../src/games/park/guests';
 import { parkRating, spawnInterval, dailyUpkeep } from '../../src/games/park/economy';
+import {
+  MIN_TRACK_LENGTH,
+  CART_MIN_SPEED,
+  CART_MAX_SPEED,
+  CART_CRUISE_SPEED,
+  stepTile,
+  dirBetween,
+  rotateDir,
+  validateTrack,
+  rotateToStation,
+  trackHeightDrop,
+  thrillBoost,
+  nextCartSpeed,
+  advanceU,
+  canPlaceTrack,
+  type Segment,
+  type SegmentKind
+} from '../../src/games/park/track';
 
 describe('park grid', () => {
   it('creates a grass park with an entrance, starter path, and flat terrain', () => {
@@ -363,7 +381,7 @@ describe('guest needs', () => {
   });
 
   it('flags the lowest urgent need and none when satisfied', () => {
-    const needs = { fun: 90, hunger: 95, thirst: 100, bladder: 100 };
+    const needs = { fun: 90, hunger: 95, thirst: 100, bladder: 100, thrill: 90 };
     expect(mostUrgentNeed(needs)).toBeNull();
     needs.hunger = 40;
     needs.thirst = 30;
@@ -371,11 +389,17 @@ describe('guest needs', () => {
   });
 
   it('satisfying a need caps at 100 and lifts happiness', () => {
-    const needs = { fun: 10, hunger: 100, thirst: 100, bladder: 100 };
+    const needs = { fun: 10, hunger: 100, thirst: 100, bladder: 100, thrill: 100 };
     const before = happiness(needs);
     satisfyNeed(needs, 'fun', 95);
     expect(needs.fun).toBe(100);
     expect(happiness(needs)).toBeGreaterThan(before);
+  });
+
+  it('decays thrill slower than fun, so an un-built coaster is less punishing than an un-built ride', () => {
+    const needs = createNeeds(() => 0.5);
+    decayNeeds(needs, 5);
+    expect(needs.thrill).toBeGreaterThan(needs.fun);
   });
 });
 
@@ -407,5 +431,263 @@ describe('park economy', () => {
     const expected =
       Math.round(BUILDINGS.carousel!.upkeep * 0.9) + BUILDINGS.toilet!.upkeep;
     expect(dailyUpkeep(tiles)).toBe(expected);
+  });
+});
+
+describe('coaster track', () => {
+  /**
+   * Builds a closed clockwise loop around the perimeter of a w×h rectangle
+   * anchored at (x0, y0), with dir/kind derived purely from tile geometry
+   * (turnR at every corner, flat along every straight run) — every segment
+   * is internally consistent by construction, so tests only need to
+   * override the specific kind(s) they're exercising.
+   */
+  function rectLoop(x0: number, y0: number, w: number, h: number): Segment[] {
+    const tiles: number[] = [];
+    for (let x = x0; x < x0 + w; x++) tiles.push(idx(x, y0));
+    for (let y = y0 + 1; y < y0 + h; y++) tiles.push(idx(x0 + w - 1, y));
+    for (let x = x0 + w - 2; x >= x0; x--) tiles.push(idx(x, y0 + h - 1));
+    for (let y = y0 + h - 2; y > y0; y--) tiles.push(idx(x0, y));
+    const n = tiles.length;
+    return tiles.map((tile, i) => {
+      const dir = dirBetween(tile, tiles[(i + 1) % n])!;
+      const prevDir = dirBetween(tiles[(i - 1 + n) % n], tile)!;
+      const kind: SegmentKind = dir === prevDir ? 'flat' : rotateDir(prevDir, 1) === dir ? 'turnR' : 'turnL';
+      return { tile, dir, kind };
+    });
+  }
+
+  /** First segment with the given kind — a stand-in for "one of the straight middles". */
+  function firstOfKind(segments: Segment[], kind: SegmentKind, from = 0): number {
+    return segments.findIndex((s, i) => i >= from && s.kind === kind);
+  }
+
+  /**
+   * Sequentially derives a heights array consistent with each segment's own
+   * kind (up=+1, down=-1, else=0) starting from 0 at segments[0].tile — so
+   * every segment's own dh check passes by construction. The loop only
+   * closes back to a self-consistent height at segments[0] if the chosen
+   * kinds' deltas sum to zero around the loop; tests that want a closed,
+   * height-consistent loop balance their up/down picks accordingly.
+   */
+  function heightsFor(segments: Segment[]): number[] {
+    const heights = new Array(GRID_W * GRID_H).fill(0);
+    let h = 0;
+    for (let i = 0; i < segments.length; i++) {
+      heights[segments[i].tile] = h;
+      const dh = segments[i].kind === 'up' ? 1 : segments[i].kind === 'down' ? -1 : 0;
+      h += dh;
+    }
+    return heights;
+  }
+
+  function withStation(segments: Segment[]): Segment[] {
+    const copy = segments.map(s => ({ ...s }));
+    copy[firstOfKind(copy, 'flat')].kind = 'station';
+    return copy;
+  }
+
+  describe('stepTile / dirBetween / rotateDir', () => {
+    it('steps one tile per direction and returns null past the edge', () => {
+      const tile = idx(5, 5);
+      expect(stepTile(tile, 1)).toBe(idx(6, 5)); // east
+      expect(stepTile(tile, 2)).toBe(idx(5, 6)); // south
+      expect(stepTile(idx(0, 5), 3)).toBeNull(); // west off the left edge
+      expect(stepTile(idx(5, 0), 0)).toBeNull(); // north off the top edge
+    });
+
+    it('finds the direction between orthogonal neighbours, or null otherwise', () => {
+      expect(dirBetween(idx(5, 5), idx(6, 5))).toBe(1);
+      expect(dirBetween(idx(5, 5), idx(5, 4))).toBe(0);
+      expect(dirBetween(idx(5, 5), idx(6, 6))).toBeNull(); // diagonal
+      expect(dirBetween(idx(5, 5), idx(5, 5))).toBeNull(); // same tile
+    });
+
+    it('rotates directions left and right, wrapping at the compass', () => {
+      expect(rotateDir(0, 1)).toBe(1);
+      expect(rotateDir(0, -1)).toBe(3);
+      expect(rotateDir(3, 1)).toBe(0);
+    });
+  });
+
+  describe('validateTrack', () => {
+    it('accepts a minimal valid closed loop with exactly one station', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      expect(loop).toHaveLength(MIN_TRACK_LENGTH);
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: true });
+    });
+
+    it('rejects a loop shorter than the minimum', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2)).slice(0, 3);
+      expect(validateTrack(loop, heightsFor(rectLoop(1, 1, 3, 2)))).toEqual({
+        ok: false,
+        error: 'tooShort'
+      });
+    });
+
+    it('rejects a loop that revisits a tile', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      loop[loop.length - 1].tile = loop[0].tile;
+      expect(validateTrack(loop, heightsFor(loop)).ok).toBe(false);
+      expect((validateTrack(loop, heightsFor(loop)) as { error: string }).error).toBe(
+        'duplicateTile'
+      );
+    });
+
+    it('rejects a loop with no station', () => {
+      const loop = rectLoop(1, 1, 3, 2); // all turnR/flat, no station
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'needsStation' });
+    });
+
+    it('rejects a loop with more than one station', () => {
+      const loop = withStation(rectLoop(1, 1, 4, 2));
+      const secondFlat = firstOfKind(loop, 'flat');
+      loop[secondFlat].kind = 'station';
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'needsStation' });
+    });
+
+    it('rejects a loop whose dir does not actually reach the next tile', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      loop[0].dir = rotateDir(loop[0].dir, 1);
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'notClosed' });
+    });
+
+    it('rejects a kind whose implied turn does not match the observed dir', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      const turnSeg = loop.find(s => s.kind === 'turnR')!;
+      turnSeg.kind = 'turnL'; // dir stays the same, but turnL expects the opposite rotation
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'notClosed' });
+    });
+
+    it('rejects a flat/turn segment whose actual height delta is nonzero', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      const heights = heightsFor(loop);
+      heights[loop[0].tile] += 1; // breaks the dh=0 expectation on whichever segment leads into it
+      expect(validateTrack(loop, heights)).toEqual({ ok: false, error: 'notClosed' });
+    });
+
+    it('rejects two consecutive up/down segments with no flat between them', () => {
+      // A 5-wide top edge has three straight middle tiles in a row; the
+      // 5-wide bottom edge balances the height change back to zero so the
+      // loop still closes, isolating the steepness rule as the only failure.
+      const loop = rectLoop(1, 1, 5, 2);
+      const topFlats = loop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
+      const [up1, up2, station] = topFlats.slice(0, 3);
+      const [down1, down2] = topFlats.slice(3, 5);
+      loop[up1].kind = 'up';
+      loop[up2].kind = 'up';
+      loop[station].kind = 'station';
+      loop[down1].kind = 'down';
+      loop[down2].kind = 'down';
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'tooSteep' });
+    });
+
+    it('accepts an isolated up/down pair separated by a flat', () => {
+      const loop = rectLoop(1, 1, 5, 2);
+      const topFlats = loop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
+      const [up, station, down] = topFlats.slice(0, 3);
+      loop[up].kind = 'up';
+      loop[station].kind = 'station';
+      loop[down].kind = 'down';
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: true });
+    });
+  });
+
+  describe('rotateToStation', () => {
+    it('rotates the loop so the station segment is first, preserving cyclic order', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      const stationTile = loop.find(s => s.kind === 'station')!.tile;
+      const rotated = rotateToStation(loop);
+      expect(rotated[0].kind).toBe('station');
+      expect(rotated[0].tile).toBe(stationTile);
+      expect(rotated).toHaveLength(loop.length);
+      // Same cyclic sequence, just rotated — every tile still appears once.
+      expect(new Set(rotated.map(s => s.tile))).toEqual(new Set(loop.map(s => s.tile)));
+    });
+
+    it('is a no-op when the station is already first', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      const stationIndex = loop.findIndex(s => s.kind === 'station');
+      const rotatedOnce = rotateToStation(loop);
+      expect(rotateToStation(rotatedOnce)).toEqual(rotatedOnce);
+      expect(stationIndex).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('trackHeightDrop / thrillBoost', () => {
+    it('is zero for a flat loop', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      expect(trackHeightDrop(loop, heightsFor(loop))).toBe(0);
+    });
+
+    it('sums only the descending segments', () => {
+      const loop = rectLoop(1, 1, 5, 2);
+      const topFlats = loop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
+      const [up, station, down] = topFlats.slice(0, 3);
+      loop[up].kind = 'up';
+      loop[station].kind = 'station';
+      loop[down].kind = 'down';
+      expect(trackHeightDrop(loop, heightsFor(loop))).toBe(1);
+    });
+
+    it('scales thrill boost with height drop and loop length, capped at 100', () => {
+      const flatLoop = withStation(rectLoop(1, 1, 3, 2));
+      const flatBoost = thrillBoost(flatLoop, heightsFor(flatLoop));
+
+      const hillLoop = rectLoop(1, 1, 5, 2);
+      const topFlats = hillLoop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
+      const [up, station, down] = topFlats.slice(0, 3);
+      hillLoop[up].kind = 'up';
+      hillLoop[station].kind = 'station';
+      hillLoop[down].kind = 'down';
+      const hillBoost = thrillBoost(hillLoop, heightsFor(hillLoop));
+
+      expect(hillBoost).toBeGreaterThan(flatBoost);
+      expect(hillBoost).toBeLessThanOrEqual(100);
+      expect(flatBoost).toBeGreaterThan(0);
+    });
+  });
+
+  describe('cart speed model', () => {
+    it('accelerates going down, within the max speed clamp', () => {
+      let speed = CART_CRUISE_SPEED;
+      for (let i = 0; i < 10; i++) speed = nextCartSpeed(speed, 'down', 0.5);
+      expect(speed).toBeGreaterThan(CART_CRUISE_SPEED);
+      expect(speed).toBeLessThanOrEqual(CART_MAX_SPEED);
+    });
+
+    it('decelerates going up, but never below the min speed clamp', () => {
+      let speed = CART_CRUISE_SPEED;
+      for (let i = 0; i < 20; i++) speed = nextCartSpeed(speed, 'up', 0.5);
+      expect(speed).toBeGreaterThanOrEqual(CART_MIN_SPEED);
+      expect(speed).toBe(CART_MIN_SPEED);
+    });
+
+    it('drags flat-segment speed back toward cruise speed', () => {
+      let speed = CART_MAX_SPEED;
+      for (let i = 0; i < 20; i++) speed = nextCartSpeed(speed, 'flat', 0.5);
+      expect(speed).toBeCloseTo(CART_CRUISE_SPEED, 1);
+    });
+  });
+
+  describe('advanceU', () => {
+    it('advances progress and wraps at the loop length', () => {
+      expect(advanceU(0, 2, 1, 10)).toBe(2);
+      expect(advanceU(9, 2, 1, 10)).toBe(1); // 11 wraps to 1 in a loop of length 10
+    });
+  });
+
+  describe('canPlaceTrack', () => {
+    it('requires every segment tile to currently be grass', () => {
+      const loop = withStation(rectLoop(1, 1, 3, 2));
+      const { tiles, heights, tunnels } = createPark();
+      expect(canPlaceTrack(tiles, loop)).toBe(true);
+      applyTool(tiles, heights, tunnels, 2, 1, 'tree');
+      expect(canPlaceTrack(tiles, loop)).toBe(false);
+    });
+  });
+
+  it('prices the track tile like any other simple tool', () => {
+    expect(toolCost('track')).toBeGreaterThan(0);
   });
 });

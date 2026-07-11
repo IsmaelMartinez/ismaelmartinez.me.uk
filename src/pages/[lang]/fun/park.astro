@@ -28,7 +28,19 @@ const tools = [
   { id: 'gateFairytale', emoji: '🏰', label: t('fun.park.toolGateFairytale'), cost: 150 },
   { id: 'gateAdventure', emoji: '🌴', label: t('fun.park.toolGateAdventure'), cost: 250 },
   { id: 'gatePirate', emoji: '🏴‍☠️', label: t('fun.park.toolGatePirate'), cost: 350 },
+  { id: 'track', emoji: '🛤️', label: t('fun.park.toolTrack'), cost: 40, perTile: true },
   { id: 'bulldoze', emoji: '🚜', label: t('fun.park.toolBulldoze'), cost: 0 }
+];
+
+const trackKinds = [
+  { kind: 'flat', emoji: '🛤️', label: t('fun.park.trackKindFlat') },
+  { kind: 'up', emoji: '⬆️', label: t('fun.park.trackKindUp') },
+  { kind: 'down', emoji: '⬇️', label: t('fun.park.trackKindDown') },
+  { kind: 'turnL', emoji: '↩️', label: t('fun.park.trackKindTurnL') },
+  { kind: 'turnR', emoji: '↪️', label: t('fun.park.trackKindTurnR') },
+  { kind: 'tunnelIn', emoji: '🕳️', label: t('fun.park.trackKindTunnelIn') },
+  { kind: 'tunnelOut', emoji: '🕳️', label: t('fun.park.trackKindTunnelOut') },
+  { kind: 'station', emoji: '🚉', label: t('fun.park.trackKindStation') }
 ];
 ---
 
@@ -49,6 +61,18 @@ const tools = [
         data-t-needs-height={t('fun.park.needsHeight')}
         data-t-too-steep={t('fun.park.tooSteep')}
         data-t-zone-locked={t('fun.park.zoneLocked')}
+        data-t-track-not-adjacent={t('fun.park.trackNotAdjacent')}
+        data-t-track-blocked={t('fun.park.trackBlocked')}
+        data-t-track-empty={t('fun.park.trackEmpty')}
+        data-t-track-not-closed-yet={t('fun.park.trackNotClosedYet')}
+        data-t-track-too-short={t('fun.park.trackTooShort')}
+        data-t-track-duplicate-tile={t('fun.park.trackDuplicateTile')}
+        data-t-track-needs-station={t('fun.park.trackNeedsStation')}
+        data-t-track-not-closed={t('fun.park.trackNotClosed')}
+        data-t-track-too-steep={t('fun.park.trackTooSteep')}
+        data-t-track-status-empty={t('fun.park.trackStatusEmpty')}
+        data-t-track-status-drafting={t('fun.park.trackStatusDrafting')}
+        data-t-track-status-closed={t('fun.park.trackStatusClosed')}
       >
         <div class="game-header">
           <h1><span class="park-emoji">🎢</span> {t('fun.park.title')}</h1>
@@ -116,7 +140,7 @@ const tools = [
               <button class={`tool-btn${i === 0 ? ' active' : ''}`} data-tool={tool.id}>
                 <span class="tool-emoji">{tool.emoji}</span>
                 <span class="tool-label">{tool.label}</span>
-                <span class="tool-cost">{tool.cost > 0 ? `£${tool.cost}` : '—'}</span>
+                <span class="tool-cost">{tool.cost > 0 ? `£${tool.cost}${tool.perTile ? '/tile' : ''}` : '—'}</span>
               </button>
             ))}
           </div>
@@ -124,6 +148,23 @@ const tools = [
             <button class="speed-btn" data-speed="0">⏸</button>
             <button class="speed-btn active" data-speed="1">▶</button>
             <button class="speed-btn" data-speed="3">⏩</button>
+          </div>
+        </div>
+
+        <div id="track-palette" class="track-palette" style="display: none;">
+          <div class="track-kinds">
+            {trackKinds.map(k => (
+              <button class={`track-kind-btn${k.kind === 'station' ? ' active' : ''}`} data-kind={k.kind}>
+                <span class="tool-emoji">{k.emoji}</span>
+                <span class="tool-label">{k.label}</span>
+              </button>
+            ))}
+          </div>
+          <div class="track-actions">
+            <span id="track-status" class="track-status">{t('fun.park.trackStatusEmpty')}</span>
+            <button id="track-close-btn" class="btn">{t('fun.park.trackClose')}</button>
+            <button id="track-test-btn" class="btn btn-primary" disabled>{t('fun.park.trackTest')}</button>
+            <button id="track-cancel-btn" class="btn">{t('fun.park.trackCancel')}</button>
           </div>
         </div>
       </div>
@@ -370,6 +411,61 @@ const tools = [
     font-size: 0.7rem;
     font-weight: 700;
     color: #4ade80;
+  }
+
+  .track-palette {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    width: 100%;
+    margin-top: var(--space-sm);
+    padding: var(--space-sm);
+    border: 2px dashed var(--color-border);
+    border-radius: 0.6rem;
+  }
+
+  .track-kinds {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+  }
+
+  .track-kind-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 56px;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .track-kind-btn:hover {
+    border-color: var(--color-accent);
+  }
+
+  .track-kind-btn.active {
+    border-color: var(--color-accent);
+    background: rgba(37, 99, 235, 0.14);
+  }
+
+  .track-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+  }
+
+  .track-status {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    flex: 1;
+    min-width: 200px;
   }
 
   .speed-controls {

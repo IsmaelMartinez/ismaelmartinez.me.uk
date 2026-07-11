@@ -704,7 +704,11 @@ export function initParkGame(): void {
       updateTrackStatus();
       return;
     }
-    if (trackDraft.some(s => s.tile === i) || tiles[i] !== 'grass') {
+    if (trackDraft.some(s => s.tile === i)) {
+      showToast(strings.trackDuplicateTile);
+      return;
+    }
+    if (tiles[i] !== 'grass') {
       showToast(strings.trackBlocked);
       return;
     }
@@ -1000,12 +1004,21 @@ export function initParkGame(): void {
 
     // Committed coaster segments plus the in-progress draft (rendered as a
     // translucent preview) so a player sees exactly what they're laying.
-    const trackByTile = new Map<number, { seg: Segment; draft: boolean }>();
+    // The draft's tail segment has a placeholder `dir` (see handleTrackTap)
+    // until the next tap fixes it, so its ramp orientation isn't known yet
+    // — `pending` flags it so the renderer falls back to a flat marker
+    // instead of guessing a slope direction.
+    const trackByTile = new Map<number, { seg: Segment; draft: boolean; pending: boolean }>();
     for (const coaster of coasters) {
-      for (const seg of coaster.segments) trackByTile.set(seg.tile, { seg, draft: false });
+      for (const seg of coaster.segments) trackByTile.set(seg.tile, { seg, draft: false, pending: false });
     }
     if (trackDraft) {
-      for (const seg of trackDraft) trackByTile.set(seg.tile, { seg, draft: true });
+      trackDraft.forEach((seg, idx) => {
+        // Once the loop is closed the tail's dir was fixed by the closing
+        // tap (see handleTrackTap), so nothing is pending any more.
+        const pending = !trackClosed && idx === trackDraft!.length - 1;
+        trackByTile.set(seg.tile, { seg, draft: true, pending });
+      });
     }
 
     let lastDiag = -1;
@@ -1086,17 +1099,21 @@ export function initParkGame(): void {
 
       const trackInfo = trackByTile.get(i);
       if (trackInfo) {
-        const { seg, draft } = trackInfo;
-        const nextTile = stepTile(seg.tile, seg.dir);
+        const { seg, draft, pending } = trackInfo;
+        // A pending tail segment's dir is still a placeholder (see
+        // handleTrackTap), so its slope direction isn't known yet — render
+        // it flat rather than guess a ramp orientation from a bogus dir.
+        const isRamp = (seg.kind === 'up' || seg.kind === 'down') && !pending;
+        const nextTile = isRamp ? stepTile(seg.tile, seg.dir) : null;
         const nextLift = nextTile !== null ? heights[nextTile] * TERRAIN_STEP : liftPx;
         ctx.save();
         if (draft) ctx.globalAlpha = 0.55;
-        if (seg.kind === 'up' || seg.kind === 'down') {
+        if (isRamp) {
           drawRamp(ctx, VIEW, x, y, rampCorners(seg.dir, liftPx, nextLift), '#8a8a95');
         } else {
           fillTile(ctx, VIEW, x, y, '#8a8a95', liftPx);
         }
-        const emojiLift = seg.kind === 'up' || seg.kind === 'down' ? (liftPx + nextLift) / 2 : liftPx;
+        const emojiLift = isRamp ? (liftPx + nextLift) / 2 : liftPx;
         const railTop = isoProject(VIEW, x + 0.5, y + 0.5);
         railTop.y -= emojiLift + 6;
         ctx.font = '12px serif';
@@ -1227,6 +1244,7 @@ export function initParkGame(): void {
         tiles[i] = 'grass';
       }
       audio.playSfx('blip');
+      invalidateGuests();
       return;
     }
     if (selectedTool === 'bulldoze' && isWalkable(tiles[i])) {

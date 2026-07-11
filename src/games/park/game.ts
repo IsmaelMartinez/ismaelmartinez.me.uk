@@ -725,7 +725,11 @@ export function initParkGame(): void {
   }
 
   function testTrack() {
-    if (!trackDraft || !trackClosed) {
+    if (!trackDraft) {
+      showToast(strings.trackEmpty);
+      return;
+    }
+    if (!trackClosed) {
       showToast(strings.trackNotClosedYet);
       return;
     }

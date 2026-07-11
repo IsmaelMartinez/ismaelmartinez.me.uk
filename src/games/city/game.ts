@@ -99,9 +99,9 @@ const ROOFTOP_UNIT = '#c9ced6';
 /** Overall silhouette height per (type, level) — tallest architectural
  *  feature — so floaters/warnings/emoji sit above the actual building. */
 const ZONE_TOP_HEIGHT: Record<ZoneType, number[]> = {
-  res: [0, 10, 14, 23],
-  com: [0, 7, 16, 26],
-  ind: [0, 9, 15, 26]
+  res: [0, 10, 14, 22],
+  com: [0, 7, 16, 25],
+  ind: [0, 8, 15, 26]
 };
 const buildingHeight = (tile: CityTile): number => {
   // These include the smokestack/gable-roof-peak flourish drawn on top of

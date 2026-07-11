@@ -12,6 +12,7 @@ import {
   ZONES,
   zoneUnlocked,
   zoneAt,
+  zonesForTiles,
   zoneDiscountFactor,
   gateZone
 } from '../../src/games/park/grid';
@@ -248,6 +249,17 @@ describe('park theme zones', () => {
     applyTool(tiles, heights, tunnels, GRID_W - 2, GRID_H - 2, 'gateAdventure');
     expect(zoneAt(tiles, idx(2, 2))).toBe('fairytale');
     expect(zoneAt(tiles, idx(GRID_W - 3, GRID_H - 3))).toBe('adventure');
+  });
+
+  it('precomputes the same zone per tile as zoneAt, for every tile', () => {
+    const { tiles, heights, tunnels } = createPark();
+    applyTool(tiles, heights, tunnels, 1, 1, 'gateFairytale');
+    applyTool(tiles, heights, tunnels, GRID_W - 2, GRID_H - 2, 'gateAdventure');
+    const precomputed = zonesForTiles(tiles);
+    expect(precomputed).toHaveLength(tiles.length);
+    tiles.forEach((_, i) => {
+      expect(precomputed[i]).toBe(zoneAt(tiles, i));
+    });
   });
 
   it('discounts a zone native attraction inside its own influence, but not other buildings', () => {

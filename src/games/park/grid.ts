@@ -129,9 +129,14 @@ const GATE_ZONE: Partial<Record<TileType, ZoneId>> = {
   gatePirate: 'pirate'
 };
 
-/** The zone a Zone Gate tile belongs to, or null for any other tile type. */
-export function gateZone(tile: TileType): ZoneId | null {
-  return GATE_ZONE[tile] ?? null;
+/**
+ * The zone a Zone Gate tile belongs to, or null for any other tile type.
+ * Takes `string` (not `TileType`) so call sites can pass a `Tool` (e.g. the
+ * currently selected toolbar tool) directly, without an unsafe cast — a
+ * non-gate value simply falls through to null.
+ */
+export function gateZone(tile: string): ZoneId | null {
+  return GATE_ZONE[tile as TileType] ?? null;
 }
 
 /** Whether the given zone's rating + cash thresholds are currently met. */
@@ -151,16 +156,43 @@ export function zoneUnlocked(zone: ZoneId, rating: number, money: number): boole
 export function zoneAt(tiles: TileType[], i: number): ZoneId | null {
   let best: ZoneId | null = null;
   let bestDist = Infinity;
-  tiles.forEach((tile, gi) => {
-    const zone = GATE_ZONE[tile];
-    if (!zone) return;
+  for (let gi = 0; gi < tiles.length; gi++) {
+    const zone = GATE_ZONE[tiles[gi]];
+    if (!zone) continue;
     const dist = chebyshev(gi, i, GRID_W);
     if (dist < bestDist) {
       bestDist = dist;
       best = zone;
     }
-  });
+  }
   return best;
+}
+
+/**
+ * Zone for every tile in one pass — O(tiles × gates) instead of calling
+ * zoneAt(tiles, i) per tile (which rescans the whole array for gates each
+ * time, O(tiles²)). Used by the renderer, which needs every tile's zone
+ * once per frame; zoneAt itself stays the right tool for a single lookup
+ * (toolCost, dailyUpkeep, hover previews).
+ */
+export function zonesForTiles(tiles: TileType[]): (ZoneId | null)[] {
+  const gates: { zone: ZoneId; gi: number }[] = [];
+  for (let gi = 0; gi < tiles.length; gi++) {
+    const zone = GATE_ZONE[tiles[gi]];
+    if (zone) gates.push({ zone, gi });
+  }
+  return tiles.map((_, i) => {
+    let best: ZoneId | null = null;
+    let bestDist = Infinity;
+    for (const gate of gates) {
+      const dist = chebyshev(gate.gi, i, GRID_W);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = gate.zone;
+      }
+    }
+    return best;
+  });
 }
 
 /** ~10% discount for a zone's native attraction built inside its own influence. */

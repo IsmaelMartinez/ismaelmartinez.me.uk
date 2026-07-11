@@ -31,7 +31,7 @@ import {
   toolCost,
   neighbours,
   isWalkable,
-  zoneAt,
+  zonesForTiles,
   zoneUnlocked,
   gateZone,
   type TileType,
@@ -635,6 +635,11 @@ export function initParkGame(): void {
       guestsByDiag[d].push(guest);
     }
 
+    // One pass over the whole grid instead of a per-tile zoneAt lookup —
+    // zoneAt rescans every tile for gates, which turns O(tiles) rendering
+    // into O(tiles²) if called once per tile inside the loop below.
+    const tileZones = zonesForTiles(tiles);
+
     let lastDiag = -1;
     forEachTileBackToFront(GRID_W, GRID_H, (x, y, i, diag) => {
       if (diag !== lastDiag) {
@@ -645,7 +650,7 @@ export function initParkGame(): void {
       const h = heights[i];
       const liftPx = h * TERRAIN_STEP;
 
-      const zone = zoneAt(tiles, i);
+      const zone = tileZones[i];
 
       if (tile === 'water') {
         const ripple = 0.85 + 0.25 * Math.sin(clock * 1.5 + (x + y) * 0.6);
@@ -714,7 +719,7 @@ export function initParkGame(): void {
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;
       const y = Math.floor(hoverTile / GRID_W);
-      const lockedZone = gateZone(selectedTool as TileType);
+      const lockedZone = gateZone(selectedTool);
       const valid =
         canPlace(tiles, heights, tunnels, x, y, selectedTool) &&
         toolCost(selectedTool, tiles, hoverTile) <= money &&
@@ -843,7 +848,7 @@ export function initParkGame(): void {
       }
       return;
     }
-    const lockedZone = gateZone(selectedTool as TileType);
+    const lockedZone = gateZone(selectedTool);
     if (lockedZone && !zoneUnlocked(lockedZone, rating, money)) {
       showToast(strings.zoneLocked);
       return;

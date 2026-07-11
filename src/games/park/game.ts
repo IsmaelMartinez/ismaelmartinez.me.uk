@@ -461,6 +461,14 @@ export function initParkGame(): void {
 
   /** Queues a guest at a coaster's station; boarding happens in `updateCoaster`. */
   function joinQueue(guest: Guest, coaster: Coaster) {
+    // The queue can fill up during the guest's walk over — chooseAction's
+    // own QUEUE_CAP check only holds at the moment they set off — so this
+    // re-checks at the point of actually joining, not just at dispatch.
+    if (coaster.queue.length >= QUEUE_CAP) {
+      guest.state = 'idle';
+      guest.idleTimer = 0.3;
+      return;
+    }
     guest.state = 'queuing';
     guest.targetBuilding = coaster.segments[0].tile;
     coaster.queue.push(guest);
@@ -540,7 +548,9 @@ export function initParkGame(): void {
           .slice(guest.step)
           .every(i => isWalkable(tiles[i]));
         const targetValid =
-          guest.targetBuilding === null || !!BUILDINGS[tiles[guest.targetBuilding]];
+          guest.targetBuilding === null ||
+          !!BUILDINGS[tiles[guest.targetBuilding]] ||
+          tiles[guest.targetBuilding] === 'track';
         if (!remainingValid || !targetValid) {
           guest.path = [];
           guest.step = 0;
@@ -1209,7 +1219,13 @@ export function initParkGame(): void {
 
     if (selectedTool === 'bulldoze' && tiles[i] === 'track') {
       const coaster = coasters.find(c => c.segments.some(s => s.tile === i));
-      if (coaster) removeCoaster(coaster);
+      if (coaster) {
+        removeCoaster(coaster);
+      } else {
+        // No owning coaster (shouldn't happen in normal play) — still clear
+        // the tile so it can never become permanently un-bulldozable.
+        tiles[i] = 'grass';
+      }
       audio.playSfx('blip');
       return;
     }

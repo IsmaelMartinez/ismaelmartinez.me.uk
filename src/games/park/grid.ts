@@ -5,7 +5,7 @@
  * see the "terrain elevation" section of
  * docs/plans/2026-07-09-park-overhaul-design.md for the model this encodes.
  */
-import { gridNeighbours } from '../engine/grid2d';
+import { gridNeighbours, chebyshev } from '../engine/grid2d';
 
 export const GRID_W = 24;
 export const GRID_H = 14;
@@ -26,7 +26,10 @@ export type TileType =
   | 'tree'
   | 'water'
   | 'flume'
-  | 'skytower';
+  | 'skytower'
+  | 'gateFairytale'
+  | 'gateAdventure'
+  | 'gatePirate';
 
 export type Tool =
   | Exclude<TileType, 'grass' | 'entrance'>
@@ -71,11 +74,145 @@ const SIMPLE_COSTS: Partial<Record<Tool, number>> = {
   water: 15,
   raiseLand: 20,
   lowerLand: 20,
-  digTunnel: 30
+  digTunnel: 30,
+  gateFairytale: 150,
+  gateAdventure: 250,
+  gatePirate: 350
 };
 
-export function toolCost(tool: Tool): number {
-  return BUILDINGS[tool as TileType]?.cost ?? SIMPLE_COSTS[tool] ?? 0;
+/**
+ * Theme zones: unlockable areas whose influence is claimed by placing a Zone
+ * Gate decoration rather than painting tiles, per the "Designed, not built:
+ * theme zones" section of docs/plans/2026-07-09-park-overhaul-design.md.
+ * Fairytale is available from the start; Adventure and Pirate unlock as
+ * park rating and banked cash climb, matching the pacing of a run.
+ */
+export type ZoneId = 'fairytale' | 'adventure' | 'pirate';
+
+export interface ZoneDef {
+  gate: TileType;
+  /** The attraction that gets a native-zone discount when built in this zone's influence. */
+  native: TileType;
+  unlockRating: number;
+  unlockCash: number;
+  /** Ground tint for grass tiles inside this zone's influence. */
+  groundColor: string;
+}
+
+export const ZONES: Record<ZoneId, ZoneDef> = {
+  fairytale: {
+    gate: 'gateFairytale',
+    native: 'carousel',
+    unlockRating: 0,
+    unlockCash: 0,
+    groundColor: '#4a7a5a'
+  },
+  adventure: {
+    gate: 'gateAdventure',
+    native: 'flume',
+    unlockRating: 60,
+    unlockCash: 3000,
+    groundColor: '#2f5a1f'
+  },
+  pirate: {
+    gate: 'gatePirate',
+    native: 'ferris',
+    unlockRating: 75,
+    unlockCash: 6000,
+    groundColor: '#c2a26a'
+  }
+};
+
+const GATE_ZONE: Partial<Record<TileType, ZoneId>> = {
+  gateFairytale: 'fairytale',
+  gateAdventure: 'adventure',
+  gatePirate: 'pirate'
+};
+
+/**
+ * The zone a Zone Gate tile belongs to, or null for any other tile type.
+ * Takes `string` (not `TileType`) so call sites can pass a `Tool` (e.g. the
+ * currently selected toolbar tool) directly, without an unsafe cast — a
+ * non-gate value simply falls through to null.
+ */
+export function gateZone(tile: string): ZoneId | null {
+  return GATE_ZONE[tile as TileType] ?? null;
+}
+
+/** Whether the given zone's rating + cash thresholds are currently met. */
+export function zoneUnlocked(zone: ZoneId, rating: number, money: number): boolean {
+  const def = ZONES[zone];
+  return rating >= def.unlockRating && money >= def.unlockCash;
+}
+
+/**
+ * The zone whose influence tile `i` falls under: the zone of the nearest
+ * placed Zone Gate by Chebyshev distance, or null if no gates are on the
+ * map yet. Rendering-only (guest pathing and building rules are unaffected)
+ * — see the design doc. Ties keep whichever gate is scanned first (stable
+ * grid order); an arbitrary but deterministic tie-break is fine since this
+ * only drives cosmetics and a small discount.
+ */
+export function zoneAt(tiles: TileType[], i: number): ZoneId | null {
+  let best: ZoneId | null = null;
+  let bestDist = Infinity;
+  for (let gi = 0; gi < tiles.length; gi++) {
+    const zone = GATE_ZONE[tiles[gi]];
+    if (!zone) continue;
+    const dist = chebyshev(gi, i, GRID_W);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = zone;
+    }
+  }
+  return best;
+}
+
+/**
+ * Zone for every tile in one pass — O(tiles × gates) instead of calling
+ * zoneAt(tiles, i) per tile (which rescans the whole array for gates each
+ * time, O(tiles²)). Used by the renderer, which needs every tile's zone
+ * once per frame; zoneAt itself stays the right tool for a single lookup
+ * (toolCost, dailyUpkeep, hover previews).
+ */
+export function zonesForTiles(tiles: TileType[]): (ZoneId | null)[] {
+  const gates: { zone: ZoneId; gi: number }[] = [];
+  for (let gi = 0; gi < tiles.length; gi++) {
+    const zone = GATE_ZONE[tiles[gi]];
+    if (zone) gates.push({ zone, gi });
+  }
+  return tiles.map((_, i) => {
+    let best: ZoneId | null = null;
+    let bestDist = Infinity;
+    for (const gate of gates) {
+      const dist = chebyshev(gate.gi, i, GRID_W);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = gate.zone;
+      }
+    }
+    return best;
+  });
+}
+
+/** ~10% discount for a zone's native attraction built inside its own influence. */
+export function zoneDiscountFactor(tiles: TileType[], i: number, tool: TileType): number {
+  const zone = zoneAt(tiles, i);
+  return zone && ZONES[zone].native === tool ? 0.9 : 1;
+}
+
+/**
+ * Cost to place `tool`. Passing the tile it's being placed on (`tiles`, `i`)
+ * applies the zone native-attraction discount; omit them for a location-
+ * independent base cost (e.g. toolbar display).
+ */
+export function toolCost(tool: Tool, tiles?: TileType[], i?: number): number {
+  const def = BUILDINGS[tool as TileType];
+  if (def) {
+    const factor = tiles && i !== undefined ? zoneDiscountFactor(tiles, i, tool as TileType) : 1;
+    return Math.round(def.cost * factor);
+  }
+  return SIMPLE_COSTS[tool] ?? 0;
 }
 
 export const idx = (x: number, y: number): number => y * GRID_W + x;

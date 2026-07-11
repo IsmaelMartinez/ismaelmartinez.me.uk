@@ -24,14 +24,19 @@ import {
   MIN_HEIGHT,
   MAX_HEIGHT,
   BUILDINGS,
+  ZONES,
   createPark,
   canPlace,
   applyTool,
   toolCost,
   neighbours,
   isWalkable,
+  zonesForTiles,
+  zoneUnlocked,
+  gateZone,
   type TileType,
-  type Tool
+  type Tool,
+  type ZoneId
 } from './grid';
 import { bfsFrom, buildPath, findPath, nearestReachable } from './pathfind';
 import {
@@ -68,6 +73,49 @@ const TILE_EMOJI: Partial<Record<TileType, string>> = {
   tree: '🌳',
   flume: '🪵',
   skytower: '🗼'
+};
+
+/** Zone Gate decorations: flat ground emoji, drawn like a tree (see `render`). */
+const GATE_EMOJI: Partial<Record<TileType, string>> = {
+  gateFairytale: '🏰',
+  gateAdventure: '🌴',
+  gatePirate: '🏴‍☠️'
+};
+
+/**
+ * Cosmetic reskins for existing attractions when built inside a zone's
+ * influence — same TileType, same BUILDINGS economics (see design doc),
+ * just a different emoji + block colour so each themed area reads
+ * distinctly. Any building without an entry here keeps its default look.
+ */
+const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji: string; color: string }>>> = {
+  fairytale: {
+    carousel: { emoji: '🎠', color: '#d68fc2' },
+    ferris: { emoji: '🎡', color: '#b28fe0' },
+    food: { emoji: '🍰', color: '#e8a0bc' },
+    drink: { emoji: '🧃', color: '#f0b6d2' },
+    toilet: { emoji: '🚻', color: '#a888d0' },
+    flume: { emoji: '🦢', color: '#8fc4dc' },
+    skytower: { emoji: '🏰', color: '#b89fdc' }
+  },
+  adventure: {
+    carousel: { emoji: '🐒', color: '#6b8f3f' },
+    ferris: { emoji: '🎡', color: '#4f7a2f' },
+    food: { emoji: '🍌', color: '#a67c2a' },
+    drink: { emoji: '🥥', color: '#5a8a3a' },
+    toilet: { emoji: '🛖', color: '#7a5a2f' },
+    flume: { emoji: '🐊', color: '#2f7a4f' },
+    skytower: { emoji: '🗿', color: '#5a6a4a' }
+  },
+  pirate: {
+    carousel: { emoji: '🎯', color: '#7a3a2a' },
+    ferris: { emoji: '🛞', color: '#6a4a2a' },
+    food: { emoji: '🍖', color: '#6a5a3a' },
+    drink: { emoji: '🍺', color: '#5a4a2a' },
+    toilet: { emoji: '⚓', color: '#3a5a6a' },
+    flume: { emoji: '🐙', color: '#2a5a6a' },
+    skytower: { emoji: '🏴‍☠️', color: '#4a3a5a' }
+  }
 };
 
 /** Per-building block colour and height so each attraction reads distinctly. */
@@ -150,7 +198,8 @@ export function initParkGame(): void {
     blocked: root.dataset.tBlocked || 'A guest is in the way!',
     needsWater: root.dataset.tNeedsWater || 'Needs water next to it!',
     needsHeight: root.dataset.tNeedsHeight || 'Needs higher ground!',
-    tooSteep: root.dataset.tTooSteep || "Can't shape the land that steeply!"
+    tooSteep: root.dataset.tTooSteep || "Can't shape the land that steeply!",
+    zoneLocked: root.dataset.tZoneLocked || 'Zone not unlocked yet!'
   };
 
   canvas.width = CANVAS_W;
@@ -586,6 +635,11 @@ export function initParkGame(): void {
       guestsByDiag[d].push(guest);
     }
 
+    // One pass over the whole grid instead of a per-tile zoneAt lookup —
+    // zoneAt rescans every tile for gates, which turns O(tiles) rendering
+    // into O(tiles²) if called once per tile inside the loop below.
+    const tileZones = zonesForTiles(tiles);
+
     let lastDiag = -1;
     forEachTileBackToFront(GRID_W, GRID_H, (x, y, i, diag) => {
       if (diag !== lastDiag) {
@@ -596,6 +650,8 @@ export function initParkGame(): void {
       const h = heights[i];
       const liftPx = h * TERRAIN_STEP;
 
+      const zone = tileZones[i];
+
       if (tile === 'water') {
         const ripple = 0.85 + 0.25 * Math.sin(clock * 1.5 + (x + y) * 0.6);
         fillTile(ctx, VIEW, x, y, shadeColor('#1f6fa8', ripple));
@@ -603,9 +659,11 @@ export function initParkGame(): void {
         const groundColor =
           tile === 'path' || tile === 'entrance'
             ? '#8a7a5c'
-            : (x + y) % 2 === 0
-              ? '#1d3b24'
-              : '#1f4028';
+            : zone
+              ? shadeColor(ZONES[zone].groundColor, (x + y) % 2 === 0 ? 1 : 0.88)
+              : (x + y) % 2 === 0
+                ? '#1d3b24'
+                : '#1f4028';
         if (h > 0) {
           drawBlock(ctx, VIEW, x, y, liftPx, groundColor, 0);
         } else {
@@ -639,16 +697,20 @@ export function initParkGame(): void {
       } else if (tile === 'tree') {
         ctx.font = '17px serif';
         ctx.fillText('🌳', top.x, top.y - 7);
+      } else if (GATE_EMOJI[tile]) {
+        ctx.font = '17px serif';
+        ctx.fillText(GATE_EMOJI[tile]!, top.x, top.y - 7);
       } else if (BUILDINGS[tile]) {
         const style = BUILDING_STYLE[tile] ?? { color: '#44447a', height: BLOCK_HEIGHT };
-        drawBlock(ctx, VIEW, x, y, style.height, style.color, 0.08, liftPx);
+        const reskin = zone ? ZONE_BUILDING_STYLE[zone][tile] : undefined;
+        drawBlock(ctx, VIEW, x, y, style.height, reskin?.color ?? style.color, 0.08, liftPx);
         const spin = RIDE_SPIN[tile];
         const busy = inUse.has(i);
         ctx.save();
         ctx.translate(top.x, top.y - style.height - (busy ? 2 : 0));
         if (spin) ctx.rotate((clock * (busy ? spin.busy : spin.idle)) % (Math.PI * 2));
         ctx.font = `${tile === 'ferris' || tile === 'skytower' ? 16 : 14}px serif`;
-        ctx.fillText(TILE_EMOJI[tile] ?? '', 0, 0);
+        ctx.fillText(reskin?.emoji ?? TILE_EMOJI[tile] ?? '', 0, 0);
         ctx.restore();
       }
     });
@@ -657,7 +719,11 @@ export function initParkGame(): void {
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;
       const y = Math.floor(hoverTile / GRID_W);
-      const valid = canPlace(tiles, heights, tunnels, x, y, selectedTool) && toolCost(selectedTool) <= money;
+      const lockedZone = gateZone(selectedTool);
+      const valid =
+        canPlace(tiles, heights, tunnels, x, y, selectedTool) &&
+        toolCost(selectedTool, tiles, hoverTile) <= money &&
+        (!lockedZone || zoneUnlocked(lockedZone, rating, money));
       strokeTile(
         ctx,
         VIEW,
@@ -782,7 +848,12 @@ export function initParkGame(): void {
       }
       return;
     }
-    const cost = toolCost(selectedTool);
+    const lockedZone = gateZone(selectedTool);
+    if (lockedZone && !zoneUnlocked(lockedZone, rating, money)) {
+      showToast(strings.zoneLocked);
+      return;
+    }
+    const cost = toolCost(selectedTool, tiles, i);
     if (cost > money) {
       showToast(strings.cantAfford);
       return;

@@ -25,6 +25,9 @@ const tools = [
   { id: 'raiseLand', emoji: '⛰️', label: t('fun.park.toolRaiseLand'), cost: 20 },
   { id: 'lowerLand', emoji: '⛏️', label: t('fun.park.toolLowerLand'), cost: 20 },
   { id: 'digTunnel', emoji: '🕳️', label: t('fun.park.toolDigTunnel'), cost: 30 },
+  { id: 'gateFairytale', emoji: '🏰', label: t('fun.park.toolGateFairytale'), cost: 150 },
+  { id: 'gateAdventure', emoji: '🌴', label: t('fun.park.toolGateAdventure'), cost: 250 },
+  { id: 'gatePirate', emoji: '🏴‍☠️', label: t('fun.park.toolGatePirate'), cost: 350 },
   { id: 'bulldoze', emoji: '🚜', label: t('fun.park.toolBulldoze'), cost: 0 }
 ];
 ---
@@ -45,6 +48,7 @@ const tools = [
         data-t-needs-water={t('fun.park.needsWater')}
         data-t-needs-height={t('fun.park.needsHeight')}
         data-t-too-steep={t('fun.park.tooSteep')}
+        data-t-zone-locked={t('fun.park.zoneLocked')}
       >
         <div class="game-header">
           <h1><span class="park-emoji">🎢</span> {t('fun.park.title')}</h1>

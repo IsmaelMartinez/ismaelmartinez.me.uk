@@ -267,7 +267,7 @@ export function initParkGame(): void {
     trackTooShort: root.dataset.tTrackTooShort || 'Loop needs to be longer before it can close!',
     trackDuplicateTile: root.dataset.tTrackDuplicateTile || 'Track already crosses that tile!',
     trackNeedsStation: root.dataset.tTrackNeedsStation || 'Needs exactly one station piece!',
-    trackNotClosed: root.dataset.tTrackNotClosed || "Track pieces don't line up into a loop!",
+    trackNotClosed: root.dataset.tTrackNotClosed || "Track pieces don't connect correctly!",
     trackTooSteep: root.dataset.tTrackTooSteep || 'Two climbs/drops in a row — add a flat between them!',
     trackStatusEmpty: root.dataset.tTrackStatusEmpty || 'Tap a grass tile to start laying track',
     trackStatusDrafting: root.dataset.tTrackStatusDrafting || 'pieces — tap the start tile to close the loop',
@@ -840,20 +840,23 @@ export function initParkGame(): void {
 
   /**
    * Pixel lift at each of a tile's four iso corners for an 'up'/'down' rail
-   * segment travelling in `dir`: the two corners on the entry side sit at
-   * `curLift`, the two on the exit side sit at `nextLift`, giving a sloped
-   * quad instead of a uniform block (see engine/iso.ts's `drawRamp`).
+   * segment travelling in `dir`: the two corners on the exit edge (the side
+   * bordering the next tile) sit at `nextLift`, the two on the opposite
+   * edge sit at `curLift` — a single-axis tilt along the direction of
+   * travel, not a partial average (which would twist the quad instead of
+   * sloping it). Corner layout matches iso.ts's `drawBlock`/`drawRamp`:
+   * n=(x,y), e=(x+1,y), s=(x+1,y+1), w=(x,y+1), so the N–E edge borders the
+   * north neighbour, S–W borders south, N–W borders west, E–S borders east.
    */
   function rampCorners(
     dir: Dir,
     curLift: number,
     nextLift: number
   ): { n: number; e: number; s: number; w: number } {
-    const avg = (curLift + nextLift) / 2;
-    if (dir === 0) return { n: nextLift, s: curLift, e: avg, w: avg };
-    if (dir === 2) return { n: curLift, s: nextLift, e: avg, w: avg };
-    if (dir === 1) return { n: avg, s: avg, e: nextLift, w: curLift };
-    return { n: avg, s: avg, e: curLift, w: nextLift }; // dir === 3
+    if (dir === 0) return { n: nextLift, e: nextLift, s: curLift, w: curLift };
+    if (dir === 2) return { n: curLift, e: curLift, s: nextLift, w: nextLift };
+    if (dir === 1) return { n: curLift, w: curLift, e: nextLift, s: nextLift };
+    return { n: nextLift, w: nextLift, e: curLift, s: curLift }; // dir === 3
   }
 
   /** The cart's current position, interpolated along its current rail segment. */

@@ -104,8 +104,10 @@ const ZONE_TOP_HEIGHT: Record<ZoneType, number[]> = {
   ind: [0, 9, 15, 26]
 };
 const buildingHeight = (tile: CityTile): number => {
-  if (tile.type === 'power') return 22;
-  if (tile.type === 'school' || tile.type === 'firehouse') return 14;
+  // These include the smokestack/gable-roof-peak flourish drawn on top of
+  // the base block, so fire icons and smoke line up above the whole shape.
+  if (tile.type === 'power') return 38;
+  if (tile.type === 'school' || tile.type === 'firehouse') return 20;
   if (!isZone(tile.type)) return 0;
   const level = Math.min(Math.max(tile.level, 0), MAX_LEVEL);
   return ZONE_TOP_HEIGHT[tile.type][level];

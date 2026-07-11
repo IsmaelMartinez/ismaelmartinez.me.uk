@@ -27,6 +27,7 @@ import {
 import {
   CITY_W,
   CITY_H,
+  MAX_LEVEL,
   cityIdx,
   createCity,
   canBuild,
@@ -105,7 +106,9 @@ const ZONE_TOP_HEIGHT: Record<ZoneType, number[]> = {
 const buildingHeight = (tile: CityTile): number => {
   if (tile.type === 'power') return 22;
   if (tile.type === 'school' || tile.type === 'firehouse') return 14;
-  return isZone(tile.type) ? ZONE_TOP_HEIGHT[tile.type][tile.level] : 0;
+  if (!isZone(tile.type)) return 0;
+  const level = Math.min(Math.max(tile.level, 0), MAX_LEVEL);
+  return ZONE_TOP_HEIGHT[tile.type][level];
 };
 
 type Phase = 'idle' | 'play' | 'over';
@@ -527,7 +530,6 @@ export function initCityGame(): void {
   /** Pointed cap (silo lid, rooftop dome) rising to a single peak above a
    *  footprint, built from the same two visible faces as drawBox. */
   function drawPyramidCap(x0: number, y0: number, x1: number, y1: number, zBase: number, peakRise: number, color: string) {
-    const n = isoProject(VIEW, x0, y0);
     const e = isoProject(VIEW, x1, y0);
     const s = isoProject(VIEW, x1, y1);
     const w = isoProject(VIEW, x0, y1);
@@ -547,9 +549,11 @@ export function initCityGame(): void {
     ctx.lineTo(apex.x, apex.y);
     ctx.closePath();
     ctx.fill();
+    // Ridge between the two visible (front) faces, not the back one — the
+    // back ridge would be occluded and shouldn't be drawn over them.
     ctx.strokeStyle = shadeColor(color, 1.3);
     ctx.beginPath();
-    ctx.moveTo(n.x, n.y - zBase);
+    ctx.moveTo(s.x, s.y - zBase);
     ctx.lineTo(apex.x, apex.y);
     ctx.stroke();
   }
@@ -753,13 +757,15 @@ export function initCityGame(): void {
     drawBox(sx0, sy0, sx1, sy1, 0, 7, p.wall);
     drawWindows(sx0, sy0, sx1, sy1, i, 1, 0, 7);
 
-    const lox0 = vx + 0.6, loy0 = vy + 0.62, lox1 = vx + 0.94, loy1 = vy + 0.92;
-    drawBox(lox0, loy0, lox1, loy1, 0, 3, p.roof);
-
+    // Silo sits further back in the tile than the dock, so it must paint
+    // first for the painter's algorithm to let the dock occlude its base.
     const silo = '#aab0b8';
     const six0 = vx + 0.66, siy0 = vy + 0.12, six1 = vx + 0.9, siy1 = vy + 0.38;
     drawBox(six0, siy0, six1, siy1, 0, 12, silo);
     drawPyramidCap(six0, siy0, six1, siy1, 12, 3, silo);
+
+    const lox0 = vx + 0.6, loy0 = vy + 0.62, lox1 = vx + 0.94, loy1 = vy + 0.92;
+    drawBox(lox0, loy0, lox1, loy1, 0, 3, p.roof);
   }
 
   /** Ind L3: a larger complex — two offset stacked volumes plus a tall
@@ -907,7 +913,7 @@ export function initCityGame(): void {
             }
             ctx.globalAlpha = 1;
           } else {
-            const height = ZONE_TOP_HEIGHT[tile.type][tile.level];
+            const height = buildingHeight(tile);
             ZONE_DRAW[tile.type](vx, vy, i, tile.level);
             ctx.font = `${ZONE_ICON_FONT}px serif`;
             // A gap above the tallest architectural feature (gable, sign,

@@ -150,6 +150,7 @@ export function initTanksGame(): void {
   let shots: Shot[] = [];
   let explosions: Explosion[] = [];
   let particles: Particle[] = [];
+  let smoke: { x: number; y: number; r: number; vx: number; life: number; maxLife: number }[] = [];
   let floaters: Floater[] = [];
   let muzzleFlash: { x: number; y: number; t: number } | null = null;
   let shake = 0;
@@ -261,6 +262,7 @@ export function initTanksGame(): void {
     shots = [];
     explosions = [];
     particles = [];
+    smoke = [];
     floaters = [];
     muzzleFlash = null;
     current = Math.random() < 0.5 ? 0 : 1;
@@ -474,6 +476,26 @@ export function initTanksGame(): void {
       f.y -= 22 * dt;
       return f.life > 0;
     });
+    // Battle damage: a badly mauled tank trails smoke until the round ends.
+    for (const tank of tanks) {
+      if (tank.hp > 0 && tank.hp <= 35 && Math.random() < dt * 7) {
+        smoke.push({
+          x: tank.x + (Math.random() - 0.5) * 10,
+          y: tank.y - TANK_H - 4,
+          r: 1.5 + Math.random() * 1.5,
+          vx: 4 + Math.random() * 8,
+          life: 1.1 + Math.random() * 0.6,
+          maxLife: 1.7
+        });
+      }
+    }
+    smoke = smoke.filter(s => {
+      s.life -= dt;
+      s.x += s.vx * dt;
+      s.y -= 20 * dt;
+      s.r += 3.5 * dt;
+      return s.life > 0;
+    });
     explosions = explosions.filter(e => (e.t += dt) < EXPLOSION_TIME);
 
     if (phase === 'cpu-think' && cpuShotPending) {
@@ -578,6 +600,42 @@ export function initTanksGame(): void {
       ctx.fill();
     }
 
+    // Moon with a soft halo, tucked toward the top-right of the battlefield.
+    const moonGlow = ctx.createRadialGradient(WIDTH - 110, 64, 4, WIDTH - 110, 64, 52);
+    moonGlow.addColorStop(0, 'rgba(226, 232, 255, 0.4)');
+    moonGlow.addColorStop(1, 'rgba(226, 232, 255, 0)');
+    ctx.fillStyle = moonGlow;
+    ctx.fillRect(WIDTH - 162, 12, 104, 104);
+    ctx.fillStyle = '#e8ecff';
+    ctx.beginPath();
+    ctx.arc(WIDTH - 110, 64, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(170, 180, 215, 0.5)';
+    ctx.beginPath();
+    ctx.arc(WIDTH - 105, 60, 3.5, 0, Math.PI * 2);
+    ctx.arc(WIDTH - 115, 69, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Two distant mountain silhouettes for parallax depth behind the terrain.
+    for (const [amp, base, tone, seed] of [
+      [46, 0.62, 'rgba(30, 24, 66, 0.9)', 1.7],
+      [30, 0.72, 'rgba(22, 18, 48, 0.95)', 4.3]
+    ] as const) {
+      ctx.fillStyle = tone;
+      ctx.beginPath();
+      ctx.moveTo(0, HEIGHT);
+      for (let x = 0; x <= WIDTH; x += 6) {
+        const y =
+          HEIGHT * base -
+          Math.sin(x * 0.006 + seed) * amp * 0.6 -
+          Math.sin(x * 0.017 + seed * 2.1) * amp * 0.4;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(WIDTH, HEIGHT);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     if (ground.length) {
       const dirt = ctx.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);
       dirt.addColorStop(0, '#1e3a2f');
@@ -645,6 +703,15 @@ export function initTanksGame(): void {
       ctx.arc(shot.p.x, shot.p.y, shot.weapon === 'heavy' ? 5.5 : 4, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    for (const s of smoke) {
+      ctx.globalAlpha = Math.max(0, (s.life / s.maxLife) * 0.4);
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
     for (const p of particles) {
       ctx.globalAlpha = Math.max(0, p.life / p.maxLife);

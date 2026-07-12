@@ -238,6 +238,7 @@ export function initCityGame(): void {
   let densityToastShown = false;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
+  let sparks: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
   const board = initScoreboard(document.getElementById('highscores'));
   // The record readout shows the table's best, beaten live by the current run.
@@ -258,6 +259,24 @@ export function initCityGame(): void {
   function addFloater(i: number, text: string, color: string) {
     const p = projectWorld((i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.5);
     floaters.push({ x: p.x, y: p.y - buildingHeight(tiles[i]) - 8, text, color, life: 1 });
+  }
+
+  /** A little celebratory (or calamitous) burst of sparks over a tile. */
+  function addSparks(i: number, color: string, count = 8) {
+    const p = projectWorld((i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.5);
+    const y = p.y - buildingHeight(tiles[i]) - 4;
+    for (let k = 0; k < count; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 12 + Math.random() * 26;
+      sparks.push({
+        x: p.x,
+        y,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s - 18,
+        life: 0.5 + Math.random() * 0.4,
+        color
+      });
+    }
   }
 
   function showToast(text: string) {
@@ -293,6 +312,7 @@ export function initCityGame(): void {
     densityToastShown = false;
     activeEvents = [];
     smoke = [];
+    sparks = [];
     floaters = [];
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     refreshDerivedState();
@@ -344,6 +364,13 @@ export function initCityGame(): void {
       s.r += 3.5 * dt;
       return s.life > 0;
     });
+    sparks = sparks.filter(s => {
+      s.life -= dt;
+      s.vy += 70 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      return s.life > 0;
+    });
 
     if (phase !== 'play' || speedMult === 0) return;
     const simDt = dt * speedMult;
@@ -378,7 +405,10 @@ export function initCityGame(): void {
       growthTimer -= GROWTH_INTERVAL;
       const result = growthStep(tiles, Math.random, sumDemandModifiers(activeEvents));
       if (result.grown.length || result.decayed.length) refreshDerivedState();
-      for (const i of result.grown) addFloater(i, '▲', '#4ade80');
+      for (const i of result.grown) {
+        addFloater(i, '▲', '#4ade80');
+        addSparks(i, '#4ade80', 6);
+      }
       for (const i of result.decayed) addFloater(i, '▼', '#f87171');
 
       // Chaos: active fires spread and burn down; new ones spark up
@@ -1055,6 +1085,13 @@ export function initCityGame(): void {
 
       if (burning.has(i)) {
         fillTile(ctx, VIEW, vx, vy, 'rgba(251, 146, 60, 0.28)');
+        // Flickering firelight halo spilling onto the surroundings.
+        const throb = 0.75 + 0.25 * Math.sin(clock * 11 + i);
+        const glow = ctx.createRadialGradient(top.x, top.y, 2, top.x, top.y, 30 * throb);
+        glow.addColorStop(0, 'rgba(251, 146, 60, 0.4)');
+        glow.addColorStop(1, 'rgba(251, 146, 60, 0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(top.x - 32, top.y - 32, 64, 64);
         const flicker = Math.floor(clock * 6) % 2;
         ctx.font = `${13 + flicker * 2}px serif`;
         ctx.fillText('🔥', top.x, top.y - buildingHeight(tile) - 4);
@@ -1068,6 +1105,13 @@ export function initCityGame(): void {
       ctx.beginPath();
       ctx.arc(puff.x, puff.y, puff.r, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const s of sparks) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, s.life * 2));
+      ctx.fillStyle = s.color;
+      ctx.fillRect(s.x - 1, s.y - 1, 2, 2);
     }
     ctx.globalAlpha = 1;
 
@@ -1193,6 +1237,7 @@ export function initCityGame(): void {
     armedTile = -1;
     // Screen-space particles were projected under the old rotation
     smoke = [];
+    sparks = [];
     floaters = [];
   }
   function startRotate(dir: 1 | -1) {

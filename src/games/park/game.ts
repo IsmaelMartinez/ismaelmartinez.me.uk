@@ -340,6 +340,7 @@ export function initParkGame(): void {
   let hoverTile = -1;
   let clock = 0;
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
+  let balloons: { x: number; y: number; sway: number; color: string; life: number }[] = [];
   let coasters: Coaster[] = [];
   let breakdowns: RideBreakdown[] = [];
   let surge: Surge | null = null;
@@ -375,6 +376,19 @@ export function initParkGame(): void {
   const treeCount = () => tiles.filter(t => t === 'tree').length;
   const hasAnyBuilding = () => tiles.some(t => BUILDINGS[t]) || coasters.length > 0;
   const isBroken = (i: number) => breakdowns.some(b => b.tile === i);
+
+  /** A delighted guest sometimes lets a balloon go as they step off a ride. */
+  function releaseBalloon(tile: number) {
+    const c = tileCenter(tile);
+    const p = isoProject(VIEW, c.x, c.y);
+    balloons.push({
+      x: p.x + (Math.random() - 0.5) * 8,
+      y: p.y - heights[tile] * TERRAIN_STEP - 22,
+      sway: Math.random() * Math.PI * 2,
+      color: GUEST_COLORS[Math.floor(Math.random() * GUEST_COLORS.length)],
+      life: 4.5
+    });
+  }
 
   // --- Guest behaviour ---
 
@@ -539,7 +553,12 @@ export function initParkGame(): void {
         guest.useTimer -= dt;
         if (guest.useTimer <= 0) {
           const def = guest.targetBuilding !== null ? BUILDINGS[tiles[guest.targetBuilding]] : undefined;
-          if (def) satisfyNeed(guest.needs, def.satisfies, def.boost);
+          if (def) {
+            satisfyNeed(guest.needs, def.satisfies, def.boost);
+            if (def.satisfies === 'fun' && guest.targetBuilding !== null && Math.random() < 0.35) {
+              releaseBalloon(guest.targetBuilding);
+            }
+          }
           guest.targetBuilding = null;
           guest.state = 'idle';
           guest.idleTimer = 0.2;
@@ -804,6 +823,12 @@ export function initParkGame(): void {
       f.y -= 16 * dt;
       return f.life > 0;
     });
+    balloons = balloons.filter(b => {
+      b.life -= dt;
+      b.y -= 22 * dt;
+      b.x += Math.sin(clock * 2.2 + b.sway) * 9 * dt;
+      return b.life > 0 && b.y > 10;
+    });
     if (phase !== 'play' || speedMult === 0) return;
     const simDt = dt * speedMult;
 
@@ -902,6 +927,7 @@ export function initParkGame(): void {
     rating = parkRating(null, 0);
     speedMult = 1;
     floaters = [];
+    balloons = [];
     coasters = [];
     breakdowns = [];
     surge = null;
@@ -1239,6 +1265,26 @@ export function initParkGame(): void {
         heights[hoverTile] * TERRAIN_STEP
       );
     }
+
+    // Escaped balloons drift up over everything, swaying on their strings.
+    for (const b of balloons) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, b.life / 0.8));
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y + 4);
+      ctx.quadraticCurveTo(b.x + 2, b.y + 9, b.x, b.y + 13);
+      ctx.stroke();
+      ctx.fillStyle = b.color;
+      ctx.beginPath();
+      ctx.ellipse(b.x, b.y, 3.6, 4.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.beginPath();
+      ctx.arc(b.x - 1.2, b.y - 1.5, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
     ctx.font = 'bold 11px monospace';
     for (const f of floaters) {

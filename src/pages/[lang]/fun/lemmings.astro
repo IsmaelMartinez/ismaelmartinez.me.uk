@@ -86,7 +86,7 @@ const hintAttrs = Object.fromEntries(
             aria-label={t('fun.lemmings.progress')}
             aria-valuemin="0"
             aria-valuenow="0"
-            aria-valuemax="0"
+            aria-valuemax={Math.max(1, LEVELS[0].needed)}
           >
             <div id="progress-fill" class="progress-fill"></div>
           </div>

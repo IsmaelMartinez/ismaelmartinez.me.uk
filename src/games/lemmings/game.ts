@@ -292,8 +292,11 @@ export function initLemmingsGame(): void {
     const progress = rescueProgress(saved, def.needed);
     if (progressFill) progressFill.style.width = `${(progress * 100).toFixed(1)}%`;
     if (progressBar) {
-      progressBar.setAttribute('aria-valuenow', saved.toString());
-      progressBar.setAttribute('aria-valuemax', def.needed.toString());
+      // Keep the ARIA range valid: the max is at least 1 (quota-free levels read
+      // as a filled bar) and valuenow never exceeds it when the crowd over-delivers.
+      const goal = Math.max(1, def.needed);
+      progressBar.setAttribute('aria-valuemax', goal.toString());
+      progressBar.setAttribute('aria-valuenow', Math.min(Math.max(saved, 0), goal).toString());
       progressBar.classList.toggle('is-complete', saved >= def.needed);
     }
   }
@@ -656,8 +659,8 @@ export function initLemmingsGame(): void {
     ctx.fill();
     // Short shaft behind the head.
     ctx.fillRect(-4, -0.5, 3, 1);
+    // restore() also rolls back globalAlpha to its pre-save value.
     ctx.restore();
-    ctx.globalAlpha = 1;
   }
 
   function render() {

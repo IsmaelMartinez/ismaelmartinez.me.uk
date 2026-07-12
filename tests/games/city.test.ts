@@ -5,6 +5,7 @@ import {
   CITY_W,
   CITY_H,
   MAX_LEVEL,
+  DENSE_LEVEL,
   BRIDGE_COST,
   FILL_COST,
   createCity,
@@ -24,8 +25,11 @@ import {
   hasNatureNearby,
   hasSchoolNearby,
   growthStep,
+  maxZoneLevel,
   POWER_RADIUS,
-  RESIDENTS_PER_LEVEL
+  RESIDENTS_PER_LEVEL,
+  DENSITY_UNLOCK_POP,
+  DENSE_DEMAND_MIN
 } from '../../src/games/city/simulation';
 import { monthlyIncome, monthlyExpenses } from '../../src/games/city/budget';
 import { targetCarCount, spawnCar, stepCar } from '../../src/games/city/traffic';
@@ -40,7 +44,18 @@ import {
   BURN_TICKS,
   BURN_TICKS_COVERED,
   EVENT_GRACE_MONTHS,
-  type Fire
+  disasterIntensity,
+  DISASTER_GRACE_MONTHS,
+  tornadoChance,
+  spawnTornado,
+  stepTornado,
+  wreckTile,
+  TORNADO_TICKS,
+  quakeChance,
+  earthquakeDamage,
+  QUAKE_RADIUS,
+  type Fire,
+  type Tornado
 } from '../../src/games/city/disasters';
 
 function seededRandom(seed = 42): () => number {
@@ -544,5 +559,177 @@ describe('city traffic', () => {
     const car = spawnCar(tiles, seededRandom())!;
     build(tiles, car.to % CITY_W, Math.floor(car.to / CITY_W), 'bulldoze');
     expect(stepCar(tiles, car, 0.1, seededRandom())).toBe(false);
+  });
+});
+
+describe('city chaos — difficulty ramp', () => {
+  it('holds all disasters back through the grace months', () => {
+    expect(disasterIntensity(1, 5000)).toBe(0);
+    expect(disasterIntensity(DISASTER_GRACE_MONTHS, 5000)).toBe(0);
+    expect(tornadoChance(disasterIntensity(4, 0))).toBe(0);
+    expect(quakeChance(disasterIntensity(4, 0))).toBe(0);
+  });
+
+  it('ramps with the city age and size and caps at 1', () => {
+    const young = disasterIntensity(DISASTER_GRACE_MONTHS + 2, 100);
+    const older = disasterIntensity(DISASTER_GRACE_MONTHS + 20, 100);
+    const bigger = disasterIntensity(DISASTER_GRACE_MONTHS + 20, 1200);
+    expect(young).toBeGreaterThan(0);
+    expect(older).toBeGreaterThan(young);
+    expect(bigger).toBeGreaterThan(older);
+    expect(disasterIntensity(999, 999999)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('city chaos — tornado', () => {
+  it('touches down on an edge with a heading into the map', () => {
+    for (let seed = 1; seed < 20; seed++) {
+      const t = spawnTornado(seededRandom(seed));
+      expect(t.ticksLeft).toBe(TORNADO_TICKS);
+      expect(t.x).toBeGreaterThanOrEqual(0);
+      expect(t.x).toBeLessThan(CITY_W);
+      expect(t.y).toBeGreaterThanOrEqual(0);
+      expect(t.y).toBeLessThan(CITY_H);
+      // At least one axis carries real speed
+      expect(Math.abs(t.dx) + Math.abs(t.dy)).toBeGreaterThan(0.5);
+    }
+  });
+
+  it('knocks a developed zone down one level, to rubble at level 1', () => {
+    const tall = { type: 'res' as const, level: 3 };
+    expect(wreckTile(tall)).toBe(true);
+    expect(tall.level).toBe(2);
+    const shack = { type: 'com' as const, level: 1 };
+    expect(wreckTile(shack)).toBe(true);
+    expect(shack.type).toBe('rubble');
+  });
+
+  it('flattens civic buildings, tears out trees, and spares power/roads/water', () => {
+    const school = { type: 'school' as const, level: 0 };
+    expect(wreckTile(school)).toBe(true);
+    expect(school.type).toBe('rubble');
+    const tree = { type: 'tree' as const, level: 0 };
+    expect(wreckTile(tree)).toBe(true);
+    expect(tree.type).toBe('empty');
+    for (const type of ['power', 'road', 'water', 'bridge', 'empty', 'rubble'] as const) {
+      const tile = { type, level: 0 };
+      expect(wreckTile(tile), type).toBe(false);
+      expect(tile.type).toBe(type);
+    }
+  });
+
+  it('drifts along its heading, wrecking what it passes over', () => {
+    const tiles = createCity();
+    build(tiles, 6, 5, 'res');
+    tiles[cityIdx(6, 5)].level = 2;
+    const tornado: Tornado = { x: 5, y: 5, dx: 1, dy: 0, ticksLeft: 10 };
+    // Zero jitter: random() always 0.5
+    const step = stepTornado(tiles, tornado, () => 0.5);
+    expect(step.tornado?.x).toBe(6);
+    expect(step.wrecked).toEqual([cityIdx(6, 5)]);
+    expect(tiles[cityIdx(6, 5)].level).toBe(1);
+  });
+
+  it('blows out when its clock runs down or it leaves the map', () => {
+    const tiles = createCity();
+    const dying: Tornado = { x: 5, y: 5, dx: 0, dy: 0, ticksLeft: 1 };
+    expect(stepTornado(tiles, dying, () => 0.5).tornado).toBeNull();
+    const leaving: Tornado = { x: CITY_W - 0.2, y: 5, dx: 2, dy: 0, ticksLeft: 10 };
+    expect(stepTornado(tiles, leaving, () => 0.5).tornado).toBeNull();
+  });
+});
+
+describe('city chaos — earthquake', () => {
+  function developedCity() {
+    const tiles = createCity();
+    for (let x = 2; x < 20; x++) {
+      for (let y = 2; y < 12; y++) {
+        build(tiles, x, y, 'res');
+        tiles[cityIdx(x, y)].level = 2;
+      }
+    }
+    return tiles;
+  }
+
+  it('damages tiles only within the radius of the epicentre', () => {
+    const tiles = developedCity();
+    const quake = earthquakeDamage(tiles, seededRandom(7));
+    expect(quake.damaged.length).toBeGreaterThan(0);
+    for (const i of quake.damaged) {
+      expect(chebyshev(quake.epicentre, i, CITY_W)).toBeLessThanOrEqual(QUAKE_RADIUS);
+    }
+  });
+
+  it('only ignites tiles that can actually burn', () => {
+    const tiles = developedCity();
+    const quake = earthquakeDamage(tiles, seededRandom(11));
+    for (const i of quake.ignited) {
+      expect(isFlammable(tiles[i])).toBe(true);
+    }
+  });
+
+  it('finds nothing to break in an empty city', () => {
+    const tiles = createCity();
+    const quake = earthquakeDamage(tiles, seededRandom(3));
+    expect(quake.damaged).toEqual([]);
+    expect(quake.ignited).toEqual([]);
+  });
+});
+
+describe('city density (level-4 zones)', () => {
+  it('caps zones at MAX_LEVEL until the population unlock', () => {
+    expect(maxZoneLevel({ population: 0, comJobs: 0, indJobs: 0, jobs: 0 })).toBe(MAX_LEVEL);
+    expect(
+      maxZoneLevel({ population: DENSITY_UNLOCK_POP - 1, comJobs: 0, indJobs: 0, jobs: 0 })
+    ).toBe(MAX_LEVEL);
+    expect(
+      maxZoneLevel({ population: DENSITY_UNLOCK_POP, comJobs: 0, indJobs: 0, jobs: 0 })
+    ).toBe(DENSE_LEVEL);
+  });
+
+  /** A serviced res tile at MAX_LEVEL inside a metropolis with hot demand. */
+  function metropolis() {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'power');
+    build(tiles, 6, 6, 'road');
+    build(tiles, 6, 5, 'res');
+    build(tiles, 5, 4, 'park');
+    build(tiles, 3, 3, 'school');
+    tiles[cityIdx(6, 5)].level = MAX_LEVEL;
+    // Backdrop population and jobs (need not be serviced to count in stats):
+    // enough residents to clear the unlock and enough jobs for hot res demand.
+    for (let x = 10; x < 22; x++) {
+      build(tiles, x, 2, 'res');
+      tiles[cityIdx(x, 2)].level = 8;
+      build(tiles, x, 10, 'ind');
+      tiles[cityIdx(x, 10)].level = 11;
+    }
+    return tiles;
+  }
+
+  it('lets a serviced zone densify to level 4 in a big city with hot demand', () => {
+    const tiles = metropolis();
+    const stats = cityStats(tiles);
+    expect(stats.population).toBeGreaterThanOrEqual(DENSITY_UNLOCK_POP);
+    expect(computeDemand(stats).res).toBeGreaterThanOrEqual(DENSE_DEMAND_MIN);
+    growthStep(tiles, () => 0);
+    expect(tiles[cityIdx(6, 5)].level).toBe(DENSE_LEVEL);
+    // And DENSE_LEVEL is the ceiling — another tick must not exceed it.
+    growthStep(tiles, () => 0);
+    expect(tiles[cityIdx(6, 5)].level).toBe(DENSE_LEVEL);
+  });
+
+  it('refuses to densify while the city is still small', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'power');
+    build(tiles, 6, 6, 'road');
+    build(tiles, 6, 5, 'res');
+    build(tiles, 5, 4, 'park');
+    build(tiles, 3, 3, 'school');
+    tiles[cityIdx(6, 5)].level = MAX_LEVEL;
+    build(tiles, 7, 6, 'ind');
+    tiles[cityIdx(7, 6)].level = 3;
+    growthStep(tiles, () => 0);
+    expect(tiles[cityIdx(6, 5)].level).toBe(MAX_LEVEL);
   });
 });

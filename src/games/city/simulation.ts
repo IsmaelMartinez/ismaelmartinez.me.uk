@@ -4,7 +4,7 @@
  * decay.
  */
 import { gridNeighbours, chebyshev } from '../engine/grid2d';
-import { CITY_W, CITY_H, MAX_LEVEL, isZone, isRoad, type CityTile, type ZoneType } from './tiles';
+import { CITY_W, CITY_H, MAX_LEVEL, DENSE_LEVEL, isZone, isRoad, type CityTile, type ZoneType } from './tiles';
 
 export const POWER_RADIUS = 7;
 export const SCHOOL_RADIUS = 6;
@@ -12,6 +12,10 @@ export const FIRE_RADIUS = 6;
 export const RESIDENTS_PER_LEVEL = 8;
 export const COM_JOBS_PER_LEVEL = 6;
 export const IND_JOBS_PER_LEVEL = 8;
+/** Population at which zones may densify past MAX_LEVEL to DENSE_LEVEL. */
+export const DENSITY_UNLOCK_POP = 600;
+/** Densifying needs genuinely hot demand, not a merely positive bar. */
+export const DENSE_DEMAND_MIN = 20;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -91,11 +95,22 @@ export function hasSchoolNearby(tiles: CityTile[], i: number, radius = SCHOOL_RA
 }
 
 /**
+ * The level zones may currently grow to: MAX_LEVEL for most of a city's
+ * life, DENSE_LEVEL once the population clears DENSITY_UNLOCK_POP — the
+ * late-game "denser zones" reward for a thriving metropolis.
+ */
+export function maxZoneLevel(stats: CityStats): number {
+  return stats.population >= DENSITY_UNLOCK_POP ? DENSE_LEVEL : MAX_LEVEL;
+}
+
+/**
  * One growth tick. Serviced zones (powered + next to a road) develop while
  * demand for their type is positive; unserviced developed zones decay.
  * Residential needs nature (park, forest, or riverfront) nearby to pass
- * level 1 and a school nearby to reach the top level. Returns the tile
- * indices that changed so the UI can celebrate (or mourn) them.
+ * level 1 and a school nearby to reach the top levels. Densifying beyond
+ * MAX_LEVEL additionally needs a big city (maxZoneLevel) and hot demand.
+ * Returns the tile indices that changed so the UI can celebrate (or mourn)
+ * them.
  */
 export function growthStep(
   tiles: CityTile[],
@@ -103,7 +118,9 @@ export function growthStep(
   demandModifier: Partial<Demand> = {}
 ): { grown: number[]; decayed: number[] } {
   const powered = computePowered(tiles);
-  const demand = computeDemand(cityStats(tiles), demandModifier);
+  const stats = cityStats(tiles);
+  const demand = computeDemand(stats, demandModifier);
+  const cap = maxZoneLevel(stats);
   const grown: number[] = [];
   const decayed: number[] = [];
 
@@ -117,10 +134,11 @@ export function growthStep(
       }
       return;
     }
-    if (tile.level >= MAX_LEVEL || demand[tile.type] <= 0) return;
+    if (tile.level >= cap || demand[tile.type] <= 0) return;
+    if (tile.level >= MAX_LEVEL && demand[tile.type] < DENSE_DEMAND_MIN) return;
     if (tile.type === 'res') {
       if (tile.level === 1 && !hasNatureNearby(tiles, i)) return;
-      if (tile.level === MAX_LEVEL - 1 && !hasSchoolNearby(tiles, i)) return;
+      if (tile.level >= MAX_LEVEL - 1 && !hasSchoolNearby(tiles, i)) return;
     }
     if (random() < Math.min(0.45, demand[tile.type] / 70)) {
       tile.level++;

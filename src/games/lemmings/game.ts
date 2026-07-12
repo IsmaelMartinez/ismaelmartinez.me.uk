@@ -91,6 +91,7 @@ export function initLemmingsGame(): void {
   const outCount = el('out-count');
   const levelNum = el('level-num');
   const bestLevel = el('best-level');
+  const levelHint = el('level-hint');
   const skillButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.skill-btn'));
 
   const strings = {
@@ -103,6 +104,9 @@ export function initLemmingsGame(): void {
   };
   const fill = (tpl: string, n: number, m: number) =>
     tpl.replace('{n}', n.toString()).replace('{m}', m.toString());
+  // Per-level hints the page resolved into `data-t-hint<index>` attributes
+  // (e.g. `data-t-hint6` → `dataset.tHint6`); blank for levels without one.
+  const hintFor = (index: number): string => root.dataset[`tHint${index}`] ?? '';
 
   canvas.width = LEVEL_W;
   canvas.height = LEVEL_H;
@@ -262,6 +266,11 @@ export function initLemmingsGame(): void {
     selected = SKILL_ORDER.find(s => stock[s] > 0) ?? null;
     levelNum.textContent = (index + 1).toString();
     neededCount.textContent = def.needed.toString();
+    // Trickier levels carry a one-line hint, resolved into a data attribute on
+    // the root by the page; show it under the field, hide it otherwise.
+    const hint = hintFor(index);
+    levelHint.textContent = hint;
+    levelHint.hidden = !hint;
     syncHud();
     syncToolbar();
   }

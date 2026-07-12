@@ -37,6 +37,14 @@ export interface LevelDef {
   spawnCount: number;
   needed: number;
   stock: Partial<Record<Skill, number>>;
+  /**
+   * Optional one-line nudge shown under the field while the level plays. The
+   * value is an i18n key (resolved in `translations.ts`), not raw text, so the
+   * level layer stays locale-agnostic; the page hands the resolved strings to
+   * the game via `data-t-hint<index>` attributes. Given to the trickier later
+   * levels whose skill chain isn't obvious at a glance.
+   */
+  hint?: string;
 }
 
 function paintShape(bmp: TerrainBitmap, shape: Shape): void {
@@ -169,7 +177,8 @@ export const LEVELS: LevelDef[] = [
     exit: { x: 40, y: 167 },
     spawnCount: 10,
     needed: 4,
-    stock: { blocker: 2, digger: 3, builder: 2, floater: 2 }
+    stock: { blocker: 2, digger: 3, builder: 2, floater: 2 },
+    hint: 'fun.lemmings.hint7'
   },
   // 8 — Up and Over: a shelf too tall to climb, capped by a wall too tall to
   // pass. Build a staircase up onto the shelf, then bash through the wall to
@@ -185,7 +194,8 @@ export const LEVELS: LevelDef[] = [
     exit: { x: 300, y: 157 },
     spawnCount: 10,
     needed: 4,
-    stock: { builder: 4, basher: 4, blocker: 2 }
+    stock: { builder: 4, basher: 4, blocker: 2 },
+    hint: 'fun.lemmings.hint8'
   },
   // 9 — Down the Shaft: a fatal drop off the entry ledge onto a walled shelf
   // with no way off but through it. Float down to land safely, then dig a shaft
@@ -204,6 +214,9 @@ export const LEVELS: LevelDef[] = [
     exit: { x: 160, y: 184 },
     spawnCount: 10,
     needed: 5,
-    stock: { floater: 12, digger: 3, blocker: 2 }
+    // Every critter must pop an umbrella before walking off the entry ledge, so
+    // the stock covers all ten with a small buffer for a fumbled tap or two.
+    stock: { floater: 14, digger: 3, blocker: 2 },
+    hint: 'fun.lemmings.hint9'
   }
 ];

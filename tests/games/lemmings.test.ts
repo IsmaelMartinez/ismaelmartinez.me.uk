@@ -254,8 +254,8 @@ describe('critter — skills', () => {
 });
 
 describe('levels', () => {
-  it('provides six solvable-shaped levels', () => {
-    expect(LEVELS).toHaveLength(6);
+  it('provides nine solvable-shaped levels', () => {
+    expect(LEVELS).toHaveLength(9);
     for (const level of LEVELS) {
       expect(level.needed).toBeGreaterThan(0);
       expect(level.needed).toBeLessThanOrEqual(level.spawnCount);
@@ -450,5 +450,67 @@ describe('levels — solvable playthroughs', () => {
       }
     });
     expect(saved).toBeGreaterThanOrEqual(LEVELS[5].needed);
+  });
+
+  it('7: a blocker holds the crowd off the cliff while a digger drops them home', () => {
+    let blocked = false;
+    let dug = false;
+    const saved = playLevel(LEVELS[6], ({ critters, assign }) => {
+      // Turn the crowd back before the leader marches off the right-hand cliff.
+      if (!blocked) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 119 && c.x >= 200 && c.x <= 208
+        );
+        if (w && assign(w, 'blocker')) blocked = true;
+      }
+      // Then sink a shaft through the shelf so the bouncing crowd falls through.
+      if (blocked && !dug) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.y === 119 && c.x >= 112 && c.x <= 128
+        );
+        if (w && assign(w, 'digger')) dug = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[6].needed);
+  });
+
+  it('8: build up onto the shelf, then bash through the wall to the exit', () => {
+    let built = false;
+    let bashed = false;
+    const saved = playLevel(LEVELS[7], ({ critters, assign }) => {
+      if (!built) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 169 && c.x >= 184 && c.x <= 190
+        );
+        if (w && assign(w, 'builder')) built = true;
+      }
+      if (built && !bashed) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 157 && c.x >= 246 && c.x <= 249
+        );
+        if (w && assign(w, 'basher')) bashed = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[7].needed);
+  });
+
+  it('9: floaters ride the drop down, then a digger opens the chamber below', () => {
+    let dug = false;
+    const saved = playLevel(LEVELS[8], ({ critters, assign }) => {
+      // Pop an umbrella on anything still above the shelf so the fall is safe.
+      for (const c of critters) {
+        if (!c.floater && c.y < 130 && (c.state === 'walker' || c.state === 'faller')) {
+          assign(c, 'floater');
+        }
+      }
+      // Once they have landed, dig through the shelf to the exit chamber.
+      if (!dug) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.y === 139 && c.x >= 80 && c.x <= 140
+        );
+        if (w && assign(w, 'digger')) dug = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[8].needed);
   });
 });

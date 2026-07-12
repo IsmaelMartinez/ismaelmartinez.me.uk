@@ -19,6 +19,15 @@ const skills = [
   { id: 'builder', emoji: '🧱', label: t('fun.lemmings.skillBuilder') },
   { id: 'floater', emoji: '☂️', label: t('fun.lemmings.skillFloater') }
 ];
+
+// Per-level hints (a `TranslationKey` on the level) resolved server-side and
+// handed to the game as `data-t-hint<index>` attributes; the game shows the
+// current level's hint under the field. No hyphen before the index: `data-t-hint6`
+// maps to `dataset.tHint6`, whereas `data-t-hint-6` would map to `tHint-6`
+// (a digit after a hyphen keeps it).
+const hintAttrs = Object.fromEntries(
+  LEVELS.flatMap((level, i) => (level.hint ? [[`data-t-hint${i}`, t(level.hint)]] : []))
+);
 ---
 
 <Layout title="Critter Rescue" lang={lang}>
@@ -35,6 +44,7 @@ const skills = [
         data-t-complete-desc={t('fun.lemmings.completeDesc')}
         data-t-failed-desc={t('fun.lemmings.failedDesc')}
         data-t-victory-desc={t('fun.lemmings.victoryDesc')}
+        {...hintAttrs}
       >
         <div class="game-header">
           <h1><span class="critter-emoji">🐛</span> {t('fun.lemmings.title')}</h1>
@@ -92,6 +102,8 @@ const skills = [
             </div>
           </div>
         </div>
+
+        <p id="level-hint" class="level-hint" hidden></p>
 
         <div class="skill-bar">
           {skills.map((skill, i) => (
@@ -267,6 +279,26 @@ const skills = [
   .btn-large {
     padding: var(--space-md) var(--space-2xl);
     font-size: 1.1rem;
+  }
+
+  .level-hint {
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(132, 204, 22, 0.12);
+    border: 1px solid rgba(132, 204, 22, 0.35);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  .level-hint[hidden] {
+    display: none;
+  }
+
+  .level-hint::before {
+    content: '💡 ';
   }
 
   .skill-bar {

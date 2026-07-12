@@ -16,6 +16,7 @@ import {
   type Skill
 } from '../../src/games/lemmings/critter';
 import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
+import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
 
 /**
  * A test double for `CritterWorld` backed by a real `TerrainBitmap`, plus an
@@ -289,6 +290,26 @@ describe('levels', () => {
     const leftCol = countSolid(bmp, 1);
     const rightCol = countSolid(bmp, 18);
     expect(rightCol).toBeGreaterThan(leftCol);
+  });
+
+  it('gives the trickier later levels (7–9) a hint key that resolves in every locale', () => {
+    // Levels 7, 8, 9 (indices 6–8) chain skills in non-obvious ways, so each
+    // carries a one-line hint. The value is an i18n key, not raw text.
+    for (const index of [6, 7, 8]) {
+      const key = LEVELS[index].hint;
+      expect(key, `level ${index + 1} should have a hint`).toBeTruthy();
+      if (!key) continue;
+      for (const locale of locales) {
+        const table = translations[locale] as Record<TranslationKey, string>;
+        expect(table[key], `${key} missing in ${locale}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('leaves the introductory levels (1–6) hint-free so their mechanic is discovered', () => {
+    for (let i = 0; i < 6; i++) {
+      expect(LEVELS[i].hint, `level ${i + 1} should not have a hint`).toBeUndefined();
+    }
   });
 
   it('detects a critter standing in the exit', () => {

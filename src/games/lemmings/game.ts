@@ -740,8 +740,8 @@ export function initLemmingsGame(): void {
   }
 
   // Level-select: jump to any level unlocked so far. Unlock state is derived
-  // from `cleared` (the highest level reached, the game's single progress
-  // source of truth) — never from a separate stored flag.
+  // from `cleared` (the highest level cleared, the game's single progress
+  // source of truth) — clearing a level opens the next, never a separate flag.
   function buildLevelGrid() {
     levelGrid.textContent = '';
     for (const item of levelSelectItems(LEVELS.length, cleared)) {

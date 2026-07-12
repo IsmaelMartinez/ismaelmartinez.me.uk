@@ -1,36 +1,40 @@
 /**
  * Level-unlock and level-select logic for Critter Rescue.
  *
- * Progress has a single source of truth: the "highest level reached" value the
+ * Progress has a single source of truth: the highest level *cleared*, which the
  * game already persists through the shared scoreboard (see game.ts and
  * engine/scoreboard.ts, backed by engine/storage.ts). This module derives the
- * level-select state from that number rather than storing a competing copy —
- * levels 1..N are unlocked where N is the highest level reached, and level 1 is
- * always available even from a cold start.
+ * level-select state from that number rather than storing a competing copy.
+ *
+ * Clearing a level opens the next one (that is exactly what the game's own
+ * "Next Level" button does), so with `c` levels cleared the player has reached
+ * level `c + 1` and levels 1..c+1 are unlocked — capped at the number of levels,
+ * and with level 1 always available even from a cold start (`c = 0`).
  *
  * It is intentionally DOM-free so the rules are unit-testable without a canvas.
  */
 
 /**
- * How many levels are unlocked given the highest level reached so far.
- * Level 1 is always available; the count never exceeds the number of levels.
+ * How many levels are unlocked given the highest level cleared so far.
+ * Clearing level K unlocks level K+1; level 1 is always available and the
+ * count never exceeds the number of levels.
  */
-export function unlockedCount(highestReached: number, totalLevels: number): number {
+export function unlockedCount(highestCleared: number, totalLevels: number): number {
   if (totalLevels <= 0) return 0;
-  const reached = Number.isFinite(highestReached) ? Math.floor(highestReached) : 0;
-  return Math.max(1, Math.min(reached, totalLevels));
+  const cleared = Number.isFinite(highestCleared) ? Math.floor(highestCleared) : 0;
+  return Math.max(1, Math.min(cleared + 1, totalLevels));
 }
 
 /** Whether a given 0-based level index can be selected yet. */
 export function isLevelUnlocked(
   levelIndex: number,
-  highestReached: number,
+  highestCleared: number,
   totalLevels: number
 ): boolean {
   return (
     Number.isInteger(levelIndex) &&
     levelIndex >= 0 &&
-    levelIndex < unlockedCount(highestReached, totalLevels)
+    levelIndex < unlockedCount(highestCleared, totalLevels)
   );
 }
 
@@ -48,9 +52,9 @@ export interface LevelSelectItem {
  */
 export function levelSelectItems(
   totalLevels: number,
-  highestReached: number
+  highestCleared: number
 ): LevelSelectItem[] {
-  const unlocked = unlockedCount(highestReached, totalLevels);
+  const unlocked = unlockedCount(highestCleared, totalLevels);
   const items: LevelSelectItem[] = [];
   for (let i = 0; i < totalLevels; i++) {
     items.push({ index: i, number: i + 1, unlocked: i < unlocked });

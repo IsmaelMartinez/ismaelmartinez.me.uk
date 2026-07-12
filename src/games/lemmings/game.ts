@@ -24,6 +24,7 @@ import {
 } from './critter';
 import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H, HATCH_W, EXIT_H, EXIT_HALF_W } from './levels';
 import { levelSelectItems } from './progress';
+import { exitArrowAngle, rescueProgress } from './hud';
 
 const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater'];
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
@@ -94,6 +95,8 @@ export function initLemmingsGame(): void {
   const savedCount = el('saved-count');
   const neededCount = el('needed-count');
   const outCount = el('out-count');
+  const progressBar = document.getElementById('progress-bar');
+  const progressFill = document.getElementById('progress-fill');
   const levelNum = el('level-num');
   const bestLevel = el('best-level');
   const levelHint = el('level-hint');
@@ -286,6 +289,13 @@ export function initLemmingsGame(): void {
     savedCount.textContent = saved.toString();
     outCount.textContent = critters.filter(isActive).length.toString();
     bestLevel.textContent = cleared.toString();
+    const progress = rescueProgress(saved, def.needed);
+    if (progressFill) progressFill.style.width = `${(progress * 100).toFixed(1)}%`;
+    if (progressBar) {
+      progressBar.setAttribute('aria-valuenow', saved.toString());
+      progressBar.setAttribute('aria-valuemax', def.needed.toString());
+      progressBar.classList.toggle('is-complete', saved >= def.needed);
+    }
   }
 
   function syncToolbar() {
@@ -415,7 +425,7 @@ export function initLemmingsGame(): void {
         c.state = 'exited';
         c.alive = false;
         saved++;
-        audio.playSfx('score');
+        audio.playSfx('rescue');
       } else if (wasAlive && c.state === 'splatted') {
         spawnParticles(c.x, c.y - CRITTER_H / 2, '#f43f5e', 6);
       }
@@ -621,6 +631,35 @@ export function initLemmingsGame(): void {
     }
   }
 
+  /**
+   * A small destination arrow floating above a critter, pointing toward the
+   * exit door so players can read where each one is headed. The heading comes
+   * from the pure `exitArrowAngle` (measured from the critter's body centre to
+   * the door's centre); this only paints it.
+   */
+  function drawExitArrow(c: Critter) {
+    const angle = exitArrowAngle(
+      { x: c.x, y: c.y - CRITTER_H / 2 },
+      { x: def.exit.x, y: def.exit.y - EXIT_H / 2 }
+    );
+    ctx.save();
+    ctx.translate(c.x, c.y - CRITTER_H - 6);
+    ctx.rotate(angle);
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#bef264';
+    // Arrowhead pointing along +x before rotation.
+    ctx.beginPath();
+    ctx.moveTo(4, 0);
+    ctx.lineTo(-1, -2.5);
+    ctx.lineTo(-1, 2.5);
+    ctx.closePath();
+    ctx.fill();
+    // Short shaft behind the head.
+    ctx.fillRect(-4, -0.5, 3, 1);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   function render() {
     frame++;
     // Prebuilt night sky, stars, moon, and hills.
@@ -632,6 +671,10 @@ export function initLemmingsGame(): void {
     drawExit();
     drawHatch();
     for (const c of critters) drawCritter(c);
+    // Destination arrows sit on top of the critters, only while a level is live.
+    if (phase === 'playing') {
+      for (const c of critters) if (isActive(c)) drawExitArrow(c);
+    }
 
     // Additive sparks glow against the dark.
     ctx.globalCompositeOperation = 'lighter';

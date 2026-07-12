@@ -77,6 +77,21 @@ const hintAttrs = Object.fromEntries(
           </div>
         </div>
 
+        <div class="rescue-progress">
+          <span class="progress-label">{t('fun.lemmings.progress')}</span>
+          <div
+            id="progress-bar"
+            class="progress-track"
+            role="progressbar"
+            aria-label={t('fun.lemmings.progress')}
+            aria-valuemin="0"
+            aria-valuenow="0"
+            aria-valuemax="0"
+          >
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+        </div>
+
         <div class="game-area">
           <canvas id="game-canvas"></canvas>
           <div id="start-overlay" class="game-overlay">
@@ -223,6 +238,44 @@ const hintAttrs = Object.fromEntries(
 
   .score-value.saved {
     color: #84cc16;
+  }
+
+  .rescue-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+  }
+
+  .progress-label {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .progress-track {
+    position: relative;
+    flex: 1;
+    height: 10px;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #65a30d, #84cc16);
+    transition: width 0.25s ease;
+  }
+
+  .progress-track.is-complete .progress-fill {
+    background: linear-gradient(90deg, #22c55e, #a3e635);
+    box-shadow: 0 0 8px rgba(132, 204, 22, 0.6);
   }
 
   .game-area {

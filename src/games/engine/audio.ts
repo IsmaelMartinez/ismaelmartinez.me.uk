@@ -32,7 +32,7 @@ export interface GameAudioOptions {
   volume?: number;
 }
 
-export type SfxName = 'blip' | 'score' | 'hit' | 'explosion' | 'gameover';
+export type SfxName = 'blip' | 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';
 
 export interface GameAudio {
   /** Begin (or resume) the looping music. Safe to call repeatedly. */
@@ -234,6 +234,17 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         playTone(330, now + 0.16, 0.18, 'triangle', 0.5, out);
         playTone(220, now + 0.32, 0.3, 'triangle', 0.5, out);
         break;
+      case 'rescue': {
+        // A bright ascending bell arpeggio — the "critter reached home" twinkle.
+        // Deliberately a soft triangle voice and a rising four-note run so it is
+        // unmistakably distinct from the terser square 'score' blip and the rest.
+        const bells = [880, 1108.73, 1318.51, 1760];
+        for (let i = 0; i < bells.length; i++) {
+          const last = i === bells.length - 1;
+          playTone(bells[i], now + i * 0.06, last ? 0.2 : 0.1, 'triangle', 0.5, out);
+        }
+        break;
+      }
     }
   }
 

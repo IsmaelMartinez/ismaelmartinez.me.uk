@@ -17,6 +17,7 @@ import {
 } from '../../src/games/lemmings/critter';
 import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
 import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
+import { exitArrowAngle, exitArrowVector, rescueProgress } from '../../src/games/lemmings/hud';
 
 /**
  * A test double for `CritterWorld` backed by a real `TerrainBitmap`, plus an
@@ -318,6 +319,60 @@ describe('levels', () => {
     const away: Critter = { ...createCritter(2, level.exit.x - 60, level.exit.y, 1), state: 'walker' };
     expect(atExit(inDoor, level)).toBe(true);
     expect(atExit(away, level)).toBe(false);
+  });
+});
+
+describe('hud — destination arrow', () => {
+  it('points straight right toward an exit on the same row', () => {
+    expect(exitArrowAngle({ x: 10, y: 100 }, { x: 200, y: 100 })).toBeCloseTo(0);
+  });
+
+  it('points straight left toward an exit behind the critter', () => {
+    expect(Math.abs(exitArrowAngle({ x: 200, y: 100 }, { x: 10, y: 100 }))).toBeCloseTo(Math.PI);
+  });
+
+  it('points down (+y in canvas space) toward an exit below', () => {
+    expect(exitArrowAngle({ x: 50, y: 20 }, { x: 50, y: 180 })).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('points up toward an exit above', () => {
+    expect(exitArrowAngle({ x: 50, y: 180 }, { x: 50, y: 20 })).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it('has a defined heading when critter and exit coincide', () => {
+    expect(exitArrowAngle({ x: 5, y: 5 }, { x: 5, y: 5 })).toBe(0);
+  });
+
+  it('returns a unit vector toward the exit', () => {
+    const v = exitArrowVector({ x: 0, y: 0 }, { x: 3, y: 4 });
+    expect(Math.hypot(v.x, v.y)).toBeCloseTo(1);
+    expect(v.x).toBeCloseTo(0.6);
+    expect(v.y).toBeCloseTo(0.8);
+  });
+
+  it('returns a zero vector for coincident points (no NaN)', () => {
+    expect(exitArrowVector({ x: 7, y: 7 }, { x: 7, y: 7 })).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('hud — rescue progress', () => {
+  it('is 0 with none saved and 1 at the quota', () => {
+    expect(rescueProgress(0, 4)).toBe(0);
+    expect(rescueProgress(4, 4)).toBe(1);
+  });
+
+  it('reports a partial fraction mid-rescue', () => {
+    expect(rescueProgress(2, 4)).toBeCloseTo(0.5);
+    expect(rescueProgress(1, 4)).toBeCloseTo(0.25);
+  });
+
+  it('clamps to 1 when the crowd over-delivers past the quota', () => {
+    expect(rescueProgress(8, 4)).toBe(1);
+  });
+
+  it('clamps to 0 for negative input and treats a zero quota as complete', () => {
+    expect(rescueProgress(-3, 4)).toBe(0);
+    expect(rescueProgress(0, 0)).toBe(1);
   });
 });
 

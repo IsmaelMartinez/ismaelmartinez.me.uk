@@ -48,6 +48,7 @@ describe('createGameAudio without AudioContext', () => {
       audio.start();
       audio.playSfx('blip');
       audio.playSfx('explosion');
+      audio.playSfx('rescue');
       audio.stop();
       audio.dispose();
       // Idempotent: a second dispose (or one before any audio existed) is safe.

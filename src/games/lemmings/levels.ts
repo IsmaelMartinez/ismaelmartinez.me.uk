@@ -6,9 +6,11 @@
  * are no image assets. Each level also carries its spawn count, rescue quota,
  * and the per-skill stock the player gets to spend.
  *
- * The six levels are hand-tuned so each of the five skills is the natural (and
+ * The nine levels are hand-tuned so each of the five skills is the natural (and
  * roughly necessary) tool on at least one of them: walk-only, basher, builder,
- * digger, floater, then a finale that chains several together.
+ * digger, floater, then a finale that chains several together, and finally three
+ * that chain skills in fresh ways — a blocker-gated dig, a builder-then-basher
+ * climb, and a floater-drop-into-dig route.
  */
 import { TerrainBitmap } from './bitmap';
 import type { Skill, Critter } from './critter';
@@ -151,5 +153,57 @@ export const LEVELS: LevelDef[] = [
     spawnCount: 12,
     needed: 4,
     stock: { floater: 12, basher: 3, builder: 4, blocker: 3, digger: 2 }
+  },
+  // 7 — Hold the Line: the upper shelf ends in a bottomless cliff, so a blocker
+  // has to turn the crowd back before they march off it while a digger opens a
+  // shaft down onto the lower floor and the exit. Blocker gates the dig.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 120, w: 230, h: 16 },
+      { kind: 'rect', x: 0, y: 88, w: 6, h: 32 },
+      { kind: 'rect', x: 0, y: 168, w: 200, h: 32 },
+      { kind: 'rect', x: 0, y: 138, w: 6, h: 30 },
+      { kind: 'rect', x: 194, y: 138, w: 6, h: 30 }
+    ],
+    hatch: { x: 40, y: 90, dir: 1 },
+    exit: { x: 40, y: 167 },
+    spawnCount: 10,
+    needed: 4,
+    stock: { blocker: 2, digger: 3, builder: 2, floater: 2 }
+  },
+  // 8 — Up and Over: a shelf too tall to climb, capped by a wall too tall to
+  // pass. Build a staircase up onto the shelf, then bash through the wall to
+  // the exit beyond it — a builder-then-basher combo.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 170, w: 320, h: 30 },
+      { kind: 'rect', x: 0, y: 140, w: 6, h: 30 },
+      { kind: 'rect', x: 200, y: 158, w: 120, h: 42 },
+      { kind: 'rect', x: 250, y: 120, w: 14, h: 38 }
+    ],
+    hatch: { x: 30, y: 140, dir: 1 },
+    exit: { x: 300, y: 157 },
+    spawnCount: 10,
+    needed: 4,
+    stock: { builder: 4, basher: 4, blocker: 2 }
+  },
+  // 9 — Down the Shaft: a fatal drop off the entry ledge onto a walled shelf
+  // with no way off but through it. Float down to land safely, then dig a shaft
+  // to the exit chamber below — a floater-drop-into-dig route.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 40, w: 90, h: 8 },
+      { kind: 'rect', x: 0, y: 140, w: 320, h: 10 },
+      { kind: 'rect', x: 0, y: 110, w: 6, h: 30 },
+      { kind: 'rect', x: 314, y: 110, w: 6, h: 30 },
+      { kind: 'rect', x: 0, y: 185, w: 320, h: 15 },
+      { kind: 'rect', x: 0, y: 155, w: 6, h: 30 },
+      { kind: 'rect', x: 314, y: 155, w: 6, h: 30 }
+    ],
+    hatch: { x: 24, y: 20, dir: 1 },
+    exit: { x: 160, y: 184 },
+    spawnCount: 10,
+    needed: 5,
+    stock: { floater: 12, digger: 3, blocker: 2 }
   }
 ];

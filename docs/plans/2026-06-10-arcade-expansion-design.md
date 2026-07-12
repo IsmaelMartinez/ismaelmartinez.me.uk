@@ -1,7 +1,7 @@
 # Arcade Expansion: Shared Engine + New Games
 
 Date: 2026-06-10
-Status: Tank Duel, Pixel Park, and Microcity shipped; Lemmings designed but not built.
+Status: Tank Duel, Pixel Park, Microcity, and Critter Rescue (the Lemmings clone) all shipped. The original four-game wish list is complete.
 
 ## Context
 
@@ -78,45 +78,68 @@ Files: `src/games/tanks/*`, `src/pages/[lang]/fun/tanks.astro`,
 `fun.tanks.*` keys in `src/i18n/translations.ts`, cabinet entry in
 `src/pages/[lang]/fun/index.astro`, tests in `tests/games/tanks.test.ts`.
 
-## Designed: Lemmings clone — "Critter Rescue"
+## Shipped: Critter Rescue (`/fun/lemmings`)
 
-**Goal.** Guide a stream of mindless walkers from a spawn hatch to the exit by
-assigning skills to individuals. Save the quota to win the level.
+A pocket Lemmings. Guide a stream of mindless walkers from a spawn hatch to the
+exit by assigning skills to individuals; rescue the level's quota to advance.
+The highest level reached persists through the shared scoreboard.
 
-**Terrain.** Unlike Tanks' heightmap, Lemmings needs overhangs and tunnels, so
-terrain is a per-pixel solidity bitmap: an offscreen canvas where alpha > 0 is
-solid. Diggers/bashers erase pixels (`destination-out`), builders draw bridge
-pixels. Collision queries read a cached `ImageData`; invalidate the cache on
-any terrain edit (edits are rare relative to queries). Levels are authored as
-simple vector descriptions (rects/ramps + hatch/exit positions) rendered onto
-the bitmap at load — no level image assets needed.
+**Terrain — per-pixel solidity bitmap.** Unlike Tanks' heightmap, a
+Lemmings-style level needs overhangs and tunnels, so terrain is a solidity grid
+where every cell is `AIR`, `EARTH`, or a builder `BRIDGE`. It landed as a
+DOM-free `Uint8Array` (`bitmap.ts`) rather than an offscreen canvas's
+`ImageData` — the array *is* the cached solidity map, so it unit-tests without a
+canvas, and a `version` counter bumped on every edit tells the renderer when to
+rebuild its offscreen image. Diggers/bashers erase cells; builders lay `BRIDGE`
+cells; the nuke erases discs. Levels are authored as pure vector descriptions
+(axis-aligned rects and ramps plus a hatch and exit) rasterised onto a fresh
+bitmap at load — no level image assets (`levels.ts`).
 
-**Critters.** Each critter is a small FSM:
-`walker → faller → splatter` (fall > threshold), plus skill states. Walkers
-advance 1px/tick, climb slopes ≤ 4px, reverse on walls. Launch set of skills
-(8 in the original; 5 keeps the UI manageable on mobile):
+**Critters — the FSM plus five skills.** Each critter's feet sit at `(x, y)`
+and run a small FSM: the base cycle is `walker → faller → splatter` (a fall
+longer than `SPLAT_DIST` is fatal unless the critter is a floater). Walkers
+advance 1px/tick, climb slopes ≤ 4px, and reverse on tall walls or blockers. On
+top of that sit the five assignable skills (8 in the original; 5 keeps the
+toolbar manageable on mobile):
 
 | Skill | Behaviour |
 |---|---|
 | Blocker | Stands still; other walkers reverse on contact |
-| Digger | Erases a column straight down until air |
-| Basher | Erases horizontally until air |
-| Builder | Lays a 45° staircase of N bridge pixels, then resumes walking |
-| Floater | Umbrella — immune to fall damage |
+| Digger | Chews a column straight down until it breaks into air |
+| Basher | Erases a body-height swathe horizontally through a wall |
+| Builder | Lays a 45° staircase of bridge treads, then resumes walking |
+| Floater | Umbrella — immune to fall damage, drifts down slowly |
 
-**Interaction.** Tap/click a critter to assign the currently selected skill
-(limited stock per level, shown as toolbar buttons). Spawn rate slider and a
-"nuke" button to end a level early. This is pointer-driven, so it works the
-same on mobile and desktop.
+`critter.ts` runs every rule against a `CritterWorld` interface (solidity
+queries, terrain edits, blocker lookup), so the whole FSM is unit-tested against
+a fake world with no DOM.
 
-**Structure.** `src/games/lemmings/{bitmap.ts, critter.ts, levels.ts, game.ts}`.
-`bitmap.ts` (solidity queries, erase/draw ops) and `critter.ts` (FSM
-transitions against a fake bitmap interface) are the unit-tested pure modules.
-Reuses `engine/loop.ts` (fixed timestep matters here — critter movement is
-per-tick) and `engine/storage.ts` (highest level reached).
+**Levels — nine vector-authored puzzles.** Shipped with six hand-tuned levels,
+each making one skill the natural tool (walk-only, basher, builder, digger,
+floater) and a finale that chains three, then expanded to nine that chain skills
+in fresh ways: a blocker-gated dig (a blocker turns the crowd back off a
+bottomless cliff while a digger opens the floor), a builder-then-basher climb
+(build up onto a shelf, then bash through the wall capping it), and a
+floater-drop-into-dig route (float down a lethal drop onto a walled shelf, then
+dig through to the exit chamber below). Each level carries its spawn count,
+rescue quota, and per-skill stock.
 
-**Scope estimate.** The hardest of the three remaining games: FSM + bitmap
-terrain + ~6 hand-tuned levels. Roughly 2× the Tanks effort.
+**Interaction.** Tap/click a critter to assign the selected skill (limited stock
+per level, shown as toolbar buttons with live counts). A release-rate slider
+controls the spawn cadence and a "nuke" button ends a level early by detonating
+the crowd one at a time. Pointer-driven throughout, so it plays the same on
+mobile and desktop.
+
+**Structure.** `src/games/lemmings/{bitmap.ts, critter.ts, levels.ts, game.ts}`;
+`bitmap.ts` and `critter.ts` are the DOM-free unit-tested modules, `game.ts`
+owns the canvas/DOM and the simulation loop. Reuses `engine/loop.ts` (the fixed
+timestep matters — critter movement is per-tick) and the shared scoreboard
+(backed by `engine/storage.ts`) for the highest level reached. Page at
+`src/pages/[lang]/fun/lemmings.astro`, `fun.lemmings.*` keys across all three
+locales in `src/i18n/translations.ts`, cabinet on
+`src/pages/[lang]/fun/index.astro`, and tests in `tests/games/lemmings.test.ts`
+— including headless solvability playthroughs that beat every level with the
+intended skills.
 
 ## Shipped: Pixel Park (`/fun/park`)
 
@@ -190,7 +213,7 @@ extraction if a third grid sim appears.
 1. ~~Tank Duel~~ (shipped)
 2. ~~Pixel Park~~ (shipped)
 3. ~~Microcity~~ (shipped)
-4. Critter Rescue — biggest standalone effort; needs level design time
+4. ~~Critter Rescue~~ (shipped)
 
 Each game lands the same way Tanks did: pure modules + tests, page under
 `[lang]/fun/`, `fun.<game>.*` translation keys in all three locales, and a

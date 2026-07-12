@@ -1,0 +1,1 @@
+export { initLemmingsGame } from './game';

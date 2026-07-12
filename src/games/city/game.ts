@@ -27,7 +27,7 @@ import {
 import {
   CITY_W,
   CITY_H,
-  MAX_LEVEL,
+  DENSE_LEVEL,
   cityIdx,
   createCity,
   canBuild,
@@ -46,7 +46,8 @@ import {
   roadAdjacent,
   cityStats,
   computeDemand,
-  growthStep
+  growthStep,
+  DENSITY_UNLOCK_POP
 } from './simulation';
 import { monthlyIncome, monthlyExpenses } from './budget';
 import { targetCarCount, spawnCar, stepCar, type Car } from './traffic';
@@ -57,7 +58,16 @@ import {
   stepFires,
   rollEvent,
   sumDemandModifiers,
+  disasterIntensity,
+  tornadoChance,
+  spawnTornado,
+  stepTornado,
+  quakeChance,
+  earthquakeDamage,
+  BURN_TICKS,
+  BURN_TICKS_COVERED,
   type Fire,
+  type Tornado,
   type ActiveEvent,
   type CityEventId
 } from './disasters';
@@ -99,9 +109,9 @@ const ROOFTOP_UNIT = '#c9ced6';
 /** Overall silhouette height per (type, level) — tallest architectural
  *  feature — so floaters/warnings/emoji sit above the actual building. */
 const ZONE_TOP_HEIGHT: Record<ZoneType, number[]> = {
-  res: [0, 10, 14, 22],
-  com: [0, 7, 16, 25],
-  ind: [0, 8, 15, 26]
+  res: [0, 10, 14, 22, 30],
+  com: [0, 7, 16, 25, 34],
+  ind: [0, 8, 15, 26, 33]
 };
 const buildingHeight = (tile: CityTile): number => {
   // These include the smokestack/gable-roof-peak flourish drawn on top of
@@ -109,7 +119,7 @@ const buildingHeight = (tile: CityTile): number => {
   if (tile.type === 'power') return 38;
   if (tile.type === 'school' || tile.type === 'firehouse') return 20;
   if (!isZone(tile.type)) return 0;
-  const level = Math.min(Math.max(tile.level, 0), MAX_LEVEL);
+  const level = Math.min(Math.max(tile.level, 0), DENSE_LEVEL);
   return ZONE_TOP_HEIGHT[tile.type][level];
 };
 
@@ -158,6 +168,9 @@ export function initCityGame(): void {
     cantAfford: root.dataset.tCantAfford || 'Not enough funds!',
     milestone: root.dataset.tMilestone || 'Population',
     fireAlert: root.dataset.tFireAlert || 'Fire has broken out!',
+    tornadoAlert: root.dataset.tTornadoAlert || 'Tornado touching down!',
+    quakeAlert: root.dataset.tQuakeAlert || 'Earthquake!',
+    densityUnlocked: root.dataset.tDensityUnlocked || 'High-density zoning unlocked!',
     events: {
       grant: root.dataset.tEventGrant || 'Government grant awarded',
       protest: root.dataset.tEventProtest || 'Tax protest at the town hall',
@@ -220,6 +233,9 @@ export function initCityGame(): void {
   let rotAnim: { t: number; dir: 1 | -1; swapped: boolean } | null = null;
   let cars: Car[] = [];
   let fires: Fire[] = [];
+  let tornado: Tornado | null = null;
+  let shake = 0; // seconds of screen shake left (earthquakes)
+  let densityToastShown = false;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
@@ -272,6 +288,9 @@ export function initCityGame(): void {
     speedMult = 1;
     cars = [];
     fires = [];
+    tornado = null;
+    shake = 0;
+    densityToastShown = false;
     activeEvents = [];
     smoke = [];
     floaters = [];
@@ -317,6 +336,7 @@ export function initCityGame(): void {
       f.y -= 14 * dt;
       return f.life > 0;
     });
+    if (shake > 0) shake = Math.max(0, shake - dt);
     smoke = smoke.filter(s => {
       s.life -= dt;
       s.x += s.vx * dt;
@@ -381,6 +401,28 @@ export function initCityGame(): void {
         }
       }
 
+      // Late-game weather: a roaming tornado, its odds ramping with the
+      // city's age and size.
+      const intensity = disasterIntensity(month, stats.population);
+      if (tornado) {
+        const step = stepTornado(tiles, tornado, Math.random);
+        tornado = step.tornado;
+        if (step.wrecked.length) {
+          for (const i of step.wrecked) addFloater(i, '💥', '#fbbf24');
+          audio.playSfx('hit');
+          refreshDerivedState();
+        }
+      } else if (Math.random() < tornadoChance(intensity)) {
+        tornado = spawnTornado(Math.random);
+        showToast(`🌪️ ${strings.tornadoAlert}`);
+        audio.playSfx('explosion');
+      }
+
+      if (!densityToastShown && stats.population >= DENSITY_UNLOCK_POP) {
+        densityToastShown = true;
+        showToast(`🏙️ ${strings.densityUnlocked}`);
+      }
+
       peakPop = Math.max(peakPop, stats.population);
       if (peakPop > record) {
         record = peakPop;
@@ -402,6 +444,22 @@ export function initCityGame(): void {
       const expenses = monthlyExpenses(tiles);
       money += income - expenses;
       showToast(`${strings.month} ${month} · ${strings.income} +£${income} · ${strings.expenses} -£${expenses}`);
+
+      // Geology: the ground itself turns hostile in the late game
+      if (Math.random() < quakeChance(disasterIntensity(month, stats.population))) {
+        const quake = earthquakeDamage(tiles, Math.random);
+        for (const i of quake.damaged) addFloater(i, '💥', '#f87171');
+        for (const i of quake.ignited) {
+          if (!fires.some(f => f.idx === i)) {
+            fires.push({ idx: i, ticks: fireCover[i] ? BURN_TICKS_COVERED : BURN_TICKS });
+            addFloater(i, '🔥', '#fb923c');
+          }
+        }
+        shake = 0.9;
+        showToast(`🫨 ${strings.quakeAlert}`);
+        audio.playSfx('explosion');
+        refreshDerivedState();
+      }
 
       // Politics: expire old events, maybe roll a fresh one
       activeEvents.forEach(a => a.monthsLeft--);
@@ -695,10 +753,24 @@ export function initCityGame(): void {
     drawBox(vx + 0.55, vy + 0.6, vx + 0.72, vy + 0.75, 20, 21.5, ROOFTOP_UNIT);
   }
 
+  /** Res L4: a slim high-rise — the dense-city payoff. Two stacked volumes
+   *  with a rooftop plant box, noticeably taller than anything at L3. */
+  function drawResLevel4(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.res;
+    const x0 = vx + 0.16, y0 = vy + 0.16, x1 = vx + 0.84, y1 = vy + 0.84;
+    drawBox(x0, y0, x1, y1, 0, 24, p.wall);
+    drawWindows(x0, y0, x1, y1, i, 5, 0, 24);
+    drawLedges(x0, y0, x1, y1, 5, 0, 24, 'rgba(226, 232, 240, 0.55)');
+    const tx0 = vx + 0.3, ty0 = vy + 0.3, tx1 = vx + 0.7, ty1 = vy + 0.7;
+    drawBox(tx0, ty0, tx1, ty1, 24, 29, shadeColor(p.wall, 1.12));
+    drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 29, 30.5, ROOFTOP_UNIT);
+  }
+
   function drawResZone(vx: number, vy: number, i: number, level: number) {
     if (level === 1) drawResLevel1(vx, vy, i);
     else if (level === 2) drawResLevel2(vx, vy, i);
-    else drawResLevel3(vx, vy, i);
+    else if (level === 3) drawResLevel3(vx, vy, i);
+    else drawResLevel4(vx, vy, i);
   }
 
   /** Shop (com L1): flat-roofed box with a canopy/awning strip out front. */
@@ -735,10 +807,30 @@ export function initCityGame(): void {
     drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 23, 25, ROOFTOP_UNIT);
   }
 
+  /** Com L4: a glass tower with a setback crown and an antenna mast. */
+  function drawComLevel4(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.com;
+    const x0 = vx + 0.16, y0 = vy + 0.16, x1 = vx + 0.84, y1 = vy + 0.84;
+    drawBox(x0, y0, x1, y1, 0, 26, p.wall);
+    drawWindows(x0, y0, x1, y1, i, 5, 0, 26);
+    drawBox(vx + 0.28, vy + 0.28, vx + 0.72, vy + 0.72, 26, 31, '#7fb0f0');
+    // Antenna mast
+    const mast = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(mast.x, mast.y - 31);
+    ctx.lineTo(mast.x, mast.y - 37);
+    ctx.stroke();
+    ctx.fillStyle = '#f87171';
+    ctx.fillRect(mast.x - 1, mast.y - 38, 2, 2);
+  }
+
   function drawComZone(vx: number, vy: number, i: number, level: number) {
     if (level === 1) drawComLevel1(vx, vy, i);
     else if (level === 2) drawComLevel2(vx, vy, i);
-    else drawComLevel3(vx, vy, i);
+    else if (level === 3) drawComLevel3(vx, vy, i);
+    else drawComLevel4(vx, vy, i);
   }
 
   /** Shed (ind L1): squat low warehouse with a couple of roof vents. */
@@ -791,10 +883,31 @@ export function initCityGame(): void {
     ctx.fillRect(stack.x - 2.5, stack.y - 13 - 13, 5, 3);
   }
 
+  /** Ind L4: heavy industry — the L3 complex scaled up with twin stacks. */
+  function drawIndLevel4(vx: number, vy: number, i: number) {
+    const p = ZONE_PALETTE.ind;
+    const hx0 = vx + 0.08, hy0 = vy + 0.3, hx1 = vx + 0.6, hy1 = vy + 0.94;
+    drawBox(hx0, hy0, hx1, hy1, 0, 12, p.wall);
+    drawWindows(hx0, hy0, hx1, hy1, i, 2, 0, 12);
+
+    const bx0 = vx + 0.6, by0 = vy + 0.08, bx1 = vx + 0.94, by1 = vy + 0.56;
+    drawBox(bx0, by0, bx1, by1, 0, 18, '#7d8a94');
+    drawWindows(bx0, by0, bx1, by1, i, 2, 0, 18, 3);
+
+    for (const sxOff of [0.72, 0.84]) {
+      const stack = isoProject(VIEW, vx + sxOff, vy + 0.28);
+      ctx.fillStyle = shadeColor(p.roof, 0.7);
+      ctx.fillRect(stack.x - 2.5, stack.y - 18 - 12, 5, 12);
+      ctx.fillStyle = shadeColor(p.roof, 1.15);
+      ctx.fillRect(stack.x - 2.5, stack.y - 18 - 14, 5, 3);
+    }
+  }
+
   function drawIndZone(vx: number, vy: number, i: number, level: number) {
     if (level === 1) drawIndLevel1(vx, vy, i);
     else if (level === 2) drawIndLevel2(vx, vy, i);
-    else drawIndLevel3(vx, vy, i);
+    else if (level === 3) drawIndLevel3(vx, vy, i);
+    else drawIndLevel4(vx, vy, i);
   }
 
   const ZONE_DRAW: Record<ZoneType, (vx: number, vy: number, i: number, level: number) => void> = {
@@ -828,6 +941,12 @@ export function initCityGame(): void {
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    // Earthquake screen shake: jitter the whole scene while `shake` runs down.
+    ctx.save();
+    if (shake > 0) {
+      const amp = 5 * shake;
+      ctx.translate((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp);
+    }
 
     const dims = rotatedDims(CITY_W, CITY_H, rotation);
     const burning = new Set(fires.map(f => f.idx));
@@ -952,6 +1071,25 @@ export function initCityGame(): void {
     }
     ctx.globalAlpha = 1;
 
+    // Tornado funnel: a wobbling stack of grey discs narrowing to the ground.
+    if (tornado) {
+      const base = projectWorld(tornado.x + 0.5, tornado.y + 0.5);
+      for (let k = 0; k < 7; k++) {
+        const t = k / 6;
+        const wob = Math.sin(clock * 9 + k * 1.3) * (1.5 + t * 4);
+        ctx.fillStyle = `rgba(148, 163, 184, ${0.5 - t * 0.32})`;
+        ctx.beginPath();
+        ctx.ellipse(base.x + wob, base.y - 4 - k * 6, 3 + t * 11, 2 + t * 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Debris ring at the base
+      ctx.fillStyle = 'rgba(120, 113, 108, 0.55)';
+      for (let d = 0; d < 5; d++) {
+        const a = clock * 7 + (d * Math.PI * 2) / 5;
+        ctx.fillRect(base.x + Math.cos(a) * 8 - 1, base.y - 2 + Math.sin(a) * 3 - 1, 2, 2);
+      }
+    }
+
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % CITY_W;
       const y = Math.floor(hoverTile / CITY_W);
@@ -967,6 +1105,7 @@ export function initCityGame(): void {
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
+    ctx.restore(); // end earthquake shake
 
     moneyEl.textContent = `£${Math.floor(money)}`;
     popEl.textContent = stats.population.toString();

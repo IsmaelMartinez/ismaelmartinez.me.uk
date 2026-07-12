@@ -27,6 +27,18 @@ import {
 } from '../../src/games/park/guests';
 import { parkRating, spawnInterval, dailyUpkeep } from '../../src/games/park/economy';
 import {
+  mayhemIntensity,
+  MAYHEM_GRACE_DAYS,
+  isRide,
+  breakdownChance,
+  pickBreakdownTile,
+  coasterStallChance,
+  rollSurge,
+  surgedInterval,
+  maxGuests,
+  SURGE_SECONDS
+} from '../../src/games/park/mayhem';
+import {
   MIN_TRACK_LENGTH,
   CART_MIN_SPEED,
   CART_MAX_SPEED,
@@ -695,5 +707,78 @@ describe('coaster track', () => {
 
   it('prices the track tile like any other simple tool', () => {
     expect(toolCost('track')).toBeGreaterThan(0);
+  });
+});
+
+describe('park mayhem', () => {
+  it('stays calm through the grace days, then ramps to a cap of 1', () => {
+    expect(mayhemIntensity(1)).toBe(0);
+    expect(mayhemIntensity(MAYHEM_GRACE_DAYS)).toBe(0);
+    const early = mayhemIntensity(MAYHEM_GRACE_DAYS + 2);
+    const later = mayhemIntensity(MAYHEM_GRACE_DAYS + 8);
+    expect(early).toBeGreaterThan(0);
+    expect(later).toBeGreaterThan(early);
+    expect(mayhemIntensity(999)).toBe(1);
+  });
+
+  it('classes exactly the fun buildings as breakable rides', () => {
+    expect(isRide('carousel')).toBe(true);
+    expect(isRide('ferris')).toBe(true);
+    expect(isRide('flume')).toBe(true);
+    expect(isRide('skytower')).toBe(true);
+    expect(isRide('food')).toBe(false);
+    expect(isRide('toilet')).toBe(false);
+    expect(isRide('grass')).toBe(false);
+    expect(isRide('track')).toBe(false);
+  });
+
+  it('breakdown odds scale with the ride count and stay zero early on', () => {
+    expect(breakdownChance(2, 5)).toBe(0);
+    const few = breakdownChance(20, 1);
+    const many = breakdownChance(20, 4);
+    expect(few).toBeGreaterThan(0);
+    expect(many).toBeCloseTo(few * 4);
+    expect(coasterStallChance(2)).toBe(0);
+    expect(coasterStallChance(20)).toBeGreaterThan(0);
+  });
+
+  it('picks a working ride to break, never an already-broken or non-ride tile', () => {
+    const { tiles } = createPark();
+    tiles[idx(4, 4)] = 'carousel';
+    tiles[idx(6, 4)] = 'ferris';
+    tiles[idx(8, 4)] = 'food';
+    const first = pickBreakdownTile(tiles, [], () => 0);
+    expect(first === idx(4, 4) || first === idx(6, 4)).toBe(true);
+    const second = pickBreakdownTile(tiles, [idx(4, 4)], () => 0);
+    expect(second).toBe(idx(6, 4));
+    expect(pickBreakdownTile(tiles, [idx(4, 4), idx(6, 4)], () => 0)).toBeNull();
+  });
+
+  it('never picks a breakdown in a park with no rides', () => {
+    const { tiles } = createPark();
+    tiles[idx(4, 4)] = 'food';
+    expect(pickBreakdownTile(tiles, [], () => 0)).toBeNull();
+  });
+
+  it('rolls no surge during the grace days, bigger ones as the park matures', () => {
+    expect(rollSurge(2, () => 0)).toBeNull();
+    const surge = rollSurge(MAYHEM_GRACE_DAYS + 14, () => 0);
+    expect(surge).not.toBeNull();
+    expect(surge!.secondsLeft).toBe(SURGE_SECONDS);
+    expect(surge!.factor).toBe(3); // 2 + intensity at full ramp
+    // An unlucky roll yields nothing
+    expect(rollSurge(MAYHEM_GRACE_DAYS + 14, () => 0.99)).toBeNull();
+  });
+
+  it('divides the spawn interval only while a surge is running', () => {
+    expect(surgedInterval(9, null)).toBe(9);
+    expect(surgedInterval(9, { secondsLeft: 10, factor: 3 })).toBe(3);
+  });
+
+  it('grows the guest cap from 60 to 120 as the park matures', () => {
+    expect(maxGuests(1)).toBe(60);
+    expect(maxGuests(MAYHEM_GRACE_DAYS + 7)).toBe(90);
+    expect(maxGuests(999)).toBe(120);
+    for (let d = 1; d < 40; d++) expect(maxGuests(d + 1)).toBeGreaterThanOrEqual(maxGuests(d));
   });
 });

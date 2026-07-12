@@ -6,6 +6,9 @@
 export const CITY_W = 24;
 export const CITY_H = 14;
 export const MAX_LEVEL = 3;
+/** Zones can densify one level beyond MAX_LEVEL once the city is big enough
+ *  (see simulation.ts's maxZoneLevel). */
+export const DENSE_LEVEL = 4;
 
 export type ZoneType = 'res' | 'com' | 'ind';
 export type CityTileType =

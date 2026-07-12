@@ -1,10 +1,12 @@
 /**
- * Microcity chaos: fires that ignite, spread, and burn tiles down, plus
- * monthly political/civic events that shake the treasury and RCI demand.
- * DOM-free so every rule is testable with a seeded random.
+ * Microcity chaos: fires that ignite, spread, and burn tiles down; roaming
+ * tornadoes and earthquakes whose frequency ramps with the city's age and
+ * size (see `disasterIntensity`); plus monthly political/civic events that
+ * shake the treasury and RCI demand. DOM-free so every rule is testable
+ * with a seeded random.
  */
-import { gridNeighbours } from '../engine/grid2d';
-import { CITY_W, CITY_H, isZone, type CityTile } from './tiles';
+import { gridNeighbours, chebyshev } from '../engine/grid2d';
+import { CITY_W, CITY_H, cityIdx, isZone, type CityTile } from './tiles';
 import type { Demand } from './simulation';
 
 // --- Fires ---
@@ -123,6 +125,163 @@ export function stepFires(
     remaining.push({ idx, ticks: fireCover[idx] ? BURN_TICKS_COVERED : BURN_TICKS });
   }
   return { fires: remaining, spread, burnedOut };
+}
+
+// --- Difficulty ramp ---
+
+/** No tornadoes or earthquakes strike before this month. */
+export const DISASTER_GRACE_MONTHS = 8;
+
+/**
+ * How hard the late game leans on the city, 0–1: nothing during the early
+ * grace period, then a ramp driven by both the city's age and its size, so
+ * a sprawling metropolis faces real weather while a village that has taken
+ * thirty months to build its first block is still mostly left alone.
+ */
+export function disasterIntensity(month: number, population: number): number {
+  if (month <= DISASTER_GRACE_MONTHS) return 0;
+  const age = Math.min(1, (month - DISASTER_GRACE_MONTHS) / 30);
+  const size = Math.min(1, population / 1500);
+  return Math.min(1, 0.2 + 0.45 * age + 0.5 * size);
+}
+
+// --- Tornado ---
+
+export interface Tornado {
+  /** Fractional tile position of the funnel. */
+  x: number;
+  y: number;
+  /** Heading, in tiles per sim tick. */
+  dx: number;
+  dy: number;
+  ticksLeft: number;
+}
+
+export const TORNADO_TICKS = 26;
+/** Chance per growth tick that a tornado touches down, at full intensity. */
+export const TORNADO_CHANCE = 0.012;
+
+export function tornadoChance(intensity: number): number {
+  return TORNADO_CHANCE * intensity;
+}
+
+/** Touches down on a random edge of the map, heading across it. */
+export function spawnTornado(random: () => number = Math.random): Tornado {
+  const edge = Math.floor(random() * 4); // 0 W, 1 E, 2 N, 3 S
+  const speed = 0.8;
+  if (edge === 0 || edge === 1) {
+    return {
+      x: edge === 0 ? 0 : CITY_W - 1,
+      y: 1 + random() * (CITY_H - 2),
+      dx: edge === 0 ? speed : -speed,
+      dy: (random() - 0.5) * 0.5,
+      ticksLeft: TORNADO_TICKS
+    };
+  }
+  return {
+    x: 1 + random() * (CITY_W - 2),
+    y: edge === 2 ? 0 : CITY_H - 1,
+    dx: (random() - 0.5) * 0.5,
+    dy: edge === 2 ? speed : -speed,
+    ticksLeft: TORNADO_TICKS
+  };
+}
+
+/**
+ * What a tornado does to the tile under it. Developed zones are knocked
+ * down a level (a level-1 building is flattened to rubble); civic buildings
+ * and parks are flattened outright; trees are torn out. Power plants stay
+ * standing for the same reason they are fireproof, and roads, water, and
+ * bridges ride it out. Returns whether the tile changed.
+ */
+export function wreckTile(tile: CityTile): boolean {
+  if (isZone(tile.type) && tile.level > 0) {
+    if (tile.level > 1) tile.level--;
+    else {
+      tile.type = 'rubble';
+      tile.level = 0;
+    }
+    return true;
+  }
+  if (tile.type === 'park' || tile.type === 'school' || tile.type === 'firehouse') {
+    tile.type = 'rubble';
+    tile.level = 0;
+    return true;
+  }
+  if (tile.type === 'tree') {
+    tile.type = 'empty';
+    return true;
+  }
+  return false;
+}
+
+/**
+ * One tornado sim tick: the funnel drifts along its heading with a little
+ * wobble, wrecking the tile it passes over. Returns the surviving tornado
+ * (null once it blows out or leaves the map) and any tile it damaged.
+ */
+export function stepTornado(
+  tiles: CityTile[],
+  tornado: Tornado,
+  random: () => number = Math.random
+): { tornado: Tornado | null; wrecked: number[] } {
+  const next: Tornado = {
+    x: tornado.x + tornado.dx + (random() - 0.5) * 0.4,
+    y: tornado.y + tornado.dy + (random() - 0.5) * 0.4,
+    dx: tornado.dx,
+    dy: tornado.dy,
+    ticksLeft: tornado.ticksLeft - 1
+  };
+  const wrecked: number[] = [];
+  const tx = Math.round(next.x);
+  const ty = Math.round(next.y);
+  if (tx >= 0 && tx < CITY_W && ty >= 0 && ty < CITY_H) {
+    const i = cityIdx(tx, ty);
+    if (wreckTile(tiles[i])) wrecked.push(i);
+  }
+  const gone =
+    next.ticksLeft <= 0 || next.x < -1 || next.x > CITY_W || next.y < -1 || next.y > CITY_H;
+  return { tornado: gone ? null : next, wrecked };
+}
+
+// --- Earthquake ---
+
+/** Chance per month of an earthquake, at full intensity. */
+export const QUAKE_CHANCE = 0.06;
+export const QUAKE_RADIUS = 4;
+/** Fires the shaking starts among the damage. */
+export const QUAKE_IGNITE_CHANCE = 0.2;
+
+export function quakeChance(intensity: number): number {
+  return QUAKE_CHANCE * intensity;
+}
+
+/**
+ * An earthquake: picks an epicentre, damages developed tiles around it with
+ * odds falling off toward the edge of the radius (same rules as a tornado
+ * hit), and starts a few fires in the wreckage's flammable surroundings.
+ * Returns the epicentre plus what was damaged and ignited so the game layer
+ * can shake the screen, spawn fires, and refresh derived state.
+ */
+export function earthquakeDamage(
+  tiles: CityTile[],
+  random: () => number = Math.random
+): { epicentre: number; damaged: number[]; ignited: number[] } {
+  const epicentre = Math.floor(random() * tiles.length);
+  const damaged: number[] = [];
+  const ignited: number[] = [];
+  tiles.forEach((tile, i) => {
+    const dist = chebyshev(epicentre, i, CITY_W);
+    if (dist > QUAKE_RADIUS) return;
+    const odds = 0.75 * (1 - dist / (QUAKE_RADIUS + 1));
+    if (random() >= odds) return;
+    if (wreckTile(tile)) {
+      damaged.push(i);
+    } else if (isFlammable(tile) && random() < QUAKE_IGNITE_CHANCE) {
+      ignited.push(i);
+    }
+  });
+  return { epicentre, damaged, ignited };
 }
 
 // --- Political & civic events ---

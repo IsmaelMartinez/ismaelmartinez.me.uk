@@ -50,6 +50,19 @@ import {
 } from './guests';
 import { parkRating, spawnInterval, dailyUpkeep } from './economy';
 import {
+  isRide,
+  breakdownChance,
+  pickBreakdownTile,
+  coasterStallChance,
+  rollSurge,
+  surgedInterval,
+  maxGuests,
+  BREAKDOWN_SECONDS,
+  STALL_SECONDS,
+  type RideBreakdown,
+  type Surge
+} from './mayhem';
+import {
   MIN_TRACK_LENGTH,
   CAR_CAPACITY,
   CART_MIN_SPEED,
@@ -79,7 +92,6 @@ const CANVAS_H = (GRID_W + GRID_H) * VIEW.halfH + VIEW.originY + 10;
 const START_MONEY = 1500;
 const DAY_LENGTH = 24; // seconds of game time per day
 const GUEST_SPEED = 2.4; // tiles per second
-const MAX_GUESTS = 60;
 /** Guests charged per coaster lap, taken at boarding — a premium ride, priced above the Big Wheel. */
 const TRACK_RIDE_PRICE = 7;
 /** Seconds a loaded/loading cart waits at the station before departing. */
@@ -209,6 +221,8 @@ interface Coaster {
   riders: Guest[];
   /** How much a completed lap restores the `thrill` need — precomputed from track.ts's thrillBoost. */
   thrillBoost: number;
+  /** Seconds the cart hangs jammed mid-track (mayhem); 0 = running fine. */
+  stallLeft: number;
 }
 
 type Phase = 'idle' | 'play' | 'over';
@@ -272,7 +286,11 @@ export function initParkGame(): void {
     trackStatusEmpty: root.dataset.tTrackStatusEmpty || 'Tap a grass tile to start laying track',
     trackStatusDrafting:
       root.dataset.tTrackStatusDrafting || 'Track length: {n} — tap the start tile to close the loop',
-    trackStatusClosed: root.dataset.tTrackStatusClosed || 'Loop closed — Test Track to open it'
+    trackStatusClosed: root.dataset.tTrackStatusClosed || 'Loop closed — Test Track to open it',
+    breakdown: root.dataset.tBreakdown || 'A ride has broken down!',
+    repaired: root.dataset.tRepaired || 'Ride repaired',
+    surge: root.dataset.tSurge || 'A coach party pours through the gates!',
+    coasterStall: root.dataset.tCoasterStall || 'The coaster has jammed mid-track!'
   };
 
   const TRACK_ERROR_MESSAGES: Record<TrackErrorCode, string> = {
@@ -323,6 +341,8 @@ export function initParkGame(): void {
   let clock = 0;
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
   let coasters: Coaster[] = [];
+  let breakdowns: RideBreakdown[] = [];
+  let surge: Surge | null = null;
   // A drafted segment's `dir` is a placeholder until the *next* tap fixes it
   // (see handleTrackTap) — trackClosed flips true once the closing tap sets
   // the last segment's dir back to the start tile.
@@ -354,6 +374,7 @@ export function initParkGame(): void {
 
   const treeCount = () => tiles.filter(t => t === 'tree').length;
   const hasAnyBuilding = () => tiles.some(t => BUILDINGS[t]) || coasters.length > 0;
+  const isBroken = (i: number) => breakdowns.some(b => b.tile === i);
 
   // --- Guest behaviour ---
 
@@ -417,7 +438,8 @@ export function initParkGame(): void {
     } else if (want) {
       const candidates: number[] = [];
       tiles.forEach((tile, i) => {
-        if (BUILDINGS[tile]?.satisfies === want) candidates.push(i);
+        // Broken rides are roped off — guests won't head for them.
+        if (BUILDINGS[tile]?.satisfies === want && !isBroken(i)) candidates.push(i);
       });
       const found = nearestReachable(tiles, guest.tile, candidates);
       if (found && found.path.length >= 2) {
@@ -448,7 +470,8 @@ export function initParkGame(): void {
 
   function beginUsing(guest: Guest, building: number) {
     const def = BUILDINGS[tiles[building]];
-    if (!def) {
+    // A ride can break down while the guest is walking over.
+    if (!def || isBroken(building)) {
       guest.state = 'idle';
       guest.idleTimer = 0.3;
       return;
@@ -583,7 +606,8 @@ export function initParkGame(): void {
       loadTimer: LOAD_WAIT,
       queue: [],
       riders: [],
-      thrillBoost: thrillBoost(segments, heights)
+      thrillBoost: thrillBoost(segments, heights),
+      stallLeft: 0
     };
   }
 
@@ -616,6 +640,18 @@ export function initParkGame(): void {
           coaster.loadTimer = LOAD_WAIT; // keep waiting rather than dispatch an empty cart
         }
       }
+      return;
+    }
+    // Mayhem: a running cart can jam mid-track and hang there a few seconds.
+    if (coaster.stallLeft > 0) {
+      coaster.stallLeft -= dt;
+      return;
+    }
+    if (coaster.riders.length > 0 && Math.random() < coasterStallChance(day) * dt) {
+      coaster.stallLeft = STALL_SECONDS;
+      const segTile = coaster.segments[Math.floor(coaster.cartU) % coaster.segments.length].tile;
+      addFloater(segTile, '🔧', '#fbbf24');
+      showToast(`🔧 ${strings.coasterStall}`);
       return;
     }
     const segIndex = Math.floor(coaster.cartU) % coaster.segments.length;
@@ -773,6 +809,41 @@ export function initParkGame(): void {
 
     guests = guests.filter(guest => updateGuest(guest, simDt));
     for (const coaster of coasters) updateCoaster(coaster, simDt);
+
+    // Mayhem: run down repairs (dropping any ride that was bulldozed) and
+    // maybe break something new; odds ramp with the park's age.
+    breakdowns = breakdowns.filter(b => {
+      if (!isRide(tiles[b.tile])) return false;
+      b.secondsLeft -= simDt;
+      if (b.secondsLeft <= 0) {
+        addFloater(b.tile, `✅ ${strings.repaired}`, '#4ade80');
+        return false;
+      }
+      return true;
+    });
+    const rideCount = tiles.filter(isRide).length;
+    if (Math.random() < breakdownChance(day, rideCount) * simDt) {
+      const tile = pickBreakdownTile(tiles, breakdowns.map(b => b.tile), Math.random);
+      if (tile !== null) {
+        breakdowns.push({ tile, secondsLeft: BREAKDOWN_SECONDS });
+        // Anyone mid-ride gets turfed out to rethink their day.
+        for (const guest of guests) {
+          if (guest.state === 'using' && guest.targetBuilding === tile) {
+            guest.state = 'idle';
+            guest.idleTimer = 0.2;
+            guest.targetBuilding = null;
+          }
+        }
+        addFloater(tile, '🔧', '#fbbf24');
+        showToast(`🔧 ${strings.breakdown}`);
+        audio.playSfx('hit');
+      }
+    }
+    if (surge) {
+      surge.secondsLeft -= simDt;
+      if (surge.secondsLeft <= 0) surge = null;
+    }
+
     peakGuests = Math.max(peakGuests, guests.length);
     if (peakGuests > record) {
       record = peakGuests;
@@ -788,8 +859,8 @@ export function initParkGame(): void {
 
     spawnTimer -= simDt;
     if (spawnTimer <= 0) {
-      spawnTimer = spawnInterval(rating);
-      if (guests.length < MAX_GUESTS && hasAnyBuilding()) spawnGuest();
+      spawnTimer = surgedInterval(spawnInterval(rating), surge);
+      if (guests.length < maxGuests(day) && hasAnyBuilding()) spawnGuest();
     }
 
     dayTimer += simDt;
@@ -799,6 +870,13 @@ export function initParkGame(): void {
       const upkeep = dailyUpkeep(tiles);
       money -= upkeep;
       showToast(`${strings.day} ${day} · ${strings.upkeep} -£${upkeep}`);
+      // Mayhem: some mornings a coach party floods the gates.
+      const rolled = rollSurge(day, Math.random);
+      if (rolled) {
+        surge = rolled;
+        showToast(`🚌 ${strings.surge}`);
+        audio.playSfx('score');
+      }
       if (money < 0) gameOver();
     }
   }
@@ -825,6 +903,8 @@ export function initParkGame(): void {
     speedMult = 1;
     floaters = [];
     coasters = [];
+    breakdowns = [];
+    surge = null;
     cancelTrackDraft();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     board.hide();
@@ -1094,15 +1174,22 @@ export function initParkGame(): void {
       } else if (BUILDINGS[tile]) {
         const style = BUILDING_STYLE[tile] ?? { color: '#44447a', height: BLOCK_HEIGHT };
         const reskin = zone ? ZONE_BUILDING_STYLE[zone][tile] : undefined;
+        const broken = isBroken(i);
         drawBlock(ctx, VIEW, x, y, style.height, reskin?.color ?? style.color, 0.08, liftPx);
         const spin = RIDE_SPIN[tile];
         const busy = inUse.has(i);
         ctx.save();
         ctx.translate(top.x, top.y - style.height - (busy ? 2 : 0));
-        if (spin) ctx.rotate((clock * (busy ? spin.busy : spin.idle)) % (Math.PI * 2));
+        // A broken ride's emoji hangs still and dimmed; the wrench bobs above.
+        if (broken) ctx.globalAlpha = 0.45;
+        if (spin && !broken) ctx.rotate((clock * (busy ? spin.busy : spin.idle)) % (Math.PI * 2));
         ctx.font = `${tile === 'ferris' || tile === 'skytower' ? 16 : 14}px serif`;
         ctx.fillText(reskin?.emoji ?? TILE_EMOJI[tile] ?? '', 0, 0);
         ctx.restore();
+        if (broken) {
+          ctx.font = '12px serif';
+          ctx.fillText('🔧', top.x, top.y - style.height - 12 + Math.sin(clock * 5) * 2);
+        }
       }
 
       const trackInfo = trackByTile.get(i);

@@ -57,10 +57,16 @@ export function buildLevel(def: LevelDef): TerrainBitmap {
   return bmp;
 }
 
-/** Whether a critter's feet are inside the exit door. */
+/**
+ * Whether a critter's feet are inside the exit door. `exit.y` is the door's
+ * base on the floor, so the opening spans up to `EXIT_H` above it; the small
+ * downward slack absorbs pixel rounding without reaching below the floor.
+ */
 export function atExit(c: Critter, def: LevelDef): boolean {
   return (
-    Math.abs(c.x - def.exit.x) <= EXIT_HALF_W && Math.abs(c.y - def.exit.y) <= EXIT_H - 6
+    Math.abs(c.x - def.exit.x) <= EXIT_HALF_W &&
+    c.y <= def.exit.y + 2 &&
+    c.y >= def.exit.y - EXIT_H
   );
 }
 

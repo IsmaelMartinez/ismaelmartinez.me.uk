@@ -252,11 +252,13 @@ export function initLemmingsGame(): void {
     const victory = won && last;
     resultEmoji.textContent = victory ? '🏆' : won ? '🎉' : '💔';
     resultTitle.textContent = victory ? strings.victory : won ? strings.complete : strings.failed;
+    // Describe the rescue out of the total crowd (the goal is on the HUD), so
+    // an over-quota clear never reads oddly as "8 of 4".
     resultDesc.textContent = won
       ? victory
         ? strings.victoryDesc
-        : fill(strings.completeDesc, saved, def.needed)
-      : fill(strings.failedDesc, saved, def.needed);
+        : fill(strings.completeDesc, saved, def.spawnCount)
+      : fill(strings.failedDesc, saved, def.spawnCount);
     nextBtn.style.display = won ? 'inline-block' : 'none';
     nextBtn.textContent = victory
       ? nextBtn.dataset.playAgain || 'Play Again'

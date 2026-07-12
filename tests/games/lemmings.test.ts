@@ -158,15 +158,21 @@ describe('critter — walking & falling', () => {
   });
 
   it('survives a short drop', () => {
+    const landingTop = 100 + SPLAT_DIST - 10; // within the splat threshold
     const bmp = new TerrainBitmap(LEVEL_W, LEVEL_H);
-    bmp.fillRect(0, 100, 80, 4);
-    bmp.fillRect(0, 100 + SPLAT_DIST - 10, 200, 10); // landing within threshold
+    bmp.fillRect(0, 100, 80, 4); // ledge the critter walks off
+    bmp.fillRect(0, landingTop, 200, 10); // ground below
     const world = makeWorld(bmp);
     const c: Critter = { ...createCritter(1, 78, 99, 1), state: 'walker' };
-    for (let i = 0; i < 200 && c.state === 'faller'; i++) stepCritter(c, world);
-    // may pass through several states; ensure it did not die
-    let guard = 0;
-    while (c.state === 'faller' && guard++ < 400) stepCritter(c, world);
+    // Step until it has walked off the ledge, fallen, and settled on the ground
+    // below (feet one px above the landing surface) — never touching 'faller' as
+    // a loop guard, which previously skipped the whole simulation.
+    let landed = false;
+    for (let i = 0; i < 400 && !landed; i++) {
+      stepCritter(c, world);
+      landed = c.state === 'walker' && c.y === landingTop - 1;
+    }
+    expect(landed).toBe(true);
     expect(c.alive).toBe(true);
     expect(c.state).not.toBe('splatted');
   });

@@ -39,11 +39,11 @@ Grounding the proposals in the real APIs (not aspirations), a new game inherits:
 | `engine/scoreboard.ts` + `engine/highscores.ts` + `HighScoreTable.astro` | `initScoreboard(panel)` → `show(score)` / `stash(score)` / `top()`; per-device top-10 with three-initials entry, provisional stashing for long runs, and auto-commit on tab close / Astro swap. |
 | `engine/audio.ts` | `createGameAudio({ melody, tempo, wave })` chiptune loop + `playSfx('blip'|'score'|'hit'|'explosion'|'gameover')`, all synthesised (no binaries), plus `wireSoundButton`. |
 
-Beyond the engine, three games (Pixel Park, Microcity, Syndicate) each carry a
+Beyond the engine, two games (Pixel Park and Syndicate) each carry a
 near-identical **BFS over a flat walkable grid** (`syndicate/pathfind.ts`
-header even notes "Same approach as Pixel Park's guest routing"). That is the
-obvious next extraction into the engine — the doc calls this out per candidate
-rather than assuming it.
+header even notes "Same approach as Pixel Park's guest routing"; Microcity's
+traffic is cosmetic and does no routing). That is the obvious next extraction
+into the engine — the doc calls this out per candidate rather than assuming it.
 
 Conventions every game follows and the next one must too: pure rules in
 DOM-free modules taking an injectable `random: () => number`; only `game.ts`
@@ -135,9 +135,9 @@ with level.
 ## Recommendation: A — Tower Defense ("Line Hold")
 
 It reuses the most of the engine we have actually hardened, and the piece it
-does *not* yet have — enemy pathfinding — is a BFS three existing games already
+does *not* yet have — enemy pathfinding — is a BFS two existing games already
 carry, so building it lands a genuine engine win (`engine/pathfind.ts`) that
-retroactively simplifies Park, City, and Syndicate. That "extract when the next
+retroactively simplifies Park and Syndicate. That "extract when the next
 game needs it" move is exactly the ethos the expansion doc set out.
 
 Its one real weakness is presentation overlap: it would be the arcade's fourth
@@ -201,8 +201,8 @@ src/games/towerdefense/
    `fun.arcade.genre.towerdefense` label across all three locales, and a cabinet
    on the arcade index.
 2. As part of it, extract `engine/pathfind.ts` (the shared BFS) and migrate
-   Park / City / Syndicate onto it opportunistically — the deduplication the
-   three copies have been waiting for.
+   Park / Syndicate onto it opportunistically — the deduplication the two
+   copies have been waiting for.
 3. Hold **Gem Caverns** and **Cascade** as designed-but-unbuilt candidates for
    the session after, the same way the wish-list games were queued behind
    Tank Duel.

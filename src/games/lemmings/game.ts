@@ -11,7 +11,7 @@
  * It expects the markup defined in src/pages/[lang]/fun/lemmings.astro.
  */
 import { createGameLoop, initScoreboard, createGameAudio, wireSoundButton } from '../engine';
-import { TerrainBitmap, AIR, EARTH } from './bitmap';
+import { TerrainBitmap, AIR, BRIDGE } from './bitmap';
 import {
   createCritter,
   assignSkill,
@@ -35,6 +35,33 @@ interface Particle {
   vy: number;
   life: number;
   color: string;
+}
+
+/** Deterministic 2D value hash in [0, 1) — used for star fields and terrain grain. */
+function hash2(x: number, y: number): number {
+  let n = (Math.imul(x | 0, 73856093) ^ Math.imul(y | 0, 19349663)) >>> 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Nudges a `#rrggbb` colour lighter (+) or darker (−) and returns an `rgb()` string. */
+function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const clamp = (v: number) => Math.max(0, Math.min(255, v + amt));
+  return `rgb(${clamp((n >> 16) & 255)},${clamp((n >> 8) & 255)},${clamp(n & 255)})`;
+}
+
+/** Fills a rolling-hills silhouette across the width at the given ctx fill style. */
+function drawHills(c: CanvasRenderingContext2D, w: number, h: number, baseY: number, amp: number, seed: number): void {
+  c.beginPath();
+  c.moveTo(0, h);
+  for (let x = 0; x <= w; x += 3) {
+    const y = baseY - Math.sin(x * 0.021 + seed) * amp * 0.5 - Math.sin(x * 0.006 + seed * 2) * amp * 0.5;
+    c.lineTo(x, y);
+  }
+  c.lineTo(w, h);
+  c.closePath();
+  c.fill();
 }
 
 export function initLemmingsGame(): void {
@@ -87,6 +114,75 @@ export function initLemmingsGame(): void {
   const terrainCtx = terrainCanvas.getContext('2d');
   const terrainImage = terrainCtx ? terrainCtx.createImageData(LEVEL_W, LEVEL_H) : null;
   let terrainVersion = -1;
+
+  // A starfield + moon + distant hills, painted once (level dimensions are fixed).
+  const bgCanvas = buildBackground();
+  // Cached radial darkening for the screen edges.
+  const vignette = ctx.createRadialGradient(
+    LEVEL_W / 2,
+    LEVEL_H / 2,
+    LEVEL_H * 0.34,
+    LEVEL_W / 2,
+    LEVEL_H / 2,
+    LEVEL_H * 0.78
+  );
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(4,6,16,0.42)');
+  let frame = 0;
+
+  function buildBackground(): HTMLCanvasElement {
+    const bg = document.createElement('canvas');
+    bg.width = LEVEL_W;
+    bg.height = LEVEL_H;
+    const b = bg.getContext('2d');
+    if (!b) return bg;
+    // Night-sky gradient.
+    const sky = b.createLinearGradient(0, 0, 0, LEVEL_H);
+    sky.addColorStop(0, '#0a0a1c');
+    sky.addColorStop(0.55, '#161638');
+    sky.addColorStop(1, '#2b2350');
+    b.fillStyle = sky;
+    b.fillRect(0, 0, LEVEL_W, LEVEL_H);
+    // Stars, thicker toward the top.
+    for (let s = 0; s < 90; s++) {
+      const x = Math.floor(hash2(s, 11) * LEVEL_W);
+      const y = Math.floor(hash2(s, 23) * LEVEL_H * 0.72);
+      const a = 0.25 + hash2(s, 31) * 0.7;
+      b.fillStyle = `rgba(255,255,255,${a})`;
+      b.fillRect(x, y, 1, 1);
+      if (hash2(s, 47) > 0.9) {
+        b.fillStyle = `rgba(190,205,255,${a * 0.45})`;
+        b.fillRect(x - 1, y, 1, 1);
+        b.fillRect(x + 1, y, 1, 1);
+        b.fillRect(x, y - 1, 1, 1);
+        b.fillRect(x, y + 1, 1, 1);
+      }
+    }
+    // Moon with a soft halo.
+    const mx = 272;
+    const my = 38;
+    const halo = b.createRadialGradient(mx, my, 2, mx, my, 42);
+    halo.addColorStop(0, 'rgba(226,232,255,0.45)');
+    halo.addColorStop(1, 'rgba(226,232,255,0)');
+    b.fillStyle = halo;
+    b.fillRect(mx - 42, my - 42, 84, 84);
+    b.fillStyle = '#eef1ff';
+    b.beginPath();
+    b.arc(mx, my, 13, 0, Math.PI * 2);
+    b.fill();
+    b.fillStyle = 'rgba(178,188,220,0.5)';
+    b.beginPath();
+    b.arc(mx + 4, my - 3, 3, 0, Math.PI * 2);
+    b.arc(mx - 4, my + 4, 2, 0, Math.PI * 2);
+    b.arc(mx + 2, my + 5, 1.5, 0, Math.PI * 2);
+    b.fill();
+    // Two layers of distant hills near the horizon.
+    b.fillStyle = '#241f43';
+    drawHills(b, LEVEL_W, LEVEL_H, 150, 24, 3);
+    b.fillStyle = '#1a1730';
+    drawHills(b, LEVEL_W, LEVEL_H, 170, 30, 8);
+    return bg;
+  }
 
   const board = initScoreboard(document.getElementById('highscores'));
 
@@ -324,25 +420,51 @@ export function initLemmingsGame(): void {
 
   function rebuildTerrain() {
     if (!terrainCtx || !terrainImage) return;
-    const data = terrainImage.data;
+    const data = terrainImage.data; // Uint8ClampedArray — assignments auto-clamp.
     const cells = bmp.data;
+    const W = LEVEL_W;
     for (let i = 0; i < cells.length; i++) {
       const o = i * 4;
       const m = cells[i];
       if (m === AIR) {
         data[o + 3] = 0;
-      } else if (m === EARTH) {
-        data[o] = 96;
-        data[o + 1] = 132;
-        data[o + 2] = 74;
-        data[o + 3] = 255;
-      } else {
-        // Builder bridge — warm timber.
-        data[o] = 234;
-        data[o + 1] = 179;
-        data[o + 2] = 8;
-        data[o + 3] = 255;
+        continue;
       }
+      const x = i % W;
+      const y = (i / W) | 0;
+      const openAbove = y === 0 || cells[i - W] === AIR;
+      const grain = hash2(x, y);
+      if (m === BRIDGE) {
+        // Timber planks: vertical seams every 6px, a grain line every 3rd row.
+        const seam = x % 6 === 0 ? -34 : 0;
+        const row = y % 3 === 0 ? -14 : 0;
+        const lip = openAbove ? 30 : 0;
+        data[o] = 216 + lip + seam * 0.5;
+        data[o + 1] = 162 + lip * 0.7 + seam + row;
+        data[o + 2] = 78 + seam + row;
+        data[o + 3] = 255;
+        continue;
+      }
+      // EARTH.
+      if (openAbove) {
+        // Grassy crown: bright, with a few taller blades from the grain.
+        const blade = grain > 0.55 ? 26 : 0;
+        data[o] = 118 + blade * 0.4;
+        data[o + 1] = 192 + blade;
+        data[o + 2] = 74 + blade * 0.3;
+        data[o + 3] = 255;
+        continue;
+      }
+      // Soil: darkens with depth below the crown, speckled with grit and pebbles.
+      let depth = 1;
+      while (depth < 20 && y - depth >= 0 && cells[i - depth * W] !== AIR) depth++;
+      const t = Math.min(1, depth / 15);
+      const speck = grain < 0.07 ? 30 : grain > 0.95 ? -24 : (grain - 0.5) * 14;
+      const rim = depth === 1 ? -14 : 0; // shadow line just under the grass
+      data[o] = 124 - t * 56 + speck + rim;
+      data[o + 1] = 94 - t * 44 + speck + rim;
+      data[o + 2] = 60 - t * 26 + speck + rim;
+      data[o + 3] = 255;
     }
     terrainCtx.putImageData(terrainImage, 0, 0);
     terrainVersion = bmp.version;
@@ -350,22 +472,55 @@ export function initLemmingsGame(): void {
 
   function drawHatch() {
     const { x, y } = def.hatch;
-    ctx.fillStyle = '#4b5563';
-    ctx.fillRect(x - HATCH_W / 2, y - 8, HATCH_W, 6);
-    ctx.fillStyle = '#1f2937';
-    ctx.fillRect(x - HATCH_W / 2 + 2, y - 3, HATCH_W - 4, 3);
-    ctx.fillStyle = '#f87171';
-    ctx.fillRect(x - 1, y - 12, 2, 4);
+    const halfW = HATCH_W / 2;
+    // Metal frame with a top lip.
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(x - halfW - 1, y - 9, HATCH_W + 2, 7);
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(x - halfW - 1, y - 9, HATCH_W + 2, 1);
+    // Dark opening the critters drop from.
+    ctx.fillStyle = '#0b1120';
+    ctx.fillRect(x - halfW + 1, y - 3, HATCH_W - 2, 3);
+    // Hazard stripes along the lintel.
+    for (let s = 0; s < HATCH_W - 2; s += 3) {
+      ctx.fillStyle = (s / 3) % 2 ? '#fbbf24' : '#1f2937';
+      ctx.fillRect(x - halfW + 1 + s, y - 7, 2, 2);
+    }
+    // Rivets.
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(x - halfW, y - 8, 1, 1);
+    ctx.fillRect(x + halfW - 1, y - 8, 1, 1);
   }
 
   function drawExit() {
     const { x, y } = def.exit;
-    ctx.fillStyle = '#16a34a';
-    ctx.fillRect(x - EXIT_HALF_W, y - EXIT_H, EXIT_HALF_W * 2, EXIT_H);
+    const cx = x;
+    const cy = y - EXIT_H / 2;
+    const pulse = 0.5 + 0.5 * Math.sin(frame * 0.09);
+    // Portal glow.
+    const glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, 24 + pulse * 8);
+    glow.addColorStop(0, `rgba(74,222,128,${0.35 + pulse * 0.28})`);
+    glow.addColorStop(1, 'rgba(74,222,128,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(cx - 30, y - EXIT_H - 16, 60, EXIT_H + 30);
+    // Door frame.
+    ctx.fillStyle = '#14532d';
+    ctx.fillRect(x - EXIT_HALF_W - 1, y - EXIT_H - 2, EXIT_HALF_W * 2 + 2, EXIT_H + 2);
+    // Lit interior.
+    const inner = ctx.createLinearGradient(0, y - EXIT_H, 0, y);
+    inner.addColorStop(0, '#dcfce7');
+    inner.addColorStop(1, '#22c55e');
+    ctx.fillStyle = inner;
+    ctx.fillRect(x - EXIT_HALF_W + 1, y - EXIT_H + 1, EXIT_HALF_W * 2 - 2, EXIT_H - 1);
+    // Rising light motes.
+    for (let k = 0; k < 3; k++) {
+      const my = y - ((frame * 0.7 + k * 8) % EXIT_H);
+      ctx.fillStyle = 'rgba(224,255,224,0.75)';
+      ctx.fillRect(x - 3 + k * 3, my, 1, 2);
+    }
+    // Beckoning arrow.
     ctx.fillStyle = '#052e16';
-    ctx.fillRect(x - EXIT_HALF_W + 2, y - EXIT_H + 3, EXIT_HALF_W * 2 - 4, EXIT_H - 3);
-    ctx.fillStyle = '#bbf7d0';
-    ctx.font = '10px monospace';
+    ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('▲', x, y - 6);
   }
@@ -379,44 +534,81 @@ export function initLemmingsGame(): void {
     builder: '#fbbf24'
   };
 
+  function drawUmbrella(c: Critter, top: number) {
+    const uy = top - 4;
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(c.x - 4, uy, 8, 1);
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(c.x - 3, uy + 1, 6, 1);
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(c.x - 1, uy + 2, 2, 1);
+    // Bright panel tips.
+    ctx.fillStyle = '#e0f2fe';
+    ctx.fillRect(c.x - 4, uy, 1, 1);
+    ctx.fillRect(c.x + 3, uy, 1, 1);
+    // Shaft down to the body.
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(c.x, uy + 3, 1, top - (uy + 3) + 1);
+  }
+
   function drawCritter(c: Critter) {
     const top = c.y - CRITTER_H;
     const body = SKILL_COLOR[c.state] || '#a3e635';
-    // Umbrella for floaters.
-    if (c.floater) {
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(c.x, top - 1, 4, Math.PI, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(c.x, top - 1);
-      ctx.lineTo(c.x, top + 1);
-      ctx.stroke();
+    // Contact shadow (skip while airborne).
+    if (c.state !== 'faller') {
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.fillRect(c.x - 2, c.y, 4, 1);
     }
+    if (c.floater) drawUmbrella(c, top);
+    // Legs — a two-frame walk cycle, phased per critter so a crowd isn't in lockstep.
+    if (c.state === 'walker') {
+      const stride = (Math.floor(frame / 4) + c.id) % 2;
+      ctx.fillStyle = '#3f6212';
+      if (stride === 0) {
+        ctx.fillRect(c.x - 2, c.y - 1, 1, 1);
+        ctx.fillRect(c.x + 1, c.y - 1, 1, 1);
+      } else {
+        ctx.fillRect(c.x - 1, c.y - 1, 1, 1);
+        ctx.fillRect(c.x, c.y - 1, 1, 1);
+      }
+    }
+    // Body with top highlight and belly shadow for a bit of roundness.
     ctx.fillStyle = body;
-    ctx.fillRect(c.x - 2, top + 1, 4, CRITTER_H - 1);
-    // Head.
-    ctx.fillStyle = '#065f46';
+    ctx.fillRect(c.x - 2, top + 2, 4, CRITTER_H - 3);
+    ctx.fillStyle = shade(body, 34);
+    ctx.fillRect(c.x - 2, top + 2, 4, 1);
+    ctx.fillStyle = shade(body, -36);
+    ctx.fillRect(c.x - 2, c.y - 2, 4, 1);
+    // Head + hair tuft.
+    ctx.fillStyle = '#e2f7c0';
     ctx.fillRect(c.x - 1, top, 2, 2);
+    ctx.fillStyle = '#65a30d';
+    ctx.fillRect(c.x - 1, top - 1, 2, 1);
+    // Eye, on the leading side.
+    ctx.fillStyle = '#0b1120';
+    ctx.fillRect(c.dir > 0 ? c.x : c.x - 1, top + 1, 1, 1);
+    // Per-skill flourishes.
     if (c.state === 'blocker') {
-      // Arms out to signal a wall.
       ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(c.x - 3, top + 2, 6, 1);
-    } else {
-      // Facing nub.
-      ctx.fillStyle = '#ecfccb';
-      ctx.fillRect(c.dir > 0 ? c.x + 2 : c.x - 3, top + 3, 1, 2);
+      ctx.fillRect(c.x - 3, top + 3, 6, 1); // arms thrown wide
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(c.x - 1, top - 1, 2, 1); // red hard hat
+    } else if (c.state === 'digger') {
+      ctx.fillStyle = '#fde68a';
+      ctx.fillRect(c.x - 1, c.y - 1, 2, 1); // spade glint at its feet
+    } else if (c.state === 'basher') {
+      ctx.fillStyle = '#fbcfe8';
+      ctx.fillRect(c.dir > 0 ? c.x + 2 : c.x - 3, top + 3, 1, 2); // outstretched fist
+    } else if (c.state === 'builder') {
+      ctx.fillStyle = '#fca5a5';
+      ctx.fillRect(c.dir > 0 ? c.x + 2 : c.x - 3, top + 4, 1, 1); // brick in hand
     }
   }
 
   function render() {
-    // Sky.
-    const sky = ctx.createLinearGradient(0, 0, 0, LEVEL_H);
-    sky.addColorStop(0, '#0b1120');
-    sky.addColorStop(1, '#1e293b');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, LEVEL_W, LEVEL_H);
+    frame++;
+    // Prebuilt night sky, stars, moon, and hills.
+    ctx.drawImage(bgCanvas, 0, 0);
 
     if (bmp.version !== terrainVersion) rebuildTerrain();
     ctx.drawImage(terrainCanvas, 0, 0);
@@ -425,12 +617,20 @@ export function initLemmingsGame(): void {
     drawHatch();
     for (const c of critters) drawCritter(c);
 
+    // Additive sparks glow against the dark.
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of particles) {
       ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
       ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+      const s = p.life > 0.3 ? 2 : 1;
+      ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
     }
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
+
+    // Darken the edges for depth.
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, LEVEL_W, LEVEL_H);
   }
 
   function stepParticles() {

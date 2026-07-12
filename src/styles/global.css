@@ -385,6 +385,10 @@ html.theme-switching::view-transition-new(root) {
   padding: var(--space-xs) var(--space-sm);
   font-size: 1.1rem;
   line-height: 1;
+  /* Comfortable tap target on phones (was 44x30 — too short to press) */
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
 }
 
 /* On phones the fixed-aspect canvas is short — too short to fit an overlay's

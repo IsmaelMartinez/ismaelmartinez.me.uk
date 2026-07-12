@@ -963,7 +963,10 @@ const t = useTranslations(lang);
   .powerup-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
+    /* Comfortable tap target on phones (was 63x34 — too short to press) */
+    min-height: 44px;
     padding: 4px 12px;
     font-size: 1rem;
     font-weight: 700;

@@ -90,8 +90,10 @@ where every cell is `AIR`, `EARTH`, or a builder `BRIDGE`. It landed as a
 DOM-free `Uint8Array` (`bitmap.ts`) rather than an offscreen canvas's
 `ImageData` — the array *is* the cached solidity map, so it unit-tests without a
 canvas, and a `version` counter bumped on every edit tells the renderer when to
-rebuild its offscreen image. Diggers/bashers erase cells; builders lay `BRIDGE`
-cells; the nuke erases discs. Levels are authored as pure vector descriptions
+rebuild its offscreen image. Diggers and bashers erase cells and builders lay
+`BRIDGE` cells (a disc-erase op is also available for explosion-style effects,
+though the shipped nuke only detonates the crowd rather than editing terrain).
+Levels are authored as pure vector descriptions
 (axis-aligned rects and ramps plus a hatch and exit) rasterised onto a fresh
 bitmap at load — no level image assets (`levels.ts`).
 

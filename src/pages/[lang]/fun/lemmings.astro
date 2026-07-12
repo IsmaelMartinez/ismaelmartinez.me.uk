@@ -3,6 +3,7 @@ import Layout from '../../../layouts/Layout.astro';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
+import { LEVELS } from '../../../games/lemmings/levels';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -47,7 +48,7 @@ const skills = [
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.lemmings.level')}</span>
-              <span class="score-value"><span id="level-num">1</span>/9</span>
+              <span class="score-value"><span id="level-num">1</span>/{LEVELS.length}</span>
             </div>
             <div class="score-item">
               <span class="score-label">{t('fun.lemmings.saved')}</span>

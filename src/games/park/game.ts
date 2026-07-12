@@ -290,7 +290,8 @@ export function initParkGame(): void {
     breakdown: root.dataset.tBreakdown || 'A ride has broken down!',
     repaired: root.dataset.tRepaired || 'Ride repaired',
     surge: root.dataset.tSurge || 'A coach party pours through the gates!',
-    coasterStall: root.dataset.tCoasterStall || 'The coaster has jammed mid-track!'
+    coasterStall: root.dataset.tCoasterStall || 'The coaster has jammed mid-track!',
+    newRecord: root.dataset.tNewRecord || 'New record crowd!'
   };
 
   const TRACK_ERROR_MESSAGES: Record<TrackErrorCode, string> = {
@@ -344,6 +345,9 @@ export function initParkGame(): void {
   let coasters: Coaster[] = [];
   let breakdowns: RideBreakdown[] = [];
   let surge: Surge | null = null;
+  // The table best when this run started, so beating it is announced once.
+  let runStartRecord = 0;
+  let recordCelebrated = false;
   // A drafted segment's `dir` is a placeholder until the *next* tap fixes it
   // (see handleTrackTap) — trackClosed flips true once the closing tap sets
   // the last segment's dir back to the start tile.
@@ -876,6 +880,12 @@ export function initParkGame(): void {
       // Persist immediately so a mid-run tab close keeps the record.
       board.stash(peakGuests);
     }
+    // Beating an established best is worth a fanfare — once per run.
+    if (!recordCelebrated && runStartRecord > 0 && peakGuests > runStartRecord) {
+      recordCelebrated = true;
+      showToast(`🏅 ${strings.newRecord}`);
+      audio.playSfx('score');
+    }
 
     const avg = guests.length
       ? guests.reduce((sum, g) => sum + happiness(g.needs), 0) / guests.length
@@ -931,6 +941,8 @@ export function initParkGame(): void {
     coasters = [];
     breakdowns = [];
     surge = null;
+    runStartRecord = record;
+    recordCelebrated = false;
     cancelTrackDraft();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     board.hide();

@@ -71,6 +71,10 @@ const hintAttrs = Object.fromEntries(
               <span id="out-count" class="score-value">0</span>
             </div>
             <div class="score-item">
+              <span class="score-label">{t('fun.lemmings.score')}</span>
+              <span id="run-score" class="score-value">0</span>
+            </div>
+            <div class="score-item">
               <span class="score-label">{t('fun.lemmings.best')}</span>
               <span id="best-level" class="score-value">0</span>
             </div>
@@ -116,6 +120,24 @@ const hintAttrs = Object.fromEntries(
               <span id="result-emoji" class="round-emoji">🎉</span>
               <h2 id="result-title"></h2>
               <p id="result-desc"></p>
+              <ul class="bonus-list">
+                <li id="bonus-time-row" hidden>
+                  <span class="bonus-label">⏱️ {t('fun.lemmings.timeBonus')}</span>
+                  <span id="bonus-time-val" class="bonus-value"></span>
+                </li>
+                <li id="bonus-perfect-row" hidden>
+                  <span class="bonus-label">💚 {t('fun.lemmings.perfectBonus')}</span>
+                  <span id="bonus-perfect-val" class="bonus-value"></span>
+                </li>
+                <li id="bonus-quota-row" hidden>
+                  <span class="bonus-label">➕ {t('fun.lemmings.quotaBonus')}</span>
+                  <span id="bonus-quota-val" class="bonus-value"></span>
+                </li>
+                <li class="bonus-total">
+                  <span class="bonus-label">{t('fun.lemmings.score')}</span>
+                  <span id="result-score-val" class="bonus-value">0</span>
+                </li>
+              </ul>
               <HighScoreTable gameId="lemmings" lang={lang} accent="#84cc16" />
               <div class="result-buttons">
                 <button
@@ -332,6 +354,44 @@ const hintAttrs = Object.fromEntries(
   .overlay-content p {
     margin-bottom: var(--space-xl);
     line-height: 1.6;
+  }
+
+  .bonus-list {
+    list-style: none;
+    max-width: 260px;
+    margin: 0 auto var(--space-lg);
+    padding: 0;
+    text-align: left;
+  }
+
+  .bonus-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 2px 0;
+    font-size: 0.85rem;
+  }
+
+  .bonus-list li[hidden] {
+    display: none;
+  }
+
+  .bonus-value {
+    font-weight: 700;
+    color: #84cc16;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bonus-total {
+    margin-top: var(--space-xs);
+    padding-top: var(--space-xs) !important;
+    border-top: 1px solid var(--color-border);
+    font-weight: 700;
+  }
+
+  .bonus-total .bonus-value {
+    color: #a3e635;
+    font-size: 1.05rem;
   }
 
   .result-buttons {

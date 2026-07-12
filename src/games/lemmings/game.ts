@@ -274,13 +274,22 @@ export function initLemmingsGame(): void {
     return (11 - rate) * 8;
   }
 
-  // The world the FSM sees: terrain edits plus where blockers stand.
+  // The world the FSM sees: terrain edits plus where blockers stand. The
+  // edit calls double as juice hooks — every dig/bash kicks up earth-brown
+  // debris and every tread laid puffs golden sawdust, so the terrain visibly
+  // reacts without the FSM knowing particles exist.
   const world: CritterWorld = {
     width: LEVEL_W,
     height: LEVEL_H,
     solid: (x, y) => bmp.solid(x, y),
-    eraseRect: (x, y, w, h) => bmp.eraseRect(x, y, w, h),
-    buildRow: (x, y, w) => bmp.buildRow(x, y, w),
+    eraseRect: (x, y, w, h) => {
+      bmp.eraseRect(x, y, w, h);
+      spawnParticles(x + w / 2, y + h / 2, '#a16207', 3);
+    },
+    buildRow: (x, y, w) => {
+      bmp.buildRow(x, y, w);
+      spawnParticles(x + w / 2, y, '#fbbf24', 2);
+    },
     blockerAt: (x, y) =>
       critters.some(
         c => c.state === 'blocker' && Math.abs(x - c.x) <= 2 && y <= c.y && y >= c.y - (CRITTER_H - 1)
@@ -471,7 +480,12 @@ export function initLemmingsGame(): void {
         if (victim) {
           victim.alive = false;
           victim.state = 'splatted';
-          spawnParticles(victim.x, victim.y - CRITTER_H / 2, '#f97316');
+          // Each detonation blows a real crater out of the terrain — the
+          // bitmap's eraseCircle exists for exactly this — plus a two-tone
+          // fireball so the chain-reaction reads as explosions, not fizzles.
+          bmp.eraseCircle(victim.x, Math.round(victim.y - CRITTER_H / 2), 8);
+          spawnParticles(victim.x, victim.y - CRITTER_H / 2, '#f97316', 14);
+          spawnParticles(victim.x, victim.y - CRITTER_H / 2, '#fde047', 8);
           audio.playSfx('hit');
         }
       }
@@ -487,7 +501,13 @@ export function initLemmingsGame(): void {
     for (const c of critters) {
       if (!isActive(c)) continue;
       const wasAlive = c.alive;
+      const wasFalling = c.state === 'faller';
+      const fell = c.fallDist;
       stepCritter(c, world);
+      // A survivable landing after a real drop kicks up a puff of dust.
+      if (wasFalling && c.state === 'walker' && fell > 12) {
+        spawnParticles(c.x, c.y, '#94a3b8', Math.min(8, 3 + fell / 20));
+      }
       if (isActive(c) && atExit(c, def)) {
         c.state = 'exited';
         c.alive = false;

@@ -250,11 +250,29 @@ export function initSnakeGame(): void {
         ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
       }
     }
+    // Mossy vignette pulls the eye to the centre of the garden.
+    const vignette = ctx.createRadialGradient(
+      WIDTH / 2, HEIGHT / 2, HEIGHT * 0.42,
+      WIDTH / 2, HEIGHT / 2, HEIGHT * 0.85
+    );
+    vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vignette.addColorStop(1, 'rgba(2, 12, 6, 0.5)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+
+  /** Soft contact shadow under round pieces (apple, bonus, snake head). */
+  function drawShadow(cx: number, cy: number, r: number) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.75, r * 0.85, r * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function drawApple(cx: number, cy: number) {
     const pulse = 1 + 0.07 * Math.sin(clock * 5);
     const r = (CELL / 2 - 3) * pulse;
+    drawShadow(cx, cy, r + 2);
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
     ctx.arc(cx, cy + 1, r, 0, Math.PI * 2);
@@ -274,6 +292,7 @@ export function initSnakeGame(): void {
   function drawBonus(cx: number, cy: number, ticksLeft: number) {
     const pulse = 1 + 0.12 * Math.sin(clock * 7);
     const r = (CELL / 2 - 2) * pulse;
+    drawShadow(cx, cy, r + 1);
     // Timer ring counts down the bonus lifetime
     ctx.strokeStyle = 'rgba(250, 204, 21, 0.85)';
     ctx.lineWidth = 2;
@@ -316,6 +335,16 @@ export function initSnakeGame(): void {
       ctx.strokeStyle = flash ? '#fee2e2' : '#22c55e';
       ctx.lineWidth = CELL - 9;
       ctx.stroke();
+      // Scale banding: a darker chevron dot on every other segment, so the
+      // body reads as a patterned snake rather than a smooth tube.
+      if (!flash) {
+        ctx.fillStyle = 'rgba(6, 78, 59, 0.55)';
+        for (let i = 2; i < points.length; i += 2) {
+          ctx.beginPath();
+          ctx.arc(points[i].x, points[i].y, CELL / 2 - 7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
     // Head with direction-facing eyes

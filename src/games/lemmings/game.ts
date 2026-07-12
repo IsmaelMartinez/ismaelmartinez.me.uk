@@ -311,7 +311,10 @@ export function initLemmingsGame(): void {
     critters = critters.filter(c => isActive(c));
     syncHud();
 
-    const done = spawned >= def.spawnCount && critters.length === 0;
+    // The level ends once everyone has emerged and no critter can still be
+    // rescued: any stragglers are blockers, which never leave on their own and
+    // — with no one else left to dig them free — are stuck for good.
+    const done = spawned >= def.spawnCount && critters.every(c => c.state === 'blocker');
     if (done) finishLevel();
   }
 

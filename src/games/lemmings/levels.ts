@@ -14,6 +14,7 @@
  */
 import { TerrainBitmap } from './bitmap';
 import type { Skill, Critter } from './critter';
+import type { TranslationKey } from '../../i18n/translations';
 
 export const LEVEL_W = 320;
 export const LEVEL_H = 200;
@@ -41,10 +42,11 @@ export interface LevelDef {
    * Optional one-line nudge shown under the field while the level plays. The
    * value is an i18n key (resolved in `translations.ts`), not raw text, so the
    * level layer stays locale-agnostic; the page hands the resolved strings to
-   * the game via `data-t-hint<index>` attributes. Given to the trickier later
-   * levels whose skill chain isn't obvious at a glance.
+   * the game via `data-t-hint<index>` attributes. Typed as `TranslationKey` so
+   * a typo or a key missing from `translations.ts` fails the build. Given to the
+   * trickier later levels whose skill chain isn't obvious at a glance.
    */
-  hint?: string;
+  hint?: TranslationKey;
 }
 
 function paintShape(bmp: TerrainBitmap, shape: Shape): void {

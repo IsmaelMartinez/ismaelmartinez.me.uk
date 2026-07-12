@@ -16,7 +16,7 @@ import {
   type Skill
 } from '../../src/games/lemmings/critter';
 import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
-import { translations, locales } from '../../src/i18n/translations';
+import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
 
 /**
  * A test double for `CritterWorld` backed by a real `TerrainBitmap`, plus an
@@ -298,9 +298,10 @@ describe('levels', () => {
     for (const index of [6, 7, 8]) {
       const key = LEVELS[index].hint;
       expect(key, `level ${index + 1} should have a hint`).toBeTruthy();
+      if (!key) continue;
       for (const locale of locales) {
-        const table = translations[locale] as Record<string, string>;
-        expect(table[key as string], `${key} missing in ${locale}`).toBeTruthy();
+        const table = translations[locale] as Record<TranslationKey, string>;
+        expect(table[key], `${key} missing in ${locale}`).toBeTruthy();
       }
     }
   });

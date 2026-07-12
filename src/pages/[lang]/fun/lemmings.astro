@@ -20,15 +20,13 @@ const skills = [
   { id: 'floater', emoji: '☂️', label: t('fun.lemmings.skillFloater') }
 ];
 
-// Per-level hints (an i18n key on the level) resolved server-side and handed to
-// the game as `data-t-hint-<index>` attributes; the game shows the current
-// level's hint under the field.
-// No hyphen before the index: `data-t-hint6` maps to `dataset.tHint6`, whereas
-// `data-t-hint-6` would map to `tHint-6` (a digit after a hyphen keeps it).
+// Per-level hints (a `TranslationKey` on the level) resolved server-side and
+// handed to the game as `data-t-hint<index>` attributes; the game shows the
+// current level's hint under the field. No hyphen before the index: `data-t-hint6`
+// maps to `dataset.tHint6`, whereas `data-t-hint-6` would map to `tHint-6`
+// (a digit after a hyphen keeps it).
 const hintAttrs = Object.fromEntries(
-  LEVELS.flatMap((level, i) =>
-    level.hint ? [[`data-t-hint${i}`, t(level.hint as Parameters<typeof t>[0])]] : []
-  )
+  LEVELS.flatMap((level, i) => (level.hint ? [[`data-t-hint${i}`, t(level.hint)]] : []))
 );
 ---
 

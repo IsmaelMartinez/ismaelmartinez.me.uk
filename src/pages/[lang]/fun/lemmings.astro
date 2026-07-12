@@ -44,6 +44,8 @@ const hintAttrs = Object.fromEntries(
         data-t-complete-desc={t('fun.lemmings.completeDesc')}
         data-t-failed-desc={t('fun.lemmings.failedDesc')}
         data-t-victory-desc={t('fun.lemmings.victoryDesc')}
+        data-t-level={t('fun.lemmings.level')}
+        data-t-locked={t('fun.lemmings.locked')}
         {...hintAttrs}
       >
         <div class="game-header">
@@ -81,7 +83,17 @@ const hintAttrs = Object.fromEntries(
             <div class="overlay-content">
               <span class="play-icon">🐛</span>
               <p>{t('fun.lemmings.instructions')}</p>
-              <button id="start-btn" class="btn btn-primary btn-large">{t('fun.lemmings.start')}</button>
+              <div class="result-buttons">
+                <button id="start-btn" class="btn btn-primary btn-large">{t('fun.lemmings.start')}</button>
+                <button id="level-select-btn" class="btn btn-large">{t('fun.lemmings.selectLevel')}</button>
+              </div>
+            </div>
+          </div>
+          <div id="level-select-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <h2>{t('fun.lemmings.levelSelectTitle')}</h2>
+              <div id="level-grid" class="level-grid"></div>
+              <button id="level-back-btn" class="btn btn-large">← {t('fun.lemmings.back')}</button>
             </div>
           </div>
           <div id="result-overlay" class="game-overlay" style="display: none;">
@@ -299,6 +311,45 @@ const hintAttrs = Object.fromEntries(
 
   .level-hint::before {
     content: '💡 ';
+  }
+
+  .level-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xl);
+  }
+
+  .level-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    aspect-ratio: 1;
+    padding: var(--space-sm);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    font-size: 1.25rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .level-cell:hover:not(:disabled) {
+    border-color: #84cc16;
+    background: rgba(132, 204, 22, 0.16);
+  }
+
+  .level-cell:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .level-cell .level-lock {
+    font-size: 0.85rem;
   }
 
   .skill-bar {

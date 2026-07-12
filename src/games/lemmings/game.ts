@@ -23,6 +23,7 @@ import {
   type Skill
 } from './critter';
 import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H, HATCH_W, EXIT_H, EXIT_HALF_W } from './levels';
+import { levelSelectItems } from './progress';
 
 const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater'];
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
@@ -78,7 +79,11 @@ export function initLemmingsGame(): void {
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const startOverlay = el('start-overlay');
   const resultOverlay = el('result-overlay');
+  const levelSelectOverlay = el('level-select-overlay');
+  const levelGrid = el('level-grid');
   const startBtn = el('start-btn') as HTMLButtonElement;
+  const levelSelectBtn = el('level-select-btn') as HTMLButtonElement;
+  const levelBackBtn = el('level-back-btn') as HTMLButtonElement;
   const nextBtn = el('next-btn') as HTMLButtonElement;
   const retryBtn = el('retry-btn') as HTMLButtonElement;
   const nukeBtn = el('nuke-btn') as HTMLButtonElement;
@@ -100,7 +105,9 @@ export function initLemmingsGame(): void {
     victory: root.dataset.tVictory || 'Every Critter Home!',
     completeDesc: root.dataset.tCompleteDesc || 'You rescued {n} of {m}!',
     failedDesc: root.dataset.tFailedDesc || 'Only {n} of {m} made it. Try again!',
-    victoryDesc: root.dataset.tVictoryDesc || 'You cleared every level!'
+    victoryDesc: root.dataset.tVictoryDesc || 'You cleared every level!',
+    level: root.dataset.tLevel || 'Level',
+    locked: root.dataset.tLocked || 'Locked'
   };
   const fill = (tpl: string, n: number, m: number) =>
     tpl.replace('{n}', n.toString()).replace('{m}', m.toString());
@@ -680,10 +687,54 @@ export function initLemmingsGame(): void {
     phase = 'playing';
     spawnTimer = 30; // brief beat before the first critter drops
     startOverlay.style.display = 'none';
+    levelSelectOverlay.style.display = 'none';
     resultOverlay.style.display = 'none';
     audio.start();
     syncToolbar();
   }
+
+  // Level-select: jump to any level unlocked so far. Unlock state is derived
+  // from `cleared` (the highest level reached, the game's single progress
+  // source of truth) — never from a separate stored flag.
+  function buildLevelGrid() {
+    levelGrid.textContent = '';
+    for (const item of levelSelectItems(LEVELS.length, cleared)) {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'level-cell';
+      cell.disabled = !item.unlocked;
+      cell.setAttribute(
+        'aria-label',
+        `${strings.level} ${item.number}${item.unlocked ? '' : ` (${strings.locked})`}`
+      );
+      if (item.unlocked) {
+        const num = document.createElement('span');
+        num.textContent = item.number.toString();
+        cell.appendChild(num);
+        cell.addEventListener('click', () => beginLevel(item.index));
+      } else {
+        const lock = document.createElement('span');
+        lock.className = 'level-lock';
+        lock.textContent = '🔒';
+        cell.appendChild(lock);
+      }
+      levelGrid.appendChild(cell);
+    }
+  }
+
+  function openLevelSelect() {
+    buildLevelGrid();
+    startOverlay.style.display = 'none';
+    levelSelectOverlay.style.display = 'flex';
+  }
+
+  function closeLevelSelect() {
+    levelSelectOverlay.style.display = 'none';
+    startOverlay.style.display = 'flex';
+  }
+
+  levelSelectBtn.addEventListener('click', openLevelSelect);
+  levelBackBtn.addEventListener('click', closeLevelSelect);
 
   startBtn.addEventListener('click', () => beginLevel(0));
   nextBtn.addEventListener('click', () => {

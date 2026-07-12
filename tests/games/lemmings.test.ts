@@ -18,6 +18,20 @@ import {
 import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
 import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
 import { exitArrowAngle, exitArrowVector, rescueProgress } from '../../src/games/lemmings/hud';
+import {
+  newCombo,
+  comboOnRescue,
+  comboAlive,
+  rescuePoints,
+  levelBonuses,
+  RESCUE_POINTS,
+  COMBO_WINDOW,
+  COMBO_STEP,
+  COMBO_MAX_STREAK,
+  OVER_QUOTA_POINTS,
+  PERFECT_BONUS,
+  TIME_BONUS_MAX
+} from '../../src/games/lemmings/score';
 
 /**
  * A test double for `CritterWorld` backed by a real `TerrainBitmap`, plus an
@@ -256,11 +270,12 @@ describe('critter — skills', () => {
 });
 
 describe('levels', () => {
-  it('provides nine solvable-shaped levels', () => {
-    expect(LEVELS).toHaveLength(9);
+  it('provides thirteen solvable-shaped levels', () => {
+    expect(LEVELS).toHaveLength(13);
     for (const level of LEVELS) {
       expect(level.needed).toBeGreaterThan(0);
       expect(level.needed).toBeLessThanOrEqual(level.spawnCount);
+      expect(level.par).toBeGreaterThan(0);
       const total = Object.values(level.stock).reduce((a, b) => a + b, 0);
       expect(total).toBeGreaterThanOrEqual(0);
     }
@@ -285,7 +300,8 @@ describe('levels', () => {
       exit: { x: 0, y: 0 },
       spawnCount: 1,
       needed: 1,
-      stock: {}
+      stock: {},
+      par: 1
     });
     // Taller on the right than the left.
     const leftCol = countSolid(bmp, 1);
@@ -293,10 +309,10 @@ describe('levels', () => {
     expect(rightCol).toBeGreaterThan(leftCol);
   });
 
-  it('gives the trickier later levels (7–9) a hint key that resolves in every locale', () => {
-    // Levels 7, 8, 9 (indices 6–8) chain skills in non-obvious ways, so each
+  it('gives the trickier later levels (7–13) a hint key that resolves in every locale', () => {
+    // Levels 7 onward (indices 6–12) chain skills in non-obvious ways, so each
     // carries a one-line hint. The value is an i18n key, not raw text.
-    for (const index of [6, 7, 8]) {
+    for (const index of [6, 7, 8, 9, 10, 11, 12]) {
       const key = LEVELS[index].hint;
       expect(key, `level ${index + 1} should have a hint`).toBeTruthy();
       if (!key) continue;
@@ -588,5 +604,170 @@ describe('levels — solvable playthroughs', () => {
       }
     });
     expect(saved).toBeGreaterThanOrEqual(LEVELS[8].needed);
+  });
+
+  it('10: a second builder takes over at the first bridge tip to span the gorge', () => {
+    let first = false;
+    let second = false;
+    const saved = playLevel(
+      LEVELS[9],
+      ({ critters, assign }) => {
+        // First bridge starts at the near bank's edge.
+        if (!first) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === 1 && c.y === 159 && c.x >= 132 && c.x <= 138
+          );
+          if (w && assign(w, 'builder')) first = true;
+        }
+        // Second builder continues from the tip (usually the same critter,
+        // freshly out of bricks and about to walk off the end).
+        if (first && !second) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === 1 && c.y < 155 && c.x >= 146
+          );
+          if (w && assign(w, 'builder')) second = true;
+        }
+      },
+      { interval: 48 }
+    );
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[9].needed);
+  });
+
+  it('11: dig through the hall floor, then build up to the exit plinth', () => {
+    let dug = false;
+    let built = false;
+    const saved = playLevel(LEVELS[10], ({ critters, assign }) => {
+      if (!dug) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.y === 139 && c.x >= 100 && c.x <= 160
+        );
+        if (w && assign(w, 'digger')) dug = true;
+      }
+      if (dug && !built) {
+        // Start the ramp so its top row meets the plinth surface (x0+16 ≥ 240
+        // while clearing the plinth wall on the way up needs x0 ≤ 228).
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 187 && c.x >= 224 && c.x <= 228
+        );
+        if (w && assign(w, 'builder')) built = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[10].needed);
+  });
+
+  it('12: umbrellas into the pit, then a basher opens the right wall', () => {
+    let bashed = false;
+    const saved = playLevel(LEVELS[11], ({ critters, assign }) => {
+      for (const c of critters) {
+        if (!c.floater && c.y < 160 && (c.state === 'walker' || c.state === 'faller')) {
+          assign(c, 'floater');
+        }
+      }
+      if (!bashed) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 167 && c.x >= 144 && c.x <= 148
+        );
+        if (w && assign(w, 'basher')) bashed = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[11].needed);
+  });
+
+  it('13: float down, bash through the wall, and build up to the door', () => {
+    let bashed = false;
+    let built = false;
+    const saved = playLevel(LEVELS[12], ({ critters, assign }) => {
+      // Umbrellas anywhere above the shelf; they persist for the later hops.
+      for (const c of critters) {
+        if (!c.floater && c.y < 110 && (c.state === 'walker' || c.state === 'faller')) {
+          assign(c, 'floater');
+        }
+      }
+      if (!bashed) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 233 && c.x <= 237
+        );
+        if (w && assign(w, 'basher')) bashed = true;
+      }
+      if (bashed && !built) {
+        // The tread run must reach past the plinth's left edge so the drop
+        // off the bridge tip lands on the plinth, not beside it.
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 264 && c.x <= 268
+        );
+        if (w && assign(w, 'builder')) built = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[12].needed);
+  });
+});
+
+describe('score — combos', () => {
+  it('pays the base amount for an isolated rescue', () => {
+    const c = comboOnRescue(newCombo(), 100);
+    expect(c.streak).toBe(1);
+    expect(rescuePoints(c.streak)).toBe(RESCUE_POINTS);
+  });
+
+  it('chains rescues inside the window and pays more per link', () => {
+    let c = comboOnRescue(newCombo(), 100);
+    c = comboOnRescue(c, 100 + COMBO_WINDOW);
+    expect(c.streak).toBe(2);
+    expect(rescuePoints(c.streak)).toBe(RESCUE_POINTS + COMBO_STEP);
+    c = comboOnRescue(c, 100 + COMBO_WINDOW + 10);
+    expect(c.streak).toBe(3);
+    expect(rescuePoints(c.streak)).toBe(RESCUE_POINTS + 2 * COMBO_STEP);
+  });
+
+  it('resets the streak when the window lapses', () => {
+    let c = comboOnRescue(newCombo(), 100);
+    c = comboOnRescue(c, 100 + COMBO_WINDOW + 1);
+    expect(c.streak).toBe(1);
+  });
+
+  it('caps the per-link bonus at COMBO_MAX_STREAK', () => {
+    expect(rescuePoints(COMBO_MAX_STREAK)).toBe(
+      RESCUE_POINTS + (COMBO_MAX_STREAK - 1) * COMBO_STEP
+    );
+    expect(rescuePoints(COMBO_MAX_STREAK + 10)).toBe(rescuePoints(COMBO_MAX_STREAK));
+  });
+
+  it('reports whether a streak can still be extended', () => {
+    const c = comboOnRescue(newCombo(), 100);
+    expect(comboAlive(c, 100 + COMBO_WINDOW)).toBe(true);
+    expect(comboAlive(c, 100 + COMBO_WINDOW + 1)).toBe(false);
+    expect(comboAlive(newCombo(), 0)).toBe(false);
+  });
+});
+
+describe('score — end-of-level bonuses', () => {
+  const base = { saved: 5, needed: 5, spawnCount: 10, ticks: 1000, par: 2000 };
+
+  it('pays nothing on a failed quota', () => {
+    const b = levelBonuses({ ...base, saved: 4 });
+    expect(b).toEqual({ time: 0, perfect: 0, overQuota: 0, total: 0 });
+  });
+
+  it('scales the time bonus linearly down to zero at par', () => {
+    expect(levelBonuses({ ...base, ticks: 0 }).time).toBe(TIME_BONUS_MAX);
+    expect(levelBonuses({ ...base, ticks: 1000 }).time).toBe(TIME_BONUS_MAX / 2);
+    expect(levelBonuses({ ...base, ticks: 2000 }).time).toBe(0);
+    expect(levelBonuses({ ...base, ticks: 5000 }).time).toBe(0);
+  });
+
+  it('pays the perfect bonus only when every spawned critter came home', () => {
+    expect(levelBonuses({ ...base, saved: 10 }).perfect).toBe(PERFECT_BONUS);
+    expect(levelBonuses({ ...base, saved: 9 }).perfect).toBe(0);
+  });
+
+  it('pays per rescue beyond the quota', () => {
+    expect(levelBonuses({ ...base, saved: 8 }).overQuota).toBe(3 * OVER_QUOTA_POINTS);
+    expect(levelBonuses({ ...base, saved: 5 }).overQuota).toBe(0);
+  });
+
+  it('totals the three bonuses', () => {
+    const b = levelBonuses({ ...base, saved: 10, ticks: 0 });
+    expect(b.total).toBe(b.time + b.perfect + b.overQuota);
+    expect(b.total).toBe(TIME_BONUS_MAX + PERFECT_BONUS + 5 * OVER_QUOTA_POINTS);
   });
 });

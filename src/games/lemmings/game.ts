@@ -2,11 +2,12 @@
  * Critter Rescue — a pocket Lemmings.
  *
  * Pure rules live in bitmap.ts (per-pixel terrain), critter.ts (the FSM and the
- * five skills), and levels.ts (vector level authoring); this module owns the
- * canvas, the DOM wiring, and the simulation loop. It runs on the shared
- * fixed-timestep engine loop because critter movement is per-tick, and persists
- * the highest level reached through the shared scoreboard (which is backed by
- * engine/storage.ts) — the high-score analogue for a level-progression game.
+ * five skills), levels.ts (vector level authoring), and score.ts (run points,
+ * combos, and end-of-level bonuses); this module owns the canvas, the DOM
+ * wiring, and the simulation loop. It runs on the shared fixed-timestep engine
+ * loop because critter movement is per-tick. Level progress persists through
+ * its own storage key (see progress.ts) while the shared scoreboard keeps the
+ * top-10 run scores.
  *
  * It expects the markup defined in src/pages/[lang]/fun/lemmings.astro.
  */
@@ -23,8 +24,9 @@ import {
   type Skill
 } from './critter';
 import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H, HATCH_W, EXIT_H, EXIT_HALF_W } from './levels';
-import { levelSelectItems } from './progress';
+import { levelSelectItems, loadClearedLevels, saveClearedLevels } from './progress';
 import { exitArrowAngle, rescueProgress } from './hud';
+import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
 
 const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater'];
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
@@ -37,6 +39,15 @@ interface Particle {
   vy: number;
   life: number;
   color: string;
+}
+
+/** A floating score readout ("+125 ×3") that drifts up from a rescue. */
+interface TextPop {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
 }
 
 /** Deterministic 2D value hash in [0, 1) — used for star fields and terrain grain. */
@@ -95,6 +106,14 @@ export function initLemmingsGame(): void {
   const savedCount = el('saved-count');
   const neededCount = el('needed-count');
   const outCount = el('out-count');
+  const runScoreEl = el('run-score');
+  const resultScoreVal = el('result-score-val');
+  const bonusTimeRow = el('bonus-time-row');
+  const bonusTimeVal = el('bonus-time-val');
+  const bonusPerfectRow = el('bonus-perfect-row');
+  const bonusPerfectVal = el('bonus-perfect-val');
+  const bonusQuotaRow = el('bonus-quota-row');
+  const bonusQuotaVal = el('bonus-quota-val');
   const progressBar = document.getElementById('progress-bar');
   const progressFill = document.getElementById('progress-fill');
   const levelNum = el('level-num');
@@ -224,6 +243,7 @@ export function initLemmingsGame(): void {
   let bmp = new TerrainBitmap(LEVEL_W, LEVEL_H);
   let critters: Critter[] = [];
   let particles: Particle[] = [];
+  let textPops: TextPop[] = [];
   let stock: Record<Skill, number> = blankStock();
   let selected: Skill | null = null;
   let spawned = 0;
@@ -233,7 +253,14 @@ export function initLemmingsGame(): void {
   let phase: 'title' | 'playing' | 'result' = 'title';
   let nuking = false;
   let nukeTimer = 0;
-  let cleared = board.top()?.score ?? 0;
+  // Points accumulate across the levels of one run (a run ends on a failed
+  // quota or the final victory); combo/tick state is per-level.
+  let runScore = 0;
+  let combo = newCombo();
+  let levelTicks = 0;
+  // Progress lives in its own key; older installs stored it as the table's
+  // "score", which loadClearedLevels migrates on first read.
+  let cleared = loadClearedLevels(board.top()?.score ?? 0, LEVELS.length);
 
   bestLevel.textContent = cleared.toString();
 
@@ -267,10 +294,13 @@ export function initLemmingsGame(): void {
     terrainVersion = -1;
     critters = [];
     particles = [];
+    textPops = [];
     saved = 0;
     spawned = 0;
     spawnTimer = 0;
     nuking = false;
+    combo = newCombo();
+    levelTicks = 0;
     stock = blankStock();
     for (const key of SKILL_ORDER) stock[key] = def.stock[key] ?? 0;
     selected = SKILL_ORDER.find(s => stock[s] > 0) ?? null;
@@ -288,6 +318,7 @@ export function initLemmingsGame(): void {
   function syncHud() {
     savedCount.textContent = saved.toString();
     outCount.textContent = critters.filter(isActive).length.toString();
+    runScoreEl.textContent = runScore.toString();
     bestLevel.textContent = cleared.toString();
     const progress = rescueProgress(saved, def.needed);
     if (progressFill) progressFill.style.width = `${(progress * 100).toFixed(1)}%`;
@@ -316,6 +347,17 @@ export function initLemmingsGame(): void {
     if ((stock[skill] ?? 0) <= 0) return;
     selected = skill;
     syncToolbar();
+  }
+
+  function spawnTextPop(x: number, y: number, text: string, color: string) {
+    // Keep the readout on screen when the rescue happens near an edge.
+    textPops.push({
+      x: Math.max(24, Math.min(LEVEL_W - 24, x)),
+      y: Math.max(10, y),
+      text,
+      color,
+      life: 1
+    });
   }
 
   function spawnParticles(x: number, y: number, color: string, n = 10) {
@@ -362,6 +404,12 @@ export function initLemmingsGame(): void {
     audio.playSfx('explosion');
   }
 
+  /** Reveals a bonus row on the result overlay, or hides it for a zero bonus. */
+  function setBonusRow(row: HTMLElement, val: HTMLElement, points: number) {
+    row.hidden = points <= 0;
+    val.textContent = `+${points}`;
+  }
+
   function finishLevel() {
     if (phase === 'result') return;
     phase = 'result';
@@ -369,10 +417,24 @@ export function initLemmingsGame(): void {
     audio.stop();
     const won = saved >= def.needed;
     const last = levelIndex === LEVELS.length - 1;
+    const bonuses = levelBonuses({
+      saved,
+      needed: def.needed,
+      spawnCount: def.spawnCount,
+      ticks: levelTicks,
+      par: def.par
+    });
+    runScore += bonuses.total;
+    setBonusRow(bonusTimeRow, bonusTimeVal, bonuses.time);
+    setBonusRow(bonusPerfectRow, bonusPerfectVal, bonuses.perfect);
+    setBonusRow(bonusQuotaRow, bonusQuotaVal, bonuses.overQuota);
+    resultScoreVal.textContent = runScore.toString();
     if (won) {
       cleared = Math.max(cleared, levelIndex + 1);
-      board.stash(cleared);
+      saveClearedLevels(cleared);
       bestLevel.textContent = cleared.toString();
+      // Keep the run's points safe even if the tab closes mid-run.
+      board.stash(runScore);
     }
     const victory = won && last;
     resultEmoji.textContent = victory ? '🏆' : won ? '🎉' : '💔';
@@ -391,13 +453,15 @@ export function initLemmingsGame(): void {
     retryBtn.style.display = won ? 'none' : 'inline-block';
     resultOverlay.style.display = 'flex';
     audio.playSfx(won ? 'score' : 'gameover');
-    // Only the run-ending victory offers the arcade initials table.
-    if (victory) board.show(cleared);
+    // A run ends on the final victory or a failed quota; either way the run's
+    // points face the table. Mid-run level clears keep the board out of the way.
+    if (victory || !won) board.show(runScore);
     else board.hide();
   }
 
   function update() {
     if (phase !== 'playing') return;
+    levelTicks++;
 
     if (nuking) {
       nukeTimer++;
@@ -428,6 +492,16 @@ export function initLemmingsGame(): void {
         c.state = 'exited';
         c.alive = false;
         saved++;
+        combo = comboOnRescue(combo, levelTicks);
+        const gained = rescuePoints(combo.streak);
+        runScore += gained;
+        spawnTextPop(
+          c.x,
+          c.y - CRITTER_H - 6,
+          combo.streak > 1 ? `+${gained} ×${combo.streak}` : `+${gained}`,
+          combo.streak > 1 ? '#fde047' : '#bbf7d0'
+        );
+        spawnParticles(c.x, c.y - CRITTER_H / 2, '#4ade80', combo.streak > 1 ? 14 : 8);
         audio.playSfx('rescue');
       } else if (wasAlive && c.state === 'splatted') {
         spawnParticles(c.x, c.y - CRITTER_H / 2, '#f43f5e', 6);
@@ -690,6 +764,18 @@ export function initLemmingsGame(): void {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
 
+    // Floating score readouts, over everything else.
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    for (const tp of textPops) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, tp.life * 2));
+      ctx.fillStyle = '#0b1120';
+      ctx.fillText(tp.text, tp.x + 1, tp.y + 1);
+      ctx.fillStyle = tp.color;
+      ctx.fillText(tp.text, tp.x, tp.y);
+    }
+    ctx.globalAlpha = 1;
+
     // Darken the edges for depth.
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, LEVEL_W, LEVEL_H);
@@ -703,6 +789,11 @@ export function initLemmingsGame(): void {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       return p.life > 0;
+    });
+    textPops = textPops.filter(tp => {
+      tp.life -= dt * 0.8;
+      tp.y -= 14 * dt;
+      return tp.life > 0;
     });
   }
 
@@ -739,6 +830,13 @@ export function initLemmingsGame(): void {
     syncToolbar();
   }
 
+  /** Starts a fresh run (points back to zero) at the given level. */
+  function startRun(index: number) {
+    board.hide();
+    runScore = 0;
+    beginLevel(index);
+  }
+
   // Level-select: jump to any level unlocked so far. Unlock state is derived
   // from `cleared` (the highest level cleared, the game's single progress
   // source of truth) — clearing a level opens the next, never a separate flag.
@@ -757,7 +855,7 @@ export function initLemmingsGame(): void {
         const num = document.createElement('span');
         num.textContent = item.number.toString();
         cell.appendChild(num);
-        cell.addEventListener('click', () => beginLevel(item.index));
+        cell.addEventListener('click', () => startRun(item.index));
       } else {
         const lock = document.createElement('span');
         lock.className = 'level-lock';
@@ -782,14 +880,17 @@ export function initLemmingsGame(): void {
   levelSelectBtn.addEventListener('click', openLevelSelect);
   levelBackBtn.addEventListener('click', closeLevelSelect);
 
-  startBtn.addEventListener('click', () => beginLevel(0));
+  startBtn.addEventListener('click', () => startRun(0));
   nextBtn.addEventListener('click', () => {
     const victory = levelIndex === LEVELS.length - 1 && saved >= def.needed;
     board.hide();
-    if (victory) beginLevel(0);
+    // A victory lap restarts as a fresh run; mid-run the points carry over.
+    if (victory) startRun(0);
     else beginLevel(Math.min(levelIndex + 1, LEVELS.length - 1));
   });
-  retryBtn.addEventListener('click', () => beginLevel(levelIndex));
+  // A failed level already ended the run (and banked its score), so a retry
+  // begins a new run from the same level.
+  retryBtn.addEventListener('click', () => startRun(levelIndex));
 
   // Idle backdrop behind the start overlay.
   loadLevel(0);

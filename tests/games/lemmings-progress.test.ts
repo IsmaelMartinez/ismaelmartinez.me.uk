@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   unlockedCount,
   isLevelUnlocked,
-  levelSelectItems
+  levelSelectItems,
+  legacyClearedFromScore
 } from '../../src/games/lemmings/progress';
 
 describe('Critter Rescue level unlocking', () => {
@@ -71,6 +72,25 @@ describe('Critter Rescue level unlocking', () => {
     it('unlocks every level once the game is completed', () => {
       const items = levelSelectItems(9, 9);
       expect(items.every(i => i.unlocked)).toBe(true);
+    });
+  });
+
+  describe('legacyClearedFromScore', () => {
+    it('reads a small integer table score as pre-rework level progress', () => {
+      expect(legacyClearedFromScore(1, 13)).toBe(1);
+      expect(legacyClearedFromScore(9, 13)).toBe(9);
+      expect(legacyClearedFromScore(13, 13)).toBe(13);
+    });
+
+    it('rejects point scores and out-of-range values', () => {
+      // Post-rework scores are at least RESCUE_POINTS (100) per critter.
+      expect(legacyClearedFromScore(100, 13)).toBe(0);
+      expect(legacyClearedFromScore(2450, 13)).toBe(0);
+      expect(legacyClearedFromScore(14, 13)).toBe(0);
+      expect(legacyClearedFromScore(0, 13)).toBe(0);
+      expect(legacyClearedFromScore(-2, 13)).toBe(0);
+      expect(legacyClearedFromScore(3.5, 13)).toBe(0);
+      expect(legacyClearedFromScore(NaN, 13)).toBe(0);
     });
   });
 });

@@ -111,6 +111,7 @@ export function initTanksGame(): void {
   const roundOverlay = el('round-overlay');
   const roundEmoji = el('round-emoji');
   const roundMessage = el('round-message');
+  const matchScoreEl = el('match-score');
   const nextRoundBtn = el('next-round-btn') as HTMLButtonElement;
   const playAgainBtn = el('play-again-btn') as HTMLButtonElement;
   const vsCpuBtn = el('vs-cpu-btn') as HTMLButtonElement;
@@ -134,7 +135,8 @@ export function initTanksGame(): void {
     winsRound: root.dataset.tWinsRound || 'wins the round!',
     winsMatch: root.dataset.tWinsMatch || 'wins the match!',
     draw: root.dataset.tDraw || 'Mutual destruction!',
-    wind: root.dataset.tWind || 'Wind'
+    wind: root.dataset.tWind || 'Wind',
+    matchScore: root.dataset.tMatchScore || 'Match score'
   };
 
   canvas.width = WIDTH;
@@ -400,9 +402,14 @@ export function initTanksGame(): void {
         : `${playerName(winner)} ${matchOver ? strings.winsMatch : strings.winsRound}`;
     nextRoundBtn.style.display = matchOver ? 'none' : 'inline-block';
     playAgainBtn.style.display = matchOver ? 'inline-block' : 'none';
+    // Winning the match surfaces the number that faces the table — round
+    // margin × 100 plus surviving armour — so the score isn't a mystery.
+    const finalScore = matchScore(wins[0], wins[1], tanks[0].hp);
+    matchScoreEl.textContent = `🏅 ${strings.matchScore}: ${finalScore}`;
+    matchScoreEl.style.display = playerWonMatch ? 'block' : 'none';
     roundOverlay.style.display = 'flex';
     // After the overlay is visible, so the initials input can take focus.
-    if (playerWonMatch) board.show(matchScore(wins[0], wins[1], tanks[0].hp));
+    if (playerWonMatch) board.show(finalScore);
   }
 
   /** Tanks above the (possibly freshly cratered) surface fall and take damage. */

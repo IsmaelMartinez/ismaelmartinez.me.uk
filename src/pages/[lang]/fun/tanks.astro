@@ -33,6 +33,7 @@ const weapons = [
         data-t-wins-match={t('fun.tanks.winsMatch')}
         data-t-draw={t('fun.tanks.draw')}
         data-t-wind={t('fun.tanks.wind')}
+        data-t-match-score={t('fun.tanks.matchScore')}
       >
         <div class="game-header">
           <h1><span class="tank-emoji">🎯</span> {t('fun.tanks.title')}</h1>
@@ -75,6 +76,7 @@ const weapons = [
             <div class="overlay-content">
               <span id="round-emoji" class="round-emoji">💥</span>
               <h2 id="round-message"></h2>
+              <p id="match-score" class="match-score" style="display: none;"></p>
               <HighScoreTable gameId="tanks" lang={lang} accent="#3b82f6" />
               <button id="next-round-btn" class="btn btn-primary btn-large">{t('fun.tanks.nextRound')}</button>
               <button id="play-again-btn" class="btn btn-primary btn-large" style="display: none;">{t('fun.tanks.playAgain')}</button>
@@ -238,6 +240,13 @@ const weapons = [
   }
 
   .play-icon,
+  .match-score {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fbbf24;
+    margin-bottom: var(--space-md);
+  }
+
   .round-emoji {
     font-size: 4rem;
     display: block;

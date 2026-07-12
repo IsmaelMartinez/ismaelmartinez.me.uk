@@ -139,6 +139,7 @@ export function initSyndicateGame(): void {
     playAgain: s('tPlayAgain', 'New campaign'),
     agentDown: s('tAgentDown', 'Agent down!'),
     joined: s('tJoined', 'joined your syndicate'),
+    newRecord: s('tNewRecord', 'New cash record!'),
     weaponNames: {
       pistol: s('tWeaponPistol', 'Pistol'),
       uzi: s('tWeaponUzi', 'Uzi'),
@@ -178,6 +179,9 @@ export function initSyndicateGame(): void {
   // The record readout shows the table's best, beaten live by the current campaign.
   let record = board.top()?.score ?? 0;
   let agentWeapons: WeaponId[] = Array(SQUAD_SIZE).fill('pistol');
+  // The table best when the campaign started, so beating it is announced once.
+  let campaignStartRecord = 0;
+  let recordCelebrated = false;
   let selected = new Set<number>([0, 1, 2, 3]);
   let boostCooldown = 0;
   let clock = 0;
@@ -299,10 +303,19 @@ export function initSyndicateGame(): void {
     });
   }
 
+  /** Announces (once per campaign) that the takings beat the table's best. */
+  function celebrateRecord() {
+    if (recordCelebrated || campaignStartRecord <= 0) return;
+    if (Math.floor(money) <= campaignStartRecord) return;
+    recordCelebrated = true;
+    showToast(`🏅 ${strings.newRecord}`);
+  }
+
   function endCampaign(victory: boolean) {
     phase = 'over';
     audio.playSfx('gameover');
     audio.stop();
+    celebrateRecord();
     record = Math.max(record, Math.floor(money));
     recordEl.textContent = `£${record}`;
     overIcon.textContent = victory ? '🏆' : '☠️';
@@ -323,6 +336,7 @@ export function initSyndicateGame(): void {
       return;
     }
     phase = 'debrief';
+    celebrateRecord();
     record = Math.max(record, Math.floor(money));
     recordEl.textContent = `£${record}`;
     // Persist the campaign's takings at each debrief, like the old record
@@ -1012,6 +1026,8 @@ export function initSyndicateGame(): void {
     startOverlay.style.display = 'none';
     money = 0;
     agentWeapons = Array(SQUAD_SIZE).fill('pistol');
+    campaignStartRecord = record;
+    recordCelebrated = false;
     startMission(0);
   });
 
@@ -1023,6 +1039,8 @@ export function initSyndicateGame(): void {
     } else {
       money = 0;
       agentWeapons = Array(SQUAD_SIZE).fill('pistol');
+      campaignStartRecord = record;
+      recordCelebrated = false;
       startMission(0);
     }
   });

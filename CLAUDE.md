@@ -34,6 +34,8 @@ Articles follow POSSE (Publish Own Site, Syndicate Elsewhere) strategy per ADR 0
 
 Arcade pages live under `src/pages/[lang]/fun/`. Newer games (Tank Duel, Pixel Park, Microcity) split pure game logic into DOM-free TypeScript modules under `src/games/<game>/` (unit-tested in `tests/games/`) with a single `init<Game>()` entry the page calls; shared utilities (fixed-timestep loop, per-device top-10 high-score tables with arcade initials entry (`highscores.ts` + `scoreboard.ts` + `src/components/HighScoreTable.astro`), grid helpers, isometric renderer) live in `src/games/engine/`. Static labels render server-side via `useTranslations`; runtime-composed strings pass through `data-t-*` attributes on the game root. New games register a cabinet in `src/pages/[lang]/fun/index.astro`. The design for the next game (Lemmings) is in `docs/plans/2026-06-10-arcade-expansion-design.md`.
 
+Scoring conventions, applied across every cabinet: each game keeps a per-device top-10 through `initScoreboard`; games whose runs can be long (Microcity, Pixel Park, Syndicate, Critter Rescue, Poo Poo Land) `stash()` the run's best as it grows so a closed tab never loses a record; every point gain is announced on screen the moment it lands (canvas floaters/score popups); the number a finished run submits to the table is shown to the player rather than computed silently (e.g. Tank Duel's match score, Critter Rescue's bonus breakdown); and beating the device record mid-run earns a one-time toast in the sims.
+
 ### Layouts and Components
 
 `src/layouts/Layout.astro` is the base layout with navigation, language switcher, and footer. `src/layouts/ArticleLayout.astro` handles article pages. Components in `src/components/` are shared across locales.

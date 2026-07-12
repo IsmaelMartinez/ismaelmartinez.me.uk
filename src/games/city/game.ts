@@ -171,6 +171,7 @@ export function initCityGame(): void {
     tornadoAlert: root.dataset.tTornadoAlert || 'Tornado touching down!',
     quakeAlert: root.dataset.tQuakeAlert || 'Earthquake!',
     densityUnlocked: root.dataset.tDensityUnlocked || 'High-density zoning unlocked!',
+    newRecord: root.dataset.tNewRecord || 'New record population!',
     events: {
       grant: root.dataset.tEventGrant || 'Government grant awarded',
       protest: root.dataset.tEventProtest || 'Tax protest at the town hall',
@@ -236,6 +237,9 @@ export function initCityGame(): void {
   let tornado: Tornado | null = null;
   let shake = 0; // seconds of screen shake left (earthquakes)
   let densityToastShown = false;
+  // The table best when this run started, so beating it is announced once.
+  let runStartRecord = 0;
+  let recordCelebrated = false;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let sparks: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
@@ -310,6 +314,8 @@ export function initCityGame(): void {
     tornado = null;
     shake = 0;
     densityToastShown = false;
+    runStartRecord = record;
+    recordCelebrated = false;
     activeEvents = [];
     smoke = [];
     sparks = [];
@@ -459,6 +465,12 @@ export function initCityGame(): void {
         recordEl.textContent = record.toString();
         // Persist immediately so a mid-run tab close keeps the record.
         board.stash(peakPop);
+      }
+      // Beating an established best is worth a fanfare — once per run.
+      if (!recordCelebrated && runStartRecord > 0 && peakPop > runStartRecord) {
+        recordCelebrated = true;
+        showToast(`🏅 ${strings.newRecord}`);
+        audio.playSfx('score');
       }
       if (milestoneIdx < MILESTONES.length && stats.population >= MILESTONES[milestoneIdx]) {
         showToast(`🏙️ ${strings.milestone} ${MILESTONES[milestoneIdx]}!`);

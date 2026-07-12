@@ -12,10 +12,10 @@ describe('Critter Rescue level unlocking', () => {
       expect(unlockedCount(-3, 9)).toBe(1);
     });
 
-    it('unlocks 1..N where N is the highest level reached', () => {
-      expect(unlockedCount(1, 9)).toBe(1);
-      expect(unlockedCount(4, 9)).toBe(4);
-      expect(unlockedCount(8, 9)).toBe(8);
+    it('unlocks 1..N+1 where N is the highest level cleared (clearing one opens the next)', () => {
+      expect(unlockedCount(1, 9)).toBe(2);
+      expect(unlockedCount(4, 9)).toBe(5);
+      expect(unlockedCount(8, 9)).toBe(9);
     });
 
     it('never unlocks more levels than exist', () => {
@@ -24,7 +24,7 @@ describe('Critter Rescue level unlocking', () => {
     });
 
     it('floors fractional and falls back to level 1 for non-finite progress values', () => {
-      expect(unlockedCount(3.9, 9)).toBe(3);
+      expect(unlockedCount(3.9, 9)).toBe(4);
       expect(unlockedCount(NaN, 9)).toBe(1);
       expect(unlockedCount(Infinity, 9)).toBe(1);
     });
@@ -37,10 +37,10 @@ describe('Critter Rescue level unlocking', () => {
 
   describe('isLevelUnlocked', () => {
     it('treats indices below the unlocked count as available', () => {
-      // Reached level 4 -> indices 0..3 (levels 1..4) unlocked.
+      // Cleared level 4 -> indices 0..4 (levels 1..5) unlocked.
       expect(isLevelUnlocked(0, 4, 9)).toBe(true);
-      expect(isLevelUnlocked(3, 4, 9)).toBe(true);
-      expect(isLevelUnlocked(4, 4, 9)).toBe(false);
+      expect(isLevelUnlocked(4, 4, 9)).toBe(true);
+      expect(isLevelUnlocked(5, 4, 9)).toBe(false);
     });
 
     it('rejects out-of-range and non-integer indices', () => {
@@ -61,10 +61,11 @@ describe('Critter Rescue level unlocking', () => {
       expect(items[8]).toEqual({ index: 8, number: 9, unlocked: false });
     });
 
-    it('unlocks exactly the levels matching the highest reached', () => {
+    it('unlocks the cleared levels plus the next reachable one', () => {
+      // Cleared through level 4 -> levels 1..5 selectable.
       const items = levelSelectItems(9, 4);
       const unlocked = items.filter(i => i.unlocked).map(i => i.number);
-      expect(unlocked).toEqual([1, 2, 3, 4]);
+      expect(unlocked).toEqual([1, 2, 3, 4, 5]);
     });
 
     it('unlocks every level once the game is completed', () => {

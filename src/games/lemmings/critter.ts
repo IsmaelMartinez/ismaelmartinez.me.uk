@@ -235,6 +235,12 @@ function stepDigger(c: Critter, world: CritterWorld): void {
   c.timer = 0;
   // Chew a slab out of the floor and sink into it.
   world.eraseRect(Math.round(c.x - DIG_WIDTH / 2), c.y + 1, DIG_WIDTH, 1);
+  // Steel underfoot survives the erase — the spade bounces off and the digger
+  // gives up on the spot.
+  if (world.solid(c.x, c.y + 1)) {
+    c.state = 'walker';
+    return;
+  }
   c.y++;
   if (c.y >= world.height) {
     c.alive = false;
@@ -266,6 +272,12 @@ function stepBasher(c: Critter, world: CritterWorld): void {
     // Erase a body-height slab directly ahead, leaving the floor intact.
     const fx = c.dir > 0 ? c.x + 1 : c.x - BASH_WIDTH;
     world.eraseRect(fx, c.y - (CRITTER_H - 2), BASH_WIDTH, CRITTER_H - 1);
+    // A steel face survives the erase — the fist bounces off and the basher
+    // quits (the walker rules then turn it around at the wall).
+    if (wallAhead(c, world, aheadX)) {
+      c.state = 'walker';
+      return;
+    }
     c.x += c.dir;
     c.stall = 0;
   } else {

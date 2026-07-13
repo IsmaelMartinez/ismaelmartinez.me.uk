@@ -6,16 +6,19 @@
  * are no image assets. Each level also carries its spawn count, rescue quota,
  * and the per-skill stock the player gets to spend.
  *
- * The thirteen levels are hand-tuned so each of the five skills is the natural
+ * The twenty levels are hand-tuned so each of the five skills is the natural
  * (and roughly necessary) tool on at least one of them: walk-only, basher,
  * builder, digger, floater, a mid-game finale that chains several together,
  * then three that chain skills in fresh ways — a blocker-gated dig, a
- * builder-then-basher climb, and a floater-drop-into-dig route — and a final
- * four-level gauntlet: a two-builder bridge over a gorge, a dig-then-build
+ * builder-then-basher climb, and a floater-drop-into-dig route — a
+ * four-level gauntlet (a two-builder bridge over a gorge, a dig-then-build
  * descent, an umbrella drop into a walled pit, and a grand tour that chains
- * float, bash, and build in one trek.
+ * float, bash, and build in one trek), and a closing seven that twist the
+ * rules themselves: a second hatch (`hatch2`, spawns alternate between the
+ * two), a level timer (`timeLimit` ticks — the level ends when it runs out),
+ * and steel terrain (`material: 'steel'` rects that no skill can cut).
  */
-import { TerrainBitmap } from './bitmap';
+import { TerrainBitmap, EARTH, STEEL } from './bitmap';
 import type { Skill, Critter } from './critter';
 import type { TranslationKey } from '../../i18n/translations';
 
@@ -28,14 +31,23 @@ export const EXIT_H = 22;
 export const HATCH_W = 20;
 
 export type Shape =
-  | { kind: 'rect'; x: number; y: number; w: number; h: number }
+  /** Axis-aligned block; `material: 'steel'` makes it indestructible. */
+  | { kind: 'rect'; x: number; y: number; w: number; h: number; material?: 'earth' | 'steel' }
   /** Right triangle; `high` says which side reaches full height `h`. */
   | { kind: 'ramp'; x: number; y: number; w: number; h: number; high: 'left' | 'right' };
+
+export interface Hatch {
+  x: number;
+  y: number;
+  dir: 1 | -1;
+}
 
 export interface LevelDef {
   shapes: Shape[];
   /** Trapdoor: critters spawn here (as fallers) facing `dir`. */
-  hatch: { x: number; y: number; dir: 1 | -1 };
+  hatch: Hatch;
+  /** Optional second trapdoor: spawns alternate between the two hatches. */
+  hatch2?: Hatch;
   /** Rescue door: feet reaching here are saved. `y` is the floor surface. */
   exit: { x: number; y: number };
   spawnCount: number;
@@ -48,6 +60,13 @@ export interface LevelDef {
    * rate takes, so a decisive replay always beats it.
    */
   par: number;
+  /**
+   * Optional hard clock in simulation ticks (60/s): when it runs out the level
+   * ends immediately with whatever has been rescued so far. Tuned so a player
+   * who cranks the release rate clears comfortably — the timer punishes
+   * trickling, not playing.
+   */
+  timeLimit?: number;
   /**
    * Optional one-line nudge shown under the field while the level plays. The
    * value is an i18n key (resolved in `translations.ts`), not raw text, so the
@@ -62,7 +81,7 @@ export interface LevelDef {
 
 function paintShape(bmp: TerrainBitmap, shape: Shape): void {
   if (shape.kind === 'rect') {
-    bmp.fillRect(shape.x, shape.y, shape.w, shape.h);
+    bmp.fillRect(shape.x, shape.y, shape.w, shape.h, shape.material === 'steel' ? STEEL : EARTH);
     return;
   }
   // Ramp: each column is filled from a sloping top down to the base.
@@ -71,6 +90,11 @@ function paintShape(bmp: TerrainBitmap, shape: Shape): void {
     const colH = Math.max(1, Math.round(shape.h * t));
     bmp.fillRect(shape.x + i, shape.y + shape.h - colH, 1, colH);
   }
+}
+
+/** Every hatch a level spawns from — the primary plus the optional second. */
+export function levelHatches(def: LevelDef): Hatch[] {
+  return def.hatch2 ? [def.hatch, def.hatch2] : [def.hatch];
 }
 
 /** Rasterises a level's shapes onto a fresh bitmap. */
@@ -319,5 +343,138 @@ export const LEVELS: LevelDef[] = [
     stock: { floater: 14, basher: 2, builder: 3, blocker: 2, digger: 1 },
     par: 5400,
     hint: 'fun.lemmings.hint13'
+  },
+  // 14 — Double Trouble: the first two-hatch level. A crowd drops in from each
+  // side of the field and both march toward one shared door in the middle —
+  // a walk-only breather that teaches the alternating spawns.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 160, w: 320, h: 40 },
+      { kind: 'rect', x: 0, y: 120, w: 6, h: 40 },
+      { kind: 'rect', x: 314, y: 120, w: 6, h: 40 }
+    ],
+    hatch: { x: 34, y: 120, dir: 1 },
+    hatch2: { x: 286, y: 120, dir: -1 },
+    exit: { x: 160, y: 159 },
+    spawnCount: 12,
+    needed: 6,
+    stock: { blocker: 2, floater: 2 },
+    par: 2400,
+    hint: 'fun.lemmings.hint14'
+  },
+  // 15 — Beat the Clock: the wall level again, but now against a hard timer.
+  // Trickling loses; crank the release rate, bash through, and hustle home.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 160, w: 320, h: 40 },
+      { kind: 'rect', x: 0, y: 120, w: 6, h: 40 },
+      { kind: 'rect', x: 150, y: 100, w: 16, h: 60 }
+    ],
+    hatch: { x: 30, y: 120, dir: 1 },
+    exit: { x: 292, y: 159 },
+    spawnCount: 10,
+    needed: 5,
+    stock: { basher: 3, builder: 2, blocker: 2 },
+    par: 2400,
+    timeLimit: 2700,
+    hint: 'fun.lemmings.hint15'
+  },
+  // 16 — Steel Floor: a sealed upper hall like level 4, but most of its floor
+  // is riveted steel that shrugs off every spade. Only the strip on the right
+  // is still earth — dig there and drop to the exit chamber below.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 120, w: 240, h: 16, material: 'steel' },
+      { kind: 'rect', x: 240, y: 120, w: 80, h: 16 },
+      { kind: 'rect', x: 0, y: 88, w: 6, h: 32 },
+      { kind: 'rect', x: 314, y: 88, w: 6, h: 32 },
+      { kind: 'rect', x: 0, y: 180, w: 320, h: 20 },
+      { kind: 'rect', x: 0, y: 150, w: 6, h: 30 },
+      { kind: 'rect', x: 314, y: 150, w: 6, h: 30 }
+    ],
+    hatch: { x: 60, y: 80, dir: 1 },
+    exit: { x: 40, y: 179 },
+    spawnCount: 10,
+    needed: 5,
+    stock: { digger: 3, blocker: 2 },
+    par: 4200,
+    hint: 'fun.lemmings.hint16'
+  },
+  // 17 — Rush Hour: two hatches and a timer at once. The right-hand crowd
+  // walks straight to the door; the left-hand crowd faces a bottomless gap
+  // that needs a bridge before the clock — and the crowd — runs out.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 176, w: 130, h: 24 },
+      { kind: 'rect', x: 142, y: 176, w: 178, h: 24 },
+      { kind: 'rect', x: 0, y: 146, w: 6, h: 30 },
+      { kind: 'rect', x: 314, y: 146, w: 6, h: 30 }
+    ],
+    hatch: { x: 30, y: 136, dir: 1 },
+    hatch2: { x: 290, y: 136, dir: -1 },
+    exit: { x: 240, y: 175 },
+    spawnCount: 12,
+    needed: 7,
+    stock: { builder: 2, blocker: 2, floater: 2 },
+    par: 4200,
+    timeLimit: 3600,
+    hint: 'fun.lemmings.hint17'
+  },
+  // 18 — Over the Steel: a squat steel wall blocks the road. Bashers bounce
+  // straight off it, so the only way past is a ramp up and over the top.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 160, w: 320, h: 40 },
+      { kind: 'rect', x: 0, y: 120, w: 6, h: 40 },
+      { kind: 'rect', x: 314, y: 120, w: 6, h: 40 },
+      { kind: 'rect', x: 150, y: 152, w: 10, h: 8, material: 'steel' }
+    ],
+    hatch: { x: 30, y: 120, dir: 1 },
+    exit: { x: 292, y: 159 },
+    spawnCount: 10,
+    needed: 5,
+    stock: { builder: 3, basher: 2, blocker: 2 },
+    par: 3600,
+    hint: 'fun.lemmings.hint18'
+  },
+  // 19 — Two Streams: one hatch opens high over a cliff, the other at ground
+  // level. The low crowd strolls home; the high crowd needs umbrellas for a
+  // drop that would otherwise be fatal.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 180, w: 320, h: 20 },
+      { kind: 'rect', x: 0, y: 70, w: 80, h: 8 },
+      { kind: 'rect', x: 0, y: 40, w: 6, h: 30 },
+      { kind: 'rect', x: 314, y: 150, w: 6, h: 30 }
+    ],
+    hatch: { x: 30, y: 30, dir: 1 },
+    hatch2: { x: 286, y: 140, dir: -1 },
+    exit: { x: 160, y: 179 },
+    spawnCount: 12,
+    needed: 8,
+    stock: { floater: 8, blocker: 2 },
+    par: 4200,
+    hint: 'fun.lemmings.hint19'
+  },
+  // 20 — The Gauntlet: everything at once. Two crowds, one central door, a
+  // hard clock: the left crowd must bash through an earth wall while the
+  // right crowd builds over a steel stub no fist can dent.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 180, w: 320, h: 20 },
+      { kind: 'rect', x: 0, y: 140, w: 6, h: 40 },
+      { kind: 'rect', x: 314, y: 140, w: 6, h: 40 },
+      { kind: 'rect', x: 110, y: 150, w: 12, h: 30 },
+      { kind: 'rect', x: 200, y: 172, w: 10, h: 8, material: 'steel' }
+    ],
+    hatch: { x: 30, y: 140, dir: 1 },
+    hatch2: { x: 290, y: 140, dir: -1 },
+    exit: { x: 160, y: 179 },
+    spawnCount: 14,
+    needed: 8,
+    stock: { basher: 2, builder: 3, blocker: 2, floater: 2, digger: 1 },
+    par: 5400,
+    timeLimit: 5400,
+    hint: 'fun.lemmings.hint20'
   }
 ];

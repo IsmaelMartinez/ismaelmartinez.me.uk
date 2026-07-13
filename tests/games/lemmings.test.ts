@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TerrainBitmap, AIR, EARTH, BRIDGE } from '../../src/games/lemmings/bitmap';
+import { TerrainBitmap, AIR, EARTH, BRIDGE, STEEL } from '../../src/games/lemmings/bitmap';
 import {
   createCritter,
   assignSkill,
@@ -15,7 +15,14 @@ import {
   type CritterWorld,
   type Skill
 } from '../../src/games/lemmings/critter';
-import { buildLevel, atExit, LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
+import {
+  buildLevel,
+  atExit,
+  levelHatches,
+  LEVELS,
+  LEVEL_W,
+  LEVEL_H
+} from '../../src/games/lemmings/levels';
 import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
 import { exitArrowAngle, exitArrowVector, rescueProgress } from '../../src/games/lemmings/hud';
 import {
@@ -117,6 +124,43 @@ describe('bitmap', () => {
     expect(bmp.materialAt(4, 10)).toBe(BRIDGE);
     expect(bmp.materialAt(9, 10)).toBe(BRIDGE);
     expect(bmp.materialAt(10, 10)).toBe(AIR);
+  });
+
+  it('paints steel as a solid material', () => {
+    const bmp = new TerrainBitmap(20, 20);
+    bmp.fillRect(5, 5, 4, 4, STEEL);
+    expect(bmp.solid(6, 6)).toBe(true);
+    expect(bmp.materialAt(6, 6)).toBe(STEEL);
+  });
+
+  it('eraseRect clears earth but leaves steel standing', () => {
+    const bmp = new TerrainBitmap(20, 20);
+    bmp.fillRect(0, 10, 10, 4, EARTH);
+    bmp.fillRect(10, 10, 10, 4, STEEL);
+    bmp.eraseRect(0, 10, 20, 4);
+    expect(bmp.solid(5, 12)).toBe(false); // earth gone
+    expect(bmp.materialAt(15, 12)).toBe(STEEL); // steel untouched
+  });
+
+  it('eraseCircle (nuke craters) cannot dent steel', () => {
+    const bmp = new TerrainBitmap(40, 40);
+    bmp.fillRect(0, 0, 40, 40, STEEL);
+    const v = bmp.version;
+    bmp.eraseCircle(20, 20, 6);
+    expect(bmp.solid(20, 20)).toBe(true);
+    expect(bmp.version).toBe(v); // nothing changed, no redraw needed
+  });
+
+  it('buildRow fills only air, never converting earth or steel to bridge', () => {
+    const bmp = new TerrainBitmap(20, 20);
+    bmp.fillRect(4, 10, 2, 1, EARTH);
+    bmp.fillRect(6, 10, 2, 1, STEEL);
+    bmp.buildRow(2, 10, 8);
+    expect(bmp.materialAt(2, 10)).toBe(BRIDGE);
+    expect(bmp.materialAt(3, 10)).toBe(BRIDGE);
+    expect(bmp.materialAt(4, 10)).toBe(EARTH);
+    expect(bmp.materialAt(6, 10)).toBe(STEEL);
+    expect(bmp.materialAt(8, 10)).toBe(BRIDGE);
   });
 });
 
@@ -253,6 +297,31 @@ describe('critter — skills', () => {
     expect(bmp.solid(125, 160)).toBe(true); // floor preserved
   });
 
+  it('digger gives up on a steel floor without sinking in', () => {
+    const bmp = new TerrainBitmap(LEVEL_W, LEVEL_H);
+    bmp.fillRect(0, 160, LEVEL_W, 40, STEEL);
+    const world = makeWorld(bmp);
+    const c: Critter = { ...createCritter(1, 60, 159, 1), state: 'digger' };
+    for (let i = 0; i < DIG_INTERVAL * 5 && c.state === 'digger'; i++) stepCritter(c, world);
+    expect(c.state).toBe('walker');
+    expect(c.y).toBe(159); // never sank into the plate
+    expect(bmp.solid(60, 160)).toBe(true);
+  });
+
+  it('basher bounces off a steel wall and turns back as a walker', () => {
+    const bmp = flatFloor(160);
+    bmp.fillRect(120, 130, 8, 30, STEEL);
+    const world = makeWorld(bmp);
+    const c: Critter = { ...createCritter(1, 116, 159, 1), state: 'basher' };
+    for (let i = 0; i < BASH_INTERVAL * 30 && c.state === 'basher'; i++) stepCritter(c, world);
+    expect(c.state).toBe('walker');
+    expect(c.x).toBeLessThan(120); // never chewed into the wall
+    expect(bmp.solid(122, 150)).toBe(true); // wall intact
+    // The walker rules then turn it around at the impassable face.
+    for (let i = 0; i < 20; i++) stepCritter(c, world);
+    expect(c.dir).toBe(-1);
+  });
+
   it('builder lays a rising staircase then resumes walking', () => {
     const bmp = flatFloor(160);
     const world = makeWorld(bmp);
@@ -270,24 +339,34 @@ describe('critter — skills', () => {
 });
 
 describe('levels', () => {
-  it('provides thirteen solvable-shaped levels', () => {
-    expect(LEVELS).toHaveLength(13);
+  it('provides twenty solvable-shaped levels', () => {
+    expect(LEVELS).toHaveLength(20);
     for (const level of LEVELS) {
       expect(level.needed).toBeGreaterThan(0);
       expect(level.needed).toBeLessThanOrEqual(level.spawnCount);
       expect(level.par).toBeGreaterThan(0);
+      if (level.timeLimit !== undefined) expect(level.timeLimit).toBeGreaterThan(0);
       const total = Object.values(level.stock).reduce((a, b) => a + b, 0);
       expect(total).toBeGreaterThanOrEqual(0);
     }
   });
 
-  it('rasterises shapes and places hatch over ground within bounds', () => {
+  it('lists one hatch normally and both when a second is defined', () => {
+    expect(levelHatches(LEVELS[0])).toEqual([LEVELS[0].hatch]);
+    const twin = LEVELS[13]; // 14 — Double Trouble introduces the second hatch
+    expect(twin.hatch2).toBeTruthy();
+    expect(levelHatches(twin)).toEqual([twin.hatch, twin.hatch2]);
+  });
+
+  it('rasterises shapes and places every hatch and exit within bounds', () => {
     for (const level of LEVELS) {
       const bmp = buildLevel(level);
       expect(bmp.width).toBe(LEVEL_W);
       expect(bmp.height).toBe(LEVEL_H);
-      expect(level.hatch.x).toBeGreaterThanOrEqual(0);
-      expect(level.hatch.x).toBeLessThan(LEVEL_W);
+      for (const hatch of levelHatches(level)) {
+        expect(hatch.x).toBeGreaterThanOrEqual(0);
+        expect(hatch.x).toBeLessThan(LEVEL_W);
+      }
       expect(level.exit.x).toBeGreaterThanOrEqual(0);
       expect(level.exit.x).toBeLessThan(LEVEL_W);
     }
@@ -309,10 +388,11 @@ describe('levels', () => {
     expect(rightCol).toBeGreaterThan(leftCol);
   });
 
-  it('gives the trickier later levels (7–13) a hint key that resolves in every locale', () => {
-    // Levels 7 onward (indices 6–12) chain skills in non-obvious ways, so each
-    // carries a one-line hint. The value is an i18n key, not raw text.
-    for (const index of [6, 7, 8, 9, 10, 11, 12]) {
+  it('gives the trickier later levels (7–20) a hint key that resolves in every locale', () => {
+    // Levels 7 onward (indices 6–19) chain skills or twist the rules in
+    // non-obvious ways, so each carries a one-line hint. The value is an i18n
+    // key, not raw text.
+    for (const index of [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]) {
       const key = LEVELS[index].hint;
       expect(key, `level ${index + 1} should have a hint`).toBeTruthy();
       if (!key) continue;
@@ -400,10 +480,12 @@ function countSolid(bmp: TerrainBitmap, x: number): number {
 
 /**
  * Headless playthrough harness: runs a level exactly as the game loop does —
- * spawning on an interval, stepping every critter each tick, banking exits —
- * while a `strategy` callback assigns skills from the level's stock, the same
- * decisions a player makes with taps. This is the automated stand-in for the
- * manual "guide the crowd home with each skill" verification.
+ * spawning on an interval (alternating hatches when a level has two), stepping
+ * every critter each tick, banking exits, and cutting the run off hard at the
+ * level's `timeLimit` — while a `strategy` callback assigns skills from the
+ * level's stock, the same decisions a player makes with taps. This is the
+ * automated stand-in for the manual "guide the crowd home with each skill"
+ * verification, so a timed level's test proves it is winnable on the clock.
  */
 type LevelDef = (typeof LEVELS)[number];
 
@@ -449,10 +531,13 @@ function playLevel(
     return false;
   };
 
-  for (let tick = 0; tick < maxTicks; tick++) {
+  const hatches = levelHatches(level);
+  const tickCap = level.timeLimit !== undefined ? Math.min(maxTicks, level.timeLimit) : maxTicks;
+  for (let tick = 0; tick < tickCap; tick++) {
     if (spawned < level.spawnCount) {
       if (spawnTimer <= 0) {
-        critters.push(createCritter(id++, level.hatch.x, level.hatch.y, level.hatch.dir));
+        const h = hatches[spawned % hatches.length];
+        critters.push(createCritter(id++, h.x, h.y, h.dir));
         spawned++;
         spawnTimer = interval;
       } else {
@@ -699,6 +784,118 @@ describe('levels — solvable playthroughs', () => {
       }
     });
     expect(saved).toBeGreaterThanOrEqual(LEVELS[12].needed);
+  });
+
+  it('14: two hatches — both crowds simply walk to the shared middle door', () => {
+    const saved = playLevel(LEVELS[13], () => {});
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[13].needed);
+  });
+
+  it('15: beats the clock — a basher opens the wall well inside the time limit', () => {
+    const saved = playLevel(LEVELS[14], ({ critters, bmp, assign }) => {
+      if (!bmp.solid(156, 158)) return; // tunnel already open
+      if (critters.some(c => c.state === 'basher')) return;
+      const w = critters.find(c => c.state === 'walker' && c.dir === 1 && c.x >= 140 && c.x <= 149);
+      if (w) assign(w, 'basher');
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[14].needed);
+  });
+
+  it('16: digs through the earth strip because the steel floor resists', () => {
+    let dug = false;
+    const saved = playLevel(LEVELS[15], ({ critters, assign }) => {
+      if (dug) return;
+      // Only the strip beyond x=240 is earth; a dig there opens the way down.
+      const w = critters.find(c => c.state === 'walker' && c.y === 119 && c.x >= 250 && c.x <= 290);
+      if (w && assign(w, 'digger')) dug = true;
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[15].needed);
+  });
+
+  it('16: proves the steel floor is a real wall — digging it saves no one', () => {
+    // The counterfactual behind the hint: a digger dropped on the steel half
+    // gives up on the spot, so nobody ever reaches the exit chamber.
+    let dug = false;
+    const saved = playLevel(LEVELS[15], ({ critters, assign }) => {
+      if (dug) return;
+      const w = critters.find(c => c.state === 'walker' && c.y === 119 && c.x >= 100 && c.x <= 200);
+      if (w && assign(w, 'digger')) dug = true;
+    });
+    expect(saved).toBe(0);
+  });
+
+  it('17: bridges the gap for the left crowd while the right crowd strolls in, on the clock', () => {
+    let built = false;
+    const saved = playLevel(LEVELS[16], ({ critters, assign }) => {
+      if (built) return;
+      // Start the bridge just before the gap's lip so the tread run reaches
+      // the far floor (x0+12 clears the gap while staying on solid ground).
+      const w = critters.find(
+        c => c.state === 'walker' && c.dir === 1 && c.y === 175 && c.x >= 125 && c.x <= 129
+      );
+      if (w && assign(w, 'builder')) built = true;
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[16].needed);
+  });
+
+  it('18: ramps over the steel wall that bashers cannot dent', () => {
+    let built = false;
+    const saved = playLevel(LEVELS[17], ({ critters, assign }) => {
+      if (built) return;
+      // The ramp must top the 8px steel stub before reaching it (x0 ≤ 142)
+      // and still have bricks left to arrive there (x0 ≥ 138).
+      const w = critters.find(
+        c => c.state === 'walker' && c.dir === 1 && c.y === 159 && c.x >= 138 && c.x <= 142
+      );
+      if (w && assign(w, 'builder')) built = true;
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[17].needed);
+  });
+
+  it('18: proves the steel wall is basher-proof — bashing alone saves no one', () => {
+    const saved = playLevel(LEVELS[17], ({ critters, assign }) => {
+      for (const c of critters) {
+        if (c.state === 'walker' && c.dir === 1 && c.x >= 144 && c.x <= 148) assign(c, 'basher');
+      }
+    });
+    expect(saved).toBe(0);
+  });
+
+  it('19: umbrellas for the high stream only — the low stream walks home', () => {
+    const saved = playLevel(LEVELS[18], ({ critters, assign }) => {
+      for (const c of critters) {
+        // Everything above y=100 came out of the high hatch and faces the
+        // fatal cliff drop; the ground-level stream never needs a floater.
+        if (!c.floater && c.y < 100 && (c.state === 'walker' || c.state === 'faller')) {
+          assign(c, 'floater');
+        }
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[18].needed);
+  });
+
+  it('20: the gauntlet — bash the earth wall left, build over the steel right, beat the clock', () => {
+    let bashed = false;
+    let built = false;
+    const saved = playLevel(LEVELS[19], ({ critters, assign }) => {
+      if (!bashed) {
+        // Close enough to the earth wall that the basher connects before its
+        // patience runs out (six wall-less swings).
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 104 && c.x <= 108
+        );
+        if (w && assign(w, 'basher')) bashed = true;
+      }
+      if (!built) {
+        // Mirrored ramp maths for the right crowd: top the steel stub before
+        // reaching it (x0 ≥ 217) with bricks to spare (x0 ≤ 221).
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 217 && c.x <= 221
+        );
+        if (w && assign(w, 'builder')) built = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[19].needed);
   });
 });
 

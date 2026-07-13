@@ -324,10 +324,13 @@ export function initParkGame(): void {
   // CANVAS_W×CANVAS_H coordinates via the transform.
   let dpr = 0;
   function applyDpr() {
-    // Floor of 2: the container can display the board a little larger than
-    // its logical size (max-width 820px vs 760 logical px), so even a 1×
-    // screen upscales a 1× store into a slight blur.
-    const next = Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
+    // Scale the backing store to the device pixels the canvas actually
+    // covers: the container can display the board larger than its logical
+    // size (max-width 820px vs 760 logical px), so devicePixelRatio alone
+    // under-provisions even on 1× screens. clientWidth is layout-based, so
+    // a mid-flip rotateY transform can't skew the measurement.
+    const cssUpscale = (canvas.clientWidth || CANVAS_W) / CANVAS_W;
+    const next = Math.min(3, Math.max(1, Math.ceil((window.devicePixelRatio || 1) * cssUpscale)));
     if (next === dpr) return;
     dpr = next;
     canvas.width = CANVAS_W * dpr;
@@ -765,6 +768,8 @@ export function initParkGame(): void {
       const laying = selectedTool === 'track';
       trackKindsEl.style.opacity = laying ? '' : '0.45';
       trackKindsEl.style.pointerEvents = laying ? '' : 'none';
+      // pointer-events doesn't stop keyboard activation (Tab + Enter).
+      trackKindButtons.forEach(btn => (btn.disabled = !laying));
     }
     if (!trackDraft) {
       trackStatusEl.textContent = strings.trackStatusEmpty;

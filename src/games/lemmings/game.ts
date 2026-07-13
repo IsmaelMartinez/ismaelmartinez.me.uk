@@ -858,7 +858,8 @@ export function initLemmingsGame(): void {
     if (phase === 'playing' && def.timeLimit !== undefined) {
       const remaining = Math.max(0, def.timeLimit - levelTicks);
       const secs = Math.ceil(remaining / 60);
-      const urgent = remaining < 600;
+      // Urgent from the moment the label first reads 10s (600 ticks) down.
+      const urgent = remaining <= 600;
       ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
       const label = `⏱ ${secs}s`;

@@ -55,6 +55,8 @@ export interface CritterWorld {
   readonly width: number;
   readonly height: number;
   solid(x: number, y: number): boolean;
+  /** Whether skills could ever remove this cell (false only for steel). */
+  erodible(x: number, y: number): boolean;
   eraseRect(x: number, y: number, w: number, h: number): void;
   buildRow(x: number, y: number, w: number): void;
   /** True when a (non-self) blocker's body occupies this cell. */
@@ -233,6 +235,13 @@ function stepDigger(c: Critter, world: CritterWorld): void {
   c.timer++;
   if (c.timer < DIG_INTERVAL) return;
   c.timer = 0;
+  // Steel directly underfoot bounces the spade before it swings: no erase, so
+  // an earth cell beside the seam is never chewed by a doomed dig, and no
+  // debris flies off a plate that lost nothing.
+  if (!world.erodible(c.x, c.y + 1)) {
+    c.state = 'walker';
+    return;
+  }
   // Chew a slab out of the floor and sink into it.
   world.eraseRect(Math.round(c.x - DIG_WIDTH / 2), c.y + 1, DIG_WIDTH, 1);
   c.y++;
@@ -252,6 +261,14 @@ function wallAhead(c: Critter, world: CritterWorld, aheadX: number): boolean {
   return false;
 }
 
+/** Any steel in the body-height face ahead — a wall no fist will ever clear. */
+function steelAhead(c: Critter, world: CritterWorld, aheadX: number): boolean {
+  for (let dy = 0; dy < CRITTER_H - 1; dy++) {
+    if (world.solid(aheadX, c.y - dy) && !world.erodible(aheadX, c.y - dy)) return true;
+  }
+  return false;
+}
+
 function stepBasher(c: Critter, world: CritterWorld): void {
   // The floor can be dug out from under a basher mid-swing.
   if (!grounded(c, world)) {
@@ -263,6 +280,13 @@ function stepBasher(c: Critter, world: CritterWorld): void {
   c.timer = 0;
   const aheadX = c.x + c.dir;
   if (wallAhead(c, world, aheadX)) {
+    // A steel face bounces the fist before it swings — no erase, so nothing
+    // is chewed out around the plate and no debris flies off untouched steel.
+    // The basher quits and the walker rules turn it around at the wall.
+    if (steelAhead(c, world, aheadX)) {
+      c.state = 'walker';
+      return;
+    }
     // Erase a body-height slab directly ahead, leaving the floor intact.
     const fx = c.dir > 0 ? c.x + 1 : c.x - BASH_WIDTH;
     world.eraseRect(fx, c.y - (CRITTER_H - 2), BASH_WIDTH, CRITTER_H - 1);

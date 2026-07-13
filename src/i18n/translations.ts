@@ -122,6 +122,18 @@ export const translations = {
     'fun.lemmings.hint11': 'Dig through the floor, then build a ramp up to the exit platform.',
     'fun.lemmings.hint12': 'Umbrellas for the drop into the pit, then bash through the right wall.',
     'fun.lemmings.hint13': 'Float down to the shelf, bash through the wall, then build up to the door.',
+    'fun.lemmings.hint14':
+      'Two hatches, one door — both crowds walk straight home, just from opposite sides.',
+    'fun.lemmings.hint15':
+      'The clock is ticking: raise the release rate, bash through the wall, and hustle everyone home.',
+    'fun.lemmings.hint16':
+      'Grey steel resists every spade — dig where the floor is still brown earth.',
+    'fun.lemmings.hint17':
+      'The right crowd is safe; bridge the left crowd over the gap before the clock runs out.',
+    'fun.lemmings.hint18': 'Bashers bounce off steel. Build a ramp and send the crowd over the top.',
+    'fun.lemmings.hint19': 'One hatch opens high, one low — umbrellas are only for the cliff crowd.',
+    'fun.lemmings.hint20':
+      'Bash the earth wall on the left, build over the steel on the right — and watch the clock.',
     'fun.lemmings.score': 'Score',
     'fun.lemmings.timeBonus': 'Time bonus',
     'fun.lemmings.perfectBonus': 'Everyone home!',
@@ -131,6 +143,7 @@ export const translations = {
     'fun.lemmings.playAgain': 'Play Again',
     'fun.lemmings.complete': 'Level Complete!',
     'fun.lemmings.failed': 'Not Enough Rescued',
+    'fun.lemmings.timeUp': 'Time Up!',
     'fun.lemmings.victory': 'Every Critter Home!',
     'fun.lemmings.completeDesc': 'You rescued {n} of {m}!',
     'fun.lemmings.failedDesc': 'Only {n} of {m} made it. Try again!',
@@ -534,6 +547,19 @@ export const translations = {
     'fun.lemmings.hint11': 'Excava el suelo y luego construye una rampa hasta la plataforma de salida.',
     'fun.lemmings.hint12': 'Paraguas para caer al foso y luego perfora el muro derecho.',
     'fun.lemmings.hint13': 'Flota hasta la repisa, perfora el muro y luego construye hasta la puerta.',
+    'fun.lemmings.hint14':
+      'Dos trampillas, una puerta: ambos grupos caminan directos a casa, solo que desde lados opuestos.',
+    'fun.lemmings.hint15':
+      'El reloj corre: sube el ritmo de salida, perfora el muro y llévalos a casa deprisa.',
+    'fun.lemmings.hint16':
+      'El acero gris resiste cualquier pala: excava donde el suelo aún es tierra marrón.',
+    'fun.lemmings.hint17':
+      'El grupo derecho está a salvo; tiende un puente sobre el hueco para el izquierdo antes de que acabe el tiempo.',
+    'fun.lemmings.hint18': 'Los perforadores rebotan en el acero. Construye una rampa y pasa por encima.',
+    'fun.lemmings.hint19':
+      'Una trampilla se abre en lo alto y otra abajo: los paraguas son solo para el grupo del precipicio.',
+    'fun.lemmings.hint20':
+      'Perfora el muro de tierra a la izquierda, construye sobre el acero a la derecha… y vigila el reloj.',
     'fun.lemmings.score': 'Puntos',
     'fun.lemmings.timeBonus': 'Bonus de tiempo',
     'fun.lemmings.perfectBonus': '¡Todos a casa!',
@@ -543,6 +569,7 @@ export const translations = {
     'fun.lemmings.playAgain': 'Jugar de Nuevo',
     'fun.lemmings.complete': '¡Nivel Completado!',
     'fun.lemmings.failed': 'No Salvaste Suficientes',
+    'fun.lemmings.timeUp': '¡Se Acabó el Tiempo!',
     'fun.lemmings.victory': '¡Todos a Casa!',
     'fun.lemmings.completeDesc': '¡Salvaste {n} de {m}!',
     'fun.lemmings.failedDesc': 'Solo {n} de {m} lo lograron. ¡Inténtalo otra vez!',
@@ -947,6 +974,19 @@ export const translations = {
     'fun.lemmings.hint11': 'Cava el terra i després construeix una rampa fins a la plataforma de sortida.',
     'fun.lemmings.hint12': 'Paraigües per caure al pou i després perfora el mur dret.',
     'fun.lemmings.hint13': 'Flota fins a la lleixa, perfora el mur i després construeix fins a la porta.',
+    'fun.lemmings.hint14':
+      'Dues trapes, una porta: tots dos grups caminen directes a casa, només que des de costats oposats.',
+    'fun.lemmings.hint15':
+      'El rellotge corre: apuja el ritme de sortida, perfora el mur i porta\'ls a casa de pressa.',
+    'fun.lemmings.hint16':
+      'L\'acer gris resisteix qualsevol pala: cava on el terra encara és terra marró.',
+    'fun.lemmings.hint17':
+      'El grup dret està fora de perill; fes un pont sobre el buit per al grup esquerre abans que s\'acabi el temps.',
+    'fun.lemmings.hint18': 'Els perforadors reboten a l\'acer. Construeix una rampa i passa per sobre.',
+    'fun.lemmings.hint19':
+      'Una trapa s\'obre a dalt i una a baix: els paraigües són només per al grup del penya-segat.',
+    'fun.lemmings.hint20':
+      'Perfora el mur de terra a l\'esquerra, construeix sobre l\'acer a la dreta… i vigila el rellotge.',
     'fun.lemmings.score': 'Punts',
     'fun.lemmings.timeBonus': 'Bonus de temps',
     'fun.lemmings.perfectBonus': 'Tothom a casa!',
@@ -956,6 +996,7 @@ export const translations = {
     'fun.lemmings.playAgain': 'Torna a Jugar',
     'fun.lemmings.complete': 'Nivell Completat!',
     'fun.lemmings.failed': 'No n\'has salvat prou',
+    'fun.lemmings.timeUp': 'S\'ha Acabat el Temps!',
     'fun.lemmings.victory': 'Totes a Casa!',
     'fun.lemmings.completeDesc': 'Has salvat {n} de {m}!',
     'fun.lemmings.failedDesc': 'Només {n} de {m} ho han aconseguit. Torna-ho a provar!',

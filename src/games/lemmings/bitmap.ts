@@ -3,23 +3,26 @@
  *
  * Unlike Tank Duel's heightmap, a Lemmings-style level needs overhangs and
  * tunnels, so terrain is a solidity grid: every cell is `AIR` (empty) or a
- * solid material (`EARTH` or a builder `BRIDGE`). A cell counts as solid when
- * its material is non-zero — mirroring the design's "offscreen canvas where
- * alpha > 0 is solid", but kept DOM-free (a `Uint8Array`) so it unit-tests
- * without a canvas.
+ * solid material (`EARTH`, a builder `BRIDGE`, or indestructible `STEEL`).
+ * A cell counts as solid when its material is non-zero — mirroring the
+ * design's "offscreen canvas where alpha > 0 is solid", but kept DOM-free
+ * (a `Uint8Array`) so it unit-tests without a canvas.
  *
  * Diggers and bashers erase cells (`AIR`); builders lay `BRIDGE` cells.
- * Collision queries read the grid directly — it *is* the cached solidity map,
- * the array-native equivalent of caching a canvas's `ImageData`. Terrain edits
- * bump `version`, which is how the renderer knows to rebuild its offscreen
- * image (edits are rare relative to queries).
+ * `STEEL` survives every erase call — diggers, bashers, and the nuke all
+ * bounce off it — so levels can wall off a tempting shortcut and force the
+ * scenic route. Collision queries read the grid directly — it *is* the cached
+ * solidity map, the array-native equivalent of caching a canvas's
+ * `ImageData`. Terrain edits bump `version`, which is how the renderer knows
+ * to rebuild its offscreen image (edits are rare relative to queries).
  */
 
 export const AIR = 0;
 export const EARTH = 1;
 export const BRIDGE = 2;
+export const STEEL = 3;
 
-export type Material = typeof AIR | typeof EARTH | typeof BRIDGE;
+export type Material = typeof AIR | typeof EARTH | typeof BRIDGE | typeof STEEL;
 
 export class TerrainBitmap {
   readonly width: number;
@@ -65,8 +68,25 @@ export class TerrainBitmap {
     this._version++;
   }
 
-  /** Fills an axis-aligned block, clipped to the field. */
-  fillRect(x: number, y: number, w: number, h: number, material: Material = EARTH): void {
+  /**
+   * The one home of the destructibility policy: what an erase call (digger,
+   * basher, nuke) may remove. Steel is the only indestructible material.
+   */
+  private canErase(m: Material): boolean {
+    return m !== AIR && m !== STEEL;
+  }
+
+  /** Whether skills could ever remove this cell (out-of-bounds reads as yes). */
+  erodible(x: number, y: number): boolean {
+    return this.materialAt(x, y) !== STEEL;
+  }
+
+  /**
+   * Applies `next` to every cell of a clipped axis-aligned block, bumping
+   * `version` only when something actually changed. All rect edits go through
+   * here so the clipping arithmetic and version bookkeeping exist once.
+   */
+  private mapRect(x: number, y: number, w: number, h: number, next: (m: Material) => Material): void {
     const x0 = Math.max(0, Math.floor(x));
     const y0 = Math.max(0, Math.floor(y));
     const x1 = Math.min(this.width, Math.floor(x + w));
@@ -75,8 +95,10 @@ export class TerrainBitmap {
     for (let yy = y0; yy < y1; yy++) {
       const row = yy * this.width;
       for (let xx = x0; xx < x1; xx++) {
-        if (this.cells[row + xx] !== material) {
-          this.cells[row + xx] = material;
+        const m = this.cells[row + xx] as Material;
+        const n = next(m);
+        if (n !== m) {
+          this.cells[row + xx] = n;
           touched = true;
         }
       }
@@ -84,12 +106,17 @@ export class TerrainBitmap {
     if (touched) this._version++;
   }
 
-  /** Clears an axis-aligned block to air (digger/basher swathes). */
-  eraseRect(x: number, y: number, w: number, h: number): void {
-    this.fillRect(x, y, w, h, AIR);
+  /** Fills an axis-aligned block, clipped to the field. */
+  fillRect(x: number, y: number, w: number, h: number, material: Material = EARTH): void {
+    this.mapRect(x, y, w, h, () => material);
   }
 
-  /** Clears a filled disc to air (used for explosion-style effects / nuke). */
+  /** Clears an axis-aligned block to air (digger/basher swathes). Steel resists. */
+  eraseRect(x: number, y: number, w: number, h: number): void {
+    this.mapRect(x, y, w, h, m => (this.canErase(m) ? AIR : m));
+  }
+
+  /** Clears a filled disc to air (used for explosion-style effects / nuke). Steel resists. */
   eraseCircle(cx: number, cy: number, r: number): void {
     const x0 = Math.max(0, Math.floor(cx - r));
     const x1 = Math.min(this.width - 1, Math.ceil(cx + r));
@@ -102,7 +129,7 @@ export class TerrainBitmap {
       for (let xx = x0; xx <= x1; xx++) {
         const dx = xx - cx;
         const dy = yy - cy;
-        if (dx * dx + dy * dy <= r2 && this.cells[row + xx] !== AIR) {
+        if (dx * dx + dy * dy <= r2 && this.canErase(this.cells[row + xx] as Material)) {
           this.cells[row + xx] = AIR;
           touched = true;
         }
@@ -111,9 +138,13 @@ export class TerrainBitmap {
     if (touched) this._version++;
   }
 
-  /** Lays a horizontal run of bridge cells (one builder tread). */
+  /**
+   * Lays a horizontal run of bridge cells (one builder tread). Treads only
+   * fill air — laying one across existing earth or steel leaves those cells
+   * as they are (otherwise a bridge overlapping steel would turn it erasable).
+   */
   buildRow(x: number, y: number, w: number): void {
-    this.fillRect(x, y, w, 1, BRIDGE);
+    this.mapRect(x, y, w, 1, m => (m === AIR ? BRIDGE : m));
   }
 
   /** Read-only view of the raw material grid, for rendering. */

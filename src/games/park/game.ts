@@ -771,7 +771,7 @@ export function initParkGame(): void {
       // pointer-events doesn't stop keyboard activation (Tab + Enter).
       trackKindButtons.forEach(btn => (btn.disabled = !laying));
     }
-    if (!trackDraft) {
+    if (trackDraft === null) {
       trackStatusEl.textContent = strings.trackStatusEmpty;
     } else if (trackClosed) {
       trackStatusEl.textContent = strings.trackStatusClosed;

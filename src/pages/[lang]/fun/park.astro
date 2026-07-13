@@ -150,6 +150,8 @@ const trackKinds = [
             ))}
           </div>
           <div class="speed-controls">
+            <button type="button" id="rotate-left" class="rotate-btn" aria-label={t('fun.park.rotateLeft')} title={t('fun.park.rotateLeft')}>↺</button>
+            <button type="button" id="rotate-right" class="rotate-btn" aria-label={t('fun.park.rotateRight')} title={t('fun.park.rotateRight')}>↻</button>
             <button class="speed-btn" data-speed="0">⏸</button>
             <button class="speed-btn active" data-speed="1">▶</button>
             <button class="speed-btn" data-speed="3">⏩</button>
@@ -278,7 +280,10 @@ const trackKinds = [
     display: block;
     width: 100%;
     height: auto;
-    aspect-ratio: 76 / 45;
+    /* Matches the logical canvas size (CANVAS_W / CANVAS_H in game.ts);
+       the game re-asserts the exact ratio on init. A mismatched ratio
+       stretches the bitmap and blurs the whole board. */
+    aspect-ratio: 760 / 498;
     cursor: pointer;
   }
 
@@ -478,7 +483,8 @@ const trackKinds = [
     gap: var(--space-xs);
   }
 
-  .speed-btn {
+  .speed-btn,
+  .rotate-btn {
     width: 44px;
     height: 44px;
     font-size: 1.1rem;
@@ -491,7 +497,8 @@ const trackKinds = [
   }
 
   .speed-btn:hover,
-  .speed-btn.active {
+  .speed-btn.active,
+  .rotate-btn:hover {
     border-color: var(--color-accent);
     background: rgba(37, 99, 235, 0.14);
   }

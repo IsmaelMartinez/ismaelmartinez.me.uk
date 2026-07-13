@@ -154,9 +154,9 @@ const trackKinds = [
           <div class="speed-controls">
             <button type="button" id="rotate-left" class="rotate-btn" aria-label={t('fun.park.rotateLeft')} title={t('fun.park.rotateLeft')}>↺</button>
             <button type="button" id="rotate-right" class="rotate-btn" aria-label={t('fun.park.rotateRight')} title={t('fun.park.rotateRight')}>↻</button>
-            <button class="speed-btn" data-speed="0">⏸</button>
-            <button class="speed-btn active" data-speed="1">▶</button>
-            <button class="speed-btn" data-speed="3">⏩</button>
+            <button type="button" class="speed-btn" data-speed="0" aria-label={t('fun.park.speedPause')} title={t('fun.park.speedPause')}>⏸</button>
+            <button type="button" class="speed-btn active" data-speed="1" aria-label={t('fun.park.speedNormal')} title={t('fun.park.speedNormal')}>▶</button>
+            <button type="button" class="speed-btn" data-speed="3" aria-label={t('fun.park.speedFast')} title={t('fun.park.speedFast')}>⏩</button>
           </div>
         </div>
 

@@ -8,6 +8,7 @@
 import {
   createGameLoop,
   initScoreboard,
+  setupHiDpiCanvas,
   isoProject,
   isoTileFromPoint,
   fillTile,
@@ -182,8 +183,7 @@ export function initCityGame(): void {
     } satisfies Record<CityEventId, string>
   };
 
-  canvas.width = CANVAS_W;
-  canvas.height = CANVAS_H;
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H);
 
   // On narrow screens the board keeps a minimum size inside a pannable
   // container; start the view centred.
@@ -1160,11 +1160,11 @@ export function initCityGame(): void {
     // Mid-flip the rotateY transform shrinks the bounding rect, so the
     // screen→tile math below would pick a tile far from the cursor.
     if (rotator.animating()) return -1;
-    const rect = canvas.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    // Logical (not backing-store) coordinates: the backing store is
+    // DPR-scaled, so canvas.width/rect.width would land tiles wide.
+    const p = hiDpi.toLogical(e);
     const dims = rotatedDims(CITY_W, CITY_H, rotation);
-    const vi = isoTileFromPoint(VIEW, sx, sy, dims.w, dims.h);
+    const vi = isoTileFromPoint(VIEW, p.x, p.y, dims.w, dims.h);
     if (vi < 0) return -1;
     const { x, y } = unrotateTile(vi % dims.w, Math.floor(vi / dims.w), CITY_W, CITY_H, rotation);
     return cityIdx(x, y);

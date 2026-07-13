@@ -9,6 +9,7 @@
 import {
   createGameLoop,
   initScoreboard,
+  setupHiDpiCanvas,
   isoProject,
   isoTileFromPoint,
   fillTile,
@@ -151,22 +152,38 @@ export function initSyndicateGame(): void {
     } as Partial<Record<Unit['kind'], string>>
   };
 
-  canvas.width = CANVAS_W;
-  canvas.height = CANVAS_H;
+  // Pre-rendered scanlines + vignette overlay (both are static, so drawing
+  // them every frame would waste a full-canvas gradient fill), rebuilt at
+  // device resolution whenever the DPR changes so the 1px CRT lines stay
+  // crisp instead of being blur-upscaled from a 1:1 bitmap.
+  let atmosphere: HTMLCanvasElement | null = null;
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, {
+    onApply(dpr) {
+      const layer = document.createElement('canvas');
+      layer.width = CANVAS_W * dpr;
+      layer.height = CANVAS_H * dpr;
+      const lctx = layer.getContext('2d');
+      atmosphere = null;
+      if (!lctx) return;
+      lctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+      for (let y = 0; y < CANVAS_H; y += 3) lctx.fillRect(0, y * dpr, CANVAS_W * dpr, dpr);
+      const vig = lctx.createRadialGradient(
+        (CANVAS_W / 2) * dpr,
+        (CANVAS_H / 2) * dpr,
+        CANVAS_H * 0.35 * dpr,
+        (CANVAS_W / 2) * dpr,
+        (CANVAS_H / 2) * dpr,
+        CANVAS_H * 0.85 * dpr
+      );
+      vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+      lctx.fillStyle = vig;
+      lctx.fillRect(0, 0, layer.width, layer.height);
+      atmosphere = layer;
+    }
+  });
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
-
-  // Pre-rendered scanline overlay (cheaper than drawing lines every frame).
-  let scanlines: HTMLCanvasElement | null = null;
-  const scan = document.createElement('canvas');
-  scan.width = CANVAS_W;
-  scan.height = CANVAS_H;
-  const scanCtx = scan.getContext('2d');
-  if (scanCtx) {
-    scanCtx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-    for (let y = 0; y < CANVAS_H; y += 3) scanCtx.fillRect(0, y, CANVAS_W, 1);
-    scanlines = scan;
-  }
 
   let phase: Phase = 'idle';
   let tiles: MapTile[] = generateCity(Math.random);
@@ -903,22 +920,9 @@ export function initSyndicateGame(): void {
     }
     ctx.stroke();
 
-    // Scanlines for the CRT-arcade feel
-    if (scanlines) ctx.drawImage(scanlines, 0, 0);
-
-    // Vignette
-    const vig = ctx.createRadialGradient(
-      CANVAS_W / 2,
-      CANVAS_H / 2,
-      CANVAS_H * 0.35,
-      CANVAS_W / 2,
-      CANVAS_H / 2,
-      CANVAS_H * 0.85
-    );
-    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    // Scanlines + vignette for the CRT-arcade feel; logical destination
+    // size — the device-resolution overlay maps 1:1 onto backing pixels.
+    if (atmosphere) ctx.drawImage(atmosphere, 0, 0, CANVAS_W, CANVAS_H);
   }
 
   function refreshHud() {
@@ -969,10 +973,10 @@ export function initSyndicateGame(): void {
   // --- Input wiring ---
 
   function tileFromEvent(e: MouseEvent): number {
-    const rect = canvas.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
-    return isoTileFromPoint(VIEW, sx, sy, MAP_W, MAP_H);
+    // Logical (not backing-store) coordinates: the backing store is
+    // DPR-scaled, so canvas.width/rect.width would land tiles wide.
+    const p = hiDpi.toLogical(e);
+    return isoTileFromPoint(VIEW, p.x, p.y, MAP_W, MAP_H);
   }
 
   canvas.addEventListener('click', e => {

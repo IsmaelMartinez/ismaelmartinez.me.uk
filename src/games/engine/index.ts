@@ -22,6 +22,9 @@ export {
   rotatedDims,
   rotateTile,
   unrotateTile,
-  rotatePoint
+  rotatePoint,
+  rotateDir
 } from './iso';
 export type { IsoView, Rotation } from './iso';
+export { createViewRotator } from './rotator';
+export type { ViewRotator } from './rotator';

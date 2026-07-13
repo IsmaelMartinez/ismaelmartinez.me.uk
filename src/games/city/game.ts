@@ -19,6 +19,7 @@ import {
   rotateTile,
   unrotateTile,
   rotatePoint,
+  createViewRotator,
   createGameAudio,
   wireSoundButton,
   type IsoView,
@@ -228,10 +229,6 @@ export function initCityGame(): void {
   let clock = 0;
   let rotation: Rotation = 0;
   let VIEW = makeView(rotation);
-  const reduceMotion =
-    typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
-  const ROTATE_ANIM_DURATION = 0.32; // seconds
-  let rotAnim: { t: number; dir: 1 | -1; swapped: boolean } | null = null;
   let cars: Car[] = [];
   let fires: Fire[] = [];
   let tornado: Tornado | null = null;
@@ -338,24 +335,7 @@ export function initCityGame(): void {
   }
 
   function update(dt: number) {
-    if (rotAnim) {
-      rotAnim.t += dt;
-      const t = Math.min(1, rotAnim.t / ROTATE_ANIM_DURATION);
-      // First half spins the current view edge-on; at the midpoint (an
-      // imperceptible sliver) the underlying rotation swaps and the second
-      // half spins the new view back in from the opposite edge.
-      if (t >= 0.5 && !rotAnim.swapped) {
-        rotAnim.swapped = true;
-        setRotation(((rotation + (rotAnim.dir === 1 ? 1 : 3)) % 4) as Rotation);
-      }
-      const half = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
-      const angle = t < 0.5 ? rotAnim.dir * 90 * half : rotAnim.dir * -90 * (1 - half);
-      canvas.style.transform = `rotateY(${angle}deg)`;
-      if (t >= 1) {
-        canvas.style.transform = '';
-        rotAnim = null;
-      }
-    }
+    rotator.update(dt);
 
     floaters = floaters.filter(f => {
       f.life -= dt;
@@ -1177,6 +1157,9 @@ export function initCityGame(): void {
   // --- Input wiring ---
 
   function tileFromEvent(e: MouseEvent): number {
+    // Mid-flip the rotateY transform shrinks the bounding rect, so the
+    // screen→tile math below would pick a tile far from the cursor.
+    if (rotator.animating()) return -1;
     const rect = canvas.getBoundingClientRect();
     const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
     const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
@@ -1242,26 +1225,18 @@ export function initCityGame(): void {
     });
   });
 
-  function setRotation(rot: Rotation) {
+  const rotator = createViewRotator(canvas, rot => {
     rotation = rot;
-    VIEW = makeView(rotation);
+    VIEW = makeView(rot);
     hoverTile = -1;
     armedTile = -1;
     // Screen-space particles were projected under the old rotation
     smoke = [];
     sparks = [];
     floaters = [];
-  }
-  function startRotate(dir: 1 | -1) {
-    if (rotAnim) return; // ignore taps while a turn is already animating
-    if (reduceMotion) {
-      setRotation(((rotation + (dir === 1 ? 1 : 3)) % 4) as Rotation);
-      return;
-    }
-    rotAnim = { t: 0, dir, swapped: false };
-  }
-  document.getElementById('rotate-left')?.addEventListener('click', () => startRotate(-1));
-  document.getElementById('rotate-right')?.addEventListener('click', () => startRotate(1));
+  });
+  document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
+  document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

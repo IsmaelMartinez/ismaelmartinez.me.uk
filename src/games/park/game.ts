@@ -15,9 +15,16 @@ import {
   drawRamp,
   shadeColor,
   forEachTileBackToFront,
+  rotatedDims,
+  rotateTile,
+  unrotateTile,
+  rotatePoint,
+  rotateDir,
+  createViewRotator,
   createGameAudio,
   wireSoundButton,
-  type IsoView
+  type IsoView,
+  type Rotation
 } from '../engine';
 import {
   GRID_W,
@@ -84,11 +91,15 @@ const BLOCK_HEIGHT = 16;
 /** Pixels a single terrain height step lifts a tile. */
 const TERRAIN_STEP = 12;
 const MAX_TERRAIN_LIFT = MAX_HEIGHT * TERRAIN_STEP;
+const HALF_W = 20;
+const HALF_H = 10;
 // originY carries extra headroom so a max-height hill (with a tall building
 // on top) never clips off the canvas top, even at the near corner.
-const VIEW: IsoView = { halfW: 20, halfH: 10, originX: GRID_H * 20, originY: 60 + MAX_TERRAIN_LIFT };
-const CANVAS_W = (GRID_W + GRID_H) * VIEW.halfW;
-const CANVAS_H = (GRID_W + GRID_H) * VIEW.halfH + VIEW.originY + 10;
+const ORIGIN_Y = 60 + MAX_TERRAIN_LIFT;
+// Quarter-turn rotations swap the grid's width and height, but W+H — and so
+// the canvas size — stays the same for every rotation.
+const CANVAS_W = (GRID_W + GRID_H) * HALF_W;
+const CANVAS_H = (GRID_W + GRID_H) * HALF_H + ORIGIN_Y + 10;
 const START_MONEY = 1500;
 const DAY_LENGTH = 24; // seconds of game time per day
 const GUEST_SPEED = 2.4; // tiles per second
@@ -283,6 +294,9 @@ export function initParkGame(): void {
     trackNeedsStation: root.dataset.tTrackNeedsStation || 'Needs exactly one station piece!',
     trackNotClosed: root.dataset.tTrackNotClosed || "Track pieces don't connect correctly!",
     trackTooSteep: root.dataset.tTrackTooSteep || 'Two climbs/drops in a row — add a flat between them!',
+    trackHeightMismatch:
+      root.dataset.tTrackHeightMismatch || "Track and terrain heights don't match — reshape the land or the piece!",
+    trackDraftInWay: root.dataset.tTrackDraftInWay || 'Your coaster draft crosses that tile!',
     trackStatusEmpty: root.dataset.tTrackStatusEmpty || 'Tap a grass tile to start laying track',
     trackStatusDrafting:
       root.dataset.tTrackStatusDrafting || 'Track length: {n} — tap the start tile to close the loop',
@@ -299,11 +313,37 @@ export function initParkGame(): void {
     duplicateTile: strings.trackDuplicateTile,
     needsStation: strings.trackNeedsStation,
     notClosed: strings.trackNotClosed,
-    tooSteep: strings.trackTooSteep
+    tooSteep: strings.trackTooSteep,
+    heightMismatch: strings.trackHeightMismatch
   };
 
-  canvas.width = CANVAS_W;
-  canvas.height = CANVAS_H;
+  // Render at device-pixel resolution: the canvas is CSS-scaled to fill its
+  // container, so a 1:1 backing store on a hi-DPI screen comes out blurry —
+  // especially the emoji sprites. All drawing stays in logical
+  // CANVAS_W×CANVAS_H coordinates via the transform.
+  let dpr = 0;
+  function applyDpr() {
+    const next = Math.min(3, Math.max(1, Math.ceil(window.devicePixelRatio || 1)));
+    if (next === dpr) return;
+    dpr = next;
+    canvas.width = CANVAS_W * dpr;
+    canvas.height = CANVAS_H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  applyDpr();
+  canvas.style.aspectRatio = `${CANVAS_W} / ${CANVAS_H}`;
+  // Browser zoom or dragging the window to another monitor changes
+  // devicePixelRatio; a stale backing store would bring the blur back. A
+  // ClientRouter swap replaces the canvas, so the orphaned listener unhooks
+  // itself rather than holding the old game alive.
+  const onResize = () => {
+    if (!canvas.isConnected) {
+      window.removeEventListener('resize', onResize);
+      return;
+    }
+    applyDpr();
+  };
+  window.addEventListener('resize', onResize);
 
   // On narrow screens the board keeps a minimum size inside a pannable
   // container; start the view centred on the entrance.
@@ -327,7 +367,16 @@ export function initParkGame(): void {
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
 
+  const makeView = (rot: Rotation): IsoView => ({
+    halfW: HALF_W,
+    halfH: HALF_H,
+    originX: rotatedDims(GRID_W, GRID_H, rot).h * HALF_W,
+    originY: ORIGIN_Y
+  });
+
   let { tiles, heights, tunnels, entrance } = createPark();
+  let rotation: Rotation = 0;
+  let VIEW = makeView(rotation);
   let phase: Phase = 'idle';
   let money = START_MONEY;
   let day = 1;
@@ -360,9 +409,15 @@ export function initParkGame(): void {
 
   recordEl.textContent = record.toString();
 
+  /** Projects fractional world-tile coordinates through the current rotation. */
+  function projectWorld(tx: number, ty: number): { x: number; y: number } {
+    const p = rotatePoint(tx, ty, GRID_W, GRID_H, rotation);
+    return isoProject(VIEW, p.tx, p.ty);
+  }
+
   function addFloater(tile: number, text: string, color: string) {
     const c = tileCenter(tile);
-    const p = isoProject(VIEW, c.x, c.y);
+    const p = projectWorld(c.x, c.y);
     p.y -= heights[tile] * TERRAIN_STEP;
     const buildingHeight = BUILDING_STYLE[tiles[tile]]?.height ?? BLOCK_HEIGHT;
     floaters.push({ x: p.x, y: p.y - buildingHeight - 6, text, color, life: 1 });
@@ -384,7 +439,7 @@ export function initParkGame(): void {
   /** A delighted guest sometimes lets a balloon go as they step off a ride. */
   function releaseBalloon(tile: number) {
     const c = tileCenter(tile);
-    const p = isoProject(VIEW, c.x, c.y);
+    const p = projectWorld(c.x, c.y);
     balloons.push({
       x: p.x + (Math.random() - 0.5) * 8,
       y: p.y - heights[tile] * TERRAIN_STEP - 22,
@@ -699,6 +754,10 @@ export function initParkGame(): void {
 
   function updateTrackStatus() {
     if (!trackPalette) return;
+    // The palette stays up while a draft exists — even with another tool
+    // selected — so Test/Cancel remain reachable and it's clear the
+    // in-progress loop hasn't been thrown away.
+    trackPalette.style.display = selectedTool === 'track' || trackDraft ? 'flex' : 'none';
     if (!trackDraft) {
       trackStatusEl.textContent = strings.trackStatusEmpty;
     } else if (trackClosed) {
@@ -707,6 +766,18 @@ export function initParkGame(): void {
       trackStatusEl.textContent = strings.trackStatusDrafting.replace('{n}', String(trackDraft.length));
     }
     trackTestBtn.disabled = !trackClosed;
+  }
+
+  /**
+   * Whether applying `tool` to tile `i` would overwrite a drafted track
+   * tile. Terraforming under a draft is the point of keeping it alive
+   * across tool switches (shaping hills for climbs), so only tools that
+   * write the tile itself conflict — raise/lower touch heights only, and
+   * bulldoze/digTunnel can never pass canPlace on the draft's grass tiles.
+   */
+  function toolHitsDraft(i: number, tool: Tool): boolean {
+    if (!trackDraft || !trackDraft.some(s => s.tile === i)) return false;
+    return tool !== 'raiseLand' && tool !== 'lowerLand' && tool !== 'digTunnel' && tool !== 'bulldoze';
   }
 
   /** Whether tapping tile `i` right now would be accepted by handleTrackTap — drives the hover highlight. */
@@ -730,6 +801,9 @@ export function initParkGame(): void {
    * docs/plans/2026-07-09-park-overhaul-design.md.
    */
   function handleTrackTap(i: number) {
+    // The Close Loop button routes here directly, bypassing the canvas
+    // click handler's own phase guard.
+    if (phase !== 'play') return;
     if (trackClosed) return; // Test Track or Cancel first
     if (trackDraft === null) {
       if (tiles[i] !== 'grass') {
@@ -785,6 +859,9 @@ export function initParkGame(): void {
   }
 
   function testTrack() {
+    // The palette outlives the run (a draft keeps it visible), so without
+    // this guard Test Track could build a coaster into a finished game.
+    if (phase !== 'play') return;
     if (!trackDraft) {
       showToast(strings.trackEmpty);
       return;
@@ -821,6 +898,7 @@ export function initParkGame(): void {
   // --- Simulation ---
 
   function update(dt: number) {
+    rotator.update(dt);
     clock += dt;
     floaters = floaters.filter(f => {
       f.life -= dt;
@@ -989,7 +1067,7 @@ export function initParkGame(): void {
     const to = tileCenter(nextSeg.tile);
     const curH = heights[curSeg.tile];
     const nextH = heights[nextSeg.tile];
-    const p = isoProject(VIEW, from.x + (to.x - from.x) * frac, from.y + (to.y - from.y) * frac);
+    const p = projectWorld(from.x + (to.x - from.x) * frac, from.y + (to.y - from.y) * frac);
     p.y -= (curH + (nextH - curH) * frac) * TERRAIN_STEP + 10;
     ctx.font = '15px serif';
     ctx.fillText('🚃', p.x, p.y);
@@ -1060,7 +1138,7 @@ export function initParkGame(): void {
     const visibility = tunnelVisibility(guest);
     if (visibility <= 0) return;
     const pos = guestPos(guest);
-    const p = isoProject(VIEW, pos.x, pos.y);
+    const p = projectWorld(pos.x, pos.y);
     p.y -= Math.max(0, pos.z) * TERRAIN_STEP;
     ctx.save();
     ctx.globalAlpha = visibility;
@@ -1113,13 +1191,15 @@ export function initParkGame(): void {
       if (guest.state === 'using' && guest.targetBuilding !== null) inUse.add(guest.targetBuilding);
     }
 
-    // Guests draw interleaved with their diagonal so blocks occlude them correctly.
-    // Riders aren't drawn individually — the cart (drawCoaster) stands in for them.
+    // Guests draw interleaved with their *view* diagonal so blocks occlude
+    // them correctly under any rotation. Riders aren't drawn individually —
+    // the cart (drawCoaster) stands in for them.
     const guestsByDiag: Guest[][] = Array.from({ length: GRID_W + GRID_H - 1 }, () => []);
     for (const guest of guests) {
       if (guest.state === 'riding') continue;
       const pos = guestPos(guest);
-      const d = Math.min(GRID_W + GRID_H - 2, Math.max(0, Math.floor(pos.x) + Math.floor(pos.y)));
+      const vp = rotatePoint(pos.x, pos.y, GRID_W, GRID_H, rotation);
+      const d = Math.min(GRID_W + GRID_H - 2, Math.max(0, Math.floor(vp.tx) + Math.floor(vp.ty)));
       guestsByDiag[d].push(guest);
     }
 
@@ -1147,12 +1227,17 @@ export function initParkGame(): void {
       });
     }
 
+    // The world grid never moves; rendering walks the *view* grid (rotated
+    // dimensions) back-to-front and maps each view tile to its world tile.
+    const dims = rotatedDims(GRID_W, GRID_H, rotation);
     let lastDiag = -1;
-    forEachTileBackToFront(GRID_W, GRID_H, (x, y, i, diag) => {
+    forEachTileBackToFront(dims.w, dims.h, (vx, vy, _vi, diag) => {
       if (diag !== lastDiag) {
         if (lastDiag >= 0) guestsByDiag[lastDiag].forEach(drawGuest);
         lastDiag = diag;
       }
+      const { x, y } = unrotateTile(vx, vy, GRID_W, GRID_H, rotation);
+      const i = y * GRID_W + x;
       const tile = tiles[i];
       const h = heights[i];
       const liftPx = h * TERRAIN_STEP;
@@ -1161,7 +1246,7 @@ export function initParkGame(): void {
 
       if (tile === 'water') {
         const ripple = 0.85 + 0.25 * Math.sin(clock * 1.5 + (x + y) * 0.6);
-        fillTile(ctx, VIEW, x, y, shadeColor('#1f6fa8', ripple));
+        fillTile(ctx, VIEW, vx, vy, shadeColor('#1f6fa8', ripple));
       } else {
         const groundColor =
           tile === 'track'
@@ -1174,11 +1259,11 @@ export function initParkGame(): void {
                   ? '#1d3b24'
                   : '#1f4028';
         if (h > 0) {
-          drawBlock(ctx, VIEW, x, y, liftPx, groundColor, 0);
+          drawBlock(ctx, VIEW, vx, vy, liftPx, groundColor, 0);
         } else {
-          fillTile(ctx, VIEW, x, y, groundColor);
+          fillTile(ctx, VIEW, vx, vy, groundColor);
           if (tile === 'path' || tile === 'entrance') {
-            strokeTile(ctx, VIEW, x, y, 'rgba(0, 0, 0, 0.2)', 1);
+            strokeTile(ctx, VIEW, vx, vy, 'rgba(0, 0, 0, 0.2)', 1);
           }
         }
         if (isTunnelActive(i)) {
@@ -1189,7 +1274,7 @@ export function initParkGame(): void {
             const ny = Math.floor(n / GRID_W);
             const mx = x + 0.5 + (nx - x) * 0.5;
             const my = y + 0.5 + (ny - y) * 0.5;
-            const mouth = isoProject(VIEW, mx, my);
+            const mouth = projectWorld(mx, my);
             ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
             ctx.beginPath();
             ctx.ellipse(mouth.x, mouth.y - 3, 9, 5, 0, 0, Math.PI * 2);
@@ -1198,7 +1283,7 @@ export function initParkGame(): void {
         }
       }
 
-      const top = isoProject(VIEW, x + 0.5, y + 0.5);
+      const top = isoProject(VIEW, vx + 0.5, vy + 0.5);
       top.y -= liftPx;
       if (tile === 'entrance') {
         ctx.font = '13px serif';
@@ -1213,7 +1298,7 @@ export function initParkGame(): void {
         const style = BUILDING_STYLE[tile] ?? { color: '#44447a', height: BLOCK_HEIGHT };
         const reskin = zone ? ZONE_BUILDING_STYLE[zone][tile] : undefined;
         const broken = isBroken(i);
-        drawBlock(ctx, VIEW, x, y, style.height, reskin?.color ?? style.color, 0.08, liftPx);
+        drawBlock(ctx, VIEW, vx, vy, style.height, reskin?.color ?? style.color, 0.08, liftPx);
         const spin = RIDE_SPIN[tile];
         const busy = inUse.has(i);
         ctx.save();
@@ -1242,12 +1327,12 @@ export function initParkGame(): void {
         ctx.save();
         if (draft) ctx.globalAlpha = 0.55;
         if (isRamp) {
-          drawRamp(ctx, VIEW, x, y, rampCorners(seg.dir, liftPx, nextLift), '#8a8a95');
+          drawRamp(ctx, VIEW, vx, vy, rampCorners(rotateDir(seg.dir, rotation) as Dir, liftPx, nextLift), '#8a8a95');
         } else {
-          fillTile(ctx, VIEW, x, y, '#8a8a95', liftPx);
+          fillTile(ctx, VIEW, vx, vy, '#8a8a95', liftPx);
         }
         const emojiLift = isRamp ? (liftPx + nextLift) / 2 : liftPx;
-        const railTop = isoProject(VIEW, x + 0.5, y + 0.5);
+        const railTop = isoProject(VIEW, vx + 0.5, vy + 0.5);
         railTop.y -= emojiLift + 6;
         ctx.font = '12px serif';
         ctx.fillText(TRACK_KIND_EMOJI[seg.kind], railTop.x, railTop.y);
@@ -1260,18 +1345,20 @@ export function initParkGame(): void {
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;
       const y = Math.floor(hoverTile / GRID_W);
+      const v = rotateTile(x, y, GRID_W, GRID_H, rotation);
       const lockedZone = gateZone(selectedTool);
       const valid =
         selectedTool === 'track'
           ? trackTapValid(hoverTile)
           : canPlace(tiles, heights, tunnels, x, y, selectedTool) &&
+            !toolHitsDraft(hoverTile, selectedTool) &&
             toolCost(selectedTool, tiles, hoverTile) <= money &&
             (!lockedZone || zoneUnlocked(lockedZone, rating, money));
       strokeTile(
         ctx,
         VIEW,
-        x,
-        y,
+        v.x,
+        v.y,
         valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)',
         2,
         heights[hoverTile] * TERRAIN_STEP
@@ -1331,11 +1418,14 @@ export function initParkGame(): void {
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         const i = y * GRID_W + x;
+        // rotateTile inlined as scalar math, same as isoUnproject above.
+        const vx = rotation === 1 ? GRID_H - 1 - y : rotation === 2 ? GRID_W - 1 - x : rotation === 3 ? y : x;
+        const vy = rotation === 1 ? x : rotation === 2 ? GRID_H - 1 - y : rotation === 3 ? GRID_W - 1 - x : y;
         const b = (sy + heights[i] * TERRAIN_STEP - VIEW.originY) / VIEW.halfH;
         const tx = (a + b) / 2;
         const ty = (b - a) / 2;
-        if (Math.floor(tx) === x && Math.floor(ty) === y) {
-          const score = heights[i] * 1000 + (x + y);
+        if (Math.floor(tx) === vx && Math.floor(ty) === vy) {
+          const score = heights[i] * 1000 + (vx + vy);
           if (score > bestScore) {
             bestScore = score;
             best = i;
@@ -1347,9 +1437,14 @@ export function initParkGame(): void {
   }
 
   function tileFromEvent(e: MouseEvent): number {
+    // Mid-flip the rotateY transform shrinks the bounding rect, so the
+    // screen→tile math below would pick a tile far from the cursor.
+    if (rotator.animating()) return -1;
     const rect = canvas.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    // Logical (not backing-store) canvas size: drawing runs under the DPR
+    // transform, so picking has to work in the same logical coordinates.
+    const sx = (e.clientX - rect.left) * (CANVAS_W / rect.width);
+    const sy = (e.clientY - rect.top) * (CANVAS_H / rect.height);
     return pickTile(sx, sy);
   }
 
@@ -1398,6 +1493,10 @@ export function initParkGame(): void {
       }
       audio.playSfx('blip');
       invalidateGuests();
+      return;
+    }
+    if (toolHitsDraft(i, selectedTool)) {
+      showToast(strings.trackDraftInWay);
       return;
     }
     if (selectedTool === 'bulldoze' && isWalkable(tiles[i])) {
@@ -1449,12 +1548,14 @@ export function initParkGame(): void {
 
   toolButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      if (selectedTool === 'track' && btn.dataset.tool !== 'track') cancelTrackDraft();
+      // Switching tools deliberately keeps any in-progress track draft: the
+      // loop stays rendered (translucently) and drafting resumes when the
+      // track tool is re-selected — players terraform mid-draft to shape
+      // hills under their climbs. Only the Cancel button discards it.
       selectedTool = btn.dataset.tool as Tool;
       armedTile = -1;
       toolButtons.forEach(b => b.classList.toggle('active', b === btn));
-      if (trackPalette) trackPalette.style.display = selectedTool === 'track' ? 'flex' : 'none';
-      if (selectedTool === 'track') updateTrackStatus();
+      updateTrackStatus();
     });
   });
 
@@ -1478,6 +1579,18 @@ export function initParkGame(): void {
       speedButtons.forEach(b => b.classList.toggle('active', b === btn));
     });
   });
+
+  const rotator = createViewRotator(canvas, rot => {
+    rotation = rot;
+    VIEW = makeView(rot);
+    hoverTile = -1;
+    armedTile = -1;
+    // Screen-space effects were projected under the old rotation
+    floaters = [];
+    balloons = [];
+  });
+  document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
+  document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

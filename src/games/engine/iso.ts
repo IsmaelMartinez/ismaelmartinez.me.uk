@@ -252,6 +252,17 @@ export function unrotateTile(
 }
 
 /**
+ * A step direction index (0=N, 1=E, 2=S, 3=W — one quarter turn clockwise
+ * per increment) as seen under `rot` quarter turns of the view. Consistent
+ * with rotateTile: a step from tile A to tile B in world direction `dir`
+ * is a step in view direction `rotateDir(dir, rot)` between their rotated
+ * positions — so callers never need to know rotateTile's handedness.
+ */
+export function rotateDir(dir: number, rot: number): number {
+  return (((dir + rot) % 4) + 4) % 4;
+}
+
+/**
  * Continuous variant of rotateTile for fractional positions (cars, smoke,
  * floaters). Consistent with rotateTile: a point inside world tile (x, y)
  * lands inside its rotated view tile.

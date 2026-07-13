@@ -581,7 +581,15 @@ describe('coaster track', () => {
       const loop = withStation(rectLoop(1, 1, 3, 2));
       const heights = heightsFor(loop);
       heights[loop[0].tile] += 1; // breaks the dh=0 expectation on whichever segment leads into it
-      expect(validateTrack(loop, heights)).toEqual({ ok: false, error: 'notClosed' });
+      expect(validateTrack(loop, heights)).toEqual({ ok: false, error: 'heightMismatch' });
+    });
+
+    it('rejects an up segment over flat terrain as a height mismatch, not a geometry error', () => {
+      // The terraform-mid-draft workflow: track laid first, land shaped
+      // after. A forgotten raise must point at the terrain, not the loop.
+      const loop = withStation(rectLoop(1, 1, 4, 2));
+      loop[firstOfKind(loop, 'flat')].kind = 'up';
+      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'heightMismatch' });
     });
 
     it('rejects two consecutive up/down segments with no flat between them', () => {

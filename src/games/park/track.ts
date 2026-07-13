@@ -80,7 +80,13 @@ export function rotateDir(dir: Dir, turn: -1 | 1): Dir {
 
 const TURN: Partial<Record<SegmentKind, -1 | 1>> = { turnL: -1, turnR: 1 };
 
-export type TrackErrorCode = 'tooShort' | 'duplicateTile' | 'needsStation' | 'notClosed' | 'tooSteep';
+export type TrackErrorCode =
+  | 'tooShort'
+  | 'duplicateTile'
+  | 'needsStation'
+  | 'notClosed'
+  | 'tooSteep'
+  | 'heightMismatch';
 
 export type TrackResult = { ok: true } | { ok: false; error: TrackErrorCode };
 
@@ -114,9 +120,13 @@ export function validateTrack(segments: Segment[], heights: number[]): TrackResu
     const expectedDir = turn !== undefined ? rotateDir(prev.dir, turn) : prev.dir;
     if (seg.dir !== expectedDir) return { ok: false, error: 'notClosed' };
 
+    // Distinct from 'notClosed': drafts survive tool switches so players
+    // terraform under laid track, and "reshape the land" is the actionable
+    // hint there — "pieces don't connect" would send them hunting a
+    // geometry problem that doesn't exist.
     const dh = heights[next.tile] - heights[seg.tile];
     const expectedDh = seg.kind === 'up' ? 1 : seg.kind === 'down' ? -1 : 0;
-    if (dh !== expectedDh) return { ok: false, error: 'notClosed' };
+    if (dh !== expectedDh) return { ok: false, error: 'heightMismatch' };
   }
 
   for (let i = 0; i < n; i++) {

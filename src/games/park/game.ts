@@ -19,6 +19,8 @@ import {
   rotateTile,
   unrotateTile,
   rotatePoint,
+  rotateDir,
+  createViewRotator,
   createGameAudio,
   wireSoundButton,
   type IsoView,
@@ -292,6 +294,9 @@ export function initParkGame(): void {
     trackNeedsStation: root.dataset.tTrackNeedsStation || 'Needs exactly one station piece!',
     trackNotClosed: root.dataset.tTrackNotClosed || "Track pieces don't connect correctly!",
     trackTooSteep: root.dataset.tTrackTooSteep || 'Two climbs/drops in a row — add a flat between them!',
+    trackHeightMismatch:
+      root.dataset.tTrackHeightMismatch || "Track and terrain heights don't match — reshape the land or the piece!",
+    trackDraftInWay: root.dataset.tTrackDraftInWay || 'Your coaster draft crosses that tile!',
     trackStatusEmpty: root.dataset.tTrackStatusEmpty || 'Tap a grass tile to start laying track',
     trackStatusDrafting:
       root.dataset.tTrackStatusDrafting || 'Track length: {n} — tap the start tile to close the loop',
@@ -308,20 +313,37 @@ export function initParkGame(): void {
     duplicateTile: strings.trackDuplicateTile,
     needsStation: strings.trackNeedsStation,
     notClosed: strings.trackNotClosed,
-    tooSteep: strings.trackTooSteep
+    tooSteep: strings.trackTooSteep,
+    heightMismatch: strings.trackHeightMismatch
   };
 
   // Render at device-pixel resolution: the canvas is CSS-scaled to fill its
-  // container, so a 1:1 backing store comes out blurry — especially the
-  // emoji sprites — on hi-DPI screens. All drawing stays in logical
-  // CANVAS_W×CANVAS_H coordinates via the transform. A floor of 2 keeps
-  // standard-DPI screens crisp too, since CSS can stretch the board wider
-  // than its logical size.
-  const DPR = Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
-  canvas.width = CANVAS_W * DPR;
-  canvas.height = CANVAS_H * DPR;
+  // container, so a 1:1 backing store on a hi-DPI screen comes out blurry —
+  // especially the emoji sprites. All drawing stays in logical
+  // CANVAS_W×CANVAS_H coordinates via the transform.
+  let dpr = 0;
+  function applyDpr() {
+    const next = Math.min(3, Math.max(1, Math.ceil(window.devicePixelRatio || 1)));
+    if (next === dpr) return;
+    dpr = next;
+    canvas.width = CANVAS_W * dpr;
+    canvas.height = CANVAS_H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  applyDpr();
   canvas.style.aspectRatio = `${CANVAS_W} / ${CANVAS_H}`;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // Browser zoom or dragging the window to another monitor changes
+  // devicePixelRatio; a stale backing store would bring the blur back. A
+  // ClientRouter swap replaces the canvas, so the orphaned listener unhooks
+  // itself rather than holding the old game alive.
+  const onResize = () => {
+    if (!canvas.isConnected) {
+      window.removeEventListener('resize', onResize);
+      return;
+    }
+    applyDpr();
+  };
+  window.addEventListener('resize', onResize);
 
   // On narrow screens the board keeps a minimum size inside a pannable
   // container; start the view centred on the entrance.
@@ -355,10 +377,6 @@ export function initParkGame(): void {
   let { tiles, heights, tunnels, entrance } = createPark();
   let rotation: Rotation = 0;
   let VIEW = makeView(rotation);
-  const reduceMotion =
-    typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
-  const ROTATE_ANIM_DURATION = 0.32; // seconds
-  let rotAnim: { t: number; dir: 1 | -1; swapped: boolean } | null = null;
   let phase: Phase = 'idle';
   let money = START_MONEY;
   let day = 1;
@@ -750,6 +768,18 @@ export function initParkGame(): void {
     trackTestBtn.disabled = !trackClosed;
   }
 
+  /**
+   * Whether applying `tool` to tile `i` would overwrite a drafted track
+   * tile. Terraforming under a draft is the point of keeping it alive
+   * across tool switches (shaping hills for climbs), so only tools that
+   * write the tile itself conflict — raise/lower touch heights only, and
+   * bulldoze/digTunnel can never pass canPlace on the draft's grass tiles.
+   */
+  function toolHitsDraft(i: number, tool: Tool): boolean {
+    if (!trackDraft || !trackDraft.some(s => s.tile === i)) return false;
+    return tool !== 'raiseLand' && tool !== 'lowerLand' && tool !== 'digTunnel' && tool !== 'bulldoze';
+  }
+
   /** Whether tapping tile `i` right now would be accepted by handleTrackTap — drives the hover highlight. */
   function trackTapValid(i: number): boolean {
     if (trackClosed) return false;
@@ -771,6 +801,9 @@ export function initParkGame(): void {
    * docs/plans/2026-07-09-park-overhaul-design.md.
    */
   function handleTrackTap(i: number) {
+    // The Close Loop button routes here directly, bypassing the canvas
+    // click handler's own phase guard.
+    if (phase !== 'play') return;
     if (trackClosed) return; // Test Track or Cancel first
     if (trackDraft === null) {
       if (tiles[i] !== 'grass') {
@@ -826,6 +859,9 @@ export function initParkGame(): void {
   }
 
   function testTrack() {
+    // The palette outlives the run (a draft keeps it visible), so without
+    // this guard Test Track could build a coaster into a finished game.
+    if (phase !== 'play') return;
     if (!trackDraft) {
       showToast(strings.trackEmpty);
       return;
@@ -862,25 +898,7 @@ export function initParkGame(): void {
   // --- Simulation ---
 
   function update(dt: number) {
-    if (rotAnim) {
-      rotAnim.t += dt;
-      const t = Math.min(1, rotAnim.t / ROTATE_ANIM_DURATION);
-      // First half spins the current view edge-on; at the midpoint (an
-      // imperceptible sliver) the underlying rotation swaps and the second
-      // half spins the new view back in from the opposite edge.
-      if (t >= 0.5 && !rotAnim.swapped) {
-        rotAnim.swapped = true;
-        setRotation(((rotation + (rotAnim.dir === 1 ? 1 : 3)) % 4) as Rotation);
-      }
-      const half = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
-      const angle = t < 0.5 ? rotAnim.dir * 90 * half : rotAnim.dir * -90 * (1 - half);
-      canvas.style.transform = `rotateY(${angle}deg)`;
-      if (t >= 1) {
-        canvas.style.transform = '';
-        rotAnim = null;
-      }
-    }
-
+    rotator.update(dt);
     clock += dt;
     floaters = floaters.filter(f => {
       f.life -= dt;
@@ -1309,10 +1327,7 @@ export function initParkGame(): void {
         ctx.save();
         if (draft) ctx.globalAlpha = 0.55;
         if (isRamp) {
-          // seg.dir is a world direction; a quarter-turn of the view turns
-          // it by the same amount on screen.
-          const viewDir = ((seg.dir + rotation) % 4) as Dir;
-          drawRamp(ctx, VIEW, vx, vy, rampCorners(viewDir, liftPx, nextLift), '#8a8a95');
+          drawRamp(ctx, VIEW, vx, vy, rampCorners(rotateDir(seg.dir, rotation) as Dir, liftPx, nextLift), '#8a8a95');
         } else {
           fillTile(ctx, VIEW, vx, vy, '#8a8a95', liftPx);
         }
@@ -1336,6 +1351,7 @@ export function initParkGame(): void {
         selectedTool === 'track'
           ? trackTapValid(hoverTile)
           : canPlace(tiles, heights, tunnels, x, y, selectedTool) &&
+            !toolHitsDraft(hoverTile, selectedTool) &&
             toolCost(selectedTool, tiles, hoverTile) <= money &&
             (!lockedZone || zoneUnlocked(lockedZone, rating, money));
       strokeTile(
@@ -1402,12 +1418,14 @@ export function initParkGame(): void {
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         const i = y * GRID_W + x;
-        const v = rotateTile(x, y, GRID_W, GRID_H, rotation);
+        // rotateTile inlined as scalar math, same as isoUnproject above.
+        const vx = rotation === 1 ? GRID_H - 1 - y : rotation === 2 ? GRID_W - 1 - x : rotation === 3 ? y : x;
+        const vy = rotation === 1 ? x : rotation === 2 ? GRID_H - 1 - y : rotation === 3 ? GRID_W - 1 - x : y;
         const b = (sy + heights[i] * TERRAIN_STEP - VIEW.originY) / VIEW.halfH;
         const tx = (a + b) / 2;
         const ty = (b - a) / 2;
-        if (Math.floor(tx) === v.x && Math.floor(ty) === v.y) {
-          const score = heights[i] * 1000 + (v.x + v.y);
+        if (Math.floor(tx) === vx && Math.floor(ty) === vy) {
+          const score = heights[i] * 1000 + (vx + vy);
           if (score > bestScore) {
             bestScore = score;
             best = i;
@@ -1419,6 +1437,9 @@ export function initParkGame(): void {
   }
 
   function tileFromEvent(e: MouseEvent): number {
+    // Mid-flip the rotateY transform shrinks the bounding rect, so the
+    // screen→tile math below would pick a tile far from the cursor.
+    if (rotator.animating()) return -1;
     const rect = canvas.getBoundingClientRect();
     // Logical (not backing-store) canvas size: drawing runs under the DPR
     // transform, so picking has to work in the same logical coordinates.
@@ -1472,6 +1493,10 @@ export function initParkGame(): void {
       }
       audio.playSfx('blip');
       invalidateGuests();
+      return;
+    }
+    if (toolHitsDraft(i, selectedTool)) {
+      showToast(strings.trackDraftInWay);
       return;
     }
     if (selectedTool === 'bulldoze' && isWalkable(tiles[i])) {
@@ -1555,25 +1580,17 @@ export function initParkGame(): void {
     });
   });
 
-  function setRotation(rot: Rotation) {
+  const rotator = createViewRotator(canvas, rot => {
     rotation = rot;
-    VIEW = makeView(rotation);
+    VIEW = makeView(rot);
     hoverTile = -1;
     armedTile = -1;
     // Screen-space effects were projected under the old rotation
     floaters = [];
     balloons = [];
-  }
-  function startRotate(dir: 1 | -1) {
-    if (rotAnim) return; // ignore taps while a turn is already animating
-    if (reduceMotion) {
-      setRotation(((rotation + (dir === 1 ? 1 : 3)) % 4) as Rotation);
-      return;
-    }
-    rotAnim = { t: 0, dir, swapped: false };
-  }
-  document.getElementById('rotate-left')?.addEventListener('click', () => startRotate(-1));
-  document.getElementById('rotate-right')?.addEventListener('click', () => startRotate(1));
+  });
+  document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
+  document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

@@ -210,6 +210,8 @@ export const translations = {
     'fun.park.trackCancel': 'Cancel',
     'fun.park.rotateLeft': 'Rotate view left',
     'fun.park.rotateRight': 'Rotate view right',
+    'fun.park.trackHeightMismatch': "Track and terrain heights don't match — reshape the land or the piece!",
+    'fun.park.trackDraftInWay': 'Your coaster draft crosses that tile!',
     'fun.park.trackNotAdjacent': 'Track pieces must connect to the last one!',
     'fun.park.trackBlocked': "Can't lay track there!",
     'fun.park.trackEmpty': 'Lay some track first!',
@@ -620,6 +622,9 @@ export const translations = {
     'fun.park.trackCancel': 'Cancelar',
     'fun.park.rotateLeft': 'Girar la vista a la izquierda',
     'fun.park.rotateRight': 'Girar la vista a la derecha',
+    'fun.park.trackHeightMismatch':
+      '¡La vía y la altura del terreno no coinciden — remodela el terreno o cambia la pieza!',
+    'fun.park.trackDraftInWay': '¡El borrador de tu montaña rusa cruza esa casilla!',
     'fun.park.trackNotAdjacent': '¡Las piezas de vía deben conectar con la última!',
     'fun.park.trackBlocked': '¡No se puede colocar vía ahí!',
     'fun.park.trackEmpty': '¡Coloca algo de vía primero!',
@@ -1030,6 +1035,9 @@ export const translations = {
     'fun.park.trackCancel': 'Cancel·lar',
     'fun.park.rotateLeft': 'Girar la vista a l\'esquerra',
     'fun.park.rotateRight': 'Girar la vista a la dreta',
+    'fun.park.trackHeightMismatch':
+      'La via i l\'alçada del terreny no coincideixen — remodela el terreny o canvia la peça!',
+    'fun.park.trackDraftInWay': 'L\'esborrany de la teva muntanya russa creua aquesta casella!',
     'fun.park.trackNotAdjacent': 'Les peces de via han de connectar amb l\'última!',
     'fun.park.trackBlocked': 'No es pot col·locar via allà!',
     'fun.park.trackEmpty': 'Col·loca una mica de via primer!',

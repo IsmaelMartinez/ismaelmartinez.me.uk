@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { setupHiDpiCanvas } from '../../src/games/engine/canvas';
+import { setupHiDpiCanvas, createStaticLayer } from '../../src/games/engine/canvas';
 
 /**
  * The suite runs under node, so window/document/canvas are hand-rolled fakes:
@@ -291,5 +291,84 @@ describe('toLogical pointer mapping', () => {
     const hiDpi = h.setup();
     h.setRect({ width: 0, height: 0 });
     expect(hiDpi.toLogical({ clientX: 42, clientY: 7 })).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('createStaticLayer', () => {
+  interface FakeLayer {
+    width: number;
+    height: number;
+    ctx: { scale: ReturnType<typeof vi.fn> } | null;
+    getContext(type: string): FakeLayer['ctx'];
+  }
+
+  function makeLayerHarness({ contextAvailable = true } = {}) {
+    const created: FakeLayer[] = [];
+    vi.stubGlobal('document', {
+      createElement: (tag: string): FakeLayer => {
+        expect(tag).toBe('canvas');
+        const el: FakeLayer = {
+          width: 0,
+          height: 0,
+          ctx: contextAvailable ? { scale: vi.fn() } : null,
+          getContext: () => el.ctx
+        };
+        created.push(el);
+        return el;
+      }
+    });
+    const drawImage = vi.fn();
+    const mainCtx = { drawImage } as unknown as CanvasRenderingContext2D;
+    return { created, drawImage, mainCtx };
+  }
+
+  it('bakes at device resolution and blits at logical size', () => {
+    const h = makeLayerHarness();
+    const paint = vi.fn();
+    const layer = createStaticLayer(400, 200, paint);
+    layer.rebuild(3);
+    expect(h.created).toHaveLength(1);
+    expect(h.created[0].width).toBe(1200);
+    expect(h.created[0].height).toBe(600);
+    // Painted in logical coordinates under a dpr scale, into the layer.
+    expect(h.created[0].ctx!.scale).toHaveBeenCalledWith(3, 3);
+    expect(paint).toHaveBeenCalledExactlyOnceWith(h.created[0].ctx);
+    // draw() blits the bake (logical destination size, 1:1 onto backing
+    // pixels) — it never repaints.
+    layer.draw(h.mainCtx);
+    expect(h.drawImage).toHaveBeenCalledExactlyOnceWith(h.created[0], 0, 0, 400, 200);
+    expect(paint).toHaveBeenCalledTimes(1);
+  });
+
+  it('paints live until the first rebuild', () => {
+    const h = makeLayerHarness();
+    const paint = vi.fn();
+    const layer = createStaticLayer(400, 200, paint);
+    layer.draw(h.mainCtx);
+    expect(paint).toHaveBeenCalledExactlyOnceWith(h.mainCtx);
+    expect(h.drawImage).not.toHaveBeenCalled();
+  });
+
+  it('falls back to live painting when the layer context is unavailable', () => {
+    const h = makeLayerHarness({ contextAvailable: false });
+    const paint = vi.fn();
+    const layer = createStaticLayer(400, 200, paint);
+    layer.rebuild(2);
+    layer.draw(h.mainCtx);
+    layer.draw(h.mainCtx);
+    expect(h.drawImage).not.toHaveBeenCalled();
+    expect(paint).toHaveBeenCalledTimes(2);
+    expect(paint).toHaveBeenNthCalledWith(1, h.mainCtx);
+  });
+
+  it('a rebuild at a new ratio replaces the bake', () => {
+    const h = makeLayerHarness();
+    const layer = createStaticLayer(400, 200, vi.fn());
+    layer.rebuild(1);
+    layer.rebuild(3);
+    expect(h.created).toHaveLength(2);
+    expect(h.created[1].width).toBe(1200);
+    layer.draw(h.mainCtx);
+    expect(h.drawImage).toHaveBeenCalledExactlyOnceWith(h.created[1], 0, 0, 400, 200);
   });
 });

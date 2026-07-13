@@ -15,6 +15,56 @@ export interface HiDpiCanvas {
   toLogical(e: { clientX: number; clientY: number }): { x: number; y: number };
 }
 
+/**
+ * Cached device-resolution layer for static full-canvas content (skies,
+ * starfields, checkerboards, vignettes) that a render loop would otherwise
+ * repaint every frame.
+ *
+ * `rebuild(dpr)` bakes `paint` into an offscreen canvas at device resolution
+ * — pass it as {@link setupHiDpiCanvas}'s `onApply` so the bake tracks every
+ * backing-store resize. `draw(ctx)` blits the layer at logical size, which
+ * maps 1:1 onto backing pixels (no resampling, smoothing-agnostic); if the
+ * layer's context couldn't be created it paints live instead, reproducing
+ * the un-cached frame.
+ *
+ * The layer must stay aligned to the visible board: gradient dithering is
+ * anchored to device pixels, so painting the same content at an offset
+ * inside the layer produces visibly-identical but not byte-identical pixels.
+ * `paint` therefore draws in plain logical coordinates (the layer context is
+ * pre-scaled by `dpr`), exactly as it would draw on the main context.
+ */
+export interface StaticLayer {
+  /** Rebuild the bake for a new device-pixel ratio. */
+  rebuild(dpr: number): void;
+  /** Blit the bake (or paint live if the layer couldn't be built). */
+  draw(ctx: CanvasRenderingContext2D): void;
+}
+
+export function createStaticLayer(
+  logicalW: number,
+  logicalH: number,
+  paint: (ctx: CanvasRenderingContext2D) => void
+): StaticLayer {
+  let layer: HTMLCanvasElement | null = null;
+  return {
+    rebuild(dpr) {
+      layer = null;
+      const next = document.createElement('canvas');
+      next.width = logicalW * dpr;
+      next.height = logicalH * dpr;
+      const lctx = next.getContext('2d');
+      if (!lctx) return;
+      lctx.scale(dpr, dpr);
+      paint(lctx);
+      layer = next;
+    },
+    draw(ctx) {
+      if (layer) ctx.drawImage(layer, 0, 0, logicalW, logicalH);
+      else paint(ctx);
+    }
+  };
+}
+
 export function setupHiDpiCanvas(
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,

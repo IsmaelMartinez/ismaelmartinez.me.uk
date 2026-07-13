@@ -7,6 +7,7 @@
  */
 import {
   createGameLoop,
+  createStaticLayer,
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
@@ -101,23 +102,10 @@ export function initSnakeGame(): void {
   const finalScoreEl = el('final-score');
 
   // The board (base fill, checkerboard, vignette) never changes, so it's
-  // baked into a device-resolution layer once per DPR change instead of
-  // re-filling the checker pattern and a full-canvas radial gradient every
-  // frame (same pattern as Syndicate's scanlines+vignette overlay).
-  let boardLayer: HTMLCanvasElement | null = null;
-  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
-    onApply(dpr) {
-      boardLayer = null;
-      const layer = document.createElement('canvas');
-      layer.width = WIDTH * dpr;
-      layer.height = HEIGHT * dpr;
-      const lctx = layer.getContext('2d');
-      if (!lctx) return;
-      lctx.scale(dpr, dpr);
-      paintBoard(lctx);
-      boardLayer = layer;
-    }
-  });
+  // baked once per DPR change instead of re-filling the checker pattern and
+  // a full-canvas radial gradient every frame.
+  const boardLayer = createStaticLayer(WIDTH, HEIGHT, paintBoard);
+  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, { onApply: boardLayer.rebuild });
 
   let state: SnakeState = createSnakeState();
   let prevSnake: Vec[] = state.snake.map(s => ({ ...s }));
@@ -283,12 +271,6 @@ export function initSnakeGame(): void {
     target.fillRect(0, 0, WIDTH, HEIGHT);
   }
 
-  function drawBoard() {
-    // Logical destination size — the device-resolution layer maps 1:1 onto
-    // backing pixels.
-    if (boardLayer) ctx.drawImage(boardLayer, 0, 0, WIDTH, HEIGHT);
-    else paintBoard(ctx);
-  }
 
   /** Soft contact shadow under round pieces (apple, bonus, snake head). */
   function drawShadow(cx: number, cy: number, r: number) {
@@ -404,10 +386,15 @@ export function initSnakeGame(): void {
   function render() {
     ctx.save();
     if (shake > 0) {
-      ctx.translate((Math.random() - 0.5) * shake * 14, (Math.random() - 0.5) * shake * 14);
+      // Whole-pixel jitter keeps the board blit on the device-pixel grid —
+      // a fractional offset would bilinear-blur the baked layer.
+      ctx.translate(
+        Math.round((Math.random() - 0.5) * shake * 14),
+        Math.round((Math.random() - 0.5) * shake * 14)
+      );
     }
 
-    drawBoard();
+    boardLayer.draw(ctx);
     if (state.food.x >= 0) drawApple(px(state.food.x), px(state.food.y));
     if (state.bonus) drawBonus(px(state.bonus.pos.x), px(state.bonus.pos.y), state.bonus.ticksLeft);
 

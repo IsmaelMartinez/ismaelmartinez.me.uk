@@ -13,6 +13,7 @@
  */
 import {
   createGameLoop,
+  createStaticLayer,
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
@@ -157,24 +158,16 @@ export function initLemmingsGame(): void {
 
   // The terrain and background layers are 1x pixel-art bitmaps that need
   // nearest-neighbour upscaling; default smoothing would smear them. The
-  // vignette is baked into a device-resolution layer once per DPR change —
-  // a full-canvas radial-gradient fill every frame is the expensive part,
-  // and a 1:1 blit keeps the gradient exactly as smooth as drawing it live.
-  let vignetteLayer: HTMLCanvasElement | null = null;
+  // vignette is baked once per DPR change — a full-canvas radial-gradient
+  // fill every frame is the expensive part, and the 1:1 blit keeps the
+  // gradient exactly as smooth as drawing it live.
+  const vignetteLayer = createStaticLayer(LEVEL_W, LEVEL_H, target => {
+    target.fillStyle = makeVignette(target);
+    target.fillRect(0, 0, LEVEL_W, LEVEL_H);
+  });
   const hiDpi = setupHiDpiCanvas(canvas, ctx, LEVEL_W, LEVEL_H, {
     smoothing: false,
-    onApply(dpr) {
-      vignetteLayer = null;
-      const layer = document.createElement('canvas');
-      layer.width = LEVEL_W * dpr;
-      layer.height = LEVEL_H * dpr;
-      const lctx = layer.getContext('2d');
-      if (!lctx) return;
-      lctx.scale(dpr, dpr);
-      lctx.fillStyle = makeVignette(lctx);
-      lctx.fillRect(0, 0, LEVEL_W, LEVEL_H);
-      vignetteLayer = layer;
-    }
+    onApply: vignetteLayer.rebuild
   });
 
   // Offscreen terrain layer, rebuilt only when the bitmap changes version.
@@ -879,14 +872,8 @@ export function initLemmingsGame(): void {
     }
     ctx.globalAlpha = 1;
 
-    // Darken the edges for depth. Logical destination size — the
-    // device-resolution layer maps 1:1 onto backing pixels.
-    if (vignetteLayer) {
-      ctx.drawImage(vignetteLayer, 0, 0, LEVEL_W, LEVEL_H);
-    } else {
-      ctx.fillStyle = makeVignette(ctx);
-      ctx.fillRect(0, 0, LEVEL_W, LEVEL_H);
-    }
+    // Darken the edges for depth.
+    vignetteLayer.draw(ctx);
 
     // Timed levels wear their clock top-centre, flashing red for the last 10s.
     if (phase === 'playing' && def.timeLimit !== undefined) {

@@ -7,6 +7,7 @@
  */
 import {
   createGameLoop,
+  createStaticLayer,
   loadScore,
   saveScore,
   initScoreboard,
@@ -148,27 +149,12 @@ export function initTanksGame(): void {
   }));
 
   // Sky, stars, moon, and mountain silhouettes never change during a match,
-  // so they're baked into a device-resolution layer once per DPR change
-  // instead of re-filling gradients over the whole canvas every frame (same
-  // pattern as Syndicate's scanlines+vignette overlay). The layer is aligned
-  // exactly to the visible board — gradient dithering is anchored to device
-  // pixels, so a margin-offset layer would land visibly-identical but not
-  // byte-identical pixels; the SKY_MARGIN overdraw that keeps screen shake
-  // from exposing a bare edge is filled live on the rare shaking frames.
-  let backdrop: HTMLCanvasElement | null = null;
-  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
-    onApply(dpr) {
-      backdrop = null;
-      const layer = document.createElement('canvas');
-      layer.width = WIDTH * dpr;
-      layer.height = HEIGHT * dpr;
-      const lctx = layer.getContext('2d');
-      if (!lctx) return;
-      lctx.scale(dpr, dpr);
-      paintBackdrop(lctx);
-      backdrop = layer;
-    }
-  });
+  // so they're baked once per DPR change instead of re-filling gradients
+  // over the whole canvas every frame. The SKY_MARGIN overdraw that keeps
+  // screen shake from exposing a bare edge is filled live on the rare
+  // shaking frames, so the layer stays board-aligned (see createStaticLayer).
+  const backdrop = createStaticLayer(WIDTH, HEIGHT, paintBackdrop);
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, { onApply: backdrop.rebuild });
 
   function makeSky(target: CanvasRenderingContext2D): CanvasGradient {
     const sky = target.createLinearGradient(0, 0, 0, HEIGHT);
@@ -670,15 +656,22 @@ export function initTanksGame(): void {
   function render() {
     ctx.save();
     if (shake > 0) {
-      ctx.translate((Math.random() - 0.5) * shake * 18, (Math.random() - 0.5) * shake * 18);
+      // Whole-pixel jitter keeps the backdrop blit on the device-pixel grid
+      // (a fractional offset would bilinear-blur the baked layer), and only
+      // the exposed margin strips need the sky fill — the blit repaints the
+      // whole interior anyway.
+      ctx.translate(
+        Math.round((Math.random() - 0.5) * shake * 18),
+        Math.round((Math.random() - 0.5) * shake * 18)
+      );
       ctx.fillStyle = skyFill;
-      ctx.fillRect(-SKY_MARGIN, -SKY_MARGIN, WIDTH + SKY_MARGIN * 2, HEIGHT + SKY_MARGIN * 2);
+      ctx.fillRect(-SKY_MARGIN, -SKY_MARGIN, WIDTH + SKY_MARGIN * 2, SKY_MARGIN);
+      ctx.fillRect(-SKY_MARGIN, HEIGHT, WIDTH + SKY_MARGIN * 2, SKY_MARGIN);
+      ctx.fillRect(-SKY_MARGIN, 0, SKY_MARGIN, HEIGHT);
+      ctx.fillRect(WIDTH, 0, SKY_MARGIN, HEIGHT);
     }
 
-    // Logical destination size — the device-resolution layer maps 1:1 onto
-    // backing pixels.
-    if (backdrop) ctx.drawImage(backdrop, 0, 0, WIDTH, HEIGHT);
-    else paintBackdrop(ctx);
+    backdrop.draw(ctx);
 
     if (ground.length) {
       const dirt = ctx.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);

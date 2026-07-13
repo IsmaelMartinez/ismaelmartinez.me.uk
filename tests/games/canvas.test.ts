@@ -7,15 +7,21 @@ import { setupHiDpiCanvas } from '../../src/games/engine/canvas';
  * pointer mapping to run, with hooks to fire events and flip the ratio.
  */
 interface FakeMq {
-  query: string;
+  media: string;
+  readonly matches: boolean;
   listener: (() => void) | null;
   addEventListener(type: string, fn: () => void): void;
   removeEventListener(type: string, fn: () => void): void;
 }
 
-function makeMq(query: string): FakeMq {
+function makeMq(media: string, currentQuery: () => string): FakeMq {
   return {
-    query,
+    media,
+    // Like the real thing: matches while the ratio the query is pinned to is
+    // still the device's current ratio.
+    get matches() {
+      return media === currentQuery();
+    },
     listener: null,
     addEventListener(_type, fn) {
       this.listener = fn;
@@ -55,7 +61,7 @@ function makeHarness(devicePixelRatio = 1) {
     addEventListener: (t: string, fn: () => void) => win.add(t, fn),
     removeEventListener: (t: string, fn: () => void) => win.remove(t, fn),
     matchMedia: (query: string) => {
-      const mq = makeMq(query);
+      const mq = makeMq(query, () => `(resolution: ${windowStub.devicePixelRatio || 1}dppx)`);
       mqs.push(mq);
       return mq;
     }
@@ -157,12 +163,12 @@ describe('DPR change lifecycle', () => {
   it('matchMedia change (same-size monitor move, no resize event) re-sizes and re-arms', () => {
     const h = makeHarness(1);
     h.setup();
-    expect(h.mqs[0].query).toBe('(resolution: 1dppx)');
+    expect(h.mqs[0].media).toBe('(resolution: 1dppx)');
     h.setRatio(2);
     h.fireMq();
     expect(h.canvas.width).toBe(800);
     // Re-armed on the new ratio, ready for the next monitor move.
-    expect(h.mqs[h.mqs.length - 1].query).toBe('(resolution: 2dppx)');
+    expect(h.mqs[h.mqs.length - 1].media).toBe('(resolution: 2dppx)');
     expect(h.mqs[h.mqs.length - 1].listener).not.toBeNull();
     h.setRatio(1);
     h.fireMq();
@@ -176,6 +182,17 @@ describe('DPR change lifecycle', () => {
     expect(onApply).toHaveBeenCalledTimes(1);
     h.win.fire('resize');
     expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('resize events without a ratio change do not rebuild the media query', () => {
+    const h = makeHarness(1);
+    h.setup();
+    const built = h.mqs.length;
+    h.win.fire('resize');
+    h.win.fire('resize');
+    h.win.fire('resize');
+    expect(h.mqs.length).toBe(built);
+    expect(h.mqs[h.mqs.length - 1].listener).not.toBeNull();
   });
 
   it('onApply receives the clamped dpr on every backing-store resize', () => {

@@ -71,8 +71,12 @@ export function setupHiDpiCanvas(
     watchDpr();
   };
   const watchDpr = () => {
+    const query = `(resolution: ${window.devicePixelRatio || 1}dppx)`;
+    // Still armed on a query that matches the current ratio (the common case
+    // for the many resize events of a window drag) — don't rebuild it.
+    if (mq?.matches && mq.media === query) return;
     mq?.removeEventListener('change', onChange);
-    mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    mq = window.matchMedia(query);
     mq.addEventListener('change', onChange, { once: true });
   };
   const unhook = () => {

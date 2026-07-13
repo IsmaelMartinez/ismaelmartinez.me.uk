@@ -760,10 +760,6 @@ export function initTanksGame(): void {
   const clamp = (value: number, min: number, max: number) =>
     Math.min(max, Math.max(min, value));
 
-  function canvasPoint(e: PointerEvent): { x: number; y: number } {
-    return hiDpi.toLogical(e);
-  }
-
   // Drag anywhere on the battlefield to aim: the vector from the turret to
   // the pointer sets angle and power. Touch-friendly; sliders fine-tune.
   let aiming = false;
@@ -771,7 +767,7 @@ export function initTanksGame(): void {
   function aimFromPointer(e: PointerEvent) {
     const tank = tanks[current];
     if (!tank) return;
-    const p = canvasPoint(e);
+    const p = hiDpi.toLogical(e);
     const dx = p.x - tank.x;
     const dy = tank.y - TANK_H - p.y;
     const dist = Math.hypot(dx, dy);

@@ -155,14 +155,9 @@ export function initLemmingsGame(): void {
   // (e.g. `data-t-hint6` → `dataset.tHint6`); blank for levels without one.
   const hintFor = (index: number): string => root.dataset[`tHint${index}`] ?? '';
 
-  const hiDpi = setupHiDpiCanvas(canvas, ctx, LEVEL_W, LEVEL_H, {
-    onApply() {
-      // The terrain and background layers are 1x pixel-art bitmaps; the
-      // integer DPR clamp means nearest-neighbour upscales them cleanly,
-      // while default smoothing would smear them into a blur.
-      ctx.imageSmoothingEnabled = false;
-    }
-  });
+  // The terrain and background layers are 1x pixel-art bitmaps that need
+  // nearest-neighbour upscaling; default smoothing would smear them.
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, LEVEL_W, LEVEL_H, { smoothing: false });
 
   // Offscreen terrain layer, rebuilt only when the bitmap changes version.
   const terrainCanvas = document.createElement('canvas');
@@ -900,12 +895,8 @@ export function initLemmingsGame(): void {
 
   // --- Input ---
 
-  function levelPoint(e: PointerEvent): { x: number; y: number } {
-    return hiDpi.toLogical(e);
-  }
-
   canvas.addEventListener('pointerdown', e => {
-    const p = levelPoint(e);
+    const p = hiDpi.toLogical(e);
     applySkillAt(p.x, p.y);
     e.preventDefault();
   });

@@ -10,6 +10,7 @@ import {
   loadScore,
   saveScore,
   initScoreboard,
+  setupHiDpiCanvas,
   createGameAudio,
   wireSoundButton
 } from '../engine';
@@ -139,8 +140,7 @@ export function initTanksGame(): void {
     matchScore: root.dataset.tMatchScore || 'Match score'
   };
 
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT);
 
   let ground: number[] = [];
   let tanks: Tank[] = [];
@@ -761,11 +761,7 @@ export function initTanksGame(): void {
     Math.min(max, Math.max(min, value));
 
   function canvasPoint(e: PointerEvent): { x: number; y: number } {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) * (WIDTH / rect.width),
-      y: (e.clientY - rect.top) * (HEIGHT / rect.height)
-    };
+    return hiDpi.toLogical(e);
   }
 
   // Drag anywhere on the battlefield to aim: the vector from the turret to

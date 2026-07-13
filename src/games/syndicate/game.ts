@@ -9,6 +9,7 @@
 import {
   createGameLoop,
   initScoreboard,
+  setupHiDpiCanvas,
   isoProject,
   isoTileFromPoint,
   fillTile,
@@ -151,22 +152,25 @@ export function initSyndicateGame(): void {
     } as Partial<Record<Unit['kind'], string>>
   };
 
-  canvas.width = CANVAS_W;
-  canvas.height = CANVAS_H;
+  // Pre-rendered scanline overlay (cheaper than drawing lines every frame),
+  // rebuilt at device resolution whenever the DPR changes so the 1px CRT
+  // lines stay crisp instead of being blur-upscaled from a 1:1 bitmap.
+  let scanlines: HTMLCanvasElement | null = null;
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, {
+    onApply(dpr) {
+      const scan = document.createElement('canvas');
+      scan.width = CANVAS_W * dpr;
+      scan.height = CANVAS_H * dpr;
+      const scanCtx = scan.getContext('2d');
+      scanlines = null;
+      if (!scanCtx) return;
+      scanCtx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+      for (let y = 0; y < CANVAS_H; y += 3) scanCtx.fillRect(0, y * dpr, CANVAS_W * dpr, dpr);
+      scanlines = scan;
+    }
+  });
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
-
-  // Pre-rendered scanline overlay (cheaper than drawing lines every frame).
-  let scanlines: HTMLCanvasElement | null = null;
-  const scan = document.createElement('canvas');
-  scan.width = CANVAS_W;
-  scan.height = CANVAS_H;
-  const scanCtx = scan.getContext('2d');
-  if (scanCtx) {
-    scanCtx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-    for (let y = 0; y < CANVAS_H; y += 3) scanCtx.fillRect(0, y, CANVAS_W, 1);
-    scanlines = scan;
-  }
 
   let phase: Phase = 'idle';
   let tiles: MapTile[] = generateCity(Math.random);
@@ -903,8 +907,9 @@ export function initSyndicateGame(): void {
     }
     ctx.stroke();
 
-    // Scanlines for the CRT-arcade feel
-    if (scanlines) ctx.drawImage(scanlines, 0, 0);
+    // Scanlines for the CRT-arcade feel; logical destination size — the
+    // device-resolution overlay maps 1:1 onto backing-store pixels.
+    if (scanlines) ctx.drawImage(scanlines, 0, 0, CANVAS_W, CANVAS_H);
 
     // Vignette
     const vig = ctx.createRadialGradient(
@@ -969,10 +974,10 @@ export function initSyndicateGame(): void {
   // --- Input wiring ---
 
   function tileFromEvent(e: MouseEvent): number {
-    const rect = canvas.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
-    return isoTileFromPoint(VIEW, sx, sy, MAP_W, MAP_H);
+    // Logical (not backing-store) coordinates: the backing store is
+    // DPR-scaled, so canvas.width/rect.width would land tiles wide.
+    const p = hiDpi.toLogical(e);
+    return isoTileFromPoint(VIEW, p.x, p.y, MAP_W, MAP_H);
   }
 
   canvas.addEventListener('click', e => {

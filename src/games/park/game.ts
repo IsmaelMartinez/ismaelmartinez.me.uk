@@ -8,6 +8,7 @@
 import {
   createGameLoop,
   initScoreboard,
+  setupHiDpiCanvas,
   isoProject,
   fillTile,
   strokeTile,
@@ -318,37 +319,7 @@ export function initParkGame(): void {
     heightMismatch: strings.trackHeightMismatch
   };
 
-  // Render at device-pixel resolution: the canvas is CSS-scaled to fill its
-  // container, so a 1:1 backing store on a hi-DPI screen comes out blurry —
-  // especially the emoji sprites. All drawing stays in logical
-  // CANVAS_W×CANVAS_H coordinates via the transform.
-  let dpr = 0;
-  function applyDpr() {
-    // Scale the backing store to the device pixels the canvas actually
-    // covers: the container can display the board larger than its logical
-    // size (max-width 820px vs 760 logical px), so devicePixelRatio alone
-    // under-provisions even on 1× screens. clientWidth is layout-based, so
-    // a mid-flip rotateY transform can't skew the measurement.
-    const cssUpscale = (canvas.clientWidth || CANVAS_W) / CANVAS_W;
-    const next = Math.min(3, Math.max(1, Math.ceil((window.devicePixelRatio || 1) * cssUpscale)));
-    if (next === dpr) return;
-    dpr = next;
-    canvas.width = CANVAS_W * dpr;
-    canvas.height = CANVAS_H * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  applyDpr();
-  canvas.style.aspectRatio = `${CANVAS_W} / ${CANVAS_H}`;
-  // Browser zoom or dragging the window to another monitor changes
-  // devicePixelRatio; a stale backing store would bring the blur back.
-  window.addEventListener('resize', applyDpr);
-  // A ClientRouter swap replaces the canvas; drop the listener there so it
-  // can't keep the old game's scope alive until some future resize.
-  document.addEventListener(
-    'astro:before-swap',
-    () => window.removeEventListener('resize', applyDpr),
-    { once: true }
-  );
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H);
 
   // On narrow screens the board keeps a minimum size inside a pannable
   // container; start the view centred on the entrance.
@@ -1453,12 +1424,8 @@ export function initParkGame(): void {
     // Mid-flip the rotateY transform shrinks the bounding rect, so the
     // screen→tile math below would pick a tile far from the cursor.
     if (rotator.animating()) return -1;
-    const rect = canvas.getBoundingClientRect();
-    // Logical (not backing-store) canvas size: drawing runs under the DPR
-    // transform, so picking has to work in the same logical coordinates.
-    const sx = (e.clientX - rect.left) * (CANVAS_W / rect.width);
-    const sy = (e.clientY - rect.top) * (CANVAS_H / rect.height);
-    return pickTile(sx, sy);
+    const p = hiDpi.toLogical(e);
+    return pickTile(p.x, p.y);
   }
 
   canvas.addEventListener('mousemove', e => {

@@ -5,7 +5,13 @@
  * loop, and canvas rendering. It expects the markup defined in
  * src/pages/[lang]/fun/snake.astro.
  */
-import { createGameLoop, initScoreboard, createGameAudio, wireSoundButton } from '../engine';
+import {
+  createGameLoop,
+  initScoreboard,
+  setupHiDpiCanvas,
+  createGameAudio,
+  wireSoundButton
+} from '../engine';
 import {
   COLS,
   ROWS,
@@ -94,8 +100,7 @@ export function initSnakeGame(): void {
   const highScoreEl = el('high-score');
   const finalScoreEl = el('final-score');
 
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT);
 
   let state: SnakeState = createSnakeState();
   let prevSnake: Vec[] = state.snake.map(s => ({ ...s }));

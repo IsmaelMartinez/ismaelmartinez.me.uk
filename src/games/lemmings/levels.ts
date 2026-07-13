@@ -416,7 +416,9 @@ export const LEVELS: LevelDef[] = [
     spawnCount: 12,
     needed: 7,
     stock: { builder: 2, blocker: 2, floater: 2 },
-    par: 4200,
+    // Par sits well inside the clock: a clear between par and the limit earns
+    // no time bonus, so the bonus stays something to chase, not a given.
+    par: 3000,
     timeLimit: 3600,
     hint: 'fun.lemmings.hint17'
   },
@@ -473,7 +475,7 @@ export const LEVELS: LevelDef[] = [
     spawnCount: 14,
     needed: 8,
     stock: { basher: 2, builder: 3, blocker: 2, floater: 2, digger: 1 },
-    par: 5400,
+    par: 4500,
     timeLimit: 5400,
     hint: 'fun.lemmings.hint20'
   }

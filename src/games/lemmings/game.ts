@@ -252,7 +252,6 @@ export function initLemmingsGame(): void {
   // --- Mutable game state ---
   let levelIndex = 0;
   let def = LEVELS[0];
-  let hatches: Hatch[] = levelHatches(def);
   let bmp = new TerrainBitmap(LEVEL_W, LEVEL_H);
   let critters: Critter[] = [];
   let particles: Particle[] = [];
@@ -295,6 +294,7 @@ export function initLemmingsGame(): void {
     width: LEVEL_W,
     height: LEVEL_H,
     solid: (x, y) => bmp.solid(x, y),
+    erodible: (x, y) => bmp.erodible(x, y),
     eraseRect: (x, y, w, h) => {
       bmp.eraseRect(x, y, w, h);
       spawnParticles(x + w / 2, y + h / 2, '#a16207', 3);
@@ -312,7 +312,6 @@ export function initLemmingsGame(): void {
   function loadLevel(index: number) {
     levelIndex = index;
     def = LEVELS[index];
-    hatches = levelHatches(def);
     bmp = buildLevel(def);
     terrainVersion = -1;
     critters = [];
@@ -433,7 +432,13 @@ export function initLemmingsGame(): void {
     val.textContent = `+${points}`;
   }
 
-  function finishLevel() {
+  /**
+   * Ends the level. `timedOut` is the caller's verdict on *why* it ended (the
+   * clock, rather than the crowd resolving) — finishLevel never re-derives it
+   * from tick state, so a quota failure that merely coincides with the final
+   * tick is not mislabelled as a timeout.
+   */
+  function finishLevel(timedOut = false) {
     if (phase === 'result') return;
     phase = 'result';
     syncToolbar();
@@ -460,17 +465,23 @@ export function initLemmingsGame(): void {
       board.stash(runScore);
     }
     const victory = won && last;
-    // A quota missed because the clock ran out gets its own title, so the
-    // player knows to speed up rather than rescue differently.
-    const timedOut = def.timeLimit !== undefined && levelTicks >= def.timeLimit;
-    resultEmoji.textContent = victory ? '🏆' : won ? '🎉' : timedOut ? '⏰' : '💔';
-    resultTitle.textContent = victory
-      ? strings.victory
-      : won
-        ? strings.complete
-        : timedOut
-          ? strings.timeUp
-          : strings.failed;
+    // One outcome chain sets both faces of the result, so emoji and title can
+    // never drift apart. A quota missed on the clock gets its own framing —
+    // the player should speed up, not rescue differently.
+    let emoji = '💔';
+    let title = strings.failed;
+    if (victory) {
+      emoji = '🏆';
+      title = strings.victory;
+    } else if (won) {
+      emoji = '🎉';
+      title = strings.complete;
+    } else if (timedOut) {
+      emoji = '⏰';
+      title = strings.timeUp;
+    }
+    resultEmoji.textContent = emoji;
+    resultTitle.textContent = title;
     // Describe the rescue out of the total crowd (the goal is on the HUD), so
     // an over-quota clear never reads oddly as "8 of 4".
     resultDesc.textContent = won
@@ -516,6 +527,7 @@ export function initLemmingsGame(): void {
       spawnTimer--;
       if (spawnTimer <= 0) {
         // With a second hatch present, spawns alternate between the two.
+        const hatches = levelHatches(def);
         const h = hatches[spawned % hatches.length];
         critters.push(createCritter(nextId++, h.x, h.y, h.dir));
         spawned++;
@@ -561,10 +573,12 @@ export function initLemmingsGame(): void {
     // rescued: any stragglers are blockers, which never leave on their own and
     // — with no one else left to dig them free — are stuck for good. A timed
     // level also ends the moment its clock runs out, stranding whoever is
-    // still in the field.
-    const timedOut = def.timeLimit !== undefined && levelTicks >= def.timeLimit;
+    // still in the field — except during a nuke: the player already conceded,
+    // so the chain plays out and the result reads as the failure it is rather
+    // than a timeout coaching them to speed up.
+    const timedOut = !nuking && def.timeLimit !== undefined && levelTicks >= def.timeLimit;
     const done = spawned >= def.spawnCount && critters.every(c => c.state === 'blocker');
-    if (done || timedOut) finishLevel();
+    if (done || timedOut) finishLevel(timedOut && !done);
   }
 
   // --- Rendering ---
@@ -806,7 +820,7 @@ export function initLemmingsGame(): void {
     ctx.drawImage(terrainCanvas, 0, 0);
 
     drawExit();
-    for (const h of hatches) drawHatch(h);
+    for (const h of levelHatches(def)) drawHatch(h);
     for (const c of critters) drawCritter(c);
     // Destination arrows sit on top of the critters, only while a level is live.
     if (phase === 'playing') {

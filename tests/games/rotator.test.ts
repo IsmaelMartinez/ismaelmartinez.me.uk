@@ -48,7 +48,7 @@ describe('createViewRotator', () => {
     const rotator = createViewRotator(canvas, () => {});
     rotator.start(1);
     rotator.update(0.08); // quarter of the way: half of the first 90° sweep
-    expect(canvas.style.transform).toBe('rotateY(45deg)');
+    expect(canvas.style.transform).toBe('perspective(1000px) rotateY(45deg)');
     rotator.update(1);
     expect(canvas.style.transform).toBe('');
   });

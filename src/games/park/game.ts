@@ -269,6 +269,7 @@ export function initParkGame(): void {
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.tool-btn'));
   const speedButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.speed-btn'));
   const trackPalette = el('track-palette');
+  const trackKindsEl = root.querySelector<HTMLElement>('.track-kinds');
   const trackKindButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.track-kind-btn'));
   const trackStatusEl = el('track-status');
   const trackCloseBtn = el('track-close-btn') as HTMLButtonElement;
@@ -333,17 +334,15 @@ export function initParkGame(): void {
   applyDpr();
   canvas.style.aspectRatio = `${CANVAS_W} / ${CANVAS_H}`;
   // Browser zoom or dragging the window to another monitor changes
-  // devicePixelRatio; a stale backing store would bring the blur back. A
-  // ClientRouter swap replaces the canvas, so the orphaned listener unhooks
-  // itself rather than holding the old game alive.
-  const onResize = () => {
-    if (!canvas.isConnected) {
-      window.removeEventListener('resize', onResize);
-      return;
-    }
-    applyDpr();
-  };
-  window.addEventListener('resize', onResize);
+  // devicePixelRatio; a stale backing store would bring the blur back.
+  window.addEventListener('resize', applyDpr);
+  // A ClientRouter swap replaces the canvas; drop the listener there so it
+  // can't keep the old game's scope alive until some future resize.
+  document.addEventListener(
+    'astro:before-swap',
+    () => window.removeEventListener('resize', applyDpr),
+    { once: true }
+  );
 
   // On narrow screens the board keeps a minimum size inside a pannable
   // container; start the view centred on the entrance.
@@ -756,8 +755,14 @@ export function initParkGame(): void {
     if (!trackPalette) return;
     // The palette stays up while a draft exists — even with another tool
     // selected — so Test/Cancel remain reachable and it's clear the
-    // in-progress loop hasn't been thrown away.
-    trackPalette.style.display = selectedTool === 'track' || trackDraft ? 'flex' : 'none';
+    // in-progress loop hasn't been thrown away. The piece selector dims
+    // then, since canvas taps run the selected tool, not track laying.
+    trackPalette.style.display = selectedTool === 'track' || trackDraft !== null ? 'flex' : 'none';
+    if (trackKindsEl) {
+      const laying = selectedTool === 'track';
+      trackKindsEl.style.opacity = laying ? '' : '0.45';
+      trackKindsEl.style.pointerEvents = laying ? '' : 'none';
+    }
     if (!trackDraft) {
       trackStatusEl.textContent = strings.trackStatusEmpty;
     } else if (trackClosed) {

@@ -38,6 +38,7 @@ const WINS_PER_MATCH = 3;
 const CPU_DIFFICULTY = 0.72;
 const CPU_THINK_TIME = 1.1;
 const SAFE_DROP = 30; // px a tank can fall without damage
+const SKY_MARGIN = 20; // backdrop overdraw so screen shake never shows an edge
 const VICTORIES_KEY = 'tanks-victories';
 
 interface Tank {
@@ -140,7 +141,91 @@ export function initTanksGame(): void {
     matchScore: root.dataset.tMatchScore || 'Match score'
   };
 
-  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT);
+  const stars = Array.from({ length: 60 }, () => ({
+    x: Math.random() * WIDTH,
+    y: Math.random() * HEIGHT * 0.55,
+    r: 0.5 + Math.random() * 1.2
+  }));
+
+  // Sky, stars, moon, and mountain silhouettes never change during a match,
+  // so they're baked into a device-resolution layer once per DPR change
+  // instead of re-filling gradients over the whole canvas every frame (same
+  // pattern as Syndicate's scanlines+vignette overlay). The layer is aligned
+  // exactly to the visible board — gradient dithering is anchored to device
+  // pixels, so a margin-offset layer would land visibly-identical but not
+  // byte-identical pixels; the SKY_MARGIN overdraw that keeps screen shake
+  // from exposing a bare edge is filled live on the rare shaking frames.
+  let backdrop: HTMLCanvasElement | null = null;
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
+    onApply(dpr) {
+      backdrop = null;
+      const layer = document.createElement('canvas');
+      layer.width = WIDTH * dpr;
+      layer.height = HEIGHT * dpr;
+      const lctx = layer.getContext('2d');
+      if (!lctx) return;
+      lctx.scale(dpr, dpr);
+      paintBackdrop(lctx);
+      backdrop = layer;
+    }
+  });
+
+  function makeSky(target: CanvasRenderingContext2D): CanvasGradient {
+    const sky = target.createLinearGradient(0, 0, 0, HEIGHT);
+    sky.addColorStop(0, '#0a0a20');
+    sky.addColorStop(1, '#2b1a4e');
+    return sky;
+  }
+  // Used only to flood the shake margin, so it never shows a bare edge.
+  const skyFill = makeSky(ctx);
+
+  function paintBackdrop(target: CanvasRenderingContext2D) {
+    target.fillStyle = makeSky(target);
+    target.fillRect(0, 0, WIDTH, HEIGHT);
+
+    target.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    for (const star of stars) {
+      target.beginPath();
+      target.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+      target.fill();
+    }
+
+    // Moon with a soft halo, tucked toward the top-right of the battlefield.
+    const moonGlow = target.createRadialGradient(WIDTH - 110, 64, 4, WIDTH - 110, 64, 52);
+    moonGlow.addColorStop(0, 'rgba(226, 232, 255, 0.4)');
+    moonGlow.addColorStop(1, 'rgba(226, 232, 255, 0)');
+    target.fillStyle = moonGlow;
+    target.fillRect(WIDTH - 162, 12, 104, 104);
+    target.fillStyle = '#e8ecff';
+    target.beginPath();
+    target.arc(WIDTH - 110, 64, 16, 0, Math.PI * 2);
+    target.fill();
+    target.fillStyle = 'rgba(170, 180, 215, 0.5)';
+    target.beginPath();
+    target.arc(WIDTH - 105, 60, 3.5, 0, Math.PI * 2);
+    target.arc(WIDTH - 115, 69, 2.5, 0, Math.PI * 2);
+    target.fill();
+
+    // Two distant mountain silhouettes for parallax depth behind the terrain.
+    for (const [amp, base, tone, seed] of [
+      [46, 0.62, 'rgba(30, 24, 66, 0.9)', 1.7],
+      [30, 0.72, 'rgba(22, 18, 48, 0.95)', 4.3]
+    ] as const) {
+      target.fillStyle = tone;
+      target.beginPath();
+      target.moveTo(0, HEIGHT);
+      for (let x = 0; x <= WIDTH; x += 6) {
+        const y =
+          HEIGHT * base -
+          Math.sin(x * 0.006 + seed) * amp * 0.6 -
+          Math.sin(x * 0.017 + seed * 2.1) * amp * 0.4;
+        target.lineTo(x, y);
+      }
+      target.lineTo(WIDTH, HEIGHT);
+      target.closePath();
+      target.fill();
+    }
+  }
 
   let ground: number[] = [];
   let tanks: Tank[] = [];
@@ -182,12 +267,6 @@ export function initTanksGame(): void {
     ]
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
-
-  const stars = Array.from({ length: 60 }, () => ({
-    x: Math.random() * WIDTH,
-    y: Math.random() * HEIGHT * 0.55,
-    r: 0.5 + Math.random() * 1.2
-  }));
 
   const playerName = (i: number) =>
     i === 1 && mode === 'cpu' ? strings.cpu : i === 1 ? strings.player2 : strings.player1;
@@ -592,56 +671,14 @@ export function initTanksGame(): void {
     ctx.save();
     if (shake > 0) {
       ctx.translate((Math.random() - 0.5) * shake * 18, (Math.random() - 0.5) * shake * 18);
+      ctx.fillStyle = skyFill;
+      ctx.fillRect(-SKY_MARGIN, -SKY_MARGIN, WIDTH + SKY_MARGIN * 2, HEIGHT + SKY_MARGIN * 2);
     }
 
-    const sky = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-    sky.addColorStop(0, '#0a0a20');
-    sky.addColorStop(1, '#2b1a4e');
-    ctx.fillStyle = sky;
-    ctx.fillRect(-20, -20, WIDTH + 40, HEIGHT + 40);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    for (const star of stars) {
-      ctx.beginPath();
-      ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Moon with a soft halo, tucked toward the top-right of the battlefield.
-    const moonGlow = ctx.createRadialGradient(WIDTH - 110, 64, 4, WIDTH - 110, 64, 52);
-    moonGlow.addColorStop(0, 'rgba(226, 232, 255, 0.4)');
-    moonGlow.addColorStop(1, 'rgba(226, 232, 255, 0)');
-    ctx.fillStyle = moonGlow;
-    ctx.fillRect(WIDTH - 162, 12, 104, 104);
-    ctx.fillStyle = '#e8ecff';
-    ctx.beginPath();
-    ctx.arc(WIDTH - 110, 64, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(170, 180, 215, 0.5)';
-    ctx.beginPath();
-    ctx.arc(WIDTH - 105, 60, 3.5, 0, Math.PI * 2);
-    ctx.arc(WIDTH - 115, 69, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Two distant mountain silhouettes for parallax depth behind the terrain.
-    for (const [amp, base, tone, seed] of [
-      [46, 0.62, 'rgba(30, 24, 66, 0.9)', 1.7],
-      [30, 0.72, 'rgba(22, 18, 48, 0.95)', 4.3]
-    ] as const) {
-      ctx.fillStyle = tone;
-      ctx.beginPath();
-      ctx.moveTo(0, HEIGHT);
-      for (let x = 0; x <= WIDTH; x += 6) {
-        const y =
-          HEIGHT * base -
-          Math.sin(x * 0.006 + seed) * amp * 0.6 -
-          Math.sin(x * 0.017 + seed * 2.1) * amp * 0.4;
-        ctx.lineTo(x, y);
-      }
-      ctx.lineTo(WIDTH, HEIGHT);
-      ctx.closePath();
-      ctx.fill();
-    }
+    // Logical destination size — the device-resolution layer maps 1:1 onto
+    // backing pixels.
+    if (backdrop) ctx.drawImage(backdrop, 0, 0, WIDTH, HEIGHT);
+    else paintBackdrop(ctx);
 
     if (ground.length) {
       const dirt = ctx.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);

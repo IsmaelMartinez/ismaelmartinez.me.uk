@@ -100,7 +100,24 @@ export function initSnakeGame(): void {
   const highScoreEl = el('high-score');
   const finalScoreEl = el('final-score');
 
-  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT);
+  // The board (base fill, checkerboard, vignette) never changes, so it's
+  // baked into a device-resolution layer once per DPR change instead of
+  // re-filling the checker pattern and a full-canvas radial gradient every
+  // frame (same pattern as Syndicate's scanlines+vignette overlay).
+  let boardLayer: HTMLCanvasElement | null = null;
+  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
+    onApply(dpr) {
+      boardLayer = null;
+      const layer = document.createElement('canvas');
+      layer.width = WIDTH * dpr;
+      layer.height = HEIGHT * dpr;
+      const lctx = layer.getContext('2d');
+      if (!lctx) return;
+      lctx.scale(dpr, dpr);
+      paintBoard(lctx);
+      boardLayer = layer;
+    }
+  });
 
   let state: SnakeState = createSnakeState();
   let prevSnake: Vec[] = state.snake.map(s => ({ ...s }));
@@ -246,24 +263,31 @@ export function initSnakeGame(): void {
 
   // --- Rendering ---
 
-  function drawBoard() {
-    ctx.fillStyle = '#101613';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+  function paintBoard(target: CanvasRenderingContext2D) {
+    target.fillStyle = '#101613';
+    target.fillRect(0, 0, WIDTH, HEIGHT);
+    target.fillStyle = 'rgba(255, 255, 255, 0.025)';
     for (let y = 0; y < ROWS; y++) {
       for (let x = (y % 2); x < COLS; x += 2) {
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        target.fillRect(x * CELL, y * CELL, CELL, CELL);
       }
     }
     // Mossy vignette pulls the eye to the centre of the garden.
-    const vignette = ctx.createRadialGradient(
+    const vignette = target.createRadialGradient(
       WIDTH / 2, HEIGHT / 2, HEIGHT * 0.42,
       WIDTH / 2, HEIGHT / 2, HEIGHT * 0.85
     );
     vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
     vignette.addColorStop(1, 'rgba(2, 12, 6, 0.5)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    target.fillStyle = vignette;
+    target.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+
+  function drawBoard() {
+    // Logical destination size — the device-resolution layer maps 1:1 onto
+    // backing pixels.
+    if (boardLayer) ctx.drawImage(boardLayer, 0, 0, WIDTH, HEIGHT);
+    else paintBoard(ctx);
   }
 
   /** Soft contact shadow under round pieces (apple, bonus, snake head). */

@@ -786,10 +786,13 @@ export function initSyndicateGame(): void {
     ctx.fillText('🚁', p.x, p.y - beamH - 6 - pulse * 3);
   }
 
+  // The sky fill doubles as the frame clear; the gradient itself never
+  // changes, so build it once instead of once per frame.
+  const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+  sky.addColorStop(0, '#070a14');
+  sky.addColorStop(1, '#0b0f1c');
+
   function render() {
-    const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    sky.addColorStop(0, '#070a14');
-    sky.addColorStop(1, '#0b0f1c');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.textAlign = 'center';
@@ -808,6 +811,21 @@ export function initSyndicateGame(): void {
     for (const pickup of world.pickups) {
       const d = Math.min(diagonals - 1, Math.max(0, Math.floor(pickup.x) + Math.floor(pickup.y)));
       pickupsByDiag[d].push(pickup);
+    }
+
+    // Group decals by the tile they fell on up front — scanning the whole
+    // decal list once per tile turns a bloody mission into an
+    // O(tiles × decals) render. Per-tile insertion order matches the array,
+    // so the composite is unchanged.
+    const decalsByTile = new Map<number, Decal[]>();
+    for (const d of decals) {
+      const dx = Math.floor(d.x);
+      const dy = Math.floor(d.y);
+      if (dx < 0 || dx >= MAP_W || dy < 0 || dy >= MAP_H) continue;
+      const tile = dy * MAP_W + dx;
+      const group = decalsByTile.get(tile);
+      if (group) group.push(d);
+      else decalsByTile.set(tile, [d]);
     }
 
     let lastDiag = -1;
@@ -835,8 +853,7 @@ export function initSyndicateGame(): void {
         drawRooftop(x, y, i, tile.height, tile.palette);
       }
       // Ground decals (blood/scorch) sit on the tile they fell on
-      for (const d of decals) {
-        if (Math.floor(d.x) !== x || Math.floor(d.y) !== y) continue;
+      for (const d of decalsByTile.get(i) ?? []) {
         const dp = isoProject(VIEW, d.x, d.y);
         ctx.globalAlpha = Math.min(0.5, (d.life / d.maxLife) * 0.5);
         ctx.fillStyle = d.color;

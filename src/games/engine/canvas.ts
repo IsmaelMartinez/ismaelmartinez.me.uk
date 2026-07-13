@@ -42,7 +42,13 @@ export function setupHiDpiCanvas(
   // allocate huge backing stores.
   let dpr = 0;
   function applyDpr() {
-    const next = Math.min(3, Math.max(1, Math.ceil(window.devicePixelRatio || 1)));
+    // Scale the backing store to the device pixels the canvas actually
+    // covers: pages can display a board larger than its logical size (e.g.
+    // Pixel Park's max-width 820px vs 760 logical px), so devicePixelRatio
+    // alone under-provisions even on 1x screens. clientWidth is layout-based,
+    // so a mid-flip rotateY transform can't skew the measurement.
+    const cssUpscale = (canvas.clientWidth || logicalW) / logicalW;
+    const next = Math.min(3, Math.max(1, Math.ceil((window.devicePixelRatio || 1) * cssUpscale)));
     if (next === dpr) return;
     dpr = next;
     canvas.width = logicalW * dpr;

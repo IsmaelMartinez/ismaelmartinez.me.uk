@@ -77,6 +77,9 @@ function makeHarness(devicePixelRatio = 1) {
   const canvas = {
     width: 0,
     height: 0,
+    // Displayed at exactly logical size by default, so the CSS-upscale
+    // factor is 1 and DPR-only expectations hold.
+    clientWidth: 400,
     isConnected: true,
     style: {} as Record<string, string>,
     getBoundingClientRect: () => rect
@@ -148,6 +151,23 @@ describe('DPR clamp and backing store sizing', () => {
     h.setup();
     expect(h.canvas.style.aspectRatio).toBe('400 / 200');
   });
+
+  it('accounts for CSS displaying the canvas larger than logical size', () => {
+    const h = makeHarness(1);
+    // Displayed at 500 CSS px for 400 logical px → 1.25x upscale, so a 1x
+    // store would be blurry even on a 1x screen; ceil provisions 2x.
+    h.canvas.clientWidth = 500;
+    h.setup();
+    expect(h.canvas.width).toBe(800);
+    expect(h.ctx.transform).toEqual([2, 0, 0, 2, 0, 0]);
+  });
+
+  it('falls back to logical size when clientWidth is 0 (not yet laid out)', () => {
+    const h = makeHarness(2);
+    h.canvas.clientWidth = 0;
+    h.setup();
+    expect(h.canvas.width).toBe(800);
+  });
 });
 
 describe('DPR change lifecycle', () => {
@@ -158,6 +178,15 @@ describe('DPR change lifecycle', () => {
     h.win.fire('resize');
     expect(h.canvas.width).toBe(800);
     expect(h.ctx.transform).toEqual([2, 0, 0, 2, 0, 0]);
+  });
+
+  it('resize that only grows the displayed size re-sizes the backing store', () => {
+    const h = makeHarness(1);
+    h.setup();
+    expect(h.canvas.width).toBe(400);
+    h.canvas.clientWidth = 600; // window grew, canvas now displayed at 1.5x
+    h.win.fire('resize');
+    expect(h.canvas.width).toBe(800);
   });
 
   it('matchMedia change (same-size monitor move, no resize event) re-sizes and re-arms', () => {

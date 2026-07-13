@@ -324,7 +324,10 @@ export function initParkGame(): void {
   // CANVAS_W×CANVAS_H coordinates via the transform.
   let dpr = 0;
   function applyDpr() {
-    const next = Math.min(3, Math.max(1, Math.ceil(window.devicePixelRatio || 1)));
+    // Floor of 2: the container can display the board a little larger than
+    // its logical size (max-width 820px vs 760 logical px), so even a 1×
+    // screen upscales a 1× store into a slight blur.
+    const next = Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
     if (next === dpr) return;
     dpr = next;
     canvas.width = CANVAS_W * dpr;

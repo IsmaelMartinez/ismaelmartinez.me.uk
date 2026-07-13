@@ -59,8 +59,10 @@ export function createViewRotator(
         anim.swapped = true;
         turn(anim.dir);
       }
+      // Without a perspective term rotateY is a flat horizontal squish;
+      // with one the board reads as a card flipping in 3D.
       const angle = anim.dir * 90 * (t < 0.5 ? t * 2 : (t - 1) * 2);
-      canvas.style.transform = t >= 1 ? '' : `rotateY(${angle}deg)`;
+      canvas.style.transform = t >= 1 ? '' : `perspective(1000px) rotateY(${angle}deg)`;
       if (t >= 1) anim = null;
     }
   };

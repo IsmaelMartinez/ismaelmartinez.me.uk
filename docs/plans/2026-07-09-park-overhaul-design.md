@@ -213,14 +213,20 @@ toolbar price is just the one-tile case.
 entirely). Corners are derived from where the player taps (`turnKind` in
 track.ts) instead of being picked; a climb/drop piece *pushes the terrain
 under the new tile to fit* (same `terraformPlan`, draft tiles locked as
-anchors) rather than demanding pre-shaped land; undo/cancel restore the
-pushed heights exactly, and the shaping is charged with the track itself at
-Test Track. The closing tap derives the final piece from the height gap back
-to the start, and the station re-homes to the first level straight if the
+anchors) rather than demanding pre-shaped land. Shaping is charged the
+moment it lands, at the terraform tools' per-step rate, and stays shaped
+through undo/cancel — the track tool literally drives the same terraforming
+the player could do by hand, so there is no deferred bill, no refundable
+draft terrain, and no revert that could clobber terraforming done in
+between. (Re-laying a piece over land already at the right height costs
+nothing.) Test Track charges the per-piece track cost only. The manual
+raise/lower path locks the draft's own tiles out of its cascades — a push
+that would bend the drafted profile is rejected with the "draft in the way"
+toast. The closing tap derives the final piece from the height gap back to
+the start, and the station re-homes to the first level straight if the
 start turned out to be a corner (or was never placed at all) — so "draft a
-loop, close it, test it" works with no piece bookkeeping. `validateTrack` is
-unchanged and stays as the safety net (manual terraforming under a draft can
-still invalidate it).
+loop, close it, test it" works with no piece bookkeeping. `validateTrack`
+is unchanged and stays as the safety net.
 
 **Rides are drawn, not spun emoji.** The old `ctx.rotate` on the ride glyph
 left the carousel horse upside down half the time. The carousel is now a

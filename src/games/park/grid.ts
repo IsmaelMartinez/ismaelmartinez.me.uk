@@ -278,9 +278,12 @@ export function terraformPlan(
   if (!isTerraformable(tiles[i]) || locked?.has(i)) return null;
   if (heights[i] === targetH) return new Map();
   const plan = new Map<number, number>([[i, targetH]]);
+  // Index-pointer queue: shift() re-indexes the whole array per dequeue.
+  // Visit order doesn't affect the result (each push is the minimum move
+  // toward the wavefront), so a plain pointer walk is safe.
   const queue = [i];
-  while (queue.length) {
-    const t = queue.shift()!;
+  for (let head = 0; head < queue.length; head++) {
+    const t = queue[head];
     const h = plan.get(t)!;
     for (const n of neighbours(t)) {
       const nh = plan.get(n) ?? heights[n];
@@ -302,6 +305,23 @@ export function terraformSteps(plan: Map<number, number>, heights: number[]): nu
   let steps = 0;
   for (const [tile, h] of plan) steps += Math.abs(h - heights[tile]);
   return steps;
+}
+
+/**
+ * Applies a terraform plan: sets each planned height and closes any tunnel
+ * dug on a moved tile — a tunnel flag is only meaningful at height 0. The
+ * single mutation site for terrain plans, whatever produced them (the
+ * raise/lower tools via applyTool, or track drafting's automatic shaping).
+ */
+export function applyTerraformPlan(
+  heights: number[],
+  tunnels: boolean[],
+  plan: Map<number, number>
+): void {
+  for (const [tile, h] of plan) {
+    heights[tile] = h;
+    tunnels[tile] = false;
+  }
 }
 
 /**
@@ -369,14 +389,7 @@ export function applyTool(
   if (tool === 'raiseLand' || tool === 'lowerLand') {
     const delta = tool === 'raiseLand' ? 1 : -1;
     const plan = terraformPlan(tiles, heights, i, heights[i] + delta);
-    if (!plan) return;
-    for (const [tile, h] of plan) {
-      heights[tile] = h;
-      // Reshaping the land under a dug tunnel closes it — a tunnel flag is
-      // only meaningful at height 0, and canPlace doesn't otherwise stop a
-      // path tile from being raised.
-      tunnels[tile] = false;
-    }
+    if (plan) applyTerraformPlan(heights, tunnels, plan);
     return;
   }
   if (tool === 'digTunnel') {

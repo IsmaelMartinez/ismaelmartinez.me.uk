@@ -45,6 +45,7 @@ import {
   gateZone,
   terraformPlan,
   terraformSteps,
+  applyTerraformPlan,
   type TileType,
   type Tool,
   type ZoneId
@@ -124,10 +125,10 @@ const TRACK_KIND_EMOJI: Record<SegmentKind, string> = {
   station: '🚉'
 };
 
+// No ferris entry: the Big Wheel is custom-drawn (see drawFerris), never an emoji.
 const TILE_EMOJI: Partial<Record<TileType, string>> = {
   entrance: '🎟️',
   carousel: '🎠',
-  ferris: '🎡',
   food: '🌭',
   drink: '🥤',
   toilet: '🚻',
@@ -148,11 +149,12 @@ const GATE_EMOJI: Partial<Record<TileType, string>> = {
  * influence — same TileType, same BUILDINGS economics (see design doc),
  * just a different emoji + block colour so each themed area reads
  * distinctly. Any building without an entry here keeps its default look.
+ * The Big Wheel is custom-drawn geometry, so its reskin is colour-only.
  */
-const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji: string; color: string }>>> = {
+const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji?: string; color: string }>>> = {
   fairytale: {
     carousel: { emoji: '🎠', color: '#d68fc2' },
-    ferris: { emoji: '🎡', color: '#b28fe0' },
+    ferris: { color: '#b28fe0' },
     food: { emoji: '🍰', color: '#e8a0bc' },
     drink: { emoji: '🧃', color: '#f0b6d2' },
     toilet: { emoji: '🚻', color: '#a888d0' },
@@ -161,7 +163,7 @@ const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji: stri
   },
   adventure: {
     carousel: { emoji: '🐒', color: '#6b8f3f' },
-    ferris: { emoji: '🎡', color: '#4f7a2f' },
+    ferris: { color: '#4f7a2f' },
     food: { emoji: '🍌', color: '#a67c2a' },
     drink: { emoji: '🥥', color: '#5a8a3a' },
     toilet: { emoji: '🛖', color: '#7a5a2f' },
@@ -170,7 +172,7 @@ const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji: stri
   },
   pirate: {
     carousel: { emoji: '🎯', color: '#7a3a2a' },
-    ferris: { emoji: '🛞', color: '#6a4a2a' },
+    ferris: { color: '#6a4a2a' },
     food: { emoji: '🍖', color: '#6a5a3a' },
     drink: { emoji: '🍺', color: '#5a4a2a' },
     toilet: { emoji: '⚓', color: '#3a5a6a' },
@@ -305,7 +307,8 @@ export function initParkGame(): void {
     trackDuplicateTile: root.dataset.tTrackDuplicateTile || 'Track already crosses that tile!',
     trackNeedsStation: root.dataset.tTrackNeedsStation || 'Needs exactly one station piece!',
     trackNotClosed: root.dataset.tTrackNotClosed || "Track pieces don't connect correctly!",
-    trackTooSteep: root.dataset.tTrackTooSteep || 'Two climbs/drops in a row — add a flat between them!',
+    trackTooSteep:
+      root.dataset.tTrackTooSteep || 'Too steep — a climb or drop needs a straight piece around it!',
     trackHeightMismatch:
       root.dataset.tTrackHeightMismatch || "Track and terrain heights don't match — reshape the land or the piece!",
     trackStationStraight: root.dataset.tTrackStationStraight || 'The station must be on a straight run!',
@@ -313,7 +316,8 @@ export function initParkGame(): void {
     trackStatusEmpty: root.dataset.tTrackStatusEmpty || 'Tap a grass tile to start laying track',
     trackStatusDrafting:
       root.dataset.tTrackStatusDrafting || 'Track length: {n} — tap the start tile to close the loop',
-    trackStatusClosed: root.dataset.tTrackStatusClosed || 'Loop closed — Test Track to open it',
+    trackStatusClosed:
+      root.dataset.tTrackStatusClosed || 'Loop closed — Test Track to open it for £{cost}',
     breakdown: root.dataset.tBreakdown || 'A ride has broken down!',
     repaired: root.dataset.tRepaired || 'Ride repaired',
     surge: root.dataset.tSurge || 'A coach party pours through the gates!',
@@ -375,6 +379,14 @@ export function initParkGame(): void {
   let selectedTool: Tool = 'path';
   let speedMult = 1;
   let hoverTile = -1;
+  // Bumped on every tiles/heights/draft mutation so the hover-placement
+  // cache in render() knows its memoized answer is stale. Money and zone
+  // unlocks deliberately sit outside it — they're compared fresh per frame.
+  let worldVersion = 0;
+  const bumpWorldVersion = () => worldVersion++;
+  let hoverCacheKey = '';
+  let hoverCachePlaceable = false;
+  let hoverCacheCost = 0;
   let clock = 0;
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
   let balloons: { x: number; y: number; sway: number; color: string; life: number }[] = [];
@@ -391,19 +403,15 @@ export function initParkGame(): void {
   let trackClosed = false;
   let trackKind: SegmentKind = 'station';
   /**
-   * One record per extension tap (parallel to trackDraft[1..]): what the tap
-   * did to the previous head (so undo can restore it) and every terrain
-   * height it pushed (so undo/cancel can put the land back). Terrain moves
-   * live while drafting but is only *charged* when the track is built — see
-   * testTrack.
+   * One record per extension tap (parallel to trackDraft[1..]): the previous
+   * head's kind before the tap overwrote it, so undo can restore it. (The
+   * head's dir needs no restore — a tail segment's dir is never read until
+   * the next extend/close rewrites it.) Terrain pushed by climb/drop pieces
+   * is NOT recorded: it's charged the moment it's shaped and stays shaped
+   * through undo/cancel, exactly like using the raise/lower tools by hand —
+   * reverting it later could clobber terraform the player did in between.
    */
-  interface DraftTerraform {
-    tile: number;
-    from: number;
-    to: number;
-    tunnel: boolean;
-  }
-  let draftSteps: { headKind: SegmentKind; headDir: Dir; terraform: DraftTerraform[] }[] = [];
+  let draftSteps: { headKind: SegmentKind }[] = [];
   const board = initScoreboard(document.getElementById('highscores'));
   // The record readout shows the table's best, beaten live by the current run.
   let record = board.top()?.score ?? 0;
@@ -789,18 +797,38 @@ export function initParkGame(): void {
     return tool !== 'raiseLand' && tool !== 'lowerLand' && tool !== 'digTunnel' && tool !== 'bulldoze';
   }
 
+  /** The draft's own tiles, which no terraform cascade may move — their heights are the loop's profile. */
+  function draftLockedTiles(): Set<number> | undefined {
+    return trackDraft ? new Set(trackDraft.map(s => s.tile)) : undefined;
+  }
+
+  /** What applying a terraform plan charges: one raise/lower fee per height step moved, cascade-wide. */
+  function terraformCharge(plan: Map<number, number>): number {
+    return terraformSteps(plan, heights) * toolCost('raiseLand');
+  }
+
+  /**
+   * The cascade a raise/lower tap on tile `i` would run, or null when it
+   * can't (out of range, unterraformable, or it would have to move a
+   * drafted track tile — the draft's heights are anchored). Shared by the
+   * hover highlight and the click handler so they can never disagree.
+   */
+  function manualTerraformPlan(tool: Tool, i: number): Map<number, number> | null {
+    const target = heights[i] + (tool === 'raiseLand' ? 1 : -1);
+    return terraformPlan(tiles, heights, i, target, draftLockedTiles());
+  }
+
   /**
    * What placing `tool` on tile `i` will charge. The terraform tools price
    * per height step across the whole cascade (see terraformPlan) — pushing
    * a tile up two neighbours' worth of hillside costs each of those steps —
    * so the toolbar's flat price is just the plain one-tile case. Infinity
-   * when no valid plan exists (canPlace rejects those taps anyway).
+   * when no valid plan exists.
    */
   function placementCost(tool: Tool, i: number): number {
     if (tool === 'raiseLand' || tool === 'lowerLand') {
-      const target = heights[i] + (tool === 'raiseLand' ? 1 : -1);
-      const plan = terraformPlan(tiles, heights, i, target);
-      return plan ? terraformSteps(plan, heights) * toolCost(tool) : Infinity;
+      const plan = manualTerraformPlan(tool, i);
+      return plan ? terraformCharge(plan) : Infinity;
     }
     return toolCost(tool, tiles, i);
   }
@@ -810,37 +838,9 @@ export function initParkGame(): void {
     return planTrackTap(i).action !== 'reject';
   }
 
-  /** Applies a terraform plan to the live park, returning records that can undo it exactly. */
-  function applyDraftTerraform(plan: Map<number, number>): DraftTerraform[] {
-    const records: DraftTerraform[] = [];
-    for (const [tile, h] of plan) {
-      records.push({ tile, from: heights[tile], to: h, tunnel: tunnels[tile] });
-      heights[tile] = h;
-      tunnels[tile] = false;
-    }
-    return records;
-  }
-
-  function revertDraftTerraform(records: DraftTerraform[]) {
-    for (const rec of records) {
-      heights[rec.tile] = rec.from;
-      tunnels[rec.tile] = rec.tunnel;
-    }
-  }
-
-  /** Height steps the draft has pushed so far — the terrain part of what Test Track will charge. */
-  function draftTerraformSteps(): number {
-    let steps = 0;
-    for (const step of draftSteps) {
-      for (const rec of step.terraform) steps += Math.abs(rec.to - rec.from);
-    }
-    return steps;
-  }
-
-  /** What Test Track will charge: per-piece track cost plus the terrain steps the draft pushed. */
+  /** What Test Track will charge: per-piece track cost. Terrain shaping was already paid tap by tap. */
   function draftCost(): number {
-    if (!trackDraft) return 0;
-    return trackDraft.length * toolCost('track') + draftTerraformSteps() * toolCost('raiseLand');
+    return trackDraft ? trackDraft.length * toolCost('track') : 0;
   }
 
   type TrackTap =
@@ -886,6 +886,7 @@ export function initParkGame(): void {
     const entryDir =
       trackDraft.length >= 2 ? dirBetween(trackDraft[trackDraft.length - 2].tile, head.tile) : null;
     const turn = entryDir !== null ? turnKind(entryDir, dir) : null;
+    const closeDh = heights[i] - heights[head.tile];
     let exitKind: SegmentKind;
     if (turn) {
       if (head.kind === 'station') return { action: 'reject', message: strings.trackStationStraight };
@@ -893,13 +894,12 @@ export function initParkGame(): void {
     } else if (head.kind === 'station') {
       exitKind = 'station';
     } else if (closing) {
-      const dh = heights[i] - heights[head.tile];
-      exitKind = dh > 0 ? 'up' : dh < 0 ? 'down' : 'flat';
+      exitKind = closeDh > 0 ? 'up' : closeDh < 0 ? 'down' : 'flat';
     } else {
       exitKind = trackKind === 'up' || trackKind === 'down' ? trackKind : 'flat';
     }
 
-    const climbs = (k: SegmentKind) => k === 'up' || k === 'down';
+    const climbs = (k: SegmentKind) => segmentClimb(k) !== 0;
     const prevKind = trackDraft.length >= 2 ? trackDraft[trackDraft.length - 2].kind : null;
     if (climbs(exitKind) && prevKind !== null && climbs(prevKind)) {
       return { action: 'reject', message: strings.trackTooSteep };
@@ -909,7 +909,7 @@ export function initParkGame(): void {
       // The closing piece must bridge the height gap back to the start
       // exactly — corners and stations can't climb, and a straight can
       // only bridge one step.
-      if (heights[i] - heights[head.tile] !== segmentClimb(exitKind)) {
+      if (closeDh !== segmentClimb(exitKind)) {
         return { action: 'reject', message: strings.trackHeightMismatch };
       }
       let startKind = trackDraft[0].kind;
@@ -940,19 +940,31 @@ export function initParkGame(): void {
     const targetH = heights[head.tile] + segmentClimb(exitKind);
     let plan: Map<number, number> | null = null;
     if (heights[i] !== targetH) {
-      plan = terraformPlan(tiles, heights, i, targetH, new Set(trackDraft.map(s => s.tile)));
-      if (!plan) return { action: 'reject', message: strings.tooSteep };
+      plan = terraformPlan(tiles, heights, i, targetH, draftLockedTiles());
+      if (!plan) {
+        // Only on failure: re-plan without the draft lock to tell "the
+        // cascade would move the draft itself" apart from "the land can't
+        // be shaped that way at all".
+        const blockedByDraft = terraformPlan(tiles, heights, i, targetH) !== null;
+        return {
+          action: 'reject',
+          message: blockedByDraft ? strings.trackDraftInWay : strings.tooSteep
+        };
+      }
     }
     return { action: 'extend', exitKind, plan };
   }
 
   /**
    * Tap-to-extend track drafting: tapping the current head's own tile again
-   * undoes the last piece (restoring any terrain it pushed); tapping an
-   * orthogonal neighbour extends the draft; tapping back at the start tile
-   * closes the loop (once it's long enough) without adding a new segment.
-   * All the decision logic lives in planTrackTap. See the "Build
-   * interaction" section of docs/plans/2026-07-09-park-overhaul-design.md.
+   * undoes the last piece; tapping an orthogonal neighbour extends the
+   * draft; tapping back at the start tile closes the loop (once it's long
+   * enough) without adding a new segment. Terrain pushed by a climb/drop
+   * piece is charged on the spot (same rate as the terraform tools) and
+   * stays shaped through undo/cancel — re-laying a piece over land already
+   * at the right height costs nothing extra. All the decision logic lives
+   * in planTrackTap. See the "Build interaction" section of
+   * docs/plans/2026-07-09-park-overhaul-design.md.
    */
   function handleTrackTap(i: number) {
     // The Close Loop button routes here directly, bypassing the canvas
@@ -970,23 +982,24 @@ export function initParkGame(): void {
       case 'undo': {
         const step = draftSteps.pop();
         trackDraft!.pop();
-        if (step) {
-          revertDraftTerraform(step.terraform);
-          const newHead = trackDraft![trackDraft!.length - 1];
-          newHead.kind = step.headKind;
-          newHead.dir = step.headDir;
-        }
+        if (step) trackDraft![trackDraft!.length - 1].kind = step.headKind;
         if (trackDraft!.length === 0) trackDraft = null;
+        bumpWorldVersion();
         updateTrackStatus();
         return;
       }
       case 'extend': {
+        const shapingCost = tap.plan ? terraformCharge(tap.plan) : 0;
+        if (shapingCost > money) {
+          showToast(strings.cantAfford);
+          return;
+        }
+        if (tap.plan) {
+          money -= shapingCost;
+          applyTerraformPlan(heights, tunnels, tap.plan);
+        }
         const head = trackDraft![trackDraft!.length - 1];
-        draftSteps.push({
-          headKind: head.kind,
-          headDir: head.dir,
-          terraform: tap.plan ? applyDraftTerraform(tap.plan) : []
-        });
+        draftSteps.push({ headKind: head.kind });
         head.dir = dirBetween(head.tile, i)!;
         head.kind = tap.exitKind;
         // Only one station per loop — once placed, further taps with the
@@ -1009,22 +1022,21 @@ export function initParkGame(): void {
         break;
       }
     }
+    bumpWorldVersion();
     audio.playSfx('blip');
     updateTrackStatus();
   }
 
-  /** Drops the draft without touching terrain — for builds (terrain stays, paid) and full park resets. */
-  function discardTrackDraft() {
+  /**
+   * Drops the draft. Terrain shaped while drafting stays — it was paid for
+   * tap by tap, exactly as if the raise/lower tools had been used by hand.
+   */
+  function cancelTrackDraft() {
     draftSteps = [];
     trackDraft = null;
     trackClosed = false;
+    bumpWorldVersion();
     updateTrackStatus();
-  }
-
-  /** Cancels the draft, restoring every terrain height the drafted pieces pushed. */
-  function cancelTrackDraft() {
-    for (let k = draftSteps.length - 1; k >= 0; k--) revertDraftTerraform(draftSteps[k].terraform);
-    discardTrackDraft();
   }
 
   function testTrack() {
@@ -1048,8 +1060,7 @@ export function initParkGame(): void {
       showToast(strings.trackBlocked);
       return;
     }
-    // Track pieces plus the terrain the draft pushed — shaping was free to
-    // experiment with while drafting, and is paid for here, when it sticks.
+    // Track pieces only — terrain shaping was already charged tap by tap.
     const cost = draftCost();
     if (cost > money) {
       showToast(strings.cantAfford);
@@ -1059,7 +1070,7 @@ export function initParkGame(): void {
     const rotated = rotateToStation(trackDraft);
     for (const seg of rotated) tiles[seg.tile] = 'track';
     coasters.push(createCoaster(rotated));
-    discardTrackDraft();
+    cancelTrackDraft();
     invalidateGuests();
     audio.playSfx('blip');
   }
@@ -1190,9 +1201,7 @@ export function initParkGame(): void {
     surge = null;
     runStartRecord = record;
     recordCelebrated = false;
-    // Discard, not cancel: heights was just replaced wholesale, so reverting
-    // the old draft's terraform into the fresh array would corrupt it.
-    discardTrackDraft();
+    cancelTrackDraft();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     board.hide();
     phase = 'play';
@@ -1252,34 +1261,35 @@ export function initParkGame(): void {
     const angle = broken ? 0.6 : clock * (busy ? spin.busy : spin.idle);
     ctx.save();
     if (broken) ctx.globalAlpha = 0.45;
-    const mounts = [0, 1, 2].map(k => {
-      const a = angle + (k * Math.PI * 2) / 3;
-      return {
+    // Depth order: mounts behind the pole (pass 0), the pole, mounts in
+    // front (pass 1). Two plain passes over the three mounts, no per-frame
+    // arrays or closures — this runs every frame for every carousel.
+    for (let pass = 0; pass < 2; pass++) {
+      if (pass === 1) {
+        ctx.strokeStyle = shadeColor(color, 0.5);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(c.x, topY);
+        ctx.lineTo(c.x, rimY);
+        ctx.stroke();
+      }
+      for (let k = 0; k < 3; k++) {
+        const a = angle + (k * Math.PI * 2) / 3;
+        const front = Math.sin(a) >= 0;
+        if (front !== (pass === 1)) continue;
         // Orbit squashed to the iso ground plane; each mount bobs on its own phase.
-        x: c.x + Math.cos(a) * 11,
-        y: topY - 6 + Math.sin(a) * 4 + (broken ? 0 : Math.sin(angle * 2 + k * 2.1) * 1.5),
-        front: Math.sin(a) >= 0
-      };
-    });
-    const drawMount = (m: { x: number; y: number }) => {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(m.x, rimY + 3);
-      ctx.lineTo(m.x, m.y - 3);
-      ctx.stroke();
-      ctx.font = '10px serif';
-      ctx.fillText(glyph, m.x, m.y);
-    };
-    // Depth order: mounts behind the pole, the pole, mounts in front, roof.
-    mounts.filter(m => !m.front).forEach(drawMount);
-    ctx.strokeStyle = shadeColor(color, 0.5);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(c.x, topY);
-    ctx.lineTo(c.x, rimY);
-    ctx.stroke();
-    mounts.filter(m => m.front).forEach(drawMount);
+        const mx = c.x + Math.cos(a) * 11;
+        const my = topY - 6 + Math.sin(a) * 4 + (broken ? 0 : Math.sin(angle * 2 + k * 2.1) * 1.5);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(mx, rimY + 3);
+        ctx.lineTo(mx, my - 3);
+        ctx.stroke();
+        ctx.font = '10px serif';
+        ctx.fillText(glyph, mx, my);
+      }
+    }
     // Canopy: elliptical rim underside, cone on top, stripes, finial.
     ctx.fillStyle = shadeColor(color, 0.85);
     ctx.beginPath();
@@ -1417,10 +1427,11 @@ export function initParkGame(): void {
 
   /**
    * Whether tile `i` still reads as a tunnel: the flag alone isn't enough,
-   * since raising/lowering a *neighbouring* hillside back to flat leaves
-   * `tunnels[i]` stale (raiseLand/lowerLand only clears the flag on the
-   * tile it directly touches). Deriving it from current state means guests
-   * only vanish where there's still a hill to vanish into.
+   * since lowering a *neighbouring* hillside back to flat leaves
+   * `tunnels[i]` stale (terraforming clears the flag on the tiles whose
+   * height it moves, not on their still-flat neighbours). Deriving it from
+   * current state means guests only vanish where there's still a hill to
+   * vanish into.
    */
   function isTunnelActive(i: number): boolean {
     return tunnels[i] && heights[i] === MIN_HEIGHT && neighbours(i).some(n => heights[n] >= 1);
@@ -1699,13 +1710,27 @@ export function initParkGame(): void {
       const y = Math.floor(hoverTile / GRID_W);
       const v = rotateTile(x, y, GRID_W, GRID_H, rotation);
       const lockedZone = gateZone(selectedTool);
+      // Placement legality can run a terraform-cascade BFS (placementCost /
+      // planTrackTap), so it's memoized per (tool, piece, tile, world
+      // version) instead of recomputed every frame; only the cheap money
+      // and zone-unlock comparisons stay per-frame.
+      const cacheKey = `${selectedTool}:${trackKind}:${hoverTile}:${worldVersion}`;
+      if (cacheKey !== hoverCacheKey) {
+        hoverCacheKey = cacheKey;
+        if (selectedTool === 'track') {
+          hoverCachePlaceable = trackTapValid(hoverTile);
+          hoverCacheCost = 0;
+        } else {
+          hoverCachePlaceable =
+            canPlace(tiles, heights, tunnels, x, y, selectedTool) &&
+            !toolHitsDraft(hoverTile, selectedTool);
+          hoverCacheCost = placementCost(selectedTool, hoverTile);
+        }
+      }
       const valid =
-        selectedTool === 'track'
-          ? trackTapValid(hoverTile)
-          : canPlace(tiles, heights, tunnels, x, y, selectedTool) &&
-            !toolHitsDraft(hoverTile, selectedTool) &&
-            placementCost(selectedTool, hoverTile) <= money &&
-            (!lockedZone || zoneUnlocked(lockedZone, rating, money));
+        hoverCachePlaceable &&
+        hoverCacheCost <= money &&
+        (!lockedZone || zoneUnlocked(lockedZone, rating, money));
       strokeTile(
         ctx,
         VIEW,
@@ -1839,12 +1864,43 @@ export function initParkGame(): void {
         // the tile so it can never become permanently un-bulldozable.
         tiles[i] = 'grass';
       }
+      bumpWorldVersion();
       audio.playSfx('blip');
       invalidateGuests();
       return;
     }
     if (toolHitsDraft(i, selectedTool)) {
       showToast(strings.trackDraftInWay);
+      return;
+    }
+    // Terraforming takes its own path: the cascade must also respect an
+    // in-progress draft's anchored tiles, which grid.ts's generic
+    // canPlace/applyTool know nothing about.
+    if (selectedTool === 'raiseLand' || selectedTool === 'lowerLand') {
+      const plan = manualTerraformPlan(selectedTool, i);
+      if (!plan) {
+        const terraformable = tiles[i] === 'grass' || tiles[i] === 'path';
+        const next = heights[i] + (selectedTool === 'raiseLand' ? 1 : -1);
+        if (terraformable && next >= MIN_HEIGHT && next <= MAX_HEIGHT) {
+          // In range on shapeable ground, so the cascade itself was blocked:
+          // by the draft's anchored tiles if one accepts the unlocked plan,
+          // otherwise by something immovable (water, a building, track).
+          const blockedByDraft =
+            trackDraft !== null && terraformPlan(tiles, heights, i, next) !== null;
+          showToast(blockedByDraft ? strings.trackDraftInWay : strings.tooSteep);
+        }
+        return;
+      }
+      const cost = terraformCharge(plan);
+      if (cost > money) {
+        showToast(strings.cantAfford);
+        return;
+      }
+      money -= cost;
+      applyTerraformPlan(heights, tunnels, plan);
+      bumpWorldVersion();
+      audio.playSfx('blip');
+      invalidateGuests();
       return;
     }
     if (selectedTool === 'bulldoze' && isWalkable(tiles[i])) {
@@ -1867,15 +1923,6 @@ export function initParkGame(): void {
         } else if (def.minHeight !== undefined && heights[i] < def.minHeight) {
           showToast(strings.needsHeight);
         }
-      } else if (selectedTool === 'raiseLand' || selectedTool === 'lowerLand') {
-        // canPlace also rejects raising/lowering water, buildings, or a tile
-        // already at MIN_HEIGHT/MAX_HEIGHT — "too steep" would be misleading
-        // for those, so only show it when the cascade itself was blocked
-        // (something immovable in the way of the neighbouring pushes).
-        const terraformable = tiles[i] === 'grass' || tiles[i] === 'path';
-        const next = heights[i] + (selectedTool === 'raiseLand' ? 1 : -1);
-        const withinRange = next >= MIN_HEIGHT && next <= MAX_HEIGHT;
-        if (terraformable && withinRange) showToast(strings.tooSteep);
       }
       return;
     }
@@ -1891,6 +1938,7 @@ export function initParkGame(): void {
     }
     money -= cost;
     applyTool(tiles, heights, tunnels, x, y, selectedTool);
+    bumpWorldVersion();
     audio.playSfx('blip');
     invalidateGuests();
   });

@@ -955,10 +955,13 @@ export function initCityGame(): void {
     ctx.fillRect(p.x - 2, p.y - 3, 4, 2.5);
   }
 
+  // The sky fill doubles as the frame clear; the gradient itself never
+  // changes, so build it once instead of once per frame.
+  const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+  sky.addColorStop(0, '#101723');
+  sky.addColorStop(1, '#0b111b');
+
   function render() {
-    const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    sky.addColorStop(0, '#101723');
-    sky.addColorStop(1, '#0b111b');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.textAlign = 'center';

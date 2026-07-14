@@ -13,6 +13,7 @@
  */
 import {
   createGameLoop,
+  createStaticLayer,
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
@@ -156,8 +157,18 @@ export function initLemmingsGame(): void {
   const hintFor = (index: number): string => root.dataset[`tHint${index}`] ?? '';
 
   // The terrain and background layers are 1x pixel-art bitmaps that need
-  // nearest-neighbour upscaling; default smoothing would smear them.
-  const hiDpi = setupHiDpiCanvas(canvas, ctx, LEVEL_W, LEVEL_H, { smoothing: false });
+  // nearest-neighbour upscaling; default smoothing would smear them. The
+  // vignette is baked once per DPR change — a full-canvas radial-gradient
+  // fill every frame is the expensive part, and the 1:1 blit keeps the
+  // gradient exactly as smooth as drawing it live.
+  const vignetteLayer = createStaticLayer(LEVEL_W, LEVEL_H, target => {
+    target.fillStyle = makeVignette(target);
+    target.fillRect(0, 0, LEVEL_W, LEVEL_H);
+  });
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, LEVEL_W, LEVEL_H, {
+    smoothing: false,
+    onApply: vignetteLayer.rebuild
+  });
 
   // Offscreen terrain layer, rebuilt only when the bitmap changes version.
   const terrainCanvas = document.createElement('canvas');
@@ -169,18 +180,22 @@ export function initLemmingsGame(): void {
 
   // A starfield + moon + distant hills, painted once (level dimensions are fixed).
   const bgCanvas = buildBackground();
-  // Cached radial darkening for the screen edges.
-  const vignette = ctx.createRadialGradient(
-    LEVEL_W / 2,
-    LEVEL_H / 2,
-    LEVEL_H * 0.34,
-    LEVEL_W / 2,
-    LEVEL_H / 2,
-    LEVEL_H * 0.78
-  );
-  vignette.addColorStop(0, 'rgba(0,0,0,0)');
-  vignette.addColorStop(1, 'rgba(4,6,16,0.42)');
   let frame = 0;
+
+  /** Radial darkening for the screen edges. */
+  function makeVignette(target: CanvasRenderingContext2D): CanvasGradient {
+    const vignette = target.createRadialGradient(
+      LEVEL_W / 2,
+      LEVEL_H / 2,
+      LEVEL_H * 0.34,
+      LEVEL_W / 2,
+      LEVEL_H / 2,
+      LEVEL_H * 0.78
+    );
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(4,6,16,0.42)');
+    return vignette;
+  }
 
   function buildBackground(): HTMLCanvasElement {
     const bg = document.createElement('canvas');
@@ -858,8 +873,7 @@ export function initLemmingsGame(): void {
     ctx.globalAlpha = 1;
 
     // Darken the edges for depth.
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, LEVEL_W, LEVEL_H);
+    vignetteLayer.draw(ctx);
 
     // Timed levels wear their clock top-centre, flashing red for the last 10s.
     if (phase === 'playing' && def.timeLimit !== undefined) {

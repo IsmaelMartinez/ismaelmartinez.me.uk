@@ -8,6 +8,7 @@
  */
 import {
   createGameLoop,
+  createStaticLayer,
   initScoreboard,
   setupHiDpiCanvas,
   isoProject,
@@ -156,31 +157,24 @@ export function initSyndicateGame(): void {
   // them every frame would waste a full-canvas gradient fill), rebuilt at
   // device resolution whenever the DPR changes so the 1px CRT lines stay
   // crisp instead of being blur-upscaled from a 1:1 bitmap.
-  let atmosphere: HTMLCanvasElement | null = null;
+  const atmosphere = createStaticLayer(CANVAS_W, CANVAS_H, target => {
+    target.fillStyle = 'rgba(0, 0, 0, 0.12)';
+    for (let y = 0; y < CANVAS_H; y += 3) target.fillRect(0, y, CANVAS_W, 1);
+    const vig = target.createRadialGradient(
+      CANVAS_W / 2,
+      CANVAS_H / 2,
+      CANVAS_H * 0.35,
+      CANVAS_W / 2,
+      CANVAS_H / 2,
+      CANVAS_H * 0.85
+    );
+    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    target.fillStyle = vig;
+    target.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  });
   const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, {
-    onApply(dpr) {
-      const layer = document.createElement('canvas');
-      layer.width = CANVAS_W * dpr;
-      layer.height = CANVAS_H * dpr;
-      const lctx = layer.getContext('2d');
-      atmosphere = null;
-      if (!lctx) return;
-      lctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-      for (let y = 0; y < CANVAS_H; y += 3) lctx.fillRect(0, y * dpr, CANVAS_W * dpr, dpr);
-      const vig = lctx.createRadialGradient(
-        (CANVAS_W / 2) * dpr,
-        (CANVAS_H / 2) * dpr,
-        CANVAS_H * 0.35 * dpr,
-        (CANVAS_W / 2) * dpr,
-        (CANVAS_H / 2) * dpr,
-        CANVAS_H * 0.85 * dpr
-      );
-      vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
-      vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
-      lctx.fillStyle = vig;
-      lctx.fillRect(0, 0, layer.width, layer.height);
-      atmosphere = layer;
-    }
+    onApply: atmosphere.rebuild
   });
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
@@ -786,10 +780,13 @@ export function initSyndicateGame(): void {
     ctx.fillText('🚁', p.x, p.y - beamH - 6 - pulse * 3);
   }
 
+  // The sky fill doubles as the frame clear; the gradient itself never
+  // changes, so build it once instead of once per frame.
+  const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+  sky.addColorStop(0, '#070a14');
+  sky.addColorStop(1, '#0b0f1c');
+
   function render() {
-    const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    sky.addColorStop(0, '#070a14');
-    sky.addColorStop(1, '#0b0f1c');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.textAlign = 'center';
@@ -808,6 +805,21 @@ export function initSyndicateGame(): void {
     for (const pickup of world.pickups) {
       const d = Math.min(diagonals - 1, Math.max(0, Math.floor(pickup.x) + Math.floor(pickup.y)));
       pickupsByDiag[d].push(pickup);
+    }
+
+    // Group decals by the tile they fell on up front — scanning the whole
+    // decal list once per tile turns a bloody mission into an
+    // O(tiles × decals) render. Per-tile insertion order matches the array,
+    // so the composite is unchanged.
+    const decalsByTile = new Map<number, Decal[]>();
+    for (const d of decals) {
+      const dx = Math.floor(d.x);
+      const dy = Math.floor(d.y);
+      if (dx < 0 || dx >= MAP_W || dy < 0 || dy >= MAP_H) continue;
+      const tile = dy * MAP_W + dx;
+      const group = decalsByTile.get(tile);
+      if (group) group.push(d);
+      else decalsByTile.set(tile, [d]);
     }
 
     let lastDiag = -1;
@@ -834,16 +846,19 @@ export function initSyndicateGame(): void {
         drawNeonTrim(x, y, tile.height, tile.palette);
         drawRooftop(x, y, i, tile.height, tile.palette);
       }
-      // Ground decals (blood/scorch) sit on the tile they fell on
-      for (const d of decals) {
-        if (Math.floor(d.x) !== x || Math.floor(d.y) !== y) continue;
-        const dp = isoProject(VIEW, d.x, d.y);
-        ctx.globalAlpha = Math.min(0.5, (d.life / d.maxLife) * 0.5);
-        ctx.fillStyle = d.color;
-        ctx.beginPath();
-        ctx.ellipse(dp.x, dp.y, d.r, d.r * 0.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
+      // Ground decals (blood/scorch) sit on the tile they fell on. The
+      // no-decal path must stay allocation-free — it runs per tile per frame.
+      const tileDecals = decalsByTile.get(i);
+      if (tileDecals) {
+        for (const d of tileDecals) {
+          const dp = isoProject(VIEW, d.x, d.y);
+          ctx.globalAlpha = Math.min(0.5, (d.life / d.maxLife) * 0.5);
+          ctx.fillStyle = d.color;
+          ctx.beginPath();
+          ctx.ellipse(dp.x, dp.y, d.r, d.r * 0.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
       }
       if (moveMarker && moveMarker.tile === i) {
         ctx.globalAlpha = Math.min(1, moveMarker.t / 0.4);
@@ -920,9 +935,8 @@ export function initSyndicateGame(): void {
     }
     ctx.stroke();
 
-    // Scanlines + vignette for the CRT-arcade feel; logical destination
-    // size — the device-resolution overlay maps 1:1 onto backing pixels.
-    if (atmosphere) ctx.drawImage(atmosphere, 0, 0, CANVAS_W, CANVAS_H);
+    // Scanlines + vignette for the CRT-arcade feel.
+    atmosphere.draw(ctx);
   }
 
   function refreshHud() {

@@ -7,6 +7,7 @@
  */
 import {
   createGameLoop,
+  createStaticLayer,
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
@@ -100,7 +101,11 @@ export function initSnakeGame(): void {
   const highScoreEl = el('high-score');
   const finalScoreEl = el('final-score');
 
-  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT);
+  // The board (base fill, checkerboard, vignette) never changes, so it's
+  // baked once per DPR change instead of re-filling the checker pattern and
+  // a full-canvas radial gradient every frame.
+  const boardLayer = createStaticLayer(WIDTH, HEIGHT, paintBoard);
+  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, { onApply: boardLayer.rebuild });
 
   let state: SnakeState = createSnakeState();
   let prevSnake: Vec[] = state.snake.map(s => ({ ...s }));
@@ -246,25 +251,26 @@ export function initSnakeGame(): void {
 
   // --- Rendering ---
 
-  function drawBoard() {
-    ctx.fillStyle = '#101613';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+  function paintBoard(target: CanvasRenderingContext2D) {
+    target.fillStyle = '#101613';
+    target.fillRect(0, 0, WIDTH, HEIGHT);
+    target.fillStyle = 'rgba(255, 255, 255, 0.025)';
     for (let y = 0; y < ROWS; y++) {
       for (let x = (y % 2); x < COLS; x += 2) {
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        target.fillRect(x * CELL, y * CELL, CELL, CELL);
       }
     }
     // Mossy vignette pulls the eye to the centre of the garden.
-    const vignette = ctx.createRadialGradient(
+    const vignette = target.createRadialGradient(
       WIDTH / 2, HEIGHT / 2, HEIGHT * 0.42,
       WIDTH / 2, HEIGHT / 2, HEIGHT * 0.85
     );
     vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
     vignette.addColorStop(1, 'rgba(2, 12, 6, 0.5)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    target.fillStyle = vignette;
+    target.fillRect(0, 0, WIDTH, HEIGHT);
   }
+
 
   /** Soft contact shadow under round pieces (apple, bonus, snake head). */
   function drawShadow(cx: number, cy: number, r: number) {
@@ -380,10 +386,15 @@ export function initSnakeGame(): void {
   function render() {
     ctx.save();
     if (shake > 0) {
-      ctx.translate((Math.random() - 0.5) * shake * 14, (Math.random() - 0.5) * shake * 14);
+      // Whole-pixel jitter keeps the board blit on the device-pixel grid —
+      // a fractional offset would bilinear-blur the baked layer.
+      ctx.translate(
+        Math.round((Math.random() - 0.5) * shake * 14),
+        Math.round((Math.random() - 0.5) * shake * 14)
+      );
     }
 
-    drawBoard();
+    boardLayer.draw(ctx);
     if (state.food.x >= 0) drawApple(px(state.food.x), px(state.food.y));
     if (state.bonus) drawBonus(px(state.bonus.pos.x), px(state.bonus.pos.y), state.bonus.ticksLeft);
 

@@ -1,6 +1,6 @@
 export { createGameLoop } from './loop';
-export { setupHiDpiCanvas } from './canvas';
-export type { HiDpiCanvas } from './canvas';
+export { setupHiDpiCanvas, createStaticLayer } from './canvas';
+export type { HiDpiCanvas, StaticLayer } from './canvas';
 export type { GameLoop } from './loop';
 export { loadScore, saveScore } from './storage';
 export { topEntry, formatScore } from './highscores';

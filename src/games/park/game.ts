@@ -1161,10 +1161,13 @@ export function initParkGame(): void {
     ctx.restore();
   }
 
+  // The sky fill doubles as the frame clear; the gradient itself never
+  // changes, so build it once instead of once per frame.
+  const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+  sky.addColorStop(0, '#11271a');
+  sky.addColorStop(1, '#0c1c13');
+
   function render() {
-    const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    sky.addColorStop(0, '#11271a');
-    sky.addColorStop(1, '#0c1c13');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.textAlign = 'center';

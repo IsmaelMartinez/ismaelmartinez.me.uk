@@ -32,15 +32,13 @@ const tools = [
   { id: 'bulldoze', emoji: '🚜', label: t('fun.park.toolBulldoze'), cost: 0 }
 ];
 
+// Corners are derived from where you tap while drafting, and climbs/drops
+// reshape the terrain to fit — so the palette is just these four pieces.
 const trackKinds = [
+  { kind: 'station', emoji: '🚉', label: t('fun.park.trackKindStation') },
   { kind: 'flat', emoji: '🛤️', label: t('fun.park.trackKindFlat') },
   { kind: 'up', emoji: '⬆️', label: t('fun.park.trackKindUp') },
-  { kind: 'down', emoji: '⬇️', label: t('fun.park.trackKindDown') },
-  { kind: 'turnL', emoji: '↩️', label: t('fun.park.trackKindTurnL') },
-  { kind: 'turnR', emoji: '↪️', label: t('fun.park.trackKindTurnR') },
-  { kind: 'tunnelIn', emoji: '🕳️', label: t('fun.park.trackKindTunnelIn') },
-  { kind: 'tunnelOut', emoji: '🕳️', label: t('fun.park.trackKindTunnelOut') },
-  { kind: 'station', emoji: '🚉', label: t('fun.park.trackKindStation') }
+  { kind: 'down', emoji: '⬇️', label: t('fun.park.trackKindDown') }
 ];
 ---
 
@@ -71,6 +69,7 @@ const trackKinds = [
         data-t-track-not-closed={t('fun.park.trackNotClosed')}
         data-t-track-too-steep={t('fun.park.trackTooSteep')}
         data-t-track-height-mismatch={t('fun.park.trackHeightMismatch')}
+        data-t-track-station-straight={t('fun.park.trackStationStraight')}
         data-t-track-draft-in-way={t('fun.park.trackDraftInWay')}
         data-t-track-status-empty={t('fun.park.trackStatusEmpty')}
         data-t-track-status-drafting={t('fun.park.trackStatusDrafting')}

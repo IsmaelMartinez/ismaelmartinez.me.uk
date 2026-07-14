@@ -193,3 +193,39 @@ Each landed the same way the base game did: pure modules + tests in
 `tests/games/park.test.ts`, translation keys across en/es/cat, no new
 runtime dependencies. This closes out the overhaul described in this
 document; further Pixel Park work should start a new design doc.
+
+## Amendment (2026-07-14): terrain cascades, track lays itself, drawn rides
+
+Play-feedback pass revising three of the systems above; the code comments in
+`grid.ts` / `track.ts` / `game.ts` are the source of truth for details.
+
+**Terraforming cascades.** `raiseLand`/`lowerLand` no longer refuse when a
+change would breach the one-step slope rule — `terraformPlan` (grid.ts)
+pushes the offending neighbours along, recursively, so hills can climb past
+height 1 without hand-building pyramids (the Sky Tower's `minHeight: 2` is
+now reachable in two taps). The push refuses only when it would have to move
+something immovable (water, buildings, track, the entrance). Cost scales
+with the total height steps moved (`terraformSteps × £20`), so the flat
+toolbar price is just the one-tile case.
+
+**Track drafting simplified.** The 8-piece sub-palette shrank to 4
+(station/flat/climb/drop; `tunnelIn`/`tunnelOut` dropped from `SegmentKind`
+entirely). Corners are derived from where the player taps (`turnKind` in
+track.ts) instead of being picked; a climb/drop piece *pushes the terrain
+under the new tile to fit* (same `terraformPlan`, draft tiles locked as
+anchors) rather than demanding pre-shaped land; undo/cancel restore the
+pushed heights exactly, and the shaping is charged with the track itself at
+Test Track. The closing tap derives the final piece from the height gap back
+to the start, and the station re-homes to the first level straight if the
+start turned out to be a corner (or was never placed at all) — so "draft a
+loop, close it, test it" works with no piece bookkeeping. `validateTrack` is
+unchanged and stays as the safety net (manual terraforming under a draft can
+still invalidate it).
+
+**Rides are drawn, not spun emoji.** The old `ctx.rotate` on the ride glyph
+left the carousel horse upside down half the time. The carousel is now a
+platform + striped canopy with three upright mounts orbiting the pole
+(glyph still themed by zone reskin), the Big Wheel is an actual spoked wheel
+on A-frame legs with upright gondolas, the Sky Tower has an observation ring
+that rides its (slimmer) shaft while in use, and the flume log bobs. Broken
+rides freeze and dim as before.

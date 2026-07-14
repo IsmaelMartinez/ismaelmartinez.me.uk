@@ -252,6 +252,58 @@ export function neighbours(i: number): number[] {
   return gridNeighbours(i, GRID_W, GRID_H);
 }
 
+/** Tiles whose terrain height may be reshaped. */
+function isTerraformable(tile: TileType): boolean {
+  return tile === 'grass' || tile === 'path';
+}
+
+/**
+ * Plan to set tile `i` to `targetH`, cascading to neighbours so every tile
+ * stays within one step of each of its neighbours (the slope rule that keeps
+ * hillside faces renderable). Neighbours are pushed the minimum amount, and
+ * those pushes recurse outward. Returns tile → new height for every tile
+ * that must change, or null if the cascade would have to move a tile that
+ * can't be reshaped (water, buildings, track, the entrance, anything in
+ * `locked`) or `targetH` is out of range. A one-step change on open ground
+ * plans exactly one tile, matching the old single-tile raise/lower.
+ */
+export function terraformPlan(
+  tiles: TileType[],
+  heights: number[],
+  i: number,
+  targetH: number,
+  locked?: ReadonlySet<number>
+): Map<number, number> | null {
+  if (targetH < MIN_HEIGHT || targetH > MAX_HEIGHT) return null;
+  if (!isTerraformable(tiles[i]) || locked?.has(i)) return null;
+  if (heights[i] === targetH) return new Map();
+  const plan = new Map<number, number>([[i, targetH]]);
+  const queue = [i];
+  while (queue.length) {
+    const t = queue.shift()!;
+    const h = plan.get(t)!;
+    for (const n of neighbours(t)) {
+      const nh = plan.get(n) ?? heights[n];
+      if (Math.abs(nh - h) <= 1) continue;
+      // The minimum move: one step past the slope limit, toward h. Always
+      // lands strictly between nh and h, so it can never leave the
+      // MIN_HEIGHT..MAX_HEIGHT range targetH was checked against.
+      const pushed = h + (nh > h ? 1 : -1);
+      if (!isTerraformable(tiles[n]) || locked?.has(n)) return null;
+      plan.set(n, pushed);
+      queue.push(n);
+    }
+  }
+  return plan;
+}
+
+/** Total height steps a terraform plan moves, across all affected tiles — the unit its cost scales with. */
+export function terraformSteps(plan: Map<number, number>, heights: number[]): number {
+  let steps = 0;
+  for (const [tile, h] of plan) steps += Math.abs(h - heights[tile]);
+  return steps;
+}
+
 /**
  * Placement rules: everything builds on grass; buildings additionally need
  * an adjacent walkable tile so guests can reach them, plus any building-
@@ -272,13 +324,10 @@ export function canPlace(
   if (tiles[i] === 'entrance') return false;
 
   if (tool === 'raiseLand' || tool === 'lowerLand') {
-    if (tiles[i] !== 'grass' && tiles[i] !== 'path') return false;
     const delta = tool === 'raiseLand' ? 1 : -1;
-    const next = heights[i] + delta;
-    if (next < MIN_HEIGHT || next > MAX_HEIGHT) return false;
-    // Every neighbour must stay within one step, so every tile's four side
-    // faces remain flat quads with no gaps or floating edges.
-    return neighbours(i).every(n => Math.abs(heights[n] - next) <= 1);
+    // Neighbours in the way get pushed along by the cascade, so the only
+    // hard limits are the height range and immovable tiles in the cascade.
+    return terraformPlan(tiles, heights, i, heights[i] + delta) !== null;
   }
 
   if (tool === 'digTunnel') {
@@ -317,17 +366,17 @@ export function applyTool(
     tunnels[i] = false;
     return;
   }
-  if (tool === 'raiseLand') {
-    heights[i] += 1;
-    // Reshaping the land under a dug tunnel closes it — a tunnel flag is
-    // only meaningful at height 0, and canPlace doesn't otherwise stop a
-    // path tile from being raised.
-    tunnels[i] = false;
-    return;
-  }
-  if (tool === 'lowerLand') {
-    heights[i] -= 1;
-    tunnels[i] = false;
+  if (tool === 'raiseLand' || tool === 'lowerLand') {
+    const delta = tool === 'raiseLand' ? 1 : -1;
+    const plan = terraformPlan(tiles, heights, i, heights[i] + delta);
+    if (!plan) return;
+    for (const [tile, h] of plan) {
+      heights[tile] = h;
+      // Reshaping the land under a dug tunnel closes it — a tunnel flag is
+      // only meaningful at height 0, and canPlace doesn't otherwise stop a
+      // path tile from being raised.
+      tunnels[tile] = false;
+    }
     return;
   }
   if (tool === 'digTunnel') {

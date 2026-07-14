@@ -7,6 +7,8 @@ import {
   canPlace,
   applyTool,
   toolCost,
+  terraformPlan,
+  terraformSteps,
   idx,
   BUILDINGS,
   ZONES,
@@ -46,6 +48,8 @@ import {
   stepTile,
   dirBetween,
   rotateDir,
+  segmentClimb,
+  turnKind,
   validateTrack,
   rotateToStation,
   trackHeightDrop,
@@ -119,22 +123,51 @@ describe('park terrain', () => {
     expect(canPlace(tiles, heights, tunnels, 5, 5, 'lowerLand')).toBe(false);
   });
 
-  it('refuses to raise a tile more than one step above its neighbours', () => {
+  it('raising past the slope limit pushes the neighbours along instead of refusing', () => {
     const { tiles, heights, tunnels } = createPark();
-    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(true);
     applyTool(tiles, heights, tunnels, 5, 5, 'raiseLand'); // height 1, flat neighbours: diff 1, fine
-    // A second raise would make it height 2 next to flat (0) neighbours: a 2-step cliff.
-    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(false);
-    // Raising every neighbour to close the gap makes it possible again.
+    // A second raise would once have been rejected as a 2-step cliff; now
+    // the cascade lifts the four neighbours to 1 so the slope rule holds.
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(true);
+    applyTool(tiles, heights, tunnels, 5, 5, 'raiseLand');
+    expect(heights[idx(5, 5)]).toBe(2);
     for (const [x, y] of [
       [4, 5],
       [6, 5],
       [5, 4],
       [5, 6]
     ]) {
-      applyTool(tiles, heights, tunnels, x, y, 'raiseLand');
+      expect(heights[idx(x, y)]).toBe(1);
     }
-    expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(true);
+    // Diagonal neighbours were never forced past the limit, so they stay flat.
+    expect(heights[idx(4, 4)]).toBe(0);
+  });
+
+  it('plans the cascade with per-step costs, and refuses when something immovable is in the way', () => {
+    const { tiles, heights, tunnels } = createPark();
+    // Flat ground: a one-step raise plans exactly one tile, one step.
+    const single = terraformPlan(tiles, heights, idx(5, 5), 1);
+    expect(single).not.toBeNull();
+    expect([...single!.entries()]).toEqual([[idx(5, 5), 1]]);
+    expect(terraformSteps(single!, heights)).toBe(1);
+    // From a height-1 tile, going to 3 needs the neighbours dragged to 2,
+    // and their neighbours to 1 — count the full ripple's steps.
+    heights[idx(5, 5)] = 1;
+    const big = terraformPlan(tiles, heights, idx(5, 5), 3);
+    expect(big).not.toBeNull();
+    expect(big!.get(idx(5, 5))).toBe(3);
+    expect(big!.get(idx(6, 5))).toBe(2);
+    expect(big!.get(idx(7, 5))).toBe(1);
+    expect(terraformSteps(big!, heights)).toBeGreaterThan(2);
+    // A building two tiles out blocks the wide ripple a 2-step raise needs...
+    tiles[idx(7, 5)] = 'carousel';
+    expect(terraformPlan(tiles, heights, idx(5, 5), 3)).toBeNull();
+    // ...but a change whose ripple stops short of it still plans fine.
+    expect(terraformPlan(tiles, heights, idx(5, 5), 2)).not.toBeNull();
+    // Out-of-range targets and locked tiles refuse outright.
+    expect(terraformPlan(tiles, heights, idx(5, 5), MAX_HEIGHT + 1)).toBeNull();
+    expect(terraformPlan(tiles, heights, idx(5, 5), 2, new Set([idx(5, 4)]))).toBeNull();
+    expect(tunnels.every(t => t === false)).toBe(true);
   });
 
   it('caps height at MAX_HEIGHT', () => {
@@ -525,6 +558,23 @@ describe('coaster track', () => {
       expect(rotateDir(0, 1)).toBe(1);
       expect(rotateDir(0, -1)).toBe(3);
       expect(rotateDir(3, 1)).toBe(0);
+    });
+
+    it('derives corner kinds from entry and exit directions', () => {
+      expect(turnKind(0, 0)).toBeNull(); // straight through
+      expect(turnKind(0, 1)).toBe('turnR'); // north → east
+      expect(turnKind(0, 3)).toBe('turnL'); // north → west
+      expect(turnKind(3, 0)).toBe('turnR'); // west → north wraps the compass
+      expect(turnKind(2, 1)).toBe('turnL'); // south → east
+    });
+
+    it('maps each segment kind to its exit height step', () => {
+      expect(segmentClimb('up')).toBe(1);
+      expect(segmentClimb('down')).toBe(-1);
+      expect(segmentClimb('flat')).toBe(0);
+      expect(segmentClimb('station')).toBe(0);
+      expect(segmentClimb('turnL')).toBe(0);
+      expect(segmentClimb('turnR')).toBe(0);
     });
   });
 

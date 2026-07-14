@@ -6,15 +6,7 @@
  */
 import { GRID_W, GRID_H, type TileType } from './grid';
 
-export type SegmentKind =
-  | 'flat'
-  | 'up'
-  | 'down'
-  | 'turnL'
-  | 'turnR'
-  | 'tunnelIn'
-  | 'tunnelOut'
-  | 'station';
+export type SegmentKind = 'flat' | 'up' | 'down' | 'turnL' | 'turnR' | 'station';
 
 export type Dir = 0 | 1 | 2 | 3;
 
@@ -80,6 +72,24 @@ export function rotateDir(dir: Dir, turn: -1 | 1): Dir {
 
 const TURN: Partial<Record<SegmentKind, -1 | 1>> = { turnL: -1, turnR: 1 };
 
+/** Height steps a segment's exit transition climbs: up = +1, down = -1, everything else level. */
+export function segmentClimb(kind: SegmentKind): -1 | 0 | 1 {
+  return kind === 'up' ? 1 : kind === 'down' ? -1 : 0;
+}
+
+/**
+ * The turn kind implied by entering a tile travelling `entryDir` and leaving
+ * it travelling `exitDir`: null for straight-through, and never a 180° —
+ * grid drafting can't produce one (stepping back lands on the previous
+ * tile, which the duplicate-tile rule already rejects). Lets the drafting
+ * UI derive corners from where the player taps instead of asking for
+ * explicit turn pieces.
+ */
+export function turnKind(entryDir: Dir, exitDir: Dir): 'turnL' | 'turnR' | null {
+  if (entryDir === exitDir) return null;
+  return rotateDir(entryDir, 1) === exitDir ? 'turnR' : 'turnL';
+}
+
 export type TrackErrorCode =
   | 'tooShort'
   | 'duplicateTile'
@@ -125,8 +135,7 @@ export function validateTrack(segments: Segment[], heights: number[]): TrackResu
     // hint there — "pieces don't connect" would send them hunting a
     // geometry problem that doesn't exist.
     const dh = heights[next.tile] - heights[seg.tile];
-    const expectedDh = seg.kind === 'up' ? 1 : seg.kind === 'down' ? -1 : 0;
-    if (dh !== expectedDh) return { ok: false, error: 'heightMismatch' };
+    if (dh !== segmentClimb(seg.kind)) return { ok: false, error: 'heightMismatch' };
   }
 
   for (let i = 0; i < n; i++) {

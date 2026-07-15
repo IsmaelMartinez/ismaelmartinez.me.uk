@@ -15,7 +15,14 @@ import {
   cityIdx,
   TOOL_COSTS
 } from '../../src/games/city/tiles';
-import { carveRiver, plantForests, generateTerrain } from '../../src/games/city/terrain';
+import {
+  carveRiver,
+  carveLakes,
+  carveCoast,
+  plantForests,
+  generateTerrain,
+  type WaterStyle
+} from '../../src/games/city/terrain';
 import {
   computePowered,
   computeFireCover,
@@ -251,12 +258,63 @@ describe('city terrain', () => {
     expect(tiles.filter(t => t.type === 'tree').length).toBeGreaterThan(0);
   });
 
+  it('carves a vertical river that reaches top and bottom without gaps', () => {
+    const tiles = createCity();
+    carveRiver(tiles, seededRandom(7), true);
+    const waterInRow = (y: number) =>
+      Array.from({ length: CITY_W }, (_, x) => tiles[cityIdx(x, y)].type).filter(t => t === 'water').length;
+    for (let y = 0; y < CITY_H; y++) expect(waterInRow(y)).toBeGreaterThan(0);
+  });
+
+  it('grows lakes of a sensible size', () => {
+    for (const seed of [1, 8, 15, 22, 29]) {
+      const tiles = createCity();
+      carveLakes(tiles, seededRandom(seed));
+      const water = tiles.filter(t => t.type === 'water').length;
+      expect(water).toBeGreaterThanOrEqual(6);
+      expect(water).toBeLessThanOrEqual(30);
+    }
+  });
+
+  it('floods a single edge with a coastline', () => {
+    for (const seed of [2, 9, 16, 23, 30]) {
+      const tiles = createCity();
+      carveCoast(tiles, seededRandom(seed));
+      const water: { x: number; y: number }[] = [];
+      tiles.forEach((t, i) => {
+        if (t.type === 'water') water.push({ x: i % CITY_W, y: Math.floor(i / CITY_W) });
+      });
+      expect(water.length).toBeGreaterThanOrEqual(Math.min(CITY_W, CITY_H));
+      // Every water tile hugs a board edge (coast depth never exceeds 4).
+      for (const { x, y } of water) {
+        const edgeDist = Math.min(x, y, CITY_W - 1 - x, CITY_H - 1 - y);
+        expect(edgeDist).toBeLessThan(4);
+      }
+    }
+  });
+
   it('generates deterministic terrain from a seeded random', () => {
     const a = createCity();
     const b = createCity();
     generateTerrain(a, seededRandom(11));
     generateTerrain(b, seededRandom(11));
     expect(a).toEqual(b);
+  });
+
+  it('rolls varied water styles while always leaving plenty of buildable land', () => {
+    const styles = new Set<WaterStyle>();
+    // Seeds spread by a large prime: the LCG's first draw (the style roll)
+    // barely moves across small consecutive seeds.
+    for (let seed = 1; seed <= 40; seed++) {
+      const tiles = createCity();
+      styles.add(generateTerrain(tiles, seededRandom(seed * 104729)));
+      const water = tiles.filter(t => t.type === 'water').length;
+      const empty = tiles.filter(t => t.type === 'empty').length;
+      expect(water).toBeGreaterThanOrEqual(6);
+      expect(water).toBeLessThanOrEqual(100);
+      expect(empty).toBeGreaterThanOrEqual(180);
+    }
+    expect(styles).toEqual(new Set(['river', 'lake', 'coast']));
   });
 });
 

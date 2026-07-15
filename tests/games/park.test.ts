@@ -4,6 +4,9 @@ import {
   GRID_H,
   MAX_HEIGHT,
   createPark,
+  createFlatPark,
+  ENTRANCE_CORE,
+  neighbours,
   canPlace,
   applyTool,
   toolCost,
@@ -61,9 +64,17 @@ import {
   type SegmentKind
 } from '../../src/games/park/track';
 
+function seededRandom(seed = 42): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    return state / 4294967296;
+  };
+}
+
 describe('park grid', () => {
-  it('creates a grass park with an entrance, starter path, and flat terrain', () => {
-    const { tiles, heights, tunnels, entrance } = createPark();
+  it('creates a flat grass board with an entrance and starter path', () => {
+    const { tiles, heights, tunnels, entrance } = createFlatPark();
     expect(tiles).toHaveLength(GRID_W * GRID_H);
     expect(heights).toHaveLength(GRID_W * GRID_H);
     expect(tunnels).toHaveLength(GRID_W * GRID_H);
@@ -75,7 +86,7 @@ describe('park grid', () => {
   });
 
   it('allows paths on any grass but requires adjacency for buildings', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     // Far corner: grass, no path nearby
     expect(canPlace(tiles, heights, tunnels, 0, 0, 'path')).toBe(true);
     expect(canPlace(tiles, heights, tunnels, 0, 0, 'carousel')).toBe(false);
@@ -85,7 +96,7 @@ describe('park grid', () => {
   });
 
   it('never allows building over occupied tiles or the entrance', () => {
-    const { tiles, heights, tunnels, entrance } = createPark();
+    const { tiles, heights, tunnels, entrance } = createFlatPark();
     const ex = entrance % GRID_W;
     expect(canPlace(tiles, heights, tunnels, ex, GRID_H - 1, 'path')).toBe(false);
     expect(canPlace(tiles, heights, tunnels, ex, GRID_H - 1, 'bulldoze')).toBe(false);
@@ -94,7 +105,7 @@ describe('park grid', () => {
   });
 
   it('bulldozing restores grass', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 0, 0, 'path');
     expect(tiles[idx(0, 0)]).toBe('path');
     applyTool(tiles, heights, tunnels, 0, 0, 'bulldoze');
@@ -110,9 +121,81 @@ describe('park grid', () => {
   });
 });
 
+describe('procedural park terrain (createPark)', () => {
+  // Seeds spread by a large prime so the first draw (the coast-vs-ponds
+  // roll) actually varies — the LCG's first output barely moves across
+  // small consecutive seeds.
+  const seeds = Array.from({ length: 60 }, (_, k) => (k + 1) * 104729);
+
+  it('keeps every neighbour within one height step (the slope rule)', () => {
+    for (const seed of seeds) {
+      const { heights } = createPark(seededRandom(seed));
+      for (let i = 0; i < heights.length; i++) {
+        for (const n of neighbours(i)) {
+          expect(Math.abs(heights[i] - heights[n])).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+
+  it('keeps heights in range and rolls at least one hill', () => {
+    for (const seed of seeds) {
+      const { heights } = createPark(seededRandom(seed));
+      expect(Math.min(...heights)).toBe(0);
+      expect(Math.max(...heights)).toBeLessThanOrEqual(MAX_HEIGHT);
+      expect(heights.some(h => h > 0)).toBe(true);
+    }
+  });
+
+  it('keeps the entrance and its starter path flat and intact', () => {
+    for (const seed of seeds) {
+      const { tiles, heights, entrance } = createPark(seededRandom(seed));
+      expect(tiles[entrance]).toBe('entrance');
+      expect(tiles[entrance - GRID_W]).toBe('path');
+      expect(tiles[entrance - 2 * GRID_W]).toBe('path');
+      expect(heights[entrance]).toBe(0);
+      expect(heights[entrance - GRID_W]).toBe(0);
+      expect(heights[entrance - 2 * GRID_W]).toBe(0);
+    }
+  });
+
+  it('leaves the entrance core untouched and a generous flat buildable board', () => {
+    for (const seed of seeds) {
+      const { tiles, heights } = createPark(seededRandom(seed));
+      for (let y = ENTRANCE_CORE.y0; y <= ENTRANCE_CORE.y1; y++) {
+        for (let x = ENTRANCE_CORE.x0; x <= ENTRANCE_CORE.x1; x++) {
+          const i = idx(x, y);
+          expect(heights[i]).toBe(0);
+          expect(['grass', 'path', 'entrance']).toContain(tiles[i]);
+        }
+      }
+      const flatGrass = tiles.filter((t, i) => t === 'grass' && heights[i] === 0).length;
+      expect(flatGrass).toBeGreaterThanOrEqual(150);
+    }
+  });
+
+  it('places some water, only ever at height 0', () => {
+    for (const seed of seeds) {
+      const { tiles, heights } = createPark(seededRandom(seed));
+      const water = tiles.reduce<number[]>((acc, t, i) => (t === 'water' ? [...acc, i] : acc), []);
+      expect(water.length).toBeGreaterThanOrEqual(2);
+      expect(water.length).toBeLessThanOrEqual(90);
+      for (const i of water) expect(heights[i]).toBe(0);
+    }
+  });
+
+  it('is deterministic for a seed and varies across seeds', () => {
+    expect(createPark(seededRandom(5))).toEqual(createPark(seededRandom(5)));
+    const a = createPark(seededRandom(1));
+    const b = createPark(seededRandom(2));
+    const same = a.tiles.join() === b.tiles.join() && a.heights.join() === b.heights.join();
+    expect(same).toBe(false);
+  });
+});
+
 describe('park terrain', () => {
   it('raises and lowers land within bounds, one step at a time', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(true);
     applyTool(tiles, heights, tunnels, 5, 5, 'raiseLand');
     expect(heights[idx(5, 5)]).toBe(1);
@@ -124,7 +207,7 @@ describe('park terrain', () => {
   });
 
   it('raising past the slope limit pushes the neighbours along instead of refusing', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'raiseLand'); // height 1, flat neighbours: diff 1, fine
     // A second raise would once have been rejected as a 2-step cliff; now
     // the cascade lifts the four neighbours to 1 so the slope rule holds.
@@ -144,7 +227,7 @@ describe('park terrain', () => {
   });
 
   it('plans the cascade with per-step costs, and refuses when something immovable is in the way', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     // Flat ground: a one-step raise plans exactly one tile, one step.
     const single = terraformPlan(tiles, heights, idx(5, 5), 1);
     expect(single).not.toBeNull();
@@ -171,7 +254,7 @@ describe('park terrain', () => {
   });
 
   it('caps height at MAX_HEIGHT', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     heights[idx(5, 5)] = MAX_HEIGHT;
     for (const [x, y] of [
       [4, 5],
@@ -185,7 +268,7 @@ describe('park terrain', () => {
   });
 
   it('cannot terraform under a building', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     tiles[idx(5, 5)] = 'carousel';
     expect(canPlace(tiles, heights, tunnels, 5, 5, 'raiseLand')).toBe(false);
   });
@@ -193,7 +276,7 @@ describe('park terrain', () => {
 
 describe('park water', () => {
   it('places water only on flat grass', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     expect(canPlace(tiles, heights, tunnels, 3, 3, 'water')).toBe(true);
     applyTool(tiles, heights, tunnels, 3, 3, 'water');
     expect(tiles[idx(3, 3)]).toBe('water');
@@ -203,7 +286,7 @@ describe('park water', () => {
   });
 
   it('gates the Log Flume on an adjacent water tile', () => {
-    const { tiles, heights, tunnels, entrance } = createPark();
+    const { tiles, heights, tunnels, entrance } = createFlatPark();
     const ex = entrance % GRID_W;
     const site = idx(ex - 1, GRID_H - 2); // beside the starter path
     expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'flume')).toBe(false); // no water yet
@@ -216,7 +299,7 @@ describe('park water', () => {
 
 describe('park tunnels', () => {
   it('only digs a tunnel from a flat path into a hillside', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'path');
     // No raised neighbour yet — nothing to tunnel into.
     expect(canPlace(tiles, heights, tunnels, 5, 5, 'digTunnel')).toBe(false);
@@ -227,7 +310,7 @@ describe('park tunnels', () => {
   });
 
   it('refuses to dig a tunnel that already exists', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'path');
     applyTool(tiles, heights, tunnels, 6, 5, 'raiseLand');
     applyTool(tiles, heights, tunnels, 5, 5, 'digTunnel');
@@ -235,7 +318,7 @@ describe('park tunnels', () => {
   });
 
   it('bulldozing a tunnelled path clears the tunnel flag', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'path');
     applyTool(tiles, heights, tunnels, 6, 5, 'raiseLand');
     applyTool(tiles, heights, tunnels, 5, 5, 'digTunnel');
@@ -245,7 +328,7 @@ describe('park tunnels', () => {
   });
 
   it('raising or lowering a tunnelled tile closes the tunnel', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'path');
     applyTool(tiles, heights, tunnels, 6, 5, 'raiseLand');
     applyTool(tiles, heights, tunnels, 5, 5, 'digTunnel');
@@ -258,7 +341,7 @@ describe('park tunnels', () => {
 
 describe('park building gates', () => {
   it('requires height 2+ for the Sky Tower', () => {
-    const { tiles, heights, tunnels, entrance } = createPark();
+    const { tiles, heights, tunnels, entrance } = createFlatPark();
     const ex = entrance % GRID_W;
     const site = idx(ex - 1, GRID_H - 2);
     expect(canPlace(tiles, heights, tunnels, ex - 1, GRID_H - 2, 'skytower')).toBe(false);
@@ -291,13 +374,13 @@ describe('park theme zones', () => {
   });
 
   it('has no zone influence anywhere until a gate is placed', () => {
-    const { tiles } = createPark();
+    const { tiles } = createFlatPark();
     expect(zoneAt(tiles, idx(5, 5))).toBeNull();
     expect(zoneAt(tiles, idx(0, 0))).toBeNull();
   });
 
   it('claims influence around a placed gate', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 2, 2, 'gateFairytale');
     expect(tiles[idx(2, 2)]).toBe('gateFairytale');
     expect(zoneAt(tiles, idx(3, 3))).toBe('fairytale');
@@ -307,7 +390,7 @@ describe('park theme zones', () => {
   });
 
   it('splits influence between two gates by Chebyshev distance', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 1, 1, 'gateFairytale');
     applyTool(tiles, heights, tunnels, GRID_W - 2, GRID_H - 2, 'gateAdventure');
     expect(zoneAt(tiles, idx(2, 2))).toBe('fairytale');
@@ -315,7 +398,7 @@ describe('park theme zones', () => {
   });
 
   it('precomputes the same zone per tile as zoneAt, for every tile', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 1, 1, 'gateFairytale');
     applyTool(tiles, heights, tunnels, GRID_W - 2, GRID_H - 2, 'gateAdventure');
     const precomputed = zonesForTiles(tiles);
@@ -326,7 +409,7 @@ describe('park theme zones', () => {
   });
 
   it('discounts a zone native attraction inside its own influence, but not other buildings', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'gateFairytale');
     // Fairytale's native attraction is the carousel — the sole gate on the
     // map claims the whole grid, so the discount reaches even a far tile.
@@ -336,12 +419,12 @@ describe('park theme zones', () => {
   });
 
   it('gives no discount anywhere before any gate is placed', () => {
-    const { tiles } = createPark();
+    const { tiles } = createFlatPark();
     expect(zoneDiscountFactor(tiles, idx(5, 5), 'carousel')).toBe(1);
   });
 
   it('applies the discount to toolCost when a location is given', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 5, 5, 'gateFairytale');
     const base = BUILDINGS.carousel!.cost;
     expect(toolCost('carousel')).toBe(base);
@@ -361,7 +444,7 @@ describe('park theme zones', () => {
 
 describe('park pathfinding', () => {
   it('finds the shortest route along a corridor', () => {
-    const { tiles, entrance } = createPark();
+    const { tiles, entrance } = createFlatPark();
     for (let n = 3; n <= 6; n++) tiles[entrance - n * GRID_W] = 'path';
     const path = findPath(tiles, entrance, entrance - 6 * GRID_W);
     expect(path).not.toBeNull();
@@ -370,13 +453,13 @@ describe('park pathfinding', () => {
   });
 
   it('returns null for disconnected targets', () => {
-    const { tiles, entrance } = createPark();
+    const { tiles, entrance } = createFlatPark();
     tiles[idx(0, 0)] = 'path';
     expect(findPath(tiles, entrance, idx(0, 0))).toBeNull();
   });
 
   it('routes guests to the nearest reachable building', () => {
-    const { tiles, entrance } = createPark();
+    const { tiles, entrance } = createFlatPark();
     // Corridor upwards with two food stalls, near and far
     for (let n = 3; n <= 8; n++) tiles[entrance - n * GRID_W] = 'path';
     const near = entrance - 4 * GRID_W + 1;
@@ -390,7 +473,7 @@ describe('park pathfinding', () => {
   });
 
   it('only stands on walkable tiles next to a building', () => {
-    const { tiles, entrance } = createPark();
+    const { tiles, entrance } = createFlatPark();
     const building = entrance - GRID_W - 1; // beside the starter path
     tiles[building] = 'drink';
     const stands = adjacentWalkable(tiles, building);
@@ -401,7 +484,7 @@ describe('park pathfinding', () => {
   });
 
   it('bfs from a non-walkable tile reaches nothing', () => {
-    const { tiles } = createPark();
+    const { tiles } = createFlatPark();
     const bfs = bfsFrom(tiles, idx(0, 0));
     expect(Math.max(...bfs.dist)).toBe(-1);
   });
@@ -467,7 +550,7 @@ describe('park economy', () => {
   });
 
   it('sums daily upkeep across placed buildings', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     expect(dailyUpkeep(tiles)).toBe(0);
     applyTool(tiles, heights, tunnels, 0, 0, 'carousel');
     applyTool(tiles, heights, tunnels, 1, 0, 'toilet');
@@ -475,7 +558,7 @@ describe('park economy', () => {
   });
 
   it('discounts upkeep for a zone native attraction inside its own influence', () => {
-    const { tiles, heights, tunnels } = createPark();
+    const { tiles, heights, tunnels } = createFlatPark();
     applyTool(tiles, heights, tunnels, 0, 0, 'gateFairytale');
     applyTool(tiles, heights, tunnels, 1, 0, 'carousel'); // native to Fairytale
     applyTool(tiles, heights, tunnels, 2, 0, 'toilet'); // not a native attraction anywhere
@@ -756,7 +839,7 @@ describe('coaster track', () => {
   describe('canPlaceTrack', () => {
     it('requires every segment tile to currently be grass', () => {
       const loop = withStation(rectLoop(1, 1, 3, 2));
-      const { tiles, heights, tunnels } = createPark();
+      const { tiles, heights, tunnels } = createFlatPark();
       expect(canPlaceTrack(tiles, loop)).toBe(true);
       applyTool(tiles, heights, tunnels, 2, 1, 'tree');
       expect(canPlaceTrack(tiles, loop)).toBe(false);
@@ -801,7 +884,7 @@ describe('park mayhem', () => {
   });
 
   it('picks a working ride to break, never an already-broken or non-ride tile', () => {
-    const { tiles } = createPark();
+    const { tiles } = createFlatPark();
     tiles[idx(4, 4)] = 'carousel';
     tiles[idx(6, 4)] = 'ferris';
     tiles[idx(8, 4)] = 'food';
@@ -813,7 +896,7 @@ describe('park mayhem', () => {
   });
 
   it('never picks a breakdown in a park with no rides', () => {
-    const { tiles } = createPark();
+    const { tiles } = createFlatPark();
     tiles[idx(4, 4)] = 'food';
     expect(pickBreakdownTile(tiles, [], () => 0)).toBeNull();
   });

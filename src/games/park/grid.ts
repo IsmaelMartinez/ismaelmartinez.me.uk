@@ -235,7 +235,12 @@ export interface Park {
   entrance: number;
 }
 
-export function createPark(): Park {
+/**
+ * A dead-flat board with just the entrance and its starter path stub — the
+ * blank slate createPark's generation starts from. Exported for tests that
+ * need known-flat ground under placement/terraform assertions.
+ */
+export function createFlatPark(): Park {
   const size = GRID_W * GRID_H;
   const tiles: TileType[] = new Array(size).fill('grass');
   const heights: number[] = new Array(size).fill(MIN_HEIGHT);
@@ -246,6 +251,160 @@ export function createPark(): Park {
   tiles[entrance - GRID_W] = 'path';
   tiles[entrance - 2 * GRID_W] = 'path';
   return { tiles, heights, tunnels, entrance };
+}
+
+/**
+ * The flat buildable core around the entrance (inclusive tile bounds) that
+ * terrain generation must leave untouched: no water, no hills — so the
+ * early game builds on open ground instead of fighting the landscape. The
+ * entrance and its starter path sit inside it.
+ */
+export const ENTRANCE_CORE = {
+  x0: Math.floor(GRID_W / 2) - 4,
+  x1: Math.floor(GRID_W / 2) + 4,
+  y0: GRID_H - 5,
+  y1: GRID_H - 1
+};
+
+/** Chebyshev distance from tile (x, y) to the entrance core's rectangle (0 = inside it). */
+function chebToCore(x: number, y: number): number {
+  const dx = Math.max(ENTRANCE_CORE.x0 - x, 0, x - ENTRANCE_CORE.x1);
+  const dy = Math.max(ENTRANCE_CORE.y0 - y, 0, y - ENTRANCE_CORE.y1);
+  return Math.max(dx, dy);
+}
+
+/** Uniform integer in [lo, hi] from a [0,1) random source. */
+const randInt = (random: () => number, lo: number, hi: number): number =>
+  lo + Math.floor(random() * (hi - lo + 1));
+
+/**
+ * Digs one pond: a random-growth blob of water on flat grass, kept a tile
+ * clear of the entrance core so it never crowds the starting build space.
+ * Runs before the hills, so "flat grass" is simply "grass" here.
+ */
+function digPond(tiles: TileType[], random: () => number): void {
+  const candidates: number[] = [];
+  for (let i = 0; i < tiles.length; i++) {
+    if (tiles[i] === 'grass' && chebToCore(i % GRID_W, Math.floor(i / GRID_W)) >= 2) {
+      candidates.push(i);
+    }
+  }
+  if (!candidates.length) return;
+  const blob = [candidates[Math.floor(random() * candidates.length)]];
+  tiles[blob[0]] = 'water';
+  const target = randInt(random, 3, 7);
+  // Growth can stall against edges/core, so bound the attempts.
+  for (let tries = 0; blob.length < target && tries < 40; tries++) {
+    const from = blob[Math.floor(random() * blob.length)];
+    const ns = neighbours(from);
+    const n = ns[Math.floor(random() * ns.length)];
+    if (tiles[n] === 'grass' && chebToCore(n % GRID_W, Math.floor(n / GRID_W)) >= 2) {
+      tiles[n] = 'water';
+      blob.push(n);
+    }
+  }
+}
+
+/**
+ * Floods one board edge (top, left, or right — never the entrance's edge)
+ * with a shoreline whose depth wanders 1–3 tiles, so some maps start
+ * coastal instead of pond-dotted. The core-distance guard is a safety net;
+ * the eligible edges never actually reach the entrance core.
+ */
+function carveCoast(tiles: TileType[], random: () => number): void {
+  const edge = randInt(random, 0, 2); // 0 = top, 1 = left, 2 = right
+  const len = edge === 0 ? GRID_W : GRID_H;
+  let depth = randInt(random, 1, 2);
+  for (let k = 0; k < len; k++) {
+    const drift = random();
+    if (drift < 0.3) depth = Math.max(1, depth - 1);
+    else if (drift > 0.7) depth = Math.min(3, depth + 1);
+    for (let d = 0; d < depth; d++) {
+      const x = edge === 0 ? k : edge === 1 ? d : GRID_W - 1 - d;
+      const y = edge === 0 ? d : k;
+      const i = idx(x, y);
+      if (tiles[i] === 'grass' && chebToCore(x, y) >= 1) tiles[i] = 'water';
+    }
+  }
+}
+
+/**
+ * Stamps one hill onto the heightmap: height falls off by one per Chebyshev
+ * ring beyond a flat top, which makes every hill (and any max-merge of
+ * overlapping hills) automatically respect the one-step slope rule — see
+ * the invariants tested in tests/games/park.test.ts. The footprint must be
+ * all grass (water stays at height 0) and clear of the entrance core.
+ * Returns false when no valid centre exists for this size.
+ */
+function placeHill(
+  tiles: TileType[],
+  heights: number[],
+  peak: number,
+  topRadius: number,
+  random: () => number
+): boolean {
+  const reach = peak + topRadius - 1; // outermost ring with height > 0
+  const candidates: number[] = [];
+  for (let cy = 0; cy < GRID_H; cy++) {
+    for (let cx = 0; cx < GRID_W; cx++) {
+      let ok = true;
+      for (let y = Math.max(0, cy - reach); ok && y <= Math.min(GRID_H - 1, cy + reach); y++) {
+        for (let x = Math.max(0, cx - reach); ok && x <= Math.min(GRID_W - 1, cx + reach); x++) {
+          if (tiles[idx(x, y)] !== 'grass' || chebToCore(x, y) < 1) ok = false;
+        }
+      }
+      if (ok) candidates.push(idx(cx, cy));
+    }
+  }
+  if (!candidates.length) return false;
+  const c = candidates[Math.floor(random() * candidates.length)];
+  const cx = c % GRID_W;
+  const cy = Math.floor(c / GRID_W);
+  for (let y = Math.max(0, cy - reach); y <= Math.min(GRID_H - 1, cy + reach); y++) {
+    for (let x = Math.max(0, cx - reach); x <= Math.min(GRID_W - 1, cx + reach); x++) {
+      const cheb = Math.max(Math.abs(x - cx), Math.abs(y - cy));
+      const h = peak - Math.max(0, cheb - topRadius);
+      const i = idx(x, y);
+      heights[i] = Math.min(MAX_HEIGHT, Math.max(heights[i], h));
+    }
+  }
+  return true;
+}
+
+/**
+ * A fresh park with procedurally rolled starting terrain: a couple of gentle
+ * hills (sometimes one tall enough — height ≥2 — to be a free Sky Tower
+ * site), and either a pond or two or a coastline along one edge (natural Log
+ * Flume sites). Pure and seedable: pass a deterministic `random` to get the
+ * same map every time. Hard invariants (unit-tested): the slope rule holds
+ * everywhere, water only at height 0, the entrance and starter path stay
+ * flat and intact, and a generous flat grass core remains around the
+ * entrance.
+ */
+export function createPark(random: () => number = Math.random): Park {
+  const park = createFlatPark();
+  // Water first, hills second: hill footprints avoid water tiles, which
+  // keeps "water only at height 0" true by construction.
+  if (random() < 0.35) {
+    carveCoast(park.tiles, random);
+  } else {
+    const ponds = randInt(random, 1, 2);
+    for (let p = 0; p < ponds; p++) digPond(park.tiles, random);
+  }
+  const hills = randInt(random, 1, 3);
+  for (let h = 0; h < hills; h++) {
+    const roll = random();
+    const wantPeak = roll < 0.35 ? 1 : roll < 0.75 ? 2 : 3;
+    const topRadius = randInt(random, 0, 1);
+    // Fall back to a smaller hill rather than none if the roll doesn't fit.
+    // Height-1 hills always get a widened top: a lone raised tile reads
+    // like a rendering glitch, a small plateau reads like a knoll.
+    for (let peak = wantPeak; peak >= 1; peak--) {
+      const top = peak === 1 ? Math.max(1, topRadius + 1) : topRadius;
+      if (placeHill(park.tiles, park.heights, peak, top, random)) break;
+    }
+  }
+  return park;
 }
 
 export function neighbours(i: number): number[] {

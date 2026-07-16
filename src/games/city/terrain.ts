@@ -8,6 +8,7 @@
  * count in range, plenty of buildable land, determinism) are unit-tested in
  * tests/games/city.test.ts.
  */
+import { growBlob, carveEdge } from '../engine/grid2d';
 import { CITY_W, CITY_H, cityIdx, type CityTile } from './tiles';
 
 export type WaterStyle = 'river' | 'lake' | 'coast';
@@ -43,27 +44,29 @@ export function carveRiver(
   }
 }
 
-/** Grows one blob lake of roughly `target` tiles from a random inland seed. */
+/**
+ * Grows one blob lake of roughly `target` tiles from a random inland seed.
+ * The seed retries onto empty land, so a second lake can't seed inside the
+ * first and silently count already-water tiles toward its size.
+ */
 function growLake(tiles: CityTile[], target: number, random: () => number): void {
-  const sx = 2 + Math.floor(random() * (CITY_W - 4));
-  const sy = 2 + Math.floor(random() * (CITY_H - 4));
-  const blob = [cityIdx(sx, sy)];
-  tiles[blob[0]].type = 'water';
-  // Growth can stall against edges, so bound the attempts.
-  for (let tries = 0; blob.length < target && tries < target * 8; tries++) {
-    const from = blob[Math.floor(random() * blob.length)];
-    const fx = from % CITY_W;
-    const fy = Math.floor(from / CITY_W);
-    const dir = Math.floor(random() * 4);
-    const x = fx + (dir === 1 ? 1 : dir === 3 ? -1 : 0);
-    const y = fy + (dir === 2 ? 1 : dir === 0 ? -1 : 0);
-    if (x < 0 || x >= CITY_W || y < 0 || y >= CITY_H) continue;
-    const tile = tiles[cityIdx(x, y)];
-    if (tile.type === 'empty') {
-      tile.type = 'water';
-      blob.push(cityIdx(x, y));
-    }
+  let seed = -1;
+  for (let tries = 0; tries < 20 && seed < 0; tries++) {
+    const sx = 2 + Math.floor(random() * (CITY_W - 4));
+    const sy = 2 + Math.floor(random() * (CITY_H - 4));
+    if (tiles[cityIdx(sx, sy)].type === 'empty') seed = cityIdx(sx, sy);
   }
+  if (seed < 0) return;
+  tiles[seed].type = 'water';
+  growBlob(
+    seed,
+    CITY_W,
+    CITY_H,
+    target,
+    i => tiles[i].type === 'empty',
+    i => (tiles[i].type = 'water'),
+    random
+  );
 }
 
 /** Fills the map's water with one big lake (and sometimes a second smaller one) instead of a river. */
@@ -79,18 +82,7 @@ export function carveLakes(tiles: CityTile[], random: () => number = Math.random
  */
 export function carveCoast(tiles: CityTile[], random: () => number = Math.random): void {
   const edge = Math.floor(random() * 4); // 0 top, 1 right, 2 bottom, 3 left
-  const len = edge % 2 === 0 ? CITY_W : CITY_H;
-  let depth = 1 + Math.floor(random() * 2);
-  for (let k = 0; k < len; k++) {
-    const drift = random();
-    if (drift < 0.3) depth = Math.max(1, depth - 1);
-    else if (drift > 0.7) depth = Math.min(4, depth + 1);
-    for (let d = 0; d < depth; d++) {
-      const x = edge === 0 || edge === 2 ? k : edge === 1 ? CITY_W - 1 - d : d;
-      const y = edge === 1 || edge === 3 ? k : edge === 0 ? d : CITY_H - 1 - d;
-      tiles[cityIdx(x, y)].type = 'water';
-    }
-  }
+  carveEdge(CITY_W, CITY_H, edge, 4, (x, y) => (tiles[cityIdx(x, y)].type = 'water'), random);
 }
 
 /** Sprinkles forest clusters onto empty land. */

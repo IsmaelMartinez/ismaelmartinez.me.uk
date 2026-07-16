@@ -22,6 +22,7 @@ import {
   gateZone
 } from '../../src/games/park/grid';
 import { findPath, bfsFrom, nearestReachable, adjacentWalkable } from '../../src/games/park/pathfind';
+import { seededRandom } from './seeded-random';
 import {
   createNeeds,
   decayNeeds,
@@ -63,14 +64,6 @@ import {
   type Segment,
   type SegmentKind
 } from '../../src/games/park/track';
-
-function seededRandom(seed = 42): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
 
 describe('park grid', () => {
   it('creates a flat grass board with an entrance and starter path', () => {
@@ -169,15 +162,22 @@ describe('procedural park terrain (createPark)', () => {
           expect(['grass', 'path', 'entrance']).toContain(tiles[i]);
         }
       }
+      // Structural floor, not a tuning target: 336 tiles − 3 entrance/path
+      // − ≤72 coast water (3 deep × 24) − ≤147 raised (3 disjoint 7×7 hill
+      // footprints) = 114, asserted with a little slack. Typical rolls sit
+      // far above it.
       const flatGrass = tiles.filter((t, i) => t === 'grass' && heights[i] === 0).length;
-      expect(flatGrass).toBeGreaterThanOrEqual(150);
+      expect(flatGrass).toBeGreaterThanOrEqual(110);
     }
   });
 
   it('places some water, only ever at height 0', () => {
     for (const seed of seeds) {
       const { tiles, heights } = createPark(seededRandom(seed));
-      const water = tiles.reduce<number[]>((acc, t, i) => (t === 'water' ? [...acc, i] : acc), []);
+      const water: number[] = [];
+      tiles.forEach((t, i) => {
+        if (t === 'water') water.push(i);
+      });
       expect(water.length).toBeGreaterThanOrEqual(2);
       expect(water.length).toBeLessThanOrEqual(90);
       for (const i of water) expect(heights[i]).toBe(0);

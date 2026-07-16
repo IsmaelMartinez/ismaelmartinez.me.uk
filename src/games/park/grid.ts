@@ -5,7 +5,7 @@
  * see the "terrain elevation" section of
  * docs/plans/2026-07-09-park-overhaul-design.md for the model this encodes.
  */
-import { gridNeighbours, chebyshev } from '../engine/grid2d';
+import { gridNeighbours, chebyshev, growBlob, carveEdge } from '../engine/grid2d';
 
 export const GRID_W = 24;
 export const GRID_H = 14;
@@ -283,26 +283,16 @@ const randInt = (random: () => number, lo: number, hi: number): number =>
  * Runs before the hills, so "flat grass" is simply "grass" here.
  */
 function digPond(tiles: TileType[], random: () => number): void {
+  const pondable = (i: number) =>
+    tiles[i] === 'grass' && chebToCore(i % GRID_W, Math.floor(i / GRID_W)) >= 2;
   const candidates: number[] = [];
   for (let i = 0; i < tiles.length; i++) {
-    if (tiles[i] === 'grass' && chebToCore(i % GRID_W, Math.floor(i / GRID_W)) >= 2) {
-      candidates.push(i);
-    }
+    if (pondable(i)) candidates.push(i);
   }
   if (!candidates.length) return;
-  const blob = [candidates[Math.floor(random() * candidates.length)]];
-  tiles[blob[0]] = 'water';
-  const target = randInt(random, 3, 7);
-  // Growth can stall against edges/core, so bound the attempts.
-  for (let tries = 0; blob.length < target && tries < 40; tries++) {
-    const from = blob[Math.floor(random() * blob.length)];
-    const ns = neighbours(from);
-    const n = ns[Math.floor(random() * ns.length)];
-    if (tiles[n] === 'grass' && chebToCore(n % GRID_W, Math.floor(n / GRID_W)) >= 2) {
-      tiles[n] = 'water';
-      blob.push(n);
-    }
-  }
+  const seed = candidates[Math.floor(random() * candidates.length)];
+  tiles[seed] = 'water';
+  growBlob(seed, GRID_W, GRID_H, randInt(random, 3, 7), pondable, i => (tiles[i] = 'water'), random);
 }
 
 /**
@@ -312,28 +302,42 @@ function digPond(tiles: TileType[], random: () => number): void {
  * the eligible edges never actually reach the entrance core.
  */
 function carveCoast(tiles: TileType[], random: () => number): void {
-  const edge = randInt(random, 0, 2); // 0 = top, 1 = left, 2 = right
-  const len = edge === 0 ? GRID_W : GRID_H;
-  let depth = randInt(random, 1, 2);
-  for (let k = 0; k < len; k++) {
-    const drift = random();
-    if (drift < 0.3) depth = Math.max(1, depth - 1);
-    else if (drift > 0.7) depth = Math.min(3, depth + 1);
-    for (let d = 0; d < depth; d++) {
-      const x = edge === 0 ? k : edge === 1 ? d : GRID_W - 1 - d;
-      const y = edge === 0 ? d : k;
+  const edge = [0, 1, 3][randInt(random, 0, 2)]; // top, right, left — never the entrance's edge
+  carveEdge(
+    GRID_W,
+    GRID_H,
+    edge,
+    3,
+    (x, y) => {
       const i = idx(x, y);
       if (tiles[i] === 'grass' && chebToCore(x, y) >= 1) tiles[i] = 'water';
+    },
+    random
+  );
+}
+
+/** Whether every tile within `reach` of (cx, cy) can host hill footprint: all grass, clear of the entrance core. */
+function footprintClear(tiles: TileType[], cx: number, cy: number, reach: number): boolean {
+  for (let y = Math.max(0, cy - reach); y <= Math.min(GRID_H - 1, cy + reach); y++) {
+    for (let x = Math.max(0, cx - reach); x <= Math.min(GRID_W - 1, cx + reach); x++) {
+      if (tiles[idx(x, y)] !== 'grass' || chebToCore(x, y) < 1) return false;
     }
   }
+  return true;
 }
 
 /**
  * Stamps one hill onto the heightmap: height falls off by one per Chebyshev
  * ring beyond a flat top, which makes every hill (and any max-merge of
  * overlapping hills) automatically respect the one-step slope rule — see
- * the invariants tested in tests/games/park.test.ts. The footprint must be
- * all grass (water stays at height 0) and clear of the entrance core.
+ * the invariants tested in tests/games/park.test.ts. Height-1 hills get
+ * their top widened by a ring here, where the falloff geometry lives: a
+ * lone raised tile reads like a rendering glitch, a small plateau reads
+ * like a knoll. The footprint must be all grass (water stays at height 0)
+ * and clear of the entrance core. Enumerating every candidate centre (the
+ * board is only 24×14, and this runs once per new park) rather than
+ * rejection-sampling is what guarantees a hill lands whenever any valid
+ * centre exists — the "at least one hill" invariant the tests rely on.
  * Returns false when no valid centre exists for this size.
  */
 function placeHill(
@@ -343,17 +347,12 @@ function placeHill(
   topRadius: number,
   random: () => number
 ): boolean {
-  const reach = peak + topRadius - 1; // outermost ring with height > 0
+  const top = peak === 1 ? topRadius + 1 : topRadius;
+  const reach = peak + top - 1; // outermost ring with height > 0
   const candidates: number[] = [];
   for (let cy = 0; cy < GRID_H; cy++) {
     for (let cx = 0; cx < GRID_W; cx++) {
-      let ok = true;
-      for (let y = Math.max(0, cy - reach); ok && y <= Math.min(GRID_H - 1, cy + reach); y++) {
-        for (let x = Math.max(0, cx - reach); ok && x <= Math.min(GRID_W - 1, cx + reach); x++) {
-          if (tiles[idx(x, y)] !== 'grass' || chebToCore(x, y) < 1) ok = false;
-        }
-      }
-      if (ok) candidates.push(idx(cx, cy));
+      if (footprintClear(tiles, cx, cy, reach)) candidates.push(idx(cx, cy));
     }
   }
   if (!candidates.length) return false;
@@ -362,9 +361,8 @@ function placeHill(
   const cy = Math.floor(c / GRID_W);
   for (let y = Math.max(0, cy - reach); y <= Math.min(GRID_H - 1, cy + reach); y++) {
     for (let x = Math.max(0, cx - reach); x <= Math.min(GRID_W - 1, cx + reach); x++) {
-      const cheb = Math.max(Math.abs(x - cx), Math.abs(y - cy));
-      const h = peak - Math.max(0, cheb - topRadius);
       const i = idx(x, y);
+      const h = peak - Math.max(0, chebyshev(i, c, GRID_W) - top);
       heights[i] = Math.min(MAX_HEIGHT, Math.max(heights[i], h));
     }
   }
@@ -397,11 +395,8 @@ export function createPark(random: () => number = Math.random): Park {
     const wantPeak = roll < 0.35 ? 1 : roll < 0.75 ? 2 : 3;
     const topRadius = randInt(random, 0, 1);
     // Fall back to a smaller hill rather than none if the roll doesn't fit.
-    // Height-1 hills always get a widened top: a lone raised tile reads
-    // like a rendering glitch, a small plateau reads like a knoll.
     for (let peak = wantPeak; peak >= 1; peak--) {
-      const top = peak === 1 ? Math.max(1, topRadius + 1) : topRadius;
-      if (placeHill(park.tiles, park.heights, peak, top, random)) break;
+      if (placeHill(park.tiles, park.heights, peak, topRadius, random)) break;
     }
   }
   return park;

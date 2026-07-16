@@ -64,14 +64,7 @@ import {
   type Fire,
   type Tornado
 } from '../../src/games/city/disasters';
-
-function seededRandom(seed = 42): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
+import { seededRandom } from './seeded-random';
 
 describe('engine grid2d', () => {
   it('respects grid edges for neighbours', () => {
@@ -568,14 +561,6 @@ describe('city budget', () => {
 });
 
 describe('city traffic', () => {
-  function seededRandom(seed = 42): () => number {
-    let state = seed;
-    return () => {
-      state = (state * 1664525 + 1013904223) % 4294967296;
-      return state / 4294967296;
-    };
-  }
-
   it('scales car count with population, capped', () => {
     expect(targetCarCount(0)).toBe(0);
     expect(targetCarCount(80)).toBe(2);

@@ -186,15 +186,16 @@ const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji?: str
 
 /**
  * Per-building block colour and height so each attraction reads distinctly.
- * Carousel and Big Wheel are drawn as bespoke shapes (see drawCarousel /
- * drawFerris) — their `height` is the visual top used to anchor floaters
- * and the breakdown wrench, not an extruded block height.
+ * Bespoke-drawn rides (carousel, Big Wheel, flume, stalls) use `height` as
+ * their visual top for anchoring floaters and the breakdown wrench, not as
+ * an extruded block height — the stalls' covers their hanging sign, so a
+ * purchase floater spawns clear above it instead of on top of it.
  */
 const BUILDING_STYLE: Partial<Record<TileType, { color: string; height: number }>> = {
   carousel: { color: '#b34a8f', height: 30 },
   ferris: { color: '#5a67c0', height: 36 },
-  food: { color: '#a8632c', height: 11 },
-  drink: { color: '#2f7fb0', height: 11 },
+  food: { color: '#a8632c', height: 18 },
+  drink: { color: '#2f7fb0', height: 18 },
   toilet: { color: '#5e6a72', height: 9 },
   flume: { color: '#1f8a9e', height: 13 },
   skytower: { color: '#8892a6', height: 40 }
@@ -218,6 +219,55 @@ const NEED_EMOJI: Record<string, string> = {
 };
 
 const GUEST_COLORS = ['#f472b6', '#60a5fa', '#fbbf24', '#34d399', '#c084fc', '#fb923c'];
+
+interface Pt {
+  x: number;
+  y: number;
+}
+
+/**
+ * One striped awning face for drawStall: the quad from the hut's top rim
+ * edge (a–b) sagging out to the overhanging outer edge (aOut–bOut), split
+ * into alternating canvas/colour strips. Module-scope (rather than a
+ * closure inside drawStall) so the render loop allocates nothing per stall
+ * per frame — same rule drawCarousel's two-pass loop follows.
+ */
+function drawAwningFace(
+  ctx: CanvasRenderingContext2D,
+  a: Pt,
+  b: Pt,
+  aOut: Pt,
+  bOut: Pt,
+  rimLift: number,
+  outerLift: number,
+  stripe: string
+) {
+  const strips = 4;
+  for (let k = 0; k < strips; k++) {
+    const t0 = k / strips;
+    const t1 = (k + 1) / strips;
+    ctx.fillStyle = k % 2 === 0 ? '#e8e4da' : stripe;
+    ctx.beginPath();
+    ctx.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0 - rimLift);
+    ctx.lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1 - rimLift);
+    ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t1, aOut.y + (bOut.y - aOut.y) * t1 - outerLift);
+    ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t0, aOut.y + (bOut.y - aOut.y) * t0 - outerLift);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/** drawStall's pale counter band across one front face (a–b), under the awning's shade. */
+function drawCounterFace(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, liftPx: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y - liftPx - 6);
+  ctx.lineTo(b.x, b.y - liftPx - 6);
+  ctx.lineTo(b.x, b.y - liftPx - 3.5);
+  ctx.lineTo(a.x, a.y - liftPx - 3.5);
+  ctx.closePath();
+  ctx.fill();
+}
 
 interface Guest {
   tile: number;
@@ -1187,8 +1237,15 @@ export function initParkGame(): void {
     board.show(peakGuests);
   }
 
-  function resetPark() {
-    ({ tiles, heights, tunnels, entrance } = createPark());
+  /**
+   * Starts a fresh run. The map rolled at page load is visible behind the
+   * translucent start overlay, so the first Start keeps it (`regenerate:
+   * false`) — re-rolling there would swap the terrain the player was
+   * looking at mid-click. Play Again rolls a new map. (Only became
+   * observable with procedural terrain: every board used to be identical.)
+   */
+  function resetPark(regenerate = true) {
+    if (regenerate) ({ tiles, heights, tunnels, entrance } = createPark());
     money = START_MONEY;
     day = 1;
     dayTimer = 0;
@@ -1470,39 +1527,15 @@ export function initParkGame(): void {
     const wOut = isoProject(VIEW, vx + inset - 0.08, vy + 1 - inset + 0.2);
     const rimLift = liftPx + bodyH + 1;
     const outerLift = liftPx + bodyH - 3;
+    // Shade once per stall, not per strip — these run per frame.
+    const stripe = shadeColor(color, 1.3);
+    const counterCol = shadeColor(color, 1.45);
     ctx.save();
     if (broken) ctx.globalAlpha = 0.45;
-    // Both front faces get the same striped canvas, drawn strip by strip.
-    const awning = (a: typeof w, b: typeof w, aOut: typeof w, bOut: typeof w) => {
-      const strips = 4;
-      for (let k = 0; k < strips; k++) {
-        const t0 = k / strips;
-        const t1 = (k + 1) / strips;
-        ctx.fillStyle = k % 2 === 0 ? '#e8e4da' : shadeColor(color, 1.3);
-        ctx.beginPath();
-        ctx.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0 - rimLift);
-        ctx.lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1 - rimLift);
-        ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t1, aOut.y + (bOut.y - aOut.y) * t1 - outerLift);
-        ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t0, aOut.y + (bOut.y - aOut.y) * t0 - outerLift);
-        ctx.closePath();
-        ctx.fill();
-      }
-    };
-    awning(w, s, wOut, sOut);
-    awning(s, e, sOut, eOut);
-    // Counter band across the front faces, under the awning's shade.
-    const counter = (a: typeof w, b: typeof w) => {
-      ctx.fillStyle = shadeColor(color, 1.45);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y - liftPx - 6);
-      ctx.lineTo(b.x, b.y - liftPx - 6);
-      ctx.lineTo(b.x, b.y - liftPx - 3.5);
-      ctx.lineTo(a.x, a.y - liftPx - 3.5);
-      ctx.closePath();
-      ctx.fill();
-    };
-    counter(w, s);
-    counter(s, e);
+    drawAwningFace(ctx, w, s, wOut, sOut, rimLift, outerLift, stripe);
+    drawAwningFace(ctx, s, e, sOut, eOut, rimLift, outerLift, stripe);
+    drawCounterFace(ctx, w, s, liftPx, counterCol);
+    drawCounterFace(ctx, s, e, liftPx, counterCol);
     const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
     const bob = busy && !broken ? Math.sin(clock * 3) : 0;
     ctx.font = '11px serif';
@@ -2129,7 +2162,7 @@ export function initParkGame(): void {
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';
-    resetPark();
+    resetPark(false);
   });
   restartBtn.addEventListener('click', () => {
     overOverlay.style.display = 'none';

@@ -125,7 +125,9 @@ const TRACK_KIND_EMOJI: Record<SegmentKind, string> = {
   station: '🚉'
 };
 
-// No ferris entry: the Big Wheel is custom-drawn (see drawFerris), never an emoji.
+// No ferris or flume entry: the Big Wheel and Log Flume are custom-drawn
+// (see drawFerris / drawFlume), never an emoji on a block. Food and drink
+// keep theirs as the stall's hanging sign (see drawStall).
 const TILE_EMOJI: Partial<Record<TileType, string>> = {
   entrance: '🎟️',
   carousel: '🎠',
@@ -133,7 +135,6 @@ const TILE_EMOJI: Partial<Record<TileType, string>> = {
   drink: '🥤',
   toilet: '🚻',
   tree: '🌳',
-  flume: '🪵',
   skytower: '🗼'
 };
 
@@ -149,7 +150,9 @@ const GATE_EMOJI: Partial<Record<TileType, string>> = {
  * influence — same TileType, same BUILDINGS economics (see design doc),
  * just a different emoji + block colour so each themed area reads
  * distinctly. Any building without an entry here keeps its default look.
- * The Big Wheel is custom-drawn geometry, so its reskin is colour-only.
+ * The Big Wheel is custom-drawn geometry, so its reskin is colour-only;
+ * the Log Flume's reskin emoji rides its channel as the themed vehicle
+ * (see drawFlume) and the stalls' hang as their sign (see drawStall).
  */
 const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji?: string; color: string }>>> = {
   fairytale: {
@@ -183,15 +186,16 @@ const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji?: str
 
 /**
  * Per-building block colour and height so each attraction reads distinctly.
- * Carousel and Big Wheel are drawn as bespoke shapes (see drawCarousel /
- * drawFerris) — their `height` is the visual top used to anchor floaters
- * and the breakdown wrench, not an extruded block height.
+ * Bespoke-drawn rides (carousel, Big Wheel, flume, stalls) use `height` as
+ * their visual top for anchoring floaters and the breakdown wrench, not as
+ * an extruded block height — the stalls' height covers their hanging sign,
+ * so a purchase floater spawns clear above it instead of on top of it.
  */
 const BUILDING_STYLE: Partial<Record<TileType, { color: string; height: number }>> = {
   carousel: { color: '#b34a8f', height: 30 },
   ferris: { color: '#5a67c0', height: 36 },
-  food: { color: '#a8632c', height: 11 },
-  drink: { color: '#2f7fb0', height: 11 },
+  food: { color: '#a8632c', height: 18 },
+  drink: { color: '#2f7fb0', height: 18 },
   toilet: { color: '#5e6a72', height: 9 },
   flume: { color: '#1f8a9e', height: 13 },
   skytower: { color: '#8892a6', height: 40 }
@@ -215,6 +219,55 @@ const NEED_EMOJI: Record<string, string> = {
 };
 
 const GUEST_COLORS = ['#f472b6', '#60a5fa', '#fbbf24', '#34d399', '#c084fc', '#fb923c'];
+
+interface Pt {
+  x: number;
+  y: number;
+}
+
+/**
+ * One striped awning face for drawStall: the quad from the hut's top rim
+ * edge (a–b) sagging out to the overhanging outer edge (aOut–bOut), split
+ * into alternating canvas/colour strips. Module-scope (rather than a
+ * closure inside drawStall) so the render loop allocates nothing per stall
+ * per frame — same rule drawCarousel's two-pass loop follows.
+ */
+function drawAwningFace(
+  ctx: CanvasRenderingContext2D,
+  a: Pt,
+  b: Pt,
+  aOut: Pt,
+  bOut: Pt,
+  rimLift: number,
+  outerLift: number,
+  stripe: string
+) {
+  const strips = 4;
+  for (let k = 0; k < strips; k++) {
+    const t0 = k / strips;
+    const t1 = (k + 1) / strips;
+    ctx.fillStyle = k % 2 === 0 ? '#e8e4da' : stripe;
+    ctx.beginPath();
+    ctx.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0 - rimLift);
+    ctx.lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1 - rimLift);
+    ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t1, aOut.y + (bOut.y - aOut.y) * t1 - outerLift);
+    ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t0, aOut.y + (bOut.y - aOut.y) * t0 - outerLift);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/** drawStall's pale counter band across one front face (a–b), under the awning's shade. */
+function drawCounterFace(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, liftPx: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y - liftPx - 6);
+  ctx.lineTo(b.x, b.y - liftPx - 6);
+  ctx.lineTo(b.x, b.y - liftPx - 3.5);
+  ctx.lineTo(a.x, a.y - liftPx - 3.5);
+  ctx.closePath();
+  ctx.fill();
+}
 
 interface Guest {
   tile: number;
@@ -1184,8 +1237,15 @@ export function initParkGame(): void {
     board.show(peakGuests);
   }
 
-  function resetPark() {
-    ({ tiles, heights, tunnels, entrance } = createPark());
+  /**
+   * Starts a fresh run. The map rolled at page load is visible behind the
+   * translucent start overlay, so the first Start keeps it (`regenerate:
+   * false`) — re-rolling there would swap the terrain the player was
+   * looking at mid-click. Play Again rolls a new map. (Only became
+   * observable with procedural terrain: every board used to be identical.)
+   */
+  function resetPark(regenerate = true) {
+    if (regenerate) ({ tiles, heights, tunnels, entrance } = createPark());
     money = START_MONEY;
     day = 1;
     dayTimer = 0;
@@ -1372,6 +1432,114 @@ export function initParkGame(): void {
     ctx.beginPath();
     ctx.arc(c.x, hubY, 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * The Log Flume drawn as an actual ride: a low platform holding an oval
+   * water channel around a raised island, with a log running the circuit —
+   * fast with spray off the front drop while guests ride, a gentle drift
+   * when idle. A zone reskin's emoji replaces the drawn log as the themed
+   * vehicle (swan, croc, octopus), same slot the carousel gives its mounts.
+   */
+  function drawFlume(
+    vx: number,
+    vy: number,
+    liftPx: number,
+    color: string,
+    vehicle: string | undefined,
+    busy: boolean,
+    broken: boolean
+  ) {
+    const platformH = 6;
+    drawBlock(ctx, VIEW, vx, vy, platformH, color, 0.1, liftPx);
+    const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    const topY = c.y - liftPx - platformH;
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.45;
+    // The circuit: stone rim, shimmering water ring, island in the middle.
+    ctx.fillStyle = shadeColor(color, 0.55);
+    ctx.beginPath();
+    ctx.ellipse(c.x, topY, 14, 6.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = shadeColor('#2f8fc4', 0.9 + 0.2 * Math.sin(clock * 2.1 + vx + vy));
+    ctx.beginPath();
+    ctx.ellipse(c.x, topY, 12, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = shadeColor(color, 1.15);
+    ctx.beginPath();
+    ctx.ellipse(c.x, topY, 6.5, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // The log rides the ring between island and rim.
+    const angle = broken ? 1.2 : clock * (busy ? 2.6 : 0.9);
+    const lx = c.x + Math.cos(angle) * 9.2;
+    const ly = topY + Math.sin(angle) * 3.7;
+    if (vehicle) {
+      ctx.font = '10px serif';
+      ctx.fillText(vehicle, lx, ly - 3);
+    } else {
+      ctx.fillStyle = '#7a4a22';
+      ctx.beginPath();
+      ctx.ellipse(lx, ly - 1.5, 4.2, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#a9743d';
+      ctx.beginPath();
+      ctx.ellipse(lx, ly - 2.2, 3, 1.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Spray while a loaded log shoots the front of the circuit
+    // (sin(angle) ≈ 1 is the point nearest the viewer).
+    if (busy && !broken && Math.sin(angle) > 0.8) {
+      ctx.fillStyle = 'rgba(226, 240, 248, 0.85)';
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.arc(lx + (k - 1) * 4, ly - 4 - k * 1.5, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Food and drink stalls drawn as tiny buildings instead of emoji on
+   * blocks: a hut with a striped awning slung over its two viewer-facing
+   * sides, a pale counter band under it, and the product emoji as the sign
+   * above the roof (bouncing gently while a customer is being served).
+   */
+  function drawStall(
+    vx: number,
+    vy: number,
+    liftPx: number,
+    color: string,
+    glyph: string,
+    busy: boolean,
+    broken: boolean
+  ) {
+    const bodyH = 10;
+    const inset = 0.18;
+    drawBlock(ctx, VIEW, vx, vy, bodyH, color, inset, liftPx);
+    const e = isoProject(VIEW, vx + 1 - inset, vy + inset);
+    const s = isoProject(VIEW, vx + 1 - inset, vy + 1 - inset);
+    const w = isoProject(VIEW, vx + inset, vy + 1 - inset);
+    // The awning's outer corners overhang the footprint and sag a little.
+    const eOut = isoProject(VIEW, vx + 1 - inset + 0.2, vy + inset - 0.08);
+    const sOut = isoProject(VIEW, vx + 1 - inset + 0.14, vy + 1 - inset + 0.14);
+    const wOut = isoProject(VIEW, vx + inset - 0.08, vy + 1 - inset + 0.2);
+    const rimLift = liftPx + bodyH + 1;
+    const outerLift = liftPx + bodyH - 3;
+    // Shade once per stall, not per strip — these run per frame.
+    const stripe = shadeColor(color, 1.3);
+    const counterCol = shadeColor(color, 1.45);
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.45;
+    drawAwningFace(ctx, w, s, wOut, sOut, rimLift, outerLift, stripe);
+    drawAwningFace(ctx, s, e, sOut, eOut, rimLift, outerLift, stripe);
+    drawCounterFace(ctx, w, s, liftPx, counterCol);
+    drawCounterFace(ctx, s, e, liftPx, counterCol);
+    const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    const bob = busy && !broken ? Math.sin(clock * 3) : 0;
+    ctx.font = '11px serif';
+    ctx.fillText(glyph, c.x, c.y - liftPx - bodyH - 7 + bob);
     ctx.restore();
   }
 
@@ -1655,6 +1823,10 @@ export function initParkGame(): void {
           drawCarousel(vx, vy, liftPx, color, reskin?.emoji ?? TILE_EMOJI.carousel!, busy, broken);
         } else if (tile === 'ferris') {
           drawFerris(vx, vy, liftPx, color, busy, broken);
+        } else if (tile === 'flume') {
+          drawFlume(vx, vy, liftPx, color, reskin?.emoji, busy, broken);
+        } else if (tile === 'food' || tile === 'drink') {
+          drawStall(vx, vy, liftPx, color, reskin?.emoji ?? TILE_EMOJI[tile]!, busy, broken);
         } else {
           // The Sky Tower gets a slimmer shaft so its travelling deck ring
           // reads as wrapping around it rather than painted on the face.
@@ -1663,12 +1835,11 @@ export function initParkGame(): void {
           ctx.save();
           // A broken ride's emoji hangs dimmed; the wrench bobs above.
           if (broken) ctx.globalAlpha = 0.45;
-          const bob = tile === 'flume' && busy && !broken ? Math.sin(clock * 2.5) * 1.5 : 0;
           ctx.font = `${tile === 'skytower' ? 16 : 14}px serif`;
           ctx.fillText(
             reskin?.emoji ?? TILE_EMOJI[tile] ?? '',
             top.x,
-            top.y - style.height - (busy ? 2 : 0) + bob
+            top.y - style.height - (busy ? 2 : 0)
           );
           ctx.restore();
         }
@@ -1991,7 +2162,7 @@ export function initParkGame(): void {
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';
-    resetPark();
+    resetPark(false);
   });
   restartBtn.addEventListener('click', () => {
     overOverlay.style.display = 'none';

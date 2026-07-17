@@ -1,14 +1,10 @@
 name: Deploy Astro site to GitHub Pages
 
+# Automatic deployment (post-CI and 6-hourly cron) is disabled while a
+# suspected-compromise report is investigated. Re-enable by restoring the
+# schedule and workflow_run triggers; until then this only runs manually.
 on:
-  schedule:
-    - cron: '0 */6 * * *'
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: ${{ github.event_name == 'schedule' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

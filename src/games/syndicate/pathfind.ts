@@ -1,52 +1,19 @@
 /**
  * Breadth-first pathfinding over the walkable city tiles (roads, pavements,
- * plazas). Same approach as Pixel Park's guest routing.
+ * plazas). The BFS core is the engine's shared engine/pathfind.ts — the same
+ * one Pixel Park's guest routing binds to — leaving only the squad-specific
+ * helpers here.
  */
+import { bfsFrom as engineBfsFrom, buildPath, type BfsResult } from '../engine/pathfind';
+import { gridNeighbours } from '../engine/grid2d';
 import { MAP_W, MAP_H, isWalkable, type MapTile } from './map';
 
-export interface BfsResult {
-  dist: Int32Array;
-  parent: Int32Array;
-}
+export type { BfsResult };
+export { buildPath };
 
 /** Distances/parents from `start` across walkable tiles; -1 = unreachable. */
 export function bfsFrom(tiles: MapTile[], start: number): BfsResult {
-  const dist = new Int32Array(tiles.length).fill(-1);
-  const parent = new Int32Array(tiles.length).fill(-1);
-  if (start < 0 || !isWalkable(tiles[start])) return { dist, parent };
-  dist[start] = 0;
-  const queue = [start];
-  for (let head = 0; head < queue.length; head++) {
-    const i = queue[head];
-    const x = i % MAP_W;
-    const y = Math.floor(i / MAP_W);
-    const neighbours = [
-      x > 0 ? i - 1 : -1,
-      x < MAP_W - 1 ? i + 1 : -1,
-      y > 0 ? i - MAP_W : -1,
-      y < MAP_H - 1 ? i + MAP_W : -1
-    ];
-    for (const n of neighbours) {
-      if (n >= 0 && dist[n] === -1 && isWalkable(tiles[n])) {
-        dist[n] = dist[i] + 1;
-        parent[n] = i;
-        queue.push(n);
-      }
-    }
-  }
-  return { dist, parent };
-}
-
-/** Reconstructs the tile sequence start→target (inclusive), or null. */
-export function buildPath(bfs: BfsResult, target: number): number[] | null {
-  if (target < 0 || bfs.dist[target] === -1) return null;
-  const path: number[] = [];
-  let i = target;
-  while (i !== -1) {
-    path.push(i);
-    i = bfs.parent[i];
-  }
-  return path.reverse();
+  return engineBfsFrom(MAP_W, MAP_H, i => isWalkable(tiles[i]), start);
 }
 
 /** Shortest walkable route between two walkable tiles, or null. */
@@ -67,16 +34,8 @@ export function spreadTargets(tiles: MapTile[], centre: number, count: number): 
   for (let head = 0; head < queue.length && targets.length < count; head++) {
     const i = queue[head];
     targets.push(i);
-    const x = i % MAP_W;
-    const y = Math.floor(i / MAP_W);
-    const neighbours = [
-      x > 0 ? i - 1 : -1,
-      x < MAP_W - 1 ? i + 1 : -1,
-      y > 0 ? i - MAP_W : -1,
-      y < MAP_H - 1 ? i + MAP_W : -1
-    ];
-    for (const n of neighbours) {
-      if (n >= 0 && !seen[n] && isWalkable(tiles[n])) {
+    for (const n of gridNeighbours(i, MAP_W, MAP_H)) {
+      if (!seen[n] && isWalkable(tiles[n])) {
         seen[n] = 1;
         queue.push(n);
       }

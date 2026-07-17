@@ -12,17 +12,10 @@ import {
 } from '../../src/games/tanks/physics';
 import { chooseAiShot } from '../../src/games/tanks/ai';
 import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster } from '../../src/games/tanks/weapons';
+import { seededRandom } from './seeded-random';
 
 const WIDTH = 800;
 const HEIGHT = 450;
-
-function seededRandom(seed = 42): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
 
 describe('terrain', () => {
   it('generates one height per column within bounds', () => {

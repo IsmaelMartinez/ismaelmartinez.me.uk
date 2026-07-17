@@ -1,43 +1,17 @@
 /**
- * Breadth-first search over walkable tiles (paths + entrance).
+ * Guest routing over walkable park tiles (paths + entrance). The BFS core
+ * lives in engine/pathfind.ts; this module binds it to the park's tile
+ * model and keeps the park-specific helpers (standing beside buildings).
  */
-import { GRID_W, neighbours, isWalkable, type TileType } from './grid';
+import { bfsFrom as engineBfsFrom, buildPath, type BfsResult } from '../engine/pathfind';
+import { GRID_W, GRID_H, neighbours, isWalkable, type TileType } from './grid';
 
-export interface BfsResult {
-  dist: Int32Array;
-  parent: Int32Array;
-}
+export type { BfsResult };
+export { buildPath };
 
 /** Distances/parents from `start` across walkable tiles; -1 = unreachable. */
 export function bfsFrom(tiles: TileType[], start: number): BfsResult {
-  const dist = new Int32Array(tiles.length).fill(-1);
-  const parent = new Int32Array(tiles.length).fill(-1);
-  if (!isWalkable(tiles[start])) return { dist, parent };
-  dist[start] = 0;
-  const queue = [start];
-  for (let head = 0; head < queue.length; head++) {
-    const i = queue[head];
-    for (const n of neighbours(i)) {
-      if (dist[n] === -1 && isWalkable(tiles[n])) {
-        dist[n] = dist[i] + 1;
-        parent[n] = i;
-        queue.push(n);
-      }
-    }
-  }
-  return { dist, parent };
-}
-
-/** Reconstructs the tile sequence start→target (inclusive) from a BFS result. */
-export function buildPath(bfs: BfsResult, target: number): number[] | null {
-  if (bfs.dist[target] === -1) return null;
-  const path: number[] = [];
-  let i = target;
-  while (i !== -1) {
-    path.push(i);
-    i = bfs.parent[i];
-  }
-  return path.reverse();
+  return engineBfsFrom(GRID_W, GRID_H, i => isWalkable(tiles[i]), start);
 }
 
 /** Shortest walkable route between two walkable tiles, or null. */

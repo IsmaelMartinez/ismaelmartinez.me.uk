@@ -188,8 +188,8 @@ const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji?: str
  * Per-building block colour and height so each attraction reads distinctly.
  * Bespoke-drawn rides (carousel, Big Wheel, flume, stalls) use `height` as
  * their visual top for anchoring floaters and the breakdown wrench, not as
- * an extruded block height — the stalls' covers their hanging sign, so a
- * purchase floater spawns clear above it instead of on top of it.
+ * an extruded block height — the stalls' height covers their hanging sign,
+ * so a purchase floater spawns clear above it instead of on top of it.
  */
 const BUILDING_STYLE: Partial<Record<TileType, { color: string; height: number }>> = {
   carousel: { color: '#b34a8f', height: 30 },

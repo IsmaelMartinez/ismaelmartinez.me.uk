@@ -38,9 +38,9 @@ overlap water, so "water only at height 0" can't be violated.
 
 **Tests** (`tests/games/park.test.ts`): across 60 spread seeds — slope rule
 everywhere, heights within range with at least one hill, entrance + starter
-path flat and intact, entrance core untouched, ≥150 flat grass tiles, water
-count in range and all at height 0, same-seed determinism, cross-seed
-variation. (Seeds are spread by a large prime: the test LCG's first draw
+path flat and intact, entrance core untouched, ≥110 flat grass tiles (the
+structural worst case; typical rolls sit far above it), water count in
+range and all at height 0, same-seed determinism, cross-seed variation. (Seeds are spread by a large prime: the test LCG's first draw
 barely moves across small consecutive seeds, which would otherwise pin the
 coast-vs-ponds roll.)
 

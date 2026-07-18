@@ -4,6 +4,12 @@
  * Pure rules live in path.ts / waves.ts / towers.ts / enemies.ts /
  * economy.ts; this module owns DOM wiring, input, and canvas rendering. It
  * expects the markup defined in src/pages/[lang]/fun/towerdefense.astro.
+ *
+ * Rendering splits three ways: the battlefield (sky, ground slab, mottled
+ * grass, cobbled road) is baked once into a static layer; tile-anchored
+ * scenery with height (trees, rocks, the spawn arch, the keep) precomputes
+ * at init but draws inside the painter sweep so towers and enemies occlude
+ * correctly; everything that moves draws per frame on top.
  */
 import {
   createGameLoop,
@@ -45,9 +51,9 @@ import {
   type Economy
 } from './economy';
 
-const VIEW: IsoView = { halfW: 16, halfH: 8, originX: GRID_H * 16, originY: 64 };
+const VIEW: IsoView = { halfW: 20, halfH: 10, originX: GRID_H * 20, originY: 70 };
 const CANVAS_W = (GRID_W + GRID_H) * VIEW.halfW;
-const CANVAS_H = (GRID_W + GRID_H) * VIEW.halfH + VIEW.originY + 14;
+const CANVAS_H = (GRID_W + GRID_H) * VIEW.halfH + VIEW.originY + 16;
 /** Seconds of building time before the next wave rolls in on its own. */
 const BUILD_TIME = 12;
 
@@ -70,6 +76,8 @@ interface Shot {
   ty: number;
   kind: TowerKind;
   life: number;
+  /** Stable jitter seed so a bolt's zigzag doesn't reroll every frame. */
+  seed: number;
 }
 
 interface Ring {
@@ -80,6 +88,19 @@ interface Ring {
   life: number;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+  gravity: number;
+  glow: boolean;
+}
+
 interface Floater {
   x: number;
   y: number;
@@ -88,7 +109,19 @@ interface Floater {
   life: number;
 }
 
+interface Scenery {
+  kind: 'pine' | 'rock' | 'bush';
+  /** Deterministic 0–1 variation roll. */
+  v: number;
+}
+
 const SHOT_LIFE = 0.14;
+
+/** Cheap deterministic 0–1 hash so scenery and cobbles stay put per tile. */
+function hash(i: number, salt: number): number {
+  const n = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
 
 type Phase = 'idle' | 'build' | 'wave' | 'over';
 
@@ -149,53 +182,135 @@ export function initTowerDefenseGame(): void {
   const map: TdMap = createTdMap();
   const routeLast = map.route.length - 1;
 
-  // --- Static ground bake -------------------------------------------------
-  // The battlefield never changes mid-run (one authored path, towers drawn
-  // live), so the sky, grass, path and the spawn/goal dressings bake into a
-  // device-resolution layer rebuilt only on DPR changes.
+  // --- Scenery placement (once per init; drawn inside the painter sweep) --
+  // Trees and rocks only stand beyond tower reach, so the buildable shelf
+  // stays clean and the scenery never has to fight a tower for a tile.
+  const scenery = new Map<number, Scenery>();
+  for (let i = 0; i < map.path.length; i++) {
+    if (map.path[i] || map.buildable[i]) continue;
+    const r = hash(i, 3);
+    if (r < 0.11) scenery.set(i, { kind: 'pine', v: hash(i, 4) });
+    else if (r < 0.17) scenery.set(i, { kind: 'bush', v: hash(i, 5) });
+    else if (r < 0.21) scenery.set(i, { kind: 'rock', v: hash(i, 6) });
+  }
+
+  // --- Static battlefield bake ------------------------------------------
+  // Flat ground only: anything with vertical extent draws in the sweep.
   const ground = createStaticLayer(CANVAS_W, CANVAS_H, target => {
+    // Dusk sky with a scatter of faint stars above the horizon.
     const sky = target.createLinearGradient(0, 0, 0, CANVAS_H);
-    sky.addColorStop(0, '#101828');
-    sky.addColorStop(1, '#1a2740');
+    sky.addColorStop(0, '#0c1322');
+    sky.addColorStop(0.55, '#16233c');
+    sky.addColorStop(1, '#1d2c49');
     target.fillStyle = sky;
     target.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    for (let star = 0; star < 70; star++) {
+      const sx = hash(star, 11) * CANVAS_W;
+      const sy = hash(star, 12) * VIEW.originY * 1.4;
+      target.globalAlpha = 0.25 + hash(star, 13) * 0.5;
+      target.fillStyle = '#dbeafe';
+      target.fillRect(sx, sy, hash(star, 14) < 0.2 ? 2 : 1, 1);
+    }
+    target.globalAlpha = 1;
 
+    // The board is a slab of earth, not a floating sheet: dark soil faces
+    // hang from its two southern edges.
+    const slab = 16;
+    const nEdge = isoProject(VIEW, GRID_W, 0);
+    const sEdge = isoProject(VIEW, GRID_W, GRID_H);
+    const wEdge = isoProject(VIEW, 0, GRID_H);
+    target.fillStyle = '#2b2116';
+    target.beginPath();
+    target.moveTo(wEdge.x, wEdge.y);
+    target.lineTo(sEdge.x, sEdge.y);
+    target.lineTo(sEdge.x, sEdge.y + slab);
+    target.lineTo(wEdge.x, wEdge.y + slab);
+    target.closePath();
+    target.fill();
+    target.fillStyle = '#1f1810';
+    target.beginPath();
+    target.moveTo(sEdge.x, sEdge.y);
+    target.lineTo(nEdge.x, nEdge.y);
+    target.lineTo(nEdge.x, nEdge.y + slab);
+    target.lineTo(sEdge.x, sEdge.y + slab);
+    target.closePath();
+    target.fill();
+    // A few strata lines so the cut earth reads as layers.
+    target.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+    target.lineWidth = 1;
+    for (const dy of [5, 10]) {
+      target.beginPath();
+      target.moveTo(wEdge.x, wEdge.y + dy);
+      target.lineTo(sEdge.x, sEdge.y + dy);
+      target.lineTo(nEdge.x, nEdge.y + dy);
+      target.stroke();
+    }
+
+    // Ground tiles: mottled grass, lighter on the buildable shelf, cobbled
+    // road along the route.
     forEachTileBackToFront(GRID_W, GRID_H, (x, y, i) => {
       if (map.path[i]) {
-        // The invaders' trampled road, edged with kerb stones.
-        fillTile(target, VIEW, x, y, (x + y) % 2 === 0 ? '#8a6d4b' : '#94764f');
-        strokeTile(target, VIEW, x, y, 'rgba(58, 44, 26, 0.55)', 1);
+        const dirt = hash(i, 1) < 0.5 ? '#8a6d4b' : '#93744e';
+        fillTile(target, VIEW, x, y, dirt);
       } else {
         const buildable = map.buildable[i];
+        const mottle = 0.92 + hash(i, 2) * 0.16;
         const base = (x + y) % 2 === 0 ? '#31563a' : '#365d3f';
-        // Ground beyond tower reach reads darker, so the buildable shelf
-        // beside the path stands out without any UI chrome.
-        fillTile(target, VIEW, x, y, buildable ? base : shadeColor(base, 0.72));
+        fillTile(target, VIEW, x, y, shadeColor(base, buildable ? mottle : mottle * 0.7));
       }
     });
 
-    // Spawn arch: a dark portal the horde marches out of.
-    const sp = isoProject(VIEW, (map.spawn % GRID_W) + 0.5, Math.floor(map.spawn / GRID_W) + 0.5);
-    const portal = target.createRadialGradient(sp.x, sp.y - 8, 1, sp.x, sp.y - 8, 16);
-    portal.addColorStop(0, '#2e1065');
-    portal.addColorStop(1, 'rgba(46, 16, 101, 0)');
-    target.fillStyle = portal;
-    target.fillRect(sp.x - 16, sp.y - 24, 32, 32);
-
-    // Goal keep: the little fort the line defends.
-    const gx = map.goal % GRID_W;
-    const gy = Math.floor(map.goal / GRID_W);
-    drawBlock(target, VIEW, gx, gy, 14, '#64748b', 0.16);
-    const gp = isoProject(VIEW, gx + 0.5, gy + 0.5);
-    target.fillStyle = '#cbd5e1';
-    target.fillRect(gp.x - 1, gp.y - 26, 2, 12);
-    target.fillStyle = '#4ade80';
+    // Trampled wheel-rut line down the middle of the road.
+    target.strokeStyle = 'rgba(58, 42, 22, 0.5)';
+    target.lineWidth = VIEW.halfH * 0.9;
+    target.lineJoin = 'round';
+    target.lineCap = 'round';
     target.beginPath();
-    target.moveTo(gp.x + 1, gp.y - 26);
-    target.lineTo(gp.x + 9, gp.y - 23.5);
-    target.lineTo(gp.x + 1, gp.y - 21);
-    target.closePath();
-    target.fill();
+    for (let r = 0; r <= routeLast; r++) {
+      const t = map.route[r];
+      const c = isoProject(VIEW, (t % GRID_W) + 0.5, Math.floor(t / GRID_W) + 0.5);
+      if (r === 0) target.moveTo(c.x, c.y);
+      else target.lineTo(c.x, c.y);
+    }
+    target.stroke();
+
+    // Cobbles and kerb stones on every road tile, and grass tufts / tiny
+    // flowers off it. All flat, so they belong in the bake.
+    forEachTileBackToFront(GRID_W, GRID_H, (x, y, i) => {
+      const c = isoProject(VIEW, x + 0.5, y + 0.5);
+      if (map.path[i]) {
+        for (let p = 0; p < 5; p++) {
+          const ox = (hash(i, 20 + p) - 0.5) * VIEW.halfW * 1.1;
+          const oy = (hash(i, 30 + p) - 0.5) * VIEW.halfH * 1.1;
+          target.fillStyle = shadeColor('#8a6d4b', 0.75 + hash(i, 40 + p) * 0.45);
+          target.beginPath();
+          target.ellipse(c.x + ox, c.y + oy, 2.4, 1.4, 0, 0, Math.PI * 2);
+          target.fill();
+        }
+        strokeTile(target, VIEW, x, y, 'rgba(52, 38, 20, 0.35)', 1);
+      } else {
+        if (hash(i, 7) < 0.3) {
+          // Grass tufts: three short blades.
+          const gx = c.x + (hash(i, 8) - 0.5) * VIEW.halfW;
+          const gy = c.y + (hash(i, 9) - 0.5) * VIEW.halfH;
+          target.strokeStyle = 'rgba(134, 190, 120, 0.5)';
+          target.lineWidth = 1;
+          target.beginPath();
+          for (let b = -1; b <= 1; b++) {
+            target.moveTo(gx + b * 1.5, gy + 2);
+            target.lineTo(gx + b * 2.2, gy - 2);
+          }
+          target.stroke();
+        }
+        if (map.buildable[i] && hash(i, 10) < 0.12) {
+          // The odd wildflower on the buildable shelf.
+          const fx = c.x + (hash(i, 15) - 0.5) * VIEW.halfW;
+          const fy = c.y + (hash(i, 16) - 0.5) * VIEW.halfH;
+          target.fillStyle = hash(i, 17) < 0.5 ? '#fde68a' : '#fda4af';
+          target.fillRect(fx - 1, fy - 1, 2, 2);
+        }
+      }
+    });
   });
   const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, { onApply: ground.rebuild });
 
@@ -213,7 +328,13 @@ export function initTowerDefenseGame(): void {
   let clock = 0;
   let shots: Shot[] = [];
   let rings: Ring[] = [];
+  let particles: Particle[] = [];
   let floaters: Floater[] = [];
+  /** Seconds left on the "WAVE N" banner splash. */
+  let bannerTimer = 0;
+  let bannerText = '';
+  /** Seconds left on the keep's red breach flash. */
+  let keepFlash = 0;
 
   const board = initScoreboard(document.getElementById('highscores'));
   let record = board.top()?.score ?? 0;
@@ -254,7 +375,33 @@ export function initTowerDefenseGame(): void {
 
   function addFloater(tx: number, ty: number, text: string, color: string) {
     const p = isoProject(VIEW, tx, ty);
-    floaters.push({ x: p.x, y: p.y - 20, text, color, life: 1.1 });
+    floaters.push({ x: p.x, y: p.y - 24, text, color, life: 1.1 });
+  }
+
+  function spawnBurst(
+    sx: number,
+    sy: number,
+    count: number,
+    color: string,
+    opts: { speed?: number; life?: number; size?: number; gravity?: number; glow?: boolean } = {}
+  ) {
+    const speed = opts.speed ?? 60;
+    for (let n = 0; n < count; n++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = speed * (0.4 + Math.random() * 0.6);
+      particles.push({
+        x: sx,
+        y: sy,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v * 0.55 - (opts.gravity ? 25 : 0),
+        life: opts.life ?? 0.5,
+        maxLife: opts.life ?? 0.5,
+        size: opts.size ?? 1.6,
+        color,
+        gravity: opts.gravity ?? 0,
+        glow: opts.glow ?? false
+      });
+    }
   }
 
   /** Announces (once per run) that the score beat the table's best. */
@@ -280,7 +427,10 @@ export function initTowerDefenseGame(): void {
     selectedTool = 'bolt';
     shots = [];
     rings = [];
+    particles = [];
     floaters = [];
+    bannerTimer = 0;
+    keepFlash = 0;
     runStartRecord = record;
     recordCelebrated = false;
     phase = 'build';
@@ -291,11 +441,14 @@ export function initTowerDefenseGame(): void {
   function launchWave() {
     phase = 'wave';
     spawner = createSpawner(WAVES[waveIdx]);
-    showToast(`⚔️ ${strings.waveNow.replace('{n}', String(waveIdx + 1))}`);
+    bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
+    bannerTimer = 1.8;
+    showToast(`⚔️ ${bannerText}`);
   }
 
   function endRun(victory: boolean) {
     phase = 'over';
+    selectedTower = null;
     audio.playSfx('gameover');
     audio.stop();
     celebrateRecord();
@@ -333,6 +486,8 @@ export function initTowerDefenseGame(): void {
 
   function update(dt: number) {
     clock += dt;
+    bannerTimer = Math.max(0, bannerTimer - dt);
+    keepFlash = Math.max(0, keepFlash - dt);
     floaters = floaters.filter(f => {
       f.life -= dt;
       f.y -= 16 * dt;
@@ -344,6 +499,13 @@ export function initTowerDefenseGame(): void {
       ring.r = ring.maxR * (1 - Math.max(0, ring.life) / 0.3);
       return ring.life > 0;
     });
+    particles = particles.filter(part => {
+      part.life -= dt;
+      part.x += part.vx * dt;
+      part.y += part.vy * dt;
+      part.vy += part.gravity * 130 * dt;
+      return part.life > 0;
+    });
     if (phase !== 'build' && phase !== 'wave') return;
 
     if (phase === 'build') {
@@ -352,42 +514,73 @@ export function initTowerDefenseGame(): void {
     } else {
       for (const kind of stepSpawner(spawner, WAVES[waveIdx], dt)) {
         enemies.push(spawnEnemy(kind, hpScale(waveIdx)));
+        // Marchers materialise out of the arch in a purple shimmer.
+        const sp = isoProject(VIEW, (map.spawn % GRID_W) + 0.5, Math.floor(map.spawn / GRID_W) + 0.5);
+        spawnBurst(sp.x, sp.y - 8, 6, '#a78bfa', { speed: 30, life: 0.4, size: 1.4, glow: true });
       }
     }
 
     const leaks = stepEnemies(enemies, map.route.length, dt);
+    let leakedThisStep = false;
     for (const leaked of leaks) {
       const lives = leak(eco, leaked.livesCost);
       const gp = routePosition(map.route, routeLast);
+      const kp = isoProject(VIEW, gp.x, gp.y);
       addFloater(gp.x, gp.y, `-${leaked.livesCost} ♥`, '#f87171');
-      audio.playSfx('explosion');
+      spawnBurst(kp.x, kp.y - 12, 12, '#f87171', { speed: 70, life: 0.5, size: 1.8, glow: true });
+      keepFlash = 0.45;
+      leakedThisStep = true;
       if (lives <= 0) {
         showToast(`💥 ${strings.breach}`);
         endRun(false);
         return;
       }
     }
+    // One boom per step keeps a cluster of leaks from stacking the mixer.
+    if (leakedThisStep) audio.playSfx('explosion');
 
     const events = stepTowers(towers, enemies, map.route, dt);
     let firedThisStep = false;
     for (const event of events) {
       if (event.type === 'shot') {
         const from = towerTop(towerAt(event.from)!);
-        shots.push({ fx: from.x, fy: from.y, tx: event.tx, ty: event.ty, kind: event.kind, life: SHOT_LIFE });
+        shots.push({
+          fx: from.x,
+          fy: from.y,
+          tx: event.tx,
+          ty: event.ty,
+          kind: event.kind,
+          life: SHOT_LIFE,
+          seed: Math.random() * 1000
+        });
+        const impact = isoProject(VIEW, event.tx, event.ty);
         if (event.kind === 'blast') {
-          const p = isoProject(VIEW, event.tx, event.ty);
-          rings.push({ x: p.x, y: p.y - 6, r: 0, maxR: TOWERS.blast.splash * VIEW.halfW, life: 0.3 });
+          rings.push({ x: impact.x, y: impact.y - 6, r: 0, maxR: TOWERS.blast.splash * VIEW.halfW, life: 0.3 });
+          spawnBurst(impact.x, impact.y - 8, 8, '#fdba74', { speed: 85, life: 0.35, size: 1.8, gravity: 1, glow: true });
+          spawnBurst(impact.x, impact.y - 8, 5, '#78716c', { speed: 40, life: 0.6, size: 2.2 });
+        } else if (event.kind === 'frost') {
+          spawnBurst(impact.x, impact.y - 8, 6, '#bae6fd', { speed: 30, life: 0.5, size: 1.3, glow: true });
+        } else {
+          spawnBurst(impact.x, impact.y - 8, 4, '#fde68a', { speed: 55, life: 0.2, size: 1.3, glow: true });
         }
         firedThisStep = true;
       } else {
         awardKill(eco, event.bounty);
         addFloater(event.x, event.y, `+${event.bounty}`, '#fbbf24');
+        const kp = isoProject(VIEW, event.x, event.y);
+        spawnBurst(kp.x, kp.y - 8, 10, ENEMY_COLORS[event.kind], {
+          speed: 80,
+          life: 0.5,
+          size: 1.7,
+          gravity: 1,
+          glow: true
+        });
       }
     }
     // One blip per step keeps a full battery from machine-gunning the mixer.
     if (firedThisStep) audio.playSfx('hit');
 
-    // Clean the fallen out of the march once their floaters have spawned.
+    // Clean the fallen out of the march once their bursts have spawned.
     if (enemies.length > 32) enemies = enemies.filter(e => e.alive);
 
     if (phase === 'wave' && spawnerDone(spawner, WAVES[waveIdx]) && enemies.every(e => !e.alive)) {
@@ -397,62 +590,100 @@ export function initTowerDefenseGame(): void {
 
   // --- Rendering ----------------------------------------------------------
 
+  function blockHeight(tower: Tower): number {
+    return 12 + tower.level * 7;
+  }
+
   /** Screen point of a tower's muzzle (top of its block). */
   function towerTop(tower: Tower): { x: number; y: number } {
     const x = tower.tile % GRID_W;
     const y = Math.floor(tower.tile / GRID_W);
     const p = isoProject(VIEW, x + 0.5, y + 0.5);
-    return { x: p.x, y: p.y - blockHeight(tower) - 6 };
-  }
-
-  function blockHeight(tower: Tower): number {
-    return 10 + tower.level * 6;
+    return { x: p.x, y: p.y - blockHeight(tower) - 7 };
   }
 
   function drawTower(tower: Tower, x: number, y: number) {
     const color = TOWER_COLORS[tower.kind];
     const height = blockHeight(tower);
-    drawBlock(ctx, VIEW, x, y, height, color, 0.18);
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
-    const topY = c.y - height;
+    // Stone plinth under every tower, then the coloured body on top of it.
+    drawBlock(ctx, VIEW, x, y, 4, '#57534e', 0.1);
+    drawBlock(ctx, VIEW, x, y, height, color, 0.2, 4);
+    const topY = c.y - height - 4;
     const charging = tower.cooldown <= 0.08;
+    const pulse = 0.5 + 0.5 * Math.sin(clock * 4 + tower.tile);
+
     if (tower.kind === 'bolt') {
-      // Mast with a glowing coil orb.
-      ctx.strokeStyle = shadeColor(color, 0.5);
-      ctx.lineWidth = 1.6;
+      // Mast, crossbars, and a crackling coil orb.
+      ctx.strokeStyle = shadeColor(color, 0.45);
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.moveTo(c.x, topY);
-      ctx.lineTo(c.x, topY - 7);
+      ctx.lineTo(c.x, topY - 9);
+      ctx.moveTo(c.x - 3.5, topY - 4);
+      ctx.lineTo(c.x + 3.5, topY - 4);
       ctx.stroke();
       ctx.save();
       ctx.shadowColor = '#fde68a';
-      ctx.shadowBlur = charging ? 8 : 4;
+      ctx.shadowBlur = charging ? 10 : 5 + pulse * 3;
       ctx.fillStyle = charging ? '#fef3c7' : '#fbbf24';
       ctx.beginPath();
-      ctx.arc(c.x, topY - 8, 2.4, 0, Math.PI * 2);
+      ctx.arc(c.x, topY - 10, 3, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+      // Static sparks that flicker around the orb between shots.
+      if (hash(Math.floor(clock * 10), tower.tile) < 0.4) {
+        ctx.strokeStyle = '#fef9c3';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const a = hash(Math.floor(clock * 10), tower.tile + 1) * Math.PI * 2;
+        ctx.moveTo(c.x + Math.cos(a) * 3.5, topY - 10 + Math.sin(a) * 3.5);
+        ctx.lineTo(c.x + Math.cos(a) * 6.5, topY - 10 + Math.sin(a) * 6.5);
+        ctx.stroke();
+      }
     } else if (tower.kind === 'blast') {
-      // Squat mortar: a dark muzzle ring set into the top face.
-      ctx.fillStyle = shadeColor(color, 0.4);
+      // Mortar tub: rim ring, dark muzzle, side rivets.
+      ctx.fillStyle = shadeColor(color, 0.45);
       ctx.beginPath();
-      ctx.ellipse(c.x, topY, 5, 2.6, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x, topY, 6.5, 3.4, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#1c1917';
+      ctx.strokeStyle = shadeColor(color, 1.3);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = charging ? '#451a03' : '#1c1917';
       ctx.beginPath();
-      ctx.ellipse(c.x, topY - 0.5, 3, 1.6, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x, topY - 0.6, 3.8, 2, 0, 0, Math.PI * 2);
       ctx.fill();
+      if (charging) {
+        ctx.fillStyle = '#fdba74';
+        ctx.beginPath();
+        ctx.ellipse(c.x, topY - 0.6, 1.6 + pulse, 0.9 + pulse * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
     } else {
-      // Frost crystal: a pale spike catching the light.
+      // Frost crystal cluster catching the light.
       ctx.save();
       ctx.shadowColor = '#bae6fd';
-      ctx.shadowBlur = 5;
+      ctx.shadowBlur = 5 + pulse * 3;
       ctx.fillStyle = '#e0f2fe';
       ctx.beginPath();
-      ctx.moveTo(c.x, topY - 10);
-      ctx.lineTo(c.x + 3, topY - 3);
+      ctx.moveTo(c.x, topY - 13);
+      ctx.lineTo(c.x + 3.6, topY - 4);
       ctx.lineTo(c.x, topY);
-      ctx.lineTo(c.x - 3, topY - 3);
+      ctx.lineTo(c.x - 3.6, topY - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#7dd3fc';
+      ctx.beginPath();
+      ctx.moveTo(c.x - 4.5, topY - 7);
+      ctx.lineTo(c.x - 2.2, topY - 2);
+      ctx.lineTo(c.x - 5.5, topY - 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(c.x + 4.8, topY - 6);
+      ctx.lineTo(c.x + 2.5, topY - 2);
+      ctx.lineTo(c.x + 5.8, topY - 1);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
@@ -460,125 +691,412 @@ export function initTowerDefenseGame(): void {
     // Level pips on the near face.
     ctx.fillStyle = '#fef9c3';
     for (let pip = 0; pip < tower.level; pip++) {
-      ctx.fillRect(c.x - 5 + pip * 4, c.y - 4, 2, 2);
+      ctx.fillRect(c.x - 6 + pip * 5, c.y - 5, 2.4, 2.4);
     }
+  }
+
+  function drawScenery(tile: number, deco: Scenery, x: number, y: number) {
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
+    if (deco.kind === 'pine') {
+      const h = 15 + deco.v * 8;
+      ctx.fillStyle = '#3b2c1a';
+      ctx.fillRect(c.x - 1.2, c.y - 4, 2.4, 4);
+      const green = shadeColor('#1e4d31', 0.85 + deco.v * 0.4);
+      for (let layer = 0; layer < 3; layer++) {
+        const ly = c.y - 3 - (h / 3.2) * layer;
+        const lw = 9 - layer * 2.4;
+        ctx.fillStyle = layer === 2 ? shadeColor(green, 1.25) : green;
+        ctx.beginPath();
+        ctx.moveTo(c.x, ly - h / 2.6);
+        ctx.lineTo(c.x + lw, ly);
+        ctx.lineTo(c.x - lw, ly);
+        ctx.closePath();
+        ctx.fill();
+      }
+    } else if (deco.kind === 'bush') {
+      const green = shadeColor('#2c5e3b', 0.8 + deco.v * 0.5);
+      ctx.fillStyle = green;
+      ctx.beginPath();
+      ctx.ellipse(c.x - 3, c.y - 3, 4.5, 3.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x + 3.5, c.y - 2.5, 3.8, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = shadeColor(green, 1.35);
+      ctx.beginPath();
+      ctx.ellipse(c.x - 2, c.y - 4.5, 2.6, 1.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (deco.v < 0.4) {
+        ctx.fillStyle = '#f87171';
+        ctx.fillRect(c.x - 4, c.y - 4, 1.6, 1.6);
+        ctx.fillRect(c.x + 2, c.y - 3, 1.6, 1.6);
+      }
+    } else {
+      const grey = shadeColor('#64748b', 0.75 + deco.v * 0.4);
+      ctx.fillStyle = grey;
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y - 2.5, 5.5, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = shadeColor(grey, 1.3);
+      ctx.beginPath();
+      ctx.ellipse(c.x - 1.5, c.y - 4, 2.4, 1.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    void tile;
+  }
+
+  /** The stone arch the horde marches out of, with its swirling portal. */
+  function drawSpawnArch(x: number, y: number) {
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
+    const h = 24;
+    // Portal shimmer behind the pillars.
+    const pulse = 0.5 + 0.5 * Math.sin(clock * 3);
+    ctx.save();
+    ctx.shadowColor = '#a78bfa';
+    ctx.shadowBlur = 8 + pulse * 6;
+    ctx.fillStyle = `rgba(76, 29, 149, ${0.7 + pulse * 0.3})`;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y - h / 2 - 2, 7, h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = `rgba(196, 181, 253, ${0.5 + pulse * 0.4})`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y - h / 2 - 2, 4.5 + pulse * 1.5, (h / 2) * 0.7, 0.4, 0, Math.PI * 2);
+    ctx.stroke();
+    // Weathered pillars and the lintel across them.
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = side < 0 ? '#7b8494' : '#5b6472';
+      ctx.fillRect(c.x + side * 9 - 2.5, c.y - h, 5, h);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+      ctx.lineWidth = 1;
+      for (let seg = 1; seg < 4; seg++) {
+        ctx.beginPath();
+        ctx.moveTo(c.x + side * 9 - 2.5, c.y - (h / 4) * seg);
+        ctx.lineTo(c.x + side * 9 + 2.5, c.y - (h / 4) * seg);
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = '#8b93a3';
+    ctx.fillRect(c.x - 13, c.y - h - 5, 26, 6);
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(c.x - 13, c.y - h - 1, 26, 2);
+  }
+
+  /** The keep the line defends: walls, gate, crenellations, waving banner. */
+  function drawKeep(x: number, y: number) {
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
+    drawBlock(ctx, VIEW, x, y, 20, '#6b7280', 0.1);
+    const topY = c.y - 20;
+    // Crenellations along the two visible top rims.
+    ctx.fillStyle = shadeColor('#6b7280', 1.1);
+    for (let m = -2; m <= 2; m++) {
+      ctx.fillRect(c.x + m * 6 - 1.6, topY - 4, 3.2, 4);
+    }
+    // Gate facing the road (the SW face), with a raised portcullis grid.
+    const gw = isoProject(VIEW, x + 0.24, y + 0.76);
+    ctx.fillStyle = '#2b2118';
+    ctx.beginPath();
+    ctx.ellipse(gw.x, gw.y - 5, 4.2, 6.5, -0.4, Math.PI * 0.9, Math.PI * 2.1);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(gw.x - 2.5, gw.y - 8);
+    ctx.lineTo(gw.x - 2.5, gw.y - 1);
+    ctx.moveTo(gw.x, gw.y - 9.5);
+    ctx.lineTo(gw.x, gw.y - 1);
+    ctx.moveTo(gw.x + 2.5, gw.y - 8);
+    ctx.lineTo(gw.x + 2.5, gw.y - 1);
+    ctx.stroke();
+    // Banner pole and a green pennant that ripples in the wind.
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(c.x, topY - 3);
+    ctx.lineTo(c.x, topY - 17);
+    ctx.stroke();
+    const wave1 = Math.sin(clock * 6) * 1.6;
+    const wave2 = Math.sin(clock * 6 + 1.2) * 2.2;
+    ctx.fillStyle = '#4ade80';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 0.5, topY - 17);
+    ctx.quadraticCurveTo(c.x + 6, topY - 16 + wave1, c.x + 11, topY - 14.5 + wave2);
+    ctx.lineTo(c.x + 0.5, topY - 12);
+    ctx.closePath();
+    ctx.fill();
+    // Breach flash: the whole keep blinks red as a marcher gets in.
+    if (keepFlash > 0) {
+      ctx.globalAlpha = Math.min(0.55, keepFlash * 1.4);
+      drawBlock(ctx, VIEW, x, y, 20, '#dc2626', 0.1);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /** Facing: +1 when the enemy's next step moves right on screen. */
+  function enemyFacing(enemy: Enemy): number {
+    const here = routePosition(map.route, enemy.progress);
+    const ahead = routePosition(map.route, Math.min(enemy.progress + 0.3, routeLast));
+    const dx = isoProject(VIEW, ahead.x, ahead.y).x - isoProject(VIEW, here.x, here.y).x;
+    return dx >= 0 ? 1 : -1;
   }
 
   function drawEnemy(enemy: Enemy) {
     const pos = routePosition(map.route, enemy.progress);
     const p = isoProject(VIEW, pos.x, pos.y);
-    const color = enemy.slow > 0 ? '#7dd3fc' : ENEMY_COLORS[enemy.kind];
-    const stride = Math.sin(clock * 9 + enemy.id) * 1.2;
+    const chilled = enemy.slow > 0;
+    const color = chilled ? '#7dd3fc' : ENEMY_COLORS[enemy.kind];
+    const dir = enemyFacing(enemy);
+    const stride = Math.sin(clock * 10 + enemy.id) * 1.4;
+    const bob = Math.abs(Math.sin(clock * (chilled ? 4 : 9) + enemy.id)) * 1.4;
+    const big = enemy.kind === 'warlord';
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y + 1, enemy.kind === 'warlord' ? 8 : 4.5, enemy.kind === 'warlord' ? 3.6 : 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y + 1, big ? 10 : 5.5, big ? 4.4 : 2.6, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (enemy.kind === 'scout') {
-      // A little round beetle with waggling antennae.
+      // A round beetle scuttling on stubby legs, antennae waving.
+      ctx.strokeStyle = shadeColor(color, 0.45);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (const leg of [-1, 1]) {
+        ctx.moveTo(p.x + leg * 2.5, p.y - 2.5);
+        ctx.lineTo(p.x + leg * (3.6 + Math.abs(stride) * 0.5), p.y + 0.5);
+      }
+      ctx.stroke();
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y - 4, 3.4, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y - 5 - bob * 0.4, 4.4, 5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = shadeColor(color, 0.6);
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(p.x - 1.5, p.y - 7);
-      ctx.lineTo(p.x - 2.5 - stride * 0.4, p.y - 10);
-      ctx.moveTo(p.x + 1.5, p.y - 7);
-      ctx.lineTo(p.x + 2.5 + stride * 0.4, p.y - 10);
+      ctx.moveTo(p.x, p.y - 9 - bob * 0.4);
+      ctx.lineTo(p.x, p.y - 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(p.x - 2, p.y - 9 - bob * 0.4);
+      ctx.lineTo(p.x - 3.5 - stride * 0.5, p.y - 12.5 - bob * 0.4);
+      ctx.moveTo(p.x + 2, p.y - 9 - bob * 0.4);
+      ctx.lineTo(p.x + 3.5 + stride * 0.5, p.y - 12.5 - bob * 0.4);
       ctx.stroke();
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(p.x - 2, p.y - 5.5, 1.4, 1.4);
-      ctx.fillRect(p.x + 0.6, p.y - 5.5, 1.4, 1.4);
+      ctx.fillRect(p.x + dir * 2.4 - 1.8, p.y - 6.6 - bob * 0.4, 1.8, 1.8);
+      ctx.fillRect(p.x + dir * 0.2 - 0.9, p.y - 6.6 - bob * 0.4, 1.8, 1.8);
     } else if (enemy.kind === 'sprinter') {
-      // A lean dart leaning into its run.
+      // A lean dart leaning hard into its run, dust at its heels.
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.moveTo(p.x + 5, p.y - 5);
-      ctx.lineTo(p.x - 3, p.y - 8 + stride * 0.5);
-      ctx.lineTo(p.x - 3, p.y - 1);
+      ctx.moveTo(p.x + dir * 7, p.y - 5.5 - bob * 0.3);
+      ctx.lineTo(p.x - dir * 4, p.y - 9.5 + stride * 0.4);
+      ctx.lineTo(p.x - dir * 3.2, p.y - 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = shadeColor(color, 1.3);
+      ctx.beginPath();
+      ctx.moveTo(p.x + dir * 7, p.y - 5.5 - bob * 0.3);
+      ctx.lineTo(p.x - dir * 4, p.y - 9.5 + stride * 0.4);
+      ctx.lineTo(p.x - dir * 1, p.y - 6.5);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = shadeColor(color, 0.55);
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(p.x - 2, p.y - 2);
-      ctx.lineTo(p.x - 4 - stride, p.y + 1);
+      ctx.moveTo(p.x - dir * 2, p.y - 2);
+      ctx.lineTo(p.x - dir * (5 + stride), p.y + 1);
+      ctx.moveTo(p.x + dir * 1, p.y - 2);
+      ctx.lineTo(p.x + dir * (1 - stride), p.y + 1);
       ctx.stroke();
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(p.x + 1.5, p.y - 5.5, 1.5, 1.5);
+      ctx.fillRect(p.x + dir * 4.4 - 0.9, p.y - 6.2, 1.8, 1.8);
     } else if (enemy.kind === 'brute') {
-      // A wide-shouldered shellback trudging under its plates.
+      // A wide shellback trudging under armour plates.
+      ctx.strokeStyle = shadeColor(color, 0.45);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (const leg of [-1, 1]) {
+        ctx.moveTo(p.x + leg * 3.6, p.y - 3);
+        ctx.lineTo(p.x + leg * 3.6 + leg * stride * 0.6, p.y + 1);
+      }
+      ctx.stroke();
       ctx.fillStyle = shadeColor(color, 0.7);
-      ctx.fillRect(p.x - 5, p.y - 4, 10, 4);
+      ctx.fillRect(p.x - 6.5, p.y - 5 - bob * 0.3, 13, 5);
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y - 6, 6, 5, 0, Math.PI, 0);
+      ctx.ellipse(p.x, p.y - 8 - bob * 0.3, 7.5, 6.4, 0, Math.PI, 0);
       ctx.fill();
       ctx.strokeStyle = shadeColor(color, 0.5);
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.2;
       for (let plate = -1; plate <= 1; plate++) {
         ctx.beginPath();
-        ctx.moveTo(p.x + plate * 3.4, p.y - 10.5);
-        ctx.lineTo(p.x + plate * 4.2, p.y - 5);
+        ctx.moveTo(p.x + plate * 4.4, p.y - 13.6 - bob * 0.3);
+        ctx.lineTo(p.x + plate * 5.4, p.y - 6);
         ctx.stroke();
       }
+      // Horn stubs and sullen eyes.
+      ctx.fillStyle = shadeColor(color, 1.35);
+      ctx.beginPath();
+      ctx.moveTo(p.x - 6.5, p.y - 12);
+      ctx.lineTo(p.x - 8.5, p.y - 15);
+      ctx.lineTo(p.x - 5, p.y - 13.4);
+      ctx.closePath();
+      ctx.moveTo(p.x + 6.5, p.y - 12);
+      ctx.lineTo(p.x + 8.5, p.y - 15);
+      ctx.lineTo(p.x + 5, p.y - 13.4);
+      ctx.closePath();
+      ctx.fill();
       ctx.fillStyle = '#fef08a';
-      ctx.fillRect(p.x - 2.6, p.y - 6.5, 1.6, 1.6);
-      ctx.fillRect(p.x + 1, p.y - 6.5, 1.6, 1.6);
+      ctx.fillRect(p.x + dir * 3 - 2.6, p.y - 8.5, 2, 2);
+      ctx.fillRect(p.x + dir * 3 + 1, p.y - 8.5, 2, 2);
     } else {
-      // The warlord: broad, spiked, and lit from within.
+      // The warlord: a hulking crowned mass, lit from within.
       ctx.save();
       ctx.shadowColor = color;
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = shadeColor(color, 0.75);
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = shadeColor(color, 0.7);
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y - 7, 8, 7.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y - 9 - bob * 0.3, 10, 9.5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
-      ctx.fillStyle = shadeColor(color, 0.45);
+      ctx.fillStyle = shadeColor(color, 0.5);
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 5, 10, 5, 0, 0, Math.PI);
+      ctx.fill();
+      // Iron crown of spikes.
+      ctx.fillStyle = '#3f3f46';
       for (let spike = -2; spike <= 2; spike++) {
         ctx.beginPath();
-        ctx.moveTo(p.x + spike * 3.4, p.y - 13);
-        ctx.lineTo(p.x + spike * 4 + 1.2, p.y - 18 - Math.abs(stride));
-        ctx.lineTo(p.x + spike * 4 + 2, p.y - 12.5);
+        ctx.moveTo(p.x + spike * 4.2 - 1.4, p.y - 16.5);
+        ctx.lineTo(p.x + spike * 4.6, p.y - 22 - Math.abs(stride) * 0.8);
+        ctx.lineTo(p.x + spike * 4.2 + 1.6, p.y - 16);
         ctx.closePath();
         ctx.fill();
       }
+      ctx.strokeStyle = '#52525b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x - 9, p.y - 15.5);
+      ctx.lineTo(p.x + 9, p.y - 15.5);
+      ctx.stroke();
       ctx.fillStyle = '#fef08a';
-      ctx.fillRect(p.x - 3.4, p.y - 8.5, 2, 2);
-      ctx.fillRect(p.x + 1.4, p.y - 8.5, 2, 2);
+      ctx.fillRect(p.x + dir * 3 - 3, p.y - 10.5, 2.6, 2.6);
+      ctx.fillRect(p.x + dir * 3 + 1.4, p.y - 10.5, 2.6, 2.6);
     }
 
-    if (enemy.slow > 0) {
+    if (chilled) {
+      // Frost rime: drifting flakes and an icy sheen.
       ctx.strokeStyle = 'rgba(186, 230, 253, 0.9)';
       ctx.lineWidth = 1;
-      const r = enemy.kind === 'warlord' ? 9 : 5;
-      for (let flake = 0; flake < 3; flake++) {
-        const a = clock * 3 + flake * 2.1 + enemy.id;
-        ctx.strokeRect(p.x + Math.cos(a) * r - 0.7, p.y - 6 + Math.sin(a) * 3 - 0.7, 1.4, 1.4);
+      const r = big ? 11 : 6;
+      for (let flake = 0; flake < 4; flake++) {
+        const a = clock * 2.5 + flake * 1.6 + enemy.id;
+        const fx = p.x + Math.cos(a) * r;
+        const fy = p.y - 7 + Math.sin(a) * 3.5;
+        ctx.beginPath();
+        ctx.moveTo(fx - 1.4, fy);
+        ctx.lineTo(fx + 1.4, fy);
+        ctx.moveTo(fx, fy - 1.4);
+        ctx.lineTo(fx, fy + 1.4);
+        ctx.stroke();
       }
     }
 
     if (enemy.hp < enemy.maxHp) {
       const frac = Math.max(0, enemy.hp / enemy.maxHp);
-      const w = enemy.kind === 'warlord' ? 16 : 10;
-      const top = enemy.kind === 'warlord' ? 22 : 13;
+      const w = big ? 20 : 12;
+      const top = big ? 27 : 16;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(p.x - w / 2, p.y - top, w, 2);
+      ctx.fillRect(p.x - w / 2, p.y - top, w, 2.4);
       ctx.fillStyle = frac > 0.5 ? '#4ade80' : frac > 0.25 ? '#fbbf24' : '#f87171';
-      ctx.fillRect(p.x - w / 2, p.y - top, w * frac, 2);
+      ctx.fillRect(p.x - w / 2, p.y - top, w * frac, 2.4);
     }
   }
 
-  /** Diamond outline around every tile within `range` of `tile`. */
+  /** Soft fill over every tile within `range` of `tile`. */
   function drawRangeOverlay(tile: number, range: number, color: string) {
     for (let i = 0; i < map.path.length; i++) {
       if (chebyshev(tile, i, GRID_W) > range) continue;
       fillTile(ctx, VIEW, i % GRID_W, Math.floor(i / GRID_W), color);
     }
+  }
+
+  function drawShot(shot: Shot) {
+    const to = isoProject(VIEW, shot.tx, shot.ty);
+    const alpha = Math.max(0, shot.life / SHOT_LIFE);
+    ctx.globalAlpha = alpha;
+    if (shot.kind === 'bolt') {
+      // Jagged lightning: fixed jitter per shot, glowing core over a haze.
+      const segs = 4;
+      const pts: Array<[number, number]> = [[shot.fx, shot.fy]];
+      for (let seg = 1; seg < segs; seg++) {
+        const t = seg / segs;
+        const jitter = (hash(Math.floor(shot.seed), seg) - 0.5) * 9;
+        pts.push([
+          shot.fx + (to.x - shot.fx) * t + jitter,
+          shot.fy + (to.y - 6 - shot.fy) * t + jitter * 0.5
+        ]);
+      }
+      pts.push([to.x, to.y - 6]);
+      ctx.save();
+      ctx.shadowColor = '#fde68a';
+      ctx.shadowBlur = 6;
+      for (const [width, style] of [
+        [3, 'rgba(253, 230, 138, 0.35)'],
+        [1.4, '#fef9c3']
+      ] as const) {
+        ctx.strokeStyle = style;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let n = 1; n < pts.length; n++) ctx.lineTo(pts[n][0], pts[n][1]);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (shot.kind === 'frost') {
+      // A pale beam with ice shards riding it.
+      ctx.save();
+      ctx.shadowColor = '#bae6fd';
+      ctx.shadowBlur = 5;
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.9)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(shot.fx, shot.fy);
+      ctx.lineTo(to.x, to.y - 6);
+      ctx.stroke();
+      ctx.fillStyle = '#e0f2fe';
+      for (const t of [0.35, 0.65]) {
+        const cx = shot.fx + (to.x - shot.fx) * t;
+        const cy = shot.fy + (to.y - 6 - shot.fy) * t;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 2.4);
+        ctx.lineTo(cx + 1.8, cy);
+        ctx.lineTo(cx, cy + 2.4);
+        ctx.lineTo(cx - 1.8, cy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    } else {
+      // Mortar shell: a tracer with a bright shell riding down it.
+      ctx.strokeStyle = 'rgba(253, 164, 175, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(shot.fx, shot.fy);
+      ctx.lineTo(to.x, to.y - 6);
+      ctx.stroke();
+      const t = 1 - alpha;
+      const sx = shot.fx + (to.x - shot.fx) * t;
+      const sy = shot.fy + (to.y - 6 - shot.fy) * t - Math.sin(t * Math.PI) * 10;
+      ctx.save();
+      ctx.shadowColor = '#fda4af';
+      ctx.shadowBlur = 5;
+      ctx.fillStyle = '#fecdd3';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
   }
 
   function render() {
@@ -593,16 +1111,8 @@ export function initTowerDefenseGame(): void {
       drawRangeOverlay(hoverTile, TOWERS[selectedTool].range, 'rgba(253, 230, 138, 0.14)');
     }
 
-    // Spawn portal pulse (the bake holds its static glow).
-    const sp = isoProject(VIEW, (map.spawn % GRID_W) + 0.5, Math.floor(map.spawn / GRID_W) + 0.5);
-    ctx.strokeStyle = `rgba(167, 139, 250, ${0.35 + 0.25 * Math.sin(clock * 3)})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(sp.x, sp.y - 6, 7, 10, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Enemies interleave with tower blocks by diagonal so towers occlude
-    // the march correctly (same trick as Syndicate's units).
+    // Enemies interleave with everything tall by diagonal so towers, trees,
+    // and the keep occlude the march correctly (Syndicate's trick).
     const diagonals = GRID_W + GRID_H - 1;
     const enemiesByDiag: Enemy[][] = Array.from({ length: diagonals }, () => []);
     for (const enemy of enemies) {
@@ -617,10 +1127,20 @@ export function initTowerDefenseGame(): void {
         if (lastDiag >= 0) enemiesByDiag[lastDiag].forEach(drawEnemy);
         lastDiag = diag;
       }
+      if (i === map.spawn) drawSpawnArch(x, y);
+      if (i === map.goal) drawKeep(x, y);
+      const deco = scenery.get(i);
+      if (deco) drawScenery(i, deco, x, y);
       const tower = towerAt(i);
       if (tower) drawTower(tower, x, y);
-      if (i === hoverTile && phase !== 'idle' && phase !== 'over') {
+      if (i === hoverTile && (phase === 'build' || phase === 'wave')) {
         const ok = selectedTool && map.buildable[i] && !tower;
+        if (ok && selectedTool) {
+          // Ghost preview of the tower about to be raised.
+          ctx.globalAlpha = 0.45;
+          drawBlock(ctx, VIEW, x, y, 12 + 7, TOWER_COLORS[selectedTool], 0.2);
+          ctx.globalAlpha = 1;
+        }
         strokeTile(ctx, VIEW, x, y, ok ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.7)', 1.5);
       }
       if (selectedTower && selectedTower.tile === i) {
@@ -629,37 +1149,8 @@ export function initTowerDefenseGame(): void {
     });
     if (lastDiag >= 0) enemiesByDiag[lastDiag].forEach(drawEnemy);
 
-    // Shots: bolt jags, frost beams, blast tracers + splash rings.
-    for (const shot of shots) {
-      const to = isoProject(VIEW, shot.tx, shot.ty);
-      ctx.globalAlpha = Math.max(0, shot.life / SHOT_LIFE);
-      if (shot.kind === 'bolt') {
-        ctx.strokeStyle = '#fde68a';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(shot.fx, shot.fy);
-        const midX = (shot.fx + to.x) / 2 + Math.sin(clock * 40) * 3;
-        const midY = (shot.fy + to.y - 6) / 2;
-        ctx.lineTo(midX, midY);
-        ctx.lineTo(to.x, to.y - 6);
-        ctx.stroke();
-      } else if (shot.kind === 'frost') {
-        ctx.strokeStyle = '#bae6fd';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(shot.fx, shot.fy);
-        ctx.lineTo(to.x, to.y - 6);
-        ctx.stroke();
-      } else {
-        ctx.strokeStyle = '#fda4af';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(shot.fx, shot.fy);
-        ctx.lineTo(to.x, to.y - 6);
-        ctx.stroke();
-      }
-    }
-    ctx.globalAlpha = 1;
+    for (const shot of shots) drawShot(shot);
+
     for (const ring of rings) {
       ctx.strokeStyle = `rgba(253, 164, 175, ${Math.max(0, ring.life / 0.3)})`;
       ctx.lineWidth = 2;
@@ -668,13 +1159,45 @@ export function initTowerDefenseGame(): void {
       ctx.stroke();
     }
 
-    ctx.font = 'bold 10px monospace';
+    for (const part of particles) {
+      const a = Math.max(0, part.life / part.maxLife);
+      ctx.globalAlpha = a;
+      if (part.glow) {
+        ctx.save();
+        ctx.shadowColor = part.color;
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = part.color;
+        ctx.beginPath();
+        ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = part.color;
+        ctx.fillRect(part.x - part.size, part.y - part.size, part.size * 2, part.size * 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.font = 'bold 11px monospace';
     for (const f of floaters) {
       ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
       ctx.fillStyle = f.color;
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
+
+    // "WAVE N" splash banner.
+    if (bannerTimer > 0) {
+      const a = Math.min(1, bannerTimer / 0.4) * Math.min(1, (1.8 - bannerTimer) / 0.25 + 0.2);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, a));
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText(bannerText.toUpperCase(), CANVAS_W / 2, VIEW.originY - 26);
+      ctx.restore();
+    }
 
     refreshHud();
   }
@@ -761,6 +1284,9 @@ export function initTowerDefenseGame(): void {
     const x = (tile % GRID_W) + 0.5;
     const y = Math.floor(tile / GRID_W) + 0.5;
     addFloater(x, y, `-${def.cost}`, '#fca5a5');
+    // Construction dust as the tower lands.
+    const c = isoProject(VIEW, x, y);
+    spawnBurst(c.x, c.y - 4, 8, '#a8a29e', { speed: 45, life: 0.4, size: 1.6 });
     audio.playSfx('blip');
   });
 
@@ -779,6 +1305,13 @@ export function initTowerDefenseGame(): void {
     const x = (selectedTower.tile % GRID_W) + 0.5;
     const y = Math.floor(selectedTower.tile / GRID_W) + 0.5;
     addFloater(x, y, `-${cost}`, '#fca5a5');
+    const c = isoProject(VIEW, x, y);
+    spawnBurst(c.x, c.y - blockHeight(selectedTower), 8, TOWER_COLORS[selectedTower.kind], {
+      speed: 40,
+      life: 0.45,
+      size: 1.5,
+      glow: true
+    });
     audio.playSfx('blip');
   });
 

@@ -24,14 +24,7 @@ import {
   persuadedCivilians
 } from '../../src/games/syndicate/sim';
 import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus } from '../../src/games/syndicate/missions';
-
-function seededRandom(seed = 42): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
+import { seededRandom } from './seeded-random';
 
 /** An all-walkable map for hand-built combat scenarios. */
 function openMap(): MapTile[] {

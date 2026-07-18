@@ -12,14 +12,7 @@ import {
   stepInterval,
   type SnakeState
 } from '../../src/games/snake/logic';
-
-function seededRandom(seed = 42): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
+import { seededRandom } from './seeded-random';
 
 /** Drops the food right in front of the head so the next step eats it. */
 function placeFoodAhead(state: SnakeState) {

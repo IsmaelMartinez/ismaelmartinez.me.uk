@@ -50,6 +50,9 @@ const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
 const NUKE_INTERVAL = 4; // ticks between successive detonations during a nuke
 
+// Deliberately NOT engine/effects: these debris motes fade on a life*2 ramp
+// and step from 2px to 1px as they die, which the shared module's
+// life/maxLife alpha and fixed sizes can't express at this tiny scale.
 interface Particle {
   x: number;
   y: number;
@@ -59,7 +62,12 @@ interface Particle {
   color: string;
 }
 
-/** A floating score readout ("+125 ×3") that drifts up from a rescue. */
+/**
+ * A floating score readout ("+125 ×3") that drifts up from a rescue.
+ * Also deliberately local: drawn twice with a shadow offset for contrast on
+ * bright terrain, decays at 0.8× time, and clamps to the level edges at
+ * spawn — none of which the shared floater model carries.
+ */
 interface TextPop {
   x: number;
   y: number;

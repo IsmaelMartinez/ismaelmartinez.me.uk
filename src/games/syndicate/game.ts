@@ -21,6 +21,7 @@ import {
   createGameAudio,
   wireSoundButton,
   createToaster,
+  createEffects,
   type IsoView,
   hash01 as hash
 } from '../engine';
@@ -59,19 +60,6 @@ const PERSUADE_BONUS: Partial<Record<Unit['kind'], number>> = {
 };
 const SHOT_LIFE = 0.12;
 const RAIN_DROPS = 90;
-
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-  color: string;
-  gravity: number;
-  glow: boolean;
-}
 
 interface Decal {
   x: number;
@@ -190,8 +178,16 @@ export function initSyndicateGame(): void {
   let clock = 0;
   let moveMarker: { tile: number; t: number } | null = null;
   let extractionAnnounced = false;
-  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
-  let particles: Particle[] = [];
+  const fx = createEffects({
+    gravityScale: 120,
+    launchKick: 20,
+    burstSpeed: 60,
+    burstSize: 1.6,
+    glowBlur: 4,
+    floaterSize: 10,
+    floaterRise: 16,
+    floaterLife: 1.1
+  });
   let decals: Decal[] = [];
   // Last screen position per unit id, so the renderer can face them and the
   // gun points the way they walk.
@@ -228,31 +224,7 @@ export function initSyndicateGame(): void {
 
   const squad = (): Unit[] => world.units.filter(u => u.kind === 'agent');
 
-  function spawnBurst(
-    sx: number,
-    sy: number,
-    count: number,
-    color: string,
-    opts: { speed?: number; life?: number; size?: number; gravity?: number; glow?: boolean } = {}
-  ) {
-    const speed = opts.speed ?? 60;
-    for (let n = 0; n < count; n++) {
-      const a = Math.random() * Math.PI * 2;
-      const v = speed * (0.4 + Math.random() * 0.6);
-      particles.push({
-        x: sx,
-        y: sy,
-        vx: Math.cos(a) * v,
-        vy: Math.sin(a) * v - (opts.gravity ? 20 : 0),
-        life: opts.life ?? 0.5,
-        maxLife: opts.life ?? 0.5,
-        size: opts.size ?? 1.6,
-        color,
-        gravity: opts.gravity ?? 0,
-        glow: opts.glow ?? false
-      });
-    }
-  }
+  const spawnBurst = fx.burst;
 
   function spawnDeath(wx: number, wy: number, kind: Unit['kind']) {
     const p = isoProject(VIEW, wx, wy);
@@ -269,7 +241,7 @@ export function initSyndicateGame(): void {
 
   function addFloater(x: number, y: number, text: string, color: string) {
     const p = isoProject(VIEW, x, y);
-    floaters.push({ x: p.x, y: p.y - 18, text, color, life: 1.1 });
+    fx.floater(p.x, p.y - 18, text, color);
   }
 
   function startMission(index: number) {
@@ -283,8 +255,7 @@ export function initSyndicateGame(): void {
     boostCooldown = 0;
     moveMarker = null;
     extractionAnnounced = false;
-    floaters = [];
-    particles = [];
+    fx.clear();
     decals = [];
     facing.clear();
     missionEl.textContent = `${index + 1}/${MISSIONS.length}`;
@@ -387,18 +358,7 @@ export function initSyndicateGame(): void {
 
   function update(dt: number) {
     clock += dt;
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 16 * dt;
-      return f.life > 0;
-    });
-    particles = particles.filter(part => {
-      part.life -= dt;
-      part.x += part.vx * dt;
-      part.y += part.vy * dt;
-      part.vy += part.gravity * 120 * dt;
-      return part.life > 0;
-    });
+    fx.update(dt);
     decals = decals.filter(d => (d.life -= dt) > 0);
     for (const drop of rain) {
       drop.y += drop.speed * dt;
@@ -870,33 +830,8 @@ export function initSyndicateGame(): void {
     }
     ctx.globalAlpha = 1;
 
-    // Particles — sparks, blood, muzzle flashes
-    for (const part of particles) {
-      const a = Math.max(0, part.life / part.maxLife);
-      ctx.globalAlpha = a;
-      if (part.glow) {
-        ctx.save();
-        ctx.shadowColor = part.color;
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = part.color;
-        ctx.beginPath();
-        ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.fillStyle = part.color;
-        ctx.fillRect(part.x - part.size, part.y - part.size, part.size * 2, part.size * 2);
-      }
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.font = 'bold 10px monospace';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    // Particles (sparks, blood, muzzle flashes), then floaters over them.
+    fx.draw(ctx);
 
     drawAtmosphere();
     refreshHud();

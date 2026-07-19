@@ -11,7 +11,8 @@ import {
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
-  wireSoundButton
+  wireSoundButton,
+  createEffects
 } from '../engine';
 import {
   COLS,
@@ -53,24 +54,6 @@ const KEY_DIRECTIONS: Record<string, Vec> = {
   d: DIRECTIONS.right,
   D: DIRECTIONS.right
 };
-
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  color: string;
-}
-
-interface Floater {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  life: number;
-}
 
 type Phase = 'idle' | 'play' | 'dying' | 'over';
 
@@ -115,8 +98,11 @@ export function initSnakeGame(): void {
   let deathTimer = 0;
   let clock = 0;
   let shake = 0;
-  let particles: Particle[] = [];
-  let floaters: Floater[] = [];
+  const fx = createEffects({
+    floaterSize: 13,
+    floaterRise: 28,
+    floaterLife: 0.9
+  });
 
   const syncHighScore = () => {
     highScoreEl.textContent = board.best().toString();
@@ -144,24 +130,28 @@ export function initSnakeGame(): void {
   wireSoundButton(document.getElementById('sound-btn'), audio);
 
   function burst(x: number, y: number, color: string, count: number) {
+    // Snake's pops predate the shared radial burst: uniform 40–150 px/s
+    // speeds, jittered lifetimes, drag instead of gravity, round dots —
+    // the spawn math stays local and hands finished particles to emit().
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 40 + Math.random() * 110;
-      particles.push({
+      fx.emit({
         x,
         y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 0.45 + Math.random() * 0.3,
         maxLife: 0.75,
-        color
+        color,
+        size: 2.5,
+        drag: 2.5,
+        shape: 'circle'
       });
     }
   }
 
-  function addFloater(x: number, y: number, text: string, color: string) {
-    floaters.push({ x, y, text, color, life: 0.9 });
-  }
+  const addFloater = fx.floater;
 
   function startGame() {
     state = createSnakeState();
@@ -169,8 +159,7 @@ export function initSnakeGame(): void {
     phase = 'play';
     paused = false;
     moveTimer = 0;
-    particles = [];
-    floaters = [];
+    fx.clear();
     scoreEl.textContent = '0';
     overlay.style.display = 'none';
     gameOverOverlay.style.display = 'none';
@@ -212,19 +201,7 @@ export function initSnakeGame(): void {
     clock += dt;
     shake = Math.max(0, shake - dt);
 
-    particles = particles.filter(p => {
-      p.life -= dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vx *= 1 - 2.5 * dt;
-      p.vy *= 1 - 2.5 * dt;
-      return p.life > 0;
-    });
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 28 * dt;
-      return f.life > 0;
-    });
+    fx.update(dt);
 
     if (phase === 'play' && !paused) {
       moveTimer += dt;
@@ -403,23 +380,8 @@ export function initSnakeGame(): void {
     const t = phase === 'play' && !paused ? Math.min(1, moveTimer / interval) : 1;
     drawSnake(t);
 
-    for (const p of particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.draw(ctx);
 
     if (paused && phase === 'play') {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';

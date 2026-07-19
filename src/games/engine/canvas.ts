@@ -40,6 +40,16 @@ export interface StaticLayer {
   draw(ctx: CanvasRenderingContext2D): void;
 }
 
+/**
+ * Cheap deterministic 0–1 hash, for baked-layer scatter (stars, cobbles,
+ * scenery rolls) that must stay put across frames and rebuilds. Extracted
+ * once Cascade became the third cabinet to carry an identical private copy.
+ */
+export function hash01(i: number, salt: number): number {
+  const n = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
+
 export function createStaticLayer(
   logicalW: number,
   logicalH: number,

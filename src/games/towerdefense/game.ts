@@ -26,7 +26,8 @@ import {
   chebyshev,
   createGameAudio,
   wireSoundButton,
-  type IsoView
+  type IsoView,
+  hash01 as hash
 } from '../engine';
 import { GRID_W, GRID_H, createTdMap, routePosition, type TdMap } from './path';
 import { spawnEnemy, stepEnemies, type Enemy, type EnemyKind } from './enemies';
@@ -116,12 +117,6 @@ interface Scenery {
 }
 
 const SHOT_LIFE = 0.14;
-
-/** Cheap deterministic 0–1 hash so scenery and cobbles stay put per tile. */
-function hash(i: number, salt: number): number {
-  const n = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
-  return n - Math.floor(n);
-}
 
 type Phase = 'idle' | 'build' | 'wave' | 'over';
 

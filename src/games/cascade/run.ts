@@ -13,6 +13,7 @@ import {
   fullRows,
   clearRows,
   cascadeGravity,
+  resolveClears,
   WELL_W,
   type Well
 } from './well';
@@ -55,7 +56,7 @@ export type RunPhase = 'falling' | 'clearing' | 'over';
 
 export type RunEvent =
   | { type: 'lock' }
-  | { type: 'clear'; rows: number[]; count: number; chain: number; points: number }
+  | { type: 'clear'; rows: number[]; chain: number; points: number }
   | { type: 'levelUp'; level: number }
   | { type: 'topOut' };
 
@@ -75,15 +76,24 @@ export interface CascadeRun {
   gravityTimer: number;
   lockTimer: number;
   lockResets: number;
+  /**
+   * Deepest row the piece's origin has reached. The full lock-delay budget
+   * only refreshes on a *new* depth record — a floor-kicked rotation that
+   * lifts the piece and lets it fall back one row would otherwise refill
+   * the budget and stall the piece forever (the classic infinite-spin
+   * exploit); a revisited depth just consumes a nudge like any other move.
+   */
+  lowestY: number;
   clearTimer: number;
   drawPiece: () => PieceId;
 }
 
 export function createRun(random: () => number): CascadeRun {
   const drawPiece = createBag(random);
+  const piece = spawnPiece(drawPiece());
   return {
     well: createWell(),
-    piece: spawnPiece(drawPiece()),
+    piece,
     nextId: drawPiece(),
     phase: 'falling',
     score: 0,
@@ -95,6 +105,7 @@ export function createRun(random: () => number): CascadeRun {
     gravityTimer: 0,
     lockTimer: LOCK_DELAY,
     lockResets: 0,
+    lowestY: piece.y,
     clearTimer: 0,
     drawPiece
   };
@@ -124,14 +135,19 @@ function bumpLevel(run: CascadeRun, events: RunEvent[]): void {
   }
 }
 
-/** Scores one chain link and lights its rows for the clearing phase. */
-function startClearStep(run: CascadeRun, rows: number[], events: RunEvent[]): void {
+/** Scores one chain link (`chain` is 1 for the lock's own clear). */
+function scoreClear(run: CascadeRun, rows: number[], events: RunEvent[]): void {
   run.chain++;
   const points = clearPoints(rows.length, run.level, run.chain);
   run.score += points;
   run.lines += rows.length;
-  events.push({ type: 'clear', rows, count: rows.length, chain: run.chain, points });
+  events.push({ type: 'clear', rows, chain: run.chain, points });
   bumpLevel(run, events);
+}
+
+/** Scores one chain link and lights its rows for the clearing phase. */
+function startClearStep(run: CascadeRun, rows: number[], events: RunEvent[]): void {
+  scoreClear(run, rows, events);
   run.clearingRows = rows;
   run.clearTimer = CLEAR_TIME;
   run.phase = 'clearing';
@@ -143,6 +159,7 @@ function spawnNext(run: CascadeRun, events: RunEvent[]): void {
   run.gravityTimer = 0;
   run.lockTimer = LOCK_DELAY;
   run.lockResets = 0;
+  run.lowestY = piece.y;
   if (!fits(run.well, piece)) {
     run.piece = null;
     run.phase = 'over';
@@ -165,13 +182,19 @@ function lockNow(run: CascadeRun, events: RunEvent[]): void {
   }
   run.piece = null;
   events.push({ type: 'lock' });
+  run.chain = 0;
   if (above) {
     // Part of the piece never entered the well: the stack has hit the sky.
+    // Any rows this last lock completed still score and clear (resolved
+    // instantly — there is no next piece to flash for), so a heroic final
+    // drop is paid before the run ends.
+    for (const step of resolveClears(run.well)) {
+      scoreClear(run, step.rows, events);
+    }
     run.phase = 'over';
     events.push({ type: 'topOut' });
     return;
   }
-  run.chain = 0;
   const rows = fullRows(run.well);
   if (rows.length > 0) startClearStep(run, rows, events);
   else spawnNext(run, events);
@@ -213,9 +236,17 @@ export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
     const below = tryMove(run.well, run.piece, 0, 1);
     if (!below) break;
     run.piece = below;
-    // Landing on a new ledge grants a fresh lock delay (and fresh resets).
-    run.lockTimer = LOCK_DELAY;
-    run.lockResets = 0;
+    if (run.piece.y > run.lowestY) {
+      // A new depth record grants a fresh lock delay and a fresh budget.
+      run.lowestY = run.piece.y;
+      run.lockTimer = LOCK_DELAY;
+      run.lockResets = 0;
+    } else if (run.lockResets < MAX_LOCK_RESETS) {
+      // Falling back onto ground it already visited (a floor kick lifted
+      // it) merely consumes a nudge, so the piece can't hover forever.
+      run.lockTimer = LOCK_DELAY;
+      run.lockResets++;
+    }
     if (grounded(run)) {
       run.gravityTimer = 0;
       break;

@@ -293,6 +293,26 @@ describe('run: gravity, lock delay, drops', () => {
     expect(events.some(e => e.type === 'lock')).toBe(true);
   });
 
+  it('cannot stall forever with floor-kick spin loops', () => {
+    // The exploit: rotating a T on the floor kicks it up a row; it falls
+    // back, and if that refilled the lock budget the piece could hover
+    // indefinitely. Falling back to a visited depth must consume nudges.
+    const run = createRun(seededRandom(21));
+    run.piece = { id: 2, rot: 0, x: 3, y: 18 };
+    run.lowestY = 18;
+    run.gravityTimer = 0;
+    run.lockTimer = LOCK_DELAY;
+    run.lockResets = 0;
+    let simTime = 0;
+    while (simTime < 60 && Array.from(run.well).every(v => v === 0)) {
+      rotate(run, 1);
+      simTime += 0.12;
+      tickRun(run, 0.12);
+    }
+    expect(Array.from(run.well).some(v => v !== 0)).toBe(true);
+    expect(simTime).toBeLessThan(30);
+  });
+
   it('hard drop locks on the ghost row immediately', () => {
     const run = createRun(seededRandom(5));
     const ghost = ghostPiece(run)!;
@@ -325,9 +345,9 @@ describe('run: gravity, lock delay, drops', () => {
   });
 });
 
-/** Drops a vertical I into the given column of `run`. */
-function dropVerticalI(run: CascadeRun, column: number): RunEvent[] {
-  run.piece = { id: 0, rot: 1, x: column - 2, y: 0 };
+/** Drops a vertical I into the given column of `run`, from row `y`. */
+function dropVerticalI(run: CascadeRun, column: number, y = 0): RunEvent[] {
+  run.piece = { id: 0, rot: 1, x: column - 2, y };
   expect(fits(run.well, run.piece)).toBe(true);
   return hardDrop(run);
 }
@@ -341,7 +361,7 @@ describe('run: clears, chains, and levels', () => {
     }
     const events = dropVerticalI(run, 9);
     const clear = events.find(e => e.type === 'clear');
-    expect(clear).toMatchObject({ rows: [18, 19], count: 2, chain: 1, points: 300 });
+    expect(clear).toMatchObject({ rows: [18, 19], chain: 1, points: 300 });
     expect(run.phase).toBe('clearing');
     expect(run.score).toBe(300);
     expect(run.lines).toBe(2);
@@ -367,16 +387,34 @@ describe('run: clears, chains, and levels', () => {
     fill(run.well, 8, 17);
 
     const first = dropVerticalI(run, 9).find(e => e.type === 'clear');
-    expect(first).toMatchObject({ count: 1, chain: 1, points: 100 });
+    expect(first).toMatchObject({ rows: [19], chain: 1, points: 100 });
 
     const second = tickRun(run, CLEAR_TIME + 0.01).find(e => e.type === 'clear');
-    expect(second).toMatchObject({ count: 1, chain: 2, points: 200 });
+    expect(second).toMatchObject({ rows: [19], chain: 2, points: 200 });
 
     const rest = tickRun(run, CLEAR_TIME + 0.01);
     expect(rest.find(e => e.type === 'clear')).toBeUndefined();
     expect(run.score).toBe(300);
     expect(run.lines).toBe(2);
     expect(run.phase).toBe('falling');
+  });
+
+  it('still pays rows completed by the lock that tops the stack out', () => {
+    const run = createRun(seededRandom(19));
+    // Row 2 is full except x=9; column 9 is a pillar from row 3 down, so a
+    // vertical I dropped there rests with its top cell above the well while
+    // its lower cells finish row 2.
+    for (let x = 0; x < WELL_W - 1; x++) fill(run.well, x, 2);
+    for (let y = 3; y < WELL_H; y++) fill(run.well, 9, y);
+    const events = dropVerticalI(run, 9, -3);
+    expect(events.find(e => e.type === 'topOut')).toBeDefined();
+    const clear = events.find(e => e.type === 'clear');
+    expect(clear).toMatchObject({ rows: [2], chain: 1, points: 100 });
+    expect(run.score).toBe(100);
+    expect(run.lines).toBe(1);
+    expect(run.phase).toBe('over');
+    // The paid row is actually gone from the final board.
+    expect(fullRows(run.well)).toEqual([]);
   });
 
   it('levels up on the lines threshold, scoring the clear at the old level', () => {
@@ -447,7 +485,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
     expect(clears.length).toBeGreaterThan(0);
     expect(run.lines).toBeGreaterThan(0);
     expect(run.score).toBe(clears.reduce((sum, e) => sum + e.points, 0));
-    expect(run.lines).toBe(clears.reduce((sum, e) => sum + e.count, 0));
+    expect(run.lines).toBe(clears.reduce((sum, e) => sum + e.rows.length, 0));
     // The well never holds a full (unresolved) row between pieces.
     expect(fullRows(run.well)).toEqual([]);
     // Locks equal the pieces played (80, or fewer if the run topped out).

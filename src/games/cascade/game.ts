@@ -18,7 +18,8 @@ import {
   setupHiDpiCanvas,
   shadeColor,
   createGameAudio,
-  wireSoundButton
+  wireSoundButton,
+  hash01 as hash
 } from '../engine';
 import { WELL_W, WELL_H } from './well';
 import { cellsOf, ROTATIONS, type PieceId } from './piece';
@@ -57,6 +58,22 @@ const CELL_COLORS = [
   '#3b82f6', // J
   '#fb923c' // L
 ];
+// Bevel shades precomputed per palette entry: shadeColor's hex-parse +
+// string build is too much to repeat for every tile at 60fps.
+const CELL_LIT = CELL_COLORS.map(c => (c ? shadeColor(c, 1.45) : ''));
+const CELL_DARK = CELL_COLORS.map(c => (c ? shadeColor(c, 0.55) : ''));
+const CELL_GHOST = CELL_COLORS.map(c => (c ? shadeColor(c, 0.4) : ''));
+
+/** Spawn-state bounding box per piece, for centring the next preview. */
+const PREVIEW_BOUNDS = ROTATIONS.map(states => {
+  const cells = states[0];
+  return {
+    minX: Math.min(...cells.map(([x]) => x)),
+    maxX: Math.max(...cells.map(([x]) => x)),
+    minY: Math.min(...cells.map(([, y]) => y)),
+    maxY: Math.max(...cells.map(([, y]) => y))
+  };
+});
 
 /** Keyboard auto-shift: initial delay then repeat rate, in seconds. */
 const DAS_DELAY = 0.17;
@@ -89,12 +106,6 @@ interface Floater {
   size: number;
 }
 
-/** Cheap deterministic 0–1 hash so baked stars stay put. */
-function hash(i: number, salt: number): number {
-  const n = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
-  return n - Math.floor(n);
-}
-
 type Phase = 'idle' | 'play' | 'over';
 
 export function initCascadeGame(): void {
@@ -124,6 +135,7 @@ export function initCascadeGame(): void {
 
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
   const strings = {
+    title: s('tTitle', 'Cascade'),
     next: s('tNext', 'Next'),
     chain: s('tChain', 'Chain ×{n}'),
     levelUp: s('tLevelUp', 'Level {n}'),
@@ -255,7 +267,7 @@ export function initCascadeGame(): void {
 
     panel(WELL_Y + 140, 78);
     target.fillStyle = '#93c5fd';
-    target.fillText('CASCADE', PANEL_X + PANEL_W / 2, WELL_Y + 156);
+    target.fillText(strings.title.toUpperCase(), PANEL_X + PANEL_W / 2, WELL_Y + 156);
     // Lamp sockets; render lights them while a chain is running.
     for (let lamp = 0; lamp < 4; lamp++) {
       const lx = PANEL_X + 24 + lamp * 27;
@@ -275,6 +287,11 @@ export function initCascadeGame(): void {
   // No pointer math needed (a board tap just rotates), so the handle is unused.
   setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, { onApply: ground.rebuild });
 
+  // The danger glow's gradient never changes shape — only its strength does.
+  const dangerGradient = ctx.createLinearGradient(0, WELL_Y, 0, WELL_Y + 70);
+  dangerGradient.addColorStop(0, 'rgba(248, 113, 113, 1)');
+  dangerGradient.addColorStop(1, 'rgba(248, 113, 113, 0)');
+
   // --- Game state ----------------------------------------------------------
   let phase: Phase = 'idle';
   let run: CascadeRun = createRun(Math.random);
@@ -287,6 +304,8 @@ export function initCascadeGame(): void {
   /** Highest chain link hit during the current cascade, for the lamps. */
   let chainGlow = 0;
   let chainGlowTimer = 0;
+  /** Last values written to the HUD, so render skips redundant DOM writes. */
+  const hud = { score: -1, lines: -1, level: -1 };
 
   const board = initScoreboard(document.getElementById('highscores'));
   let record = board.top()?.score ?? 0;
@@ -372,6 +391,14 @@ export function initCascadeGame(): void {
     showToast(`🏅 ${strings.newRecord}`);
   }
 
+  /** Celebrates, banks the run's best into the HUD, and stashes it. */
+  function bankScore() {
+    celebrateRecord();
+    board.stash(run.score);
+    record = Math.max(record, run.score);
+    recordEl.textContent = `${record}`;
+  }
+
   function applyTempo() {
     audio.setTempo(Math.min(MAX_TEMPO, BASE_TEMPO + (run.level - 1) * TEMPO_PER_LEVEL));
   }
@@ -386,6 +413,7 @@ export function initCascadeGame(): void {
     runStartRecord = record;
     recordCelebrated = false;
     held.left = held.right = false;
+    dasDir = 0;
     phase = 'play';
     applyTempo();
     audio.start();
@@ -396,9 +424,7 @@ export function initCascadeGame(): void {
     setSoftDrop(run, false);
     audio.playSfx('gameover');
     audio.stop();
-    celebrateRecord();
-    record = Math.max(record, run.score);
-    recordEl.textContent = `${record}`;
+    bankScore();
     finalScoreEl.textContent = `${run.score}`;
     overOverlay.style.display = 'flex';
     // After the overlay is visible, so the initials input can take focus.
@@ -434,11 +460,8 @@ export function initCascadeGame(): void {
           audio.playSfx('score');
         }
         addFloater(WELL_X + PIT_W / 2, cy, `+${event.points}`, '#fbbf24', event.chain > 1 ? 18 : 14);
-        celebrateRecord();
         // Bank the run as it grows so a closed tab keeps the record.
-        board.stash(run.score);
-        record = Math.max(record, run.score);
-        recordEl.textContent = `${record}`;
+        bankScore();
       } else if (event.type === 'levelUp') {
         bannerText = strings.levelUp.replace('{n}', String(event.level));
         bannerTimer = 1.6;
@@ -463,21 +486,33 @@ export function initCascadeGame(): void {
 
   // --- Input ----------------------------------------------------------------
   const held = { left: false, right: false };
+  /** Direction DAS is currently driving: the most recent still-held press. */
+  let dasDir: -1 | 0 | 1 = 0;
   let dasTimer = 0;
   let arrTimer = 0;
+
+  function startDas(dir: -1 | 1) {
+    dasDir = dir;
+    dasTimer = 0;
+    arrTimer = 0;
+  }
 
   function press(dir: -1 | 1) {
     const key = dir < 0 ? 'left' : 'right';
     if (held[key]) return;
     held[key] = true;
-    held[dir < 0 ? 'right' : 'left'] = false;
-    dasTimer = 0;
-    arrTimer = 0;
+    startDas(dir);
     if (phase === 'play') shift(run, dir);
   }
 
   function release(dir: -1 | 1) {
     held[dir < 0 ? 'left' : 'right'] = false;
+    if (dasDir !== dir) return;
+    // Fall back to the other, still-physically-held key (its OS repeats are
+    // suppressed, so DAS must pick it back up or it goes dead).
+    if (held.left) startDas(-1);
+    else if (held.right) startDas(1);
+    else dasDir = 0;
   }
 
   function doRotate(dir: 1 | -1) {
@@ -488,7 +523,11 @@ export function initCascadeGame(): void {
   function doHardDrop() {
     if (phase !== 'play' || !run.piece) return;
     const landing = ghostPiece(run);
-    handleEvents(hardDrop(run));
+    const events = hardDrop(run);
+    handleEvents(events);
+    // A drop that tops out already played its defeat jingle in endRun —
+    // don't thud and kick dust over the game-over screen.
+    if (events.some(e => e.type === 'topOut')) return;
     audio.playSfx('hit');
     if (landing) {
       for (const c of cellsOf(landing)) {
@@ -558,7 +597,10 @@ export function initCascadeGame(): void {
   );
 
   // Touch pads: hold-to-repeat for shift and soft drop, taps for the rest.
-  function wireHoldButton(id: string, down: () => void, up?: () => void) {
+  // `tap` is the single-step action for keyboard/AT activation — those fire
+  // click (with detail 0), never pointerdown, so without it the aria-labelled
+  // buttons would be announced but dead to a switch or keyboard user.
+  function wireHoldButton(id: string, down: () => void, up?: () => void, tap?: () => void) {
     const btn = document.getElementById(id);
     if (!btn) return;
     btn.addEventListener('pointerdown', e => {
@@ -568,13 +610,32 @@ export function initCascadeGame(): void {
     for (const evt of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       btn.addEventListener(evt, () => up?.());
     }
+    btn.addEventListener('click', e => {
+      if (e.detail === 0) (tap ?? down)();
+    });
   }
-  wireHoldButton('btn-left', () => press(-1), () => release(-1));
-  wireHoldButton('btn-right', () => press(1), () => release(1));
+  wireHoldButton(
+    'btn-left',
+    () => press(-1),
+    () => release(-1),
+    () => phase === 'play' && shift(run, -1)
+  );
+  wireHoldButton(
+    'btn-right',
+    () => press(1),
+    () => release(1),
+    () => phase === 'play' && shift(run, 1)
+  );
   wireHoldButton(
     'btn-down',
     () => phase === 'play' && setSoftDrop(run, true),
-    () => setSoftDrop(run, false)
+    () => setSoftDrop(run, false),
+    () => {
+      // One keyboard activation = a short soft-drop pulse.
+      if (phase !== 'play') return;
+      setSoftDrop(run, true);
+      setTimeout(() => setSoftDrop(run, false), 150);
+    }
   );
   wireHoldButton('btn-rotate', () => doRotate(1));
   wireHoldButton('btn-drop', () => doHardDrop());
@@ -604,14 +665,16 @@ export function initCascadeGame(): void {
     if (phase !== 'play') return;
 
     // Delayed auto-shift while a direction is held.
-    const dir = held.left ? -1 : held.right ? 1 : 0;
-    if (dir !== 0) {
+    if (dasDir !== 0) {
+      const prev = dasTimer;
       dasTimer += dt;
       if (dasTimer >= DAS_DELAY) {
-        arrTimer += dt;
+        // Credit the repeat clock only with time past the delay threshold,
+        // so the first repeat doesn't land up to a frame early.
+        arrTimer += dasTimer - Math.max(prev, DAS_DELAY);
         while (arrTimer >= DAS_REPEAT) {
           arrTimer -= DAS_REPEAT;
-          shift(run, dir);
+          shift(run, dasDir);
         }
       }
     }
@@ -621,14 +684,14 @@ export function initCascadeGame(): void {
 
   // --- Rendering ---------------------------------------------------------------
 
-  /** A bevelled tile face: lit from the top-left, glossed, outlined. */
-  function drawTile(px: number, py: number, colour: string, size = TILE, alpha = 1) {
+  /** A bevelled tile face: lit from the top-left, glossed, outlined.
+   * Takes the palette index (cell value) so the shades come precomputed. */
+  function drawTile(px: number, py: number, v: number, size = TILE) {
     const bevel = Math.max(2, size * 0.14);
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = colour;
+    ctx.fillStyle = CELL_COLORS[v];
     ctx.fillRect(px, py, size, size);
     // Lit top and left edges.
-    ctx.fillStyle = shadeColor(colour, 1.45);
+    ctx.fillStyle = CELL_LIT[v];
     ctx.beginPath();
     ctx.moveTo(px, py);
     ctx.lineTo(px + size, py);
@@ -639,7 +702,7 @@ export function initCascadeGame(): void {
     ctx.closePath();
     ctx.fill();
     // Shaded bottom and right edges.
-    ctx.fillStyle = shadeColor(colour, 0.55);
+    ctx.fillStyle = CELL_DARK[v];
     ctx.beginPath();
     ctx.moveTo(px + size, py + size);
     ctx.lineTo(px, py + size);
@@ -655,23 +718,35 @@ export function initCascadeGame(): void {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.lineWidth = 1;
     ctx.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
-    ctx.globalAlpha = 1;
+  }
+
+  // The ghost only moves when the piece does, and the well can't change
+  // under an in-flight piece — tryMove returns a fresh object on every
+  // successful move, so piece identity is a complete cache key. Recomputing
+  // per frame would walk the whole drop height in allocations.
+  let ghostFor: typeof run.piece = null;
+  let ghostCached: typeof run.piece = null;
+  function currentGhost() {
+    if (run.piece !== ghostFor) {
+      ghostFor = run.piece;
+      ghostCached = run.piece ? ghostPiece(run) : null;
+    }
+    return ghostCached;
   }
 
   function drawGhost() {
     if (run.phase !== 'falling') return;
-    const ghost = ghostPiece(run);
+    const ghost = currentGhost();
     const piece = run.piece;
     if (!ghost || !piece || ghost.y === piece.y) return;
-    const colour = CELL_COLORS[piece.id + 1];
     for (const c of cellsOf(ghost)) {
       if (c.y < 0) continue;
       const p = cellPx(c.x, c.y);
-      ctx.fillStyle = shadeColor(colour, 0.4);
+      ctx.fillStyle = CELL_GHOST[piece.id + 1];
       ctx.globalAlpha = 0.28;
       ctx.fillRect(p.x + 2, p.y + 2, TILE - 4, TILE - 4);
       ctx.globalAlpha = 0.75;
-      ctx.strokeStyle = colour;
+      ctx.strokeStyle = CELL_COLORS[piece.id + 1];
       ctx.lineWidth = 1.5;
       ctx.strokeRect(p.x + 2.5, p.y + 2.5, TILE - 5, TILE - 5);
       ctx.globalAlpha = 1;
@@ -680,16 +755,12 @@ export function initCascadeGame(): void {
 
   function drawNextPreview() {
     const id: PieceId = run.nextId;
-    const cells = ROTATIONS[id][0];
     const size = 18;
-    const minX = Math.min(...cells.map(([x]) => x));
-    const maxX = Math.max(...cells.map(([x]) => x));
-    const minY = Math.min(...cells.map(([, y]) => y));
-    const maxY = Math.max(...cells.map(([, y]) => y));
-    const ox = PANEL_X + PANEL_W / 2 - ((maxX - minX + 1) * size) / 2 - minX * size;
-    const oy = WELL_Y + 60 - ((maxY - minY + 1) * size) / 2 - minY * size;
-    for (const [cx, cy] of cells) {
-      drawTile(ox + cx * size, oy + cy * size, CELL_COLORS[id + 1], size);
+    const b = PREVIEW_BOUNDS[id];
+    const ox = PANEL_X + PANEL_W / 2 - ((b.maxX - b.minX + 1) * size) / 2 - b.minX * size;
+    const oy = WELL_Y + 60 - ((b.maxY - b.minY + 1) * size) / 2 - b.minY * size;
+    for (const [cx, cy] of ROTATIONS[id][0]) {
+      drawTile(ox + cx * size, oy + cy * size, id + 1, size);
     }
   }
 
@@ -722,7 +793,7 @@ export function initCascadeGame(): void {
         const v = run.well[y * WELL_W + x];
         if (v === 0) continue;
         const p = cellPx(x, y);
-        drawTile(p.x, p.y, CELL_COLORS[v]);
+        drawTile(p.x, p.y, v);
         if (clearing.has(y)) {
           const flash = 0.5 + 0.45 * Math.sin(clock * 26);
           ctx.fillStyle = `rgba(255, 255, 255, ${flash})`;
@@ -734,11 +805,10 @@ export function initCascadeGame(): void {
     drawGhost();
 
     if (run.piece) {
-      const colour = CELL_COLORS[run.piece.id + 1];
       for (const c of cellsOf(run.piece)) {
         if (c.y < 0) continue;
         const p = cellPx(c.x, c.y);
-        drawTile(p.x, p.y, colour);
+        drawTile(p.x, p.y, run.piece.id + 1);
       }
     }
 
@@ -751,12 +821,11 @@ export function initCascadeGame(): void {
       }
     }
     if (stackTop <= 4 && phase === 'play') {
-      const danger = ctx.createLinearGradient(0, WELL_Y, 0, WELL_Y + 70);
-      const a = (0.22 + 0.12 * Math.sin(clock * 6)) * (1 - stackTop / 5);
-      danger.addColorStop(0, `rgba(248, 113, 113, ${a})`);
-      danger.addColorStop(1, 'rgba(248, 113, 113, 0)');
-      ctx.fillStyle = danger;
+      // Hoisted gradient, alpha-modulated per frame (the sims' sky trick).
+      ctx.globalAlpha = (0.22 + 0.12 * Math.sin(clock * 6)) * (1 - stackTop / 5);
+      ctx.fillStyle = dangerGradient;
       ctx.fillRect(WELL_X, WELL_Y, PIT_W, 70);
+      ctx.globalAlpha = 1;
     }
 
     drawNextPreview();
@@ -809,9 +878,19 @@ export function initCascadeGame(): void {
       ctx.restore();
     }
 
-    scoreEl.textContent = `${run.score}`;
-    linesEl.textContent = `${run.lines}`;
-    levelEl.textContent = `${run.level}`;
+    // These only change on clear events; skip the DOM writes otherwise.
+    if (hud.score !== run.score) {
+      hud.score = run.score;
+      scoreEl.textContent = `${run.score}`;
+    }
+    if (hud.lines !== run.lines) {
+      hud.lines = run.lines;
+      linesEl.textContent = `${run.lines}`;
+    }
+    if (hud.level !== run.level) {
+      hud.level = run.level;
+      levelEl.textContent = `${run.level}`;
+    }
   }
 
   startBtn.addEventListener('click', () => {
@@ -828,14 +907,20 @@ export function initCascadeGame(): void {
   // Cheat-mode handle, only when the page is opened with #dev: exposes the
   // live run and the real input paths so a bot (or a curious player) can
   // drive full games in a real browser — how the cabinet gets playtested.
+  // Retired with the page it drives, so a ClientRouter swap can't leave the
+  // global pointing at a dead board.
   if (window.location.hash === '#dev') {
-    (window as unknown as Record<string, unknown>).cascadeDev = {
+    const devWindow = window as unknown as Record<string, unknown>;
+    devWindow.cascadeDev = {
       getRun: () => run,
       shift: (dir: -1 | 1) => shift(run, dir),
       rotate: (dir: 1 | -1) => doRotate(dir),
       hardDrop: () => doHardDrop(),
       softDrop: (on: boolean) => setSoftDrop(run, on)
     };
+    document.addEventListener('astro:before-swap', () => delete devWindow.cascadeDev, {
+      once: true
+    });
   }
 
   createGameLoop(update, render).start();

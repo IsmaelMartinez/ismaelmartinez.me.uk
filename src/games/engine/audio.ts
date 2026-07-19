@@ -295,7 +295,9 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     setMuted,
     playSfx,
     setTempo(bpm: number) {
-      if (bpm > 0) secondsPerBeat = 60 / bpm;
+      // Finite-positive only: Infinity would zero secondsPerBeat and spin
+      // scheduleAhead's lookahead loop forever.
+      if (Number.isFinite(bpm) && bpm > 0) secondsPerBeat = 60 / bpm;
     },
     dispose
   };

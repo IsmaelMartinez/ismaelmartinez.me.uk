@@ -11,9 +11,9 @@
  */
 import { WELL_W, WELL_H, type Well } from './well';
 
+/** Piece ids index the classic order I, O, T, S, Z, J, L. */
 export type PieceId = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export const PIECE_IDS: readonly PieceId[] = [0, 1, 2, 3, 4, 5, 6];
-export const PIECE_NAMES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'] as const;
 
 type Cell = readonly [number, number];
 

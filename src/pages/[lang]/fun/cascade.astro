@@ -18,6 +18,7 @@ const t = useTranslations(lang);
       <div
         class="game-container"
         id="cascade-root"
+        data-t-title={t('fun.cascade.title')}
         data-t-next={t('fun.cascade.next')}
         data-t-chain={t('fun.cascade.chain')}
         data-t-level-up={t('fun.cascade.levelUp')}
@@ -83,7 +84,7 @@ const t = useTranslations(lang);
           </div>
         </div>
 
-        <div class="pad" aria-hidden="false">
+        <div class="pad">
           <button id="btn-left" class="pad-btn" aria-label={t('fun.cascade.moveLeft')}>◀</button>
           <button id="btn-down" class="pad-btn" aria-label={t('fun.cascade.softDrop')}>▼</button>
           <button id="btn-right" class="pad-btn" aria-label={t('fun.cascade.moveRight')}>▶</button>

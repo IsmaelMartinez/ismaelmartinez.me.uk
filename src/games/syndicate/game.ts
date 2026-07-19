@@ -20,7 +20,8 @@ import {
   shadeColor,
   createGameAudio,
   wireSoundButton,
-  type IsoView
+  type IsoView,
+  hash01 as hash
 } from '../engine';
 import { MAP_W, MAP_H, generateCity, type MapTile } from './map';
 import type { Unit, WeaponId } from './units';
@@ -78,12 +79,6 @@ interface Decal {
   color: string;
   life: number;
   maxLife: number;
-}
-
-/** Cheap deterministic 0–1 hash so building props stay stable per tile. */
-function hash(i: number, salt: number): number {
-  const n = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
-  return n - Math.floor(n);
 }
 
 type Phase = 'idle' | 'play' | 'debrief' | 'over';

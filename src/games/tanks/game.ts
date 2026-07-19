@@ -13,7 +13,8 @@ import {
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
-  wireSoundButton
+  wireSoundButton,
+  createEffects
 } from '../engine';
 import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
 import {
@@ -71,25 +72,6 @@ interface Explosion {
   y: number;
   t: number;
   radius: number;
-}
-
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  color: string;
-  size: number;
-}
-
-interface Floater {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  life: number;
 }
 
 type Phase = 'idle' | 'aim' | 'cpu-think' | 'fly' | 'round-over';
@@ -222,9 +204,14 @@ export function initTanksGame(): void {
   let phase: Phase = 'idle';
   let shots: Shot[] = [];
   let explosions: Explosion[] = [];
-  let particles: Particle[] = [];
+  const fx = createEffects({
+    gravityScale: 420,
+    cullBelowY: HEIGHT + 10,
+    floaterSize: 13,
+    floaterRise: 22,
+    floaterLife: 1
+  });
   let smoke: { x: number; y: number; r: number; vx: number; life: number; maxLife: number }[] = [];
-  let floaters: Floater[] = [];
   let muzzleFlash: { x: number; y: number; t: number } | null = null;
   let shake = 0;
   let cpuTimer = 0;
@@ -292,13 +279,7 @@ export function initTanksGame(): void {
     if (amount <= 0 || tank.hp <= 0) return;
     tank.hp = Math.max(0, tank.hp - amount);
     tank.flash = 0.35;
-    floaters.push({
-      x: tank.x,
-      y: tank.y - TANK_H - 30,
-      text: `-${amount}`,
-      color: '#f87171',
-      life: 1
-    });
+    fx.floater(tank.x, tank.y - TANK_H - 30, `-${amount}`, '#f87171');
   }
 
   function newWind() {
@@ -328,9 +309,8 @@ export function initTanksGame(): void {
     tanks = [makeTank(p1x, 60, '#38bdf8'), makeTank(p2x, 120, '#f87171')];
     shots = [];
     explosions = [];
-    particles = [];
+    fx.clear();
     smoke = [];
-    floaters = [];
     muzzleFlash = null;
     current = Math.random() < 0.5 ? 0 : 1;
     newWind();
@@ -399,11 +379,14 @@ export function initTanksGame(): void {
   }
 
   function spawnDirt(x: number, y: number, radius: number) {
+    // A directional wind-blown cone, not the shared radial burst — the
+    // spawn math stays local and hands finished particles to emit().
+    // emit() draws squares 2× its size, so halve the old side length.
     const count = Math.round(radius / 3);
     for (let i = 0; i < count; i++) {
       const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.8;
       const speed = 60 + Math.random() * radius * 3.2;
-      particles.push({
+      fx.emit({
         x: x + (Math.random() - 0.5) * radius * 0.8,
         y,
         vx: Math.cos(angle) * speed + wind * 0.3,
@@ -411,7 +394,8 @@ export function initTanksGame(): void {
         life: 0.5 + Math.random() * 0.5,
         maxLife: 1,
         color: Math.random() < 0.5 ? '#34d399' : '#1e3a2f',
-        size: 1.5 + Math.random() * 2
+        size: (1.5 + Math.random() * 2) / 2,
+        gravity: 1
       });
     }
   }
@@ -536,18 +520,7 @@ export function initTanksGame(): void {
     }
     for (const tank of tanks) tank.flash = Math.max(0, tank.flash - dt);
 
-    particles = particles.filter(p => {
-      p.life -= dt;
-      p.vy += 420 * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      return p.life > 0 && p.y < HEIGHT + 10;
-    });
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 22 * dt;
-      return f.life > 0;
-    });
+    fx.update(dt);
     // Battle damage: a badly mauled tank trails smoke until the round ends.
     for (const tank of tanks) {
       if (tank.hp > 0 && tank.hp <= 35 && Math.random() < dt * 7) {
@@ -750,12 +723,7 @@ export function initTanksGame(): void {
     }
     ctx.globalAlpha = 1;
 
-    for (const p of particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-    }
-    ctx.globalAlpha = 1;
+    fx.drawParticles(ctx);
 
     for (const explosion of explosions) {
       const progress = explosion.t / EXPLOSION_TIME;
@@ -773,14 +741,8 @@ export function initTanksGame(): void {
       ctx.fill();
     }
 
-    ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.drawFloaters(ctx);
 
     ctx.restore();
   }

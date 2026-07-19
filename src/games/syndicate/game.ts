@@ -20,6 +20,8 @@ import {
   shadeColor,
   createGameAudio,
   wireSoundButton,
+  createToaster,
+  createEffects,
   type IsoView,
   hash01 as hash
 } from '../engine';
@@ -58,19 +60,6 @@ const PERSUADE_BONUS: Partial<Record<Unit['kind'], number>> = {
 };
 const SHOT_LIFE = 0.12;
 const RAIN_DROPS = 90;
-
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-  color: string;
-  gravity: number;
-  glow: boolean;
-}
 
 interface Decal {
   x: number;
@@ -116,6 +105,7 @@ export function initSyndicateGame(): void {
   const objectiveEl = el('objective-text');
   const boostBtn = el('boost-btn') as HTMLButtonElement;
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
   const chips = Array.from(root.querySelectorAll<HTMLButtonElement>('.agent-chip'));
   const allBtn = el('select-all') as HTMLButtonElement;
 
@@ -182,19 +172,22 @@ export function initSyndicateGame(): void {
   let extraction = -1;
   let money = 0;
   const board = initScoreboard(document.getElementById('highscores'));
-  // The record readout shows the table's best, beaten live by the current campaign.
-  let record = board.top()?.score ?? 0;
   let agentWeapons: WeaponId[] = Array(SQUAD_SIZE).fill('pistol');
-  // The table best when the campaign started, so beating it is announced once.
-  let campaignStartRecord = 0;
-  let recordCelebrated = false;
   let selected = new Set<number>([0, 1, 2, 3]);
   let boostCooldown = 0;
   let clock = 0;
   let moveMarker: { tile: number; t: number } | null = null;
   let extractionAnnounced = false;
-  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
-  let particles: Particle[] = [];
+  const fx = createEffects({
+    gravityScale: 120,
+    launchKick: 20,
+    burstSpeed: 60,
+    burstSize: 1.6,
+    glowBlur: 4,
+    floaterSize: 10,
+    floaterRise: 16,
+    floaterLife: 1.1
+  });
   let decals: Decal[] = [];
   // Last screen position per unit id, so the renderer can face them and the
   // gun points the way they walk.
@@ -207,7 +200,8 @@ export function initSyndicateGame(): void {
     speed: 320 + Math.random() * 220
   }));
 
-  recordEl.textContent = `£${record}`;
+  // The record readout shows the table's best, beaten live by the current campaign.
+  recordEl.textContent = `£${board.best()}`;
 
   // Dark, brooding cyber-noir bassline in E minor.
   const audio = createGameAudio({
@@ -230,31 +224,7 @@ export function initSyndicateGame(): void {
 
   const squad = (): Unit[] => world.units.filter(u => u.kind === 'agent');
 
-  function spawnBurst(
-    sx: number,
-    sy: number,
-    count: number,
-    color: string,
-    opts: { speed?: number; life?: number; size?: number; gravity?: number; glow?: boolean } = {}
-  ) {
-    const speed = opts.speed ?? 60;
-    for (let n = 0; n < count; n++) {
-      const a = Math.random() * Math.PI * 2;
-      const v = speed * (0.4 + Math.random() * 0.6);
-      particles.push({
-        x: sx,
-        y: sy,
-        vx: Math.cos(a) * v,
-        vy: Math.sin(a) * v - (opts.gravity ? 20 : 0),
-        life: opts.life ?? 0.5,
-        maxLife: opts.life ?? 0.5,
-        size: opts.size ?? 1.6,
-        color,
-        gravity: opts.gravity ?? 0,
-        glow: opts.glow ?? false
-      });
-    }
-  }
+  const spawnBurst = fx.burst;
 
   function spawnDeath(wx: number, wy: number, kind: Unit['kind']) {
     const p = isoProject(VIEW, wx, wy);
@@ -269,18 +239,9 @@ export function initSyndicateGame(): void {
     spawnBurst(p.x, p.y - 10, 10, color, { speed: 40, life: 0.7, size: 1.4, glow: true });
   }
 
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2400);
-  }
-
   function addFloater(x: number, y: number, text: string, color: string) {
     const p = isoProject(VIEW, x, y);
-    floaters.push({ x: p.x, y: p.y - 18, text, color, life: 1.1 });
+    fx.floater(p.x, p.y - 18, text, color);
   }
 
   function startMission(index: number) {
@@ -294,8 +255,7 @@ export function initSyndicateGame(): void {
     boostCooldown = 0;
     moveMarker = null;
     extractionAnnounced = false;
-    floaters = [];
-    particles = [];
+    fx.clear();
     decals = [];
     facing.clear();
     missionEl.textContent = `${index + 1}/${MISSIONS.length}`;
@@ -309,21 +269,18 @@ export function initSyndicateGame(): void {
     });
   }
 
-  /** Announces (once per campaign) that the takings beat the table's best. */
-  function celebrateRecord() {
-    if (recordCelebrated || campaignStartRecord <= 0) return;
-    if (Math.floor(money) <= campaignStartRecord) return;
-    recordCelebrated = true;
-    showToast(`🏅 ${strings.newRecord}`);
+  /** Banks the takings; announces (once per campaign) a beaten table best. */
+  function bankTakings() {
+    const { best, newRecord } = board.bank(Math.floor(money));
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+    recordEl.textContent = `£${best}`;
   }
 
   function endCampaign(victory: boolean) {
     phase = 'over';
     audio.playSfx('gameover');
     audio.stop();
-    celebrateRecord();
-    record = Math.max(record, Math.floor(money));
-    recordEl.textContent = `£${record}`;
+    bankTakings();
     overIcon.textContent = victory ? '🏆' : '☠️';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
     overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
@@ -342,12 +299,9 @@ export function initSyndicateGame(): void {
       return;
     }
     phase = 'debrief';
-    celebrateRecord();
-    record = Math.max(record, Math.floor(money));
-    recordEl.textContent = `£${record}`;
-    // Persist the campaign's takings at each debrief, like the old record
-    // key did, so quitting mid-campaign keeps the run on the table.
-    board.stash(Math.floor(money));
+    // Banking persists the campaign's takings at each debrief, like the old
+    // record key did, so quitting mid-campaign keeps the run on the table.
+    bankTakings();
     overIcon.textContent = '💼';
     overTitle.textContent = `${strings.missionComplete} · +£${spec.reward}`;
     overDesc.textContent = `${strings.missionNames[missionIdx + 1]} — ${strings.missionBriefs[missionIdx + 1]}`;
@@ -404,18 +358,7 @@ export function initSyndicateGame(): void {
 
   function update(dt: number) {
     clock += dt;
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 16 * dt;
-      return f.life > 0;
-    });
-    particles = particles.filter(part => {
-      part.life -= dt;
-      part.x += part.vx * dt;
-      part.y += part.vy * dt;
-      part.vy += part.gravity * 120 * dt;
-      return part.life > 0;
-    });
+    fx.update(dt);
     decals = decals.filter(d => (d.life -= dt) > 0);
     for (const drop of rain) {
       drop.y += drop.speed * dt;
@@ -887,33 +830,8 @@ export function initSyndicateGame(): void {
     }
     ctx.globalAlpha = 1;
 
-    // Particles — sparks, blood, muzzle flashes
-    for (const part of particles) {
-      const a = Math.max(0, part.life / part.maxLife);
-      ctx.globalAlpha = a;
-      if (part.glow) {
-        ctx.save();
-        ctx.shadowColor = part.color;
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = part.color;
-        ctx.beginPath();
-        ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.fillStyle = part.color;
-        ctx.fillRect(part.x - part.size, part.y - part.size, part.size * 2, part.size * 2);
-      }
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.font = 'bold 10px monospace';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    // Particles (sparks, blood, muzzle flashes), then floaters over them.
+    fx.draw(ctx);
 
     drawAtmosphere();
     refreshHud();
@@ -1039,8 +957,7 @@ export function initSyndicateGame(): void {
     startOverlay.style.display = 'none';
     money = 0;
     agentWeapons = Array(SQUAD_SIZE).fill('pistol');
-    campaignStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     startMission(0);
   });
 
@@ -1052,8 +969,7 @@ export function initSyndicateGame(): void {
     } else {
       money = 0;
       agentWeapons = Array(SQUAD_SIZE).fill('pistol');
-      campaignStartRecord = record;
-      recordCelebrated = false;
+      board.beginRun();
       startMission(0);
     }
   });

@@ -24,6 +24,8 @@ import {
   createViewRotator,
   createGameAudio,
   wireSoundButton,
+  createToaster,
+  createEffects,
   type IsoView,
   type Rotation
 } from '../engine';
@@ -332,6 +334,8 @@ export function initParkGame(): void {
   const finalDaysEl = el('final-days');
   const finalPeakEl = el('final-peak');
   const toastArea = el('toast-area');
+  // Park's toasts linger slightly less than the arcade default (2.2s vs 2.4s).
+  const { show: showToast } = createToaster(toastArea, { durationMs: 2200 });
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.tool-btn'));
   const speedButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.speed-btn'));
   const trackPalette = el('track-palette');
@@ -441,14 +445,13 @@ export function initParkGame(): void {
   let hoverCachePlaceable = false;
   let hoverCacheCost = 0;
   let clock = 0;
-  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
+  // Floaters live in the shared effects module; balloons stay local (their
+  // sway drift has no analogue in its physics).
+  const fx = createEffects({ floaterSize: 11, floaterRise: 16, floaterLife: 1 });
   let balloons: { x: number; y: number; sway: number; color: string; life: number }[] = [];
   let coasters: Coaster[] = [];
   let breakdowns: RideBreakdown[] = [];
   let surge: Surge | null = null;
-  // The table best when this run started, so beating it is announced once.
-  let runStartRecord = 0;
-  let recordCelebrated = false;
   // A drafted segment's `dir` and `kind` are placeholders until the *next*
   // tap fixes them (see handleTrackTap) — trackClosed flips true once the
   // closing tap sets the last segment's dir back to the start tile.
@@ -466,10 +469,9 @@ export function initParkGame(): void {
    */
   let draftSteps: { headKind: SegmentKind }[] = [];
   const board = initScoreboard(document.getElementById('highscores'));
-  // The record readout shows the table's best, beaten live by the current run.
-  let record = board.top()?.score ?? 0;
 
-  recordEl.textContent = record.toString();
+  // The record readout shows the table's best, beaten live by the current run.
+  recordEl.textContent = board.best().toString();
 
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
@@ -482,16 +484,7 @@ export function initParkGame(): void {
     const p = projectWorld(c.x, c.y);
     p.y -= heights[tile] * TERRAIN_STEP;
     const buildingHeight = BUILDING_STYLE[tiles[tile]]?.height ?? BLOCK_HEIGHT;
-    floaters.push({ x: p.x, y: p.y - buildingHeight - 6, text, color, life: 1 });
-  }
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2200);
+    fx.floater(p.x, p.y - buildingHeight - 6, text, color);
   }
 
   const treeCount = () => tiles.filter(t => t === 'tree').length;
@@ -1133,11 +1126,7 @@ export function initParkGame(): void {
   function update(dt: number) {
     rotator.update(dt);
     clock += dt;
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 16 * dt;
-      return f.life > 0;
-    });
+    fx.update(dt);
     balloons = balloons.filter(b => {
       b.life -= dt;
       b.y -= 22 * dt;
@@ -1185,15 +1174,11 @@ export function initParkGame(): void {
     }
 
     peakGuests = Math.max(peakGuests, guests.length);
-    if (peakGuests > record) {
-      record = peakGuests;
-      recordEl.textContent = record.toString();
-      // Persist immediately so a mid-run tab close keeps the record.
-      board.stash(peakGuests);
-    }
-    // Beating an established best is worth a fanfare — once per run.
-    if (!recordCelebrated && runStartRecord > 0 && peakGuests > runStartRecord) {
-      recordCelebrated = true;
+    // Banking stashes a grown peak immediately, so a mid-run tab close
+    // keeps the record; beating an established best is worth a fanfare.
+    const { best, newRecord } = board.bank(peakGuests);
+    if (recordEl.textContent !== best.toString()) recordEl.textContent = best.toString();
+    if (newRecord) {
       showToast(`🏅 ${strings.newRecord}`);
       audio.playSfx('score');
     }
@@ -1254,13 +1239,12 @@ export function initParkGame(): void {
     peakGuests = 0;
     rating = parkRating(null, 0);
     speedMult = 1;
-    floaters = [];
+    fx.clear();
     balloons = [];
     coasters = [];
     breakdowns = [];
     surge = null;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     cancelTrackDraft();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     board.hide();
@@ -1933,13 +1917,7 @@ export function initParkGame(): void {
     }
     ctx.globalAlpha = 1;
 
-    ctx.font = 'bold 11px monospace';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.drawFloaters(ctx);
 
     moneyEl.textContent = `£${Math.floor(money)}`;
     guestCountEl.textContent = guests.length.toString();
@@ -2154,7 +2132,7 @@ export function initParkGame(): void {
     hoverTile = -1;
     armedTile = -1;
     // Screen-space effects were projected under the old rotation
-    floaters = [];
+    fx.clear();
     balloons = [];
   });
   document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));

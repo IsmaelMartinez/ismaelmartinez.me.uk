@@ -23,6 +23,8 @@ import {
   createViewRotator,
   createGameAudio,
   wireSoundButton,
+  createToaster,
+  createEffects,
   type IsoView,
   type Rotation
 } from '../engine';
@@ -155,6 +157,7 @@ export function initCityGame(): void {
   const finalMonthsEl = el('final-months');
   const finalPopEl = el('final-pop');
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
   const demandBars: Record<ZoneType, HTMLElement> = {
     res: el('demand-res'),
     com: el('demand-com'),
@@ -234,22 +237,20 @@ export function initCityGame(): void {
   let tornado: Tornado | null = null;
   let shake = 0; // seconds of screen shake left (earthquakes)
   let densityToastShown = false;
-  // The table best when this run started, so beating it is announced once.
-  let runStartRecord = 0;
-  let recordCelebrated = false;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let sparks: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
-  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
+  // Floaters live in the shared effects module; smoke and sparks stay local
+  // (their life*2 alpha ramp and stepped sizes diverge from its draw model).
+  const fx = createEffects({ floaterSize: 10, floaterRise: 14, floaterLife: 1 });
   const board = initScoreboard(document.getElementById('highscores'));
-  // The record readout shows the table's best, beaten live by the current run.
-  let record = board.top()?.score ?? 0;
   let powered = computePowered(tiles);
   let fireCover = computeFireCover(tiles);
   let stats = cityStats(tiles);
   let demand = computeDemand(stats);
 
-  recordEl.textContent = record.toString();
+  // The record readout shows the table's best, beaten live by the current run.
+  recordEl.textContent = board.best().toString();
 
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
@@ -259,7 +260,7 @@ export function initCityGame(): void {
 
   function addFloater(i: number, text: string, color: string) {
     const p = projectWorld((i % CITY_W) + 0.5, Math.floor(i / CITY_W) + 0.5);
-    floaters.push({ x: p.x, y: p.y - buildingHeight(tiles[i]) - 8, text, color, life: 1 });
+    fx.floater(p.x, p.y - buildingHeight(tiles[i]) - 8, text, color);
   }
 
   /** A little celebratory (or calamitous) burst of sparks over a tile. */
@@ -278,15 +279,6 @@ export function initCityGame(): void {
         color
       });
     }
-  }
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2400);
   }
 
   function refreshDerivedState() {
@@ -311,12 +303,11 @@ export function initCityGame(): void {
     tornado = null;
     shake = 0;
     densityToastShown = false;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     activeEvents = [];
     smoke = [];
     sparks = [];
-    floaters = [];
+    fx.clear();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     refreshDerivedState();
     board.hide();
@@ -337,11 +328,7 @@ export function initCityGame(): void {
   function update(dt: number) {
     rotator.update(dt);
 
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 14 * dt;
-      return f.life > 0;
-    });
+    fx.update(dt);
     if (shake > 0) shake = Math.max(0, shake - dt);
     smoke = smoke.filter(s => {
       s.life -= dt;
@@ -440,15 +427,11 @@ export function initCityGame(): void {
       }
 
       peakPop = Math.max(peakPop, stats.population);
-      if (peakPop > record) {
-        record = peakPop;
-        recordEl.textContent = record.toString();
-        // Persist immediately so a mid-run tab close keeps the record.
-        board.stash(peakPop);
-      }
-      // Beating an established best is worth a fanfare — once per run.
-      if (!recordCelebrated && runStartRecord > 0 && peakPop > runStartRecord) {
-        recordCelebrated = true;
+      // Banking stashes a grown peak immediately, so a mid-run tab close
+      // keeps the record; beating an established best is worth a fanfare.
+      const { best, newRecord } = board.bank(peakPop);
+      if (recordEl.textContent !== best.toString()) recordEl.textContent = best.toString();
+      if (newRecord) {
         showToast(`🏅 ${strings.newRecord}`);
         audio.playSfx('score');
       }
@@ -1137,13 +1120,7 @@ export function initCityGame(): void {
       strokeTile(ctx, VIEW, v.x, v.y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
 
-    ctx.font = 'bold 10px monospace';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.drawFloaters(ctx);
     ctx.restore(); // end earthquake shake
 
     moneyEl.textContent = `£${Math.floor(money)}`;
@@ -1236,7 +1213,7 @@ export function initCityGame(): void {
     // Screen-space particles were projected under the old rotation
     smoke = [];
     sparks = [];
-    floaters = [];
+    fx.clear();
   });
   document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));

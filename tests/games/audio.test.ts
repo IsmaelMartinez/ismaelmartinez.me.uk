@@ -205,6 +205,27 @@ describe('setTempo', () => {
     expect(noteLength(ctx, 0)).toBeCloseTo(0.47);
     audio.stop();
   });
+
+  it('clamps an absurdly large tempo so scheduling work stays bounded', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+    // 1e6 bpm would schedule ~1,600 notes per 100ms lookahead window; the
+    // clamp (1000 bpm) keeps a whole beat at 60ms → 0.054 + 0.02 stop pad.
+    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 1e6 });
+    audio.start();
+    expect(noteLength(ctx, 0)).toBeCloseTo(0.074);
+
+    const before = ctx.createOscillator.mock.calls.length;
+    audio.setTempo(1e9); // clamped too, not ignored
+    expect(before).toBeLessThan(10);
+    audio.stop();
+  });
 });
 
 describe('navigation teardown via Astro ClientRouter', () => {

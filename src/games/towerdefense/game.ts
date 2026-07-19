@@ -26,6 +26,8 @@ import {
   chebyshev,
   createGameAudio,
   wireSoundButton,
+  createToaster,
+  createEffects,
   type IsoView,
   hash01 as hash
 } from '../engine';
@@ -89,27 +91,6 @@ interface Ring {
   life: number;
 }
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-  color: string;
-  gravity: number;
-  glow: boolean;
-}
-
-interface Floater {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  life: number;
-}
-
 interface Scenery {
   kind: 'pine' | 'rock' | 'bush';
   /** Deterministic 0–1 variation roll. */
@@ -151,6 +132,7 @@ export function initTowerDefenseGame(): void {
   const upgradeBtn = el('upgrade-btn') as HTMLButtonElement;
   const towerInfoEl = el('tower-info');
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.tower-tool'));
 
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
@@ -323,8 +305,18 @@ export function initTowerDefenseGame(): void {
   let clock = 0;
   let shots: Shot[] = [];
   let rings: Ring[] = [];
-  let particles: Particle[] = [];
-  let floaters: Floater[] = [];
+  const fx = createEffects({
+    gravityScale: 130,
+    // Downward velocities squashed for the isometric battlefield.
+    vySquash: 0.55,
+    launchKick: 25,
+    burstSpeed: 60,
+    burstSize: 1.6,
+    glowBlur: 4,
+    floaterSize: 11,
+    floaterRise: 16,
+    floaterLife: 1.1
+  });
   /** Seconds left on the "WAVE N" banner splash. */
   let bannerTimer = 0;
   let bannerText = '';
@@ -332,10 +324,7 @@ export function initTowerDefenseGame(): void {
   let keepFlash = 0;
 
   const board = initScoreboard(document.getElementById('highscores'));
-  let record = board.top()?.score ?? 0;
-  let runStartRecord = 0;
-  let recordCelebrated = false;
-  recordEl.textContent = `${record}`;
+  recordEl.textContent = `${board.best()}`;
 
   // A brisk minor-key march — drums to hold a line to.
   const audio = createGameAudio({
@@ -359,52 +348,18 @@ export function initTowerDefenseGame(): void {
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
 
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2400);
-  }
-
   function addFloater(tx: number, ty: number, text: string, color: string) {
     const p = isoProject(VIEW, tx, ty);
-    floaters.push({ x: p.x, y: p.y - 24, text, color, life: 1.1 });
+    fx.floater(p.x, p.y - 24, text, color);
   }
 
-  function spawnBurst(
-    sx: number,
-    sy: number,
-    count: number,
-    color: string,
-    opts: { speed?: number; life?: number; size?: number; gravity?: number; glow?: boolean } = {}
-  ) {
-    const speed = opts.speed ?? 60;
-    for (let n = 0; n < count; n++) {
-      const a = Math.random() * Math.PI * 2;
-      const v = speed * (0.4 + Math.random() * 0.6);
-      particles.push({
-        x: sx,
-        y: sy,
-        vx: Math.cos(a) * v,
-        vy: Math.sin(a) * v * 0.55 - (opts.gravity ? 25 : 0),
-        life: opts.life ?? 0.5,
-        maxLife: opts.life ?? 0.5,
-        size: opts.size ?? 1.6,
-        color,
-        gravity: opts.gravity ?? 0,
-        glow: opts.glow ?? false
-      });
-    }
-  }
+  const spawnBurst = fx.burst;
 
-  /** Announces (once per run) that the score beat the table's best. */
-  function celebrateRecord() {
-    if (recordCelebrated || runStartRecord <= 0) return;
-    if (score(eco) <= runStartRecord) return;
-    recordCelebrated = true;
-    showToast(`🏅 ${strings.newRecord}`);
+  /** Banks the run's score; announces (once per run) a beaten table best. */
+  function bankScore() {
+    const { best, newRecord } = board.bank(score(eco));
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+    recordEl.textContent = `${best}`;
   }
 
   function towerAt(tile: number): Tower | null {
@@ -422,12 +377,10 @@ export function initTowerDefenseGame(): void {
     selectedTool = 'bolt';
     shots = [];
     rings = [];
-    particles = [];
-    floaters = [];
+    fx.clear();
     bannerTimer = 0;
     keepFlash = 0;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     phase = 'build';
     audio.start();
     refreshToolbar();
@@ -446,9 +399,7 @@ export function initTowerDefenseGame(): void {
     selectedTower = null;
     audio.playSfx('gameover');
     audio.stop();
-    celebrateRecord();
-    record = Math.max(record, score(eco));
-    recordEl.textContent = `${record}`;
+    bankScore();
     overIcon.textContent = victory ? '🏆' : '💥';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
     overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
@@ -460,12 +411,9 @@ export function initTowerDefenseGame(): void {
 
   function waveCleared() {
     const interest = clearWave(eco);
-    celebrateRecord();
-    record = Math.max(record, score(eco));
-    recordEl.textContent = `${record}`;
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
-    board.stash(score(eco));
+    bankScore();
     const gp = routePosition(map.route, routeLast);
     addFloater(gp.x, gp.y - 1, `+${interest} ${strings.interest}`, '#4ade80');
     showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);
@@ -483,23 +431,12 @@ export function initTowerDefenseGame(): void {
     clock += dt;
     bannerTimer = Math.max(0, bannerTimer - dt);
     keepFlash = Math.max(0, keepFlash - dt);
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 16 * dt;
-      return f.life > 0;
-    });
+    fx.update(dt);
     shots = shots.filter(shot => (shot.life -= dt) > 0);
     rings = rings.filter(ring => {
       ring.life -= dt;
       ring.r = ring.maxR * (1 - Math.max(0, ring.life) / 0.3);
       return ring.life > 0;
-    });
-    particles = particles.filter(part => {
-      part.life -= dt;
-      part.x += part.vx * dt;
-      part.y += part.vy * dt;
-      part.vy += part.gravity * 130 * dt;
-      return part.life > 0;
     });
     if (phase !== 'build' && phase !== 'wave') return;
 
@@ -1154,32 +1091,7 @@ export function initTowerDefenseGame(): void {
       ctx.stroke();
     }
 
-    for (const part of particles) {
-      const a = Math.max(0, part.life / part.maxLife);
-      ctx.globalAlpha = a;
-      if (part.glow) {
-        ctx.save();
-        ctx.shadowColor = part.color;
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = part.color;
-        ctx.beginPath();
-        ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.fillStyle = part.color;
-        ctx.fillRect(part.x - part.size, part.y - part.size, part.size * 2, part.size * 2);
-      }
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.font = 'bold 11px monospace';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.draw(ctx);
 
     // "WAVE N" splash banner.
     if (bannerTimer > 0) {

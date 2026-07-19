@@ -41,6 +41,61 @@ export interface Scoreboard {
   stash(score: number): void;
   /** Current #1 entry, for "best" HUD readouts. */
   top(): ScoreEntry | null;
+  /**
+   * Snapshot the current best as the starting run's baseline and re-arm the
+   * one-time record celebration. Call from the game's startRun.
+   */
+  beginRun(): void;
+  /**
+   * Bank a run's score as it grows: stash it (a closed tab keeps it), fold
+   * it into the tracked best, and report whether the run just beat its
+   * baseline. `best` drives the HUD "Best" readout; `newRecord` is true
+   * exactly once per run — never for a zero baseline, since a first-ever
+   * score is not a beaten record — and drives the one-time record toast.
+   */
+  bank(score: number): RunRecordBank;
+  /** Stash-aware current best, for init-time HUD seeding. */
+  best(): number;
+}
+
+export interface RunRecordBank {
+  best: number;
+  newRecord: boolean;
+}
+
+/**
+ * Pure run-record state machine behind `beginRun`/`bank`/`best`, kept
+ * separate from the DOM wiring so it can be unit-tested. `stash` is only
+ * invoked when the run's own best grows (stashing a non-improved score is
+ * a no-op anyway, and the guard spares a table load per bank call).
+ */
+export function createRunRecord(
+  initialBest: number,
+  stash: (score: number) => void
+): Pick<Scoreboard, 'beginRun' | 'bank' | 'best'> {
+  let best = initialBest;
+  let baseline = 0;
+  // Armed by beginRun; banking before the first run never celebrates.
+  let celebrated = true;
+  let runBest = 0;
+  return {
+    beginRun() {
+      baseline = best;
+      celebrated = false;
+      runBest = 0;
+    },
+    bank(score: number): RunRecordBank {
+      if (score > runBest) {
+        runBest = score;
+        stash(score);
+      }
+      if (score > best) best = score;
+      const newRecord = !celebrated && baseline > 0 && score > baseline;
+      if (newRecord) celebrated = true;
+      return { best, newRecord };
+    },
+    best: () => best
+  };
 }
 
 export interface ScoreboardOptions {
@@ -55,7 +110,13 @@ export function initScoreboard(
   // Games stay functional if the panel (or its table identity) is missing.
   const gameId = panel?.dataset.hsGame;
   if (!panel || !gameId) {
-    return { show() {}, hide() {}, stash() {}, top: () => null };
+    return {
+      show() {},
+      hide() {},
+      stash() {},
+      top: () => null,
+      ...createRunRecord(0, () => {})
+    };
   }
 
   const form = panel.querySelector<HTMLFormElement>('.hs-entry');
@@ -148,15 +209,18 @@ export function initScoreboard(
   window.addEventListener('pagehide', commitPending);
   document.addEventListener('astro:before-swap', onSwap);
 
+  function stash(score: number) {
+    if (stashed !== null && score <= stashed.score) return;
+    const table = unstash(loadTable(gameId!));
+    if (!qualifies(table, score)) return;
+    const initials = loadInitials();
+    saveTable(gameId!, insertScore(table, initials, score).table);
+    stashed = { initials, score };
+  }
+
   return {
-    stash(score: number) {
-      if (stashed !== null && score <= stashed.score) return;
-      const table = unstash(loadTable(gameId!));
-      if (!qualifies(table, score)) return;
-      const initials = loadInitials();
-      saveTable(gameId!, insertScore(table, initials, score).table);
-      stashed = { initials, score };
-    },
+    stash,
+    ...createRunRecord(topEntry(gameId)?.score ?? 0, stash),
     show(score: number) {
       pendingScore = null;
       panel.hidden = false;

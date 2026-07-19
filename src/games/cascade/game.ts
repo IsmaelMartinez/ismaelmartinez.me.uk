@@ -19,6 +19,8 @@ import {
   shadeColor,
   createGameAudio,
   wireSoundButton,
+  createToaster,
+  createEffects,
   hash01 as hash
 } from '../engine';
 import { WELL_W, WELL_H } from './well';
@@ -83,29 +85,6 @@ const BASE_TEMPO = 126;
 const TEMPO_PER_LEVEL = 9;
 const MAX_TEMPO = 240;
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-  color: string;
-  gravity: number;
-  glow: boolean;
-}
-
-interface Floater {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  life: number;
-  /** Font px; big popups announce chains and level-ups. */
-  size: number;
-}
-
 type Phase = 'idle' | 'play' | 'over';
 
 export function initCascadeGame(): void {
@@ -132,6 +111,7 @@ export function initCascadeGame(): void {
   const levelEl = el('level');
   const recordEl = el('record');
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
 
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
   const strings = {
@@ -296,8 +276,16 @@ export function initCascadeGame(): void {
   let phase: Phase = 'idle';
   let run: CascadeRun = createRun(Math.random);
   let clock = 0;
-  let particles: Particle[] = [];
-  let floaters: Floater[] = [];
+  const fx = createEffects({
+    gravityScale: 260,
+    launchKick: 40,
+    burstSpeed: 70,
+    burstSize: 2,
+    glowBlur: 5,
+    floaterSize: 13,
+    floaterRise: 22,
+    floaterLife: 1.1
+  });
   /** Seconds left on the big centre banner (level-ups). */
   let bannerTimer = 0;
   let bannerText = '';
@@ -308,10 +296,7 @@ export function initCascadeGame(): void {
   const hud = { score: -1, lines: -1, level: -1 };
 
   const board = initScoreboard(document.getElementById('highscores'));
-  let record = board.top()?.score ?? 0;
-  let runStartRecord = 0;
-  let recordCelebrated = false;
-  recordEl.textContent = `${record}`;
+  recordEl.textContent = `${board.best()}`;
 
   // A driving minor-key loop that setTempo() winds up level by level.
   const audio = createGameAudio({
@@ -339,64 +324,23 @@ export function initCascadeGame(): void {
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
 
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.firstElementChild?.remove();
-    setTimeout(() => toast.remove(), 2400);
-  }
-
   const cellPx = (cx: number, cy: number) => ({
     x: WELL_X + cx * TILE,
     y: WELL_Y + cy * TILE
   });
 
-  function spawnBurst(
-    sx: number,
-    sy: number,
-    count: number,
-    color: string,
-    opts: { speed?: number; life?: number; size?: number; gravity?: number; glow?: boolean } = {}
-  ) {
-    const speed = opts.speed ?? 70;
-    for (let n = 0; n < count; n++) {
-      const a = Math.random() * Math.PI * 2;
-      const v = speed * (0.4 + Math.random() * 0.6);
-      particles.push({
-        x: sx,
-        y: sy,
-        vx: Math.cos(a) * v,
-        vy: Math.sin(a) * v - (opts.gravity ? 40 : 0),
-        life: opts.life ?? 0.5,
-        maxLife: opts.life ?? 0.5,
-        size: opts.size ?? 2,
-        color,
-        gravity: opts.gravity ?? 0,
-        glow: opts.glow ?? false
-      });
-    }
-  }
+  const spawnBurst = fx.burst;
 
   function addFloater(x: number, y: number, text: string, color: string, size = 13) {
-    floaters.push({ x, y, text, color, life: size > 13 ? 1.5 : 1.1, size });
+    // Big popups (chains, level-ups) linger longer, drift slower, and glow.
+    fx.floater(x, y, text, color, size > 13 ? { size, life: 1.5, rise: 10, glow: true } : {});
   }
 
-  /** Announces (once per run) that the score beat the table's best. */
-  function celebrateRecord() {
-    if (recordCelebrated || runStartRecord <= 0) return;
-    if (run.score <= runStartRecord) return;
-    recordCelebrated = true;
-    showToast(`🏅 ${strings.newRecord}`);
-  }
-
-  /** Celebrates, banks the run's best into the HUD, and stashes it. */
+  /** Banks the run's score; announces (once per run) a beaten table best. */
   function bankScore() {
-    celebrateRecord();
-    board.stash(run.score);
-    record = Math.max(record, run.score);
-    recordEl.textContent = `${record}`;
+    const { best, newRecord } = board.bank(run.score);
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+    recordEl.textContent = `${best}`;
   }
 
   function applyTempo() {
@@ -405,13 +349,11 @@ export function initCascadeGame(): void {
 
   function startRun() {
     run = createRun(Math.random);
-    particles = [];
-    floaters = [];
+    fx.clear();
     bannerTimer = 0;
     chainGlow = 0;
     chainGlowTimer = 0;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     held.left = held.right = false;
     dasDir = 0;
     phase = 'play';
@@ -652,18 +594,7 @@ export function initCascadeGame(): void {
     bannerTimer = Math.max(0, bannerTimer - dt);
     chainGlowTimer = Math.max(0, chainGlowTimer - dt);
     if (chainGlowTimer === 0 && run.phase !== 'clearing') chainGlow = 0;
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= (f.size > 13 ? 10 : 22) * dt;
-      return f.life > 0;
-    });
-    particles = particles.filter(part => {
-      part.life -= dt;
-      part.x += part.vx * dt;
-      part.y += part.vy * dt;
-      part.vy += part.gravity * 260 * dt;
-      return part.life > 0;
-    });
+    fx.update(dt);
     if (phase !== 'play') return;
 
     // Delayed auto-shift while a direction is held.
@@ -833,40 +764,7 @@ export function initCascadeGame(): void {
     drawNextPreview();
     drawChainLamps();
 
-    for (const part of particles) {
-      ctx.globalAlpha = Math.max(0, part.life / part.maxLife);
-      if (part.glow) {
-        ctx.save();
-        ctx.shadowColor = part.color;
-        ctx.shadowBlur = 5;
-        ctx.fillStyle = part.color;
-        ctx.beginPath();
-        ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.fillStyle = part.color;
-        ctx.fillRect(part.x - part.size, part.y - part.size, part.size * 2, part.size * 2);
-      }
-    }
-    ctx.globalAlpha = 1;
-
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.font = `bold ${f.size}px monospace`;
-      if (f.size > 13) {
-        ctx.save();
-        ctx.shadowColor = f.color;
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = f.color;
-        ctx.fillText(f.text, f.x, f.y);
-        ctx.restore();
-      } else {
-        ctx.fillStyle = f.color;
-        ctx.fillText(f.text, f.x, f.y);
-      }
-    }
-    ctx.globalAlpha = 1;
+    fx.draw(ctx);
 
     if (bannerTimer > 0) {
       const a = Math.min(1, bannerTimer / 0.4) * Math.min(1, (1.6 - bannerTimer) / 0.25 + 0.2);

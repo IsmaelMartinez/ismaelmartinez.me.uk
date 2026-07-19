@@ -1,7 +1,14 @@
 # Arcade Art-Definition Round
 
 Date: 2026-07-19
-Status: Planned.
+Status: Done — all five phases landed 2026-07-19, one commit per game.
+Notes from execution: the shadeColor fix (engine/iso.ts now accepts its own
+rgb() output) also cured zone-tinted hills rendering pure black in Pixel
+Park. Syndicate additionally gained a baked ground layer (roads, lamps,
+pavement) and batched window drawing; its measured per-frame cost in
+headless CPU rasterization is ~2ms over main (28.3 → 30.2ms) for the
+framed-window/storefront detail — GPU browsers absorb it. Every other
+cabinet measured identical to main (vsync-locked).
 
 ## Why
 

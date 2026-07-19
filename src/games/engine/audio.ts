@@ -80,14 +80,25 @@ function getAudioContextCtor(): AudioCtor | null {
   return w.AudioContext || w.webkitAudioContext || null;
 }
 
+/**
+ * Tempo ceiling. Beyond this, note durations get so short that
+ * scheduleAhead's ~100ms lookahead loop has to schedule thousands of notes
+ * per tick, which can freeze the tab. No cabinet plays above 240 bpm.
+ */
+const MAX_BPM = 1000;
+
 export function createGameAudio(options: GameAudioOptions): GameAudio {
   const wave = options.wave ?? 'square';
   const volume = options.volume ?? 0.14;
-  // Same finite-positive rule as setTempo: a 0/NaN/Infinity tempo would give
-  // scheduleAhead zero-length notes and a non-terminating lookahead loop.
+  // Same finite-positive-bounded rule as setTempo: a 0/NaN/Infinity tempo
+  // would give scheduleAhead zero-length notes and a non-terminating
+  // lookahead loop.
   const requestedTempo = options.tempo ?? 120;
   let secondsPerBeat =
-    60 / (Number.isFinite(requestedTempo) && requestedTempo > 0 ? requestedTempo : 120);
+    60 /
+    (Number.isFinite(requestedTempo) && requestedTempo > 0
+      ? Math.min(requestedTempo, MAX_BPM)
+      : 120);
 
   let muted = loadMuted();
   let running = false;
@@ -299,9 +310,10 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     setMuted,
     playSfx,
     setTempo(bpm: number) {
-      // Finite-positive only: Infinity would zero secondsPerBeat and spin
-      // scheduleAhead's lookahead loop forever.
-      if (Number.isFinite(bpm) && bpm > 0) secondsPerBeat = 60 / bpm;
+      // Finite-positive only, capped at MAX_BPM: Infinity would zero
+      // secondsPerBeat and spin scheduleAhead's lookahead loop forever, and
+      // a huge finite bpm would flood it with near-zero-length notes.
+      if (Number.isFinite(bpm) && bpm > 0) secondsPerBeat = 60 / Math.min(bpm, MAX_BPM);
     },
     dispose
   };

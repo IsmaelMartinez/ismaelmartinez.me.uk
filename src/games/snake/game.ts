@@ -164,6 +164,9 @@ export function initSnakeGame(): void {
     overlay.style.display = 'none';
     gameOverOverlay.style.display = 'none';
     board.hide();
+    // Snake ignores bank()'s newRecord (no record toast here), but the
+    // per-run baseline still has to reset for its stash gate to work.
+    board.beginRun();
     audio.start();
   }
 

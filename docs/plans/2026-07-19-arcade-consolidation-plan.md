@@ -1,7 +1,13 @@
 # Arcade Consolidation & Quality Round
 
 Date: 2026-07-19
-Status: Proposed — approved direction ("quality over quantity"), not yet started.
+Status: Done — all phases landed 2026-07-19. Phase 1a (toast), 1b
+(scoreboard record API), 1c (effects: cascade, towerdefense, syndicate,
+snake, tanks, city, park migrated; Critter Rescue stays local with the
+divergence noted; Snake and Tank Duel keep bespoke spawn math via
+`emit()`), Phase 2 (shelves), Phase 3 (Poo Poo Land retired). 1d
+(padButtons) skipped as planned. Queue returns to
+`2026-07-18-arcade-candidates-3.md`.
 Supersedes (parks) the candidates queue in `2026-07-18-arcade-candidates-3.md`:
 the next arcade session is this consolidation, not a tenth cabinet.
 

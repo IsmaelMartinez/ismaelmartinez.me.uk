@@ -25,6 +25,7 @@ import {
   createGameAudio,
   wireSoundButton,
   createToaster,
+  createEffects,
   type IsoView,
   type Rotation
 } from '../engine';
@@ -444,7 +445,9 @@ export function initParkGame(): void {
   let hoverCachePlaceable = false;
   let hoverCacheCost = 0;
   let clock = 0;
-  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
+  // Floaters live in the shared effects module; balloons stay local (their
+  // sway drift has no analogue in its physics).
+  const fx = createEffects({ floaterSize: 11, floaterRise: 16, floaterLife: 1 });
   let balloons: { x: number; y: number; sway: number; color: string; life: number }[] = [];
   let coasters: Coaster[] = [];
   let breakdowns: RideBreakdown[] = [];
@@ -481,7 +484,7 @@ export function initParkGame(): void {
     const p = projectWorld(c.x, c.y);
     p.y -= heights[tile] * TERRAIN_STEP;
     const buildingHeight = BUILDING_STYLE[tiles[tile]]?.height ?? BLOCK_HEIGHT;
-    floaters.push({ x: p.x, y: p.y - buildingHeight - 6, text, color, life: 1 });
+    fx.floater(p.x, p.y - buildingHeight - 6, text, color);
   }
 
   const treeCount = () => tiles.filter(t => t === 'tree').length;
@@ -1123,11 +1126,7 @@ export function initParkGame(): void {
   function update(dt: number) {
     rotator.update(dt);
     clock += dt;
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 16 * dt;
-      return f.life > 0;
-    });
+    fx.update(dt);
     balloons = balloons.filter(b => {
       b.life -= dt;
       b.y -= 22 * dt;
@@ -1240,7 +1239,7 @@ export function initParkGame(): void {
     peakGuests = 0;
     rating = parkRating(null, 0);
     speedMult = 1;
-    floaters = [];
+    fx.clear();
     balloons = [];
     coasters = [];
     breakdowns = [];
@@ -1918,13 +1917,7 @@ export function initParkGame(): void {
     }
     ctx.globalAlpha = 1;
 
-    ctx.font = 'bold 11px monospace';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.drawFloaters(ctx);
 
     moneyEl.textContent = `£${Math.floor(money)}`;
     guestCountEl.textContent = guests.length.toString();
@@ -2139,7 +2132,7 @@ export function initParkGame(): void {
     hoverTile = -1;
     armedTile = -1;
     // Screen-space effects were projected under the old rotation
-    floaters = [];
+    fx.clear();
     balloons = [];
   });
   document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));

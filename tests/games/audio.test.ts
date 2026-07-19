@@ -189,6 +189,22 @@ describe('setTempo', () => {
     audio.stop();
     vi.useRealTimers();
   });
+
+  it('sanitises a non-finite constructor tempo to the 120 bpm default', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: Infinity });
+    audio.start(); // must not spin the lookahead loop
+    // One beat at the sanitised 120 bpm default = 0.5s → 0.45 + 0.02 pad.
+    expect(noteLength(ctx, 0)).toBeCloseTo(0.47);
+    audio.stop();
+  });
 });
 
 describe('navigation teardown via Astro ClientRouter', () => {

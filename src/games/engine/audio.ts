@@ -83,7 +83,11 @@ function getAudioContextCtor(): AudioCtor | null {
 export function createGameAudio(options: GameAudioOptions): GameAudio {
   const wave = options.wave ?? 'square';
   const volume = options.volume ?? 0.14;
-  let secondsPerBeat = 60 / (options.tempo ?? 120);
+  // Same finite-positive rule as setTempo: a 0/NaN/Infinity tempo would give
+  // scheduleAhead zero-length notes and a non-terminating lookahead loop.
+  const requestedTempo = options.tempo ?? 120;
+  let secondsPerBeat =
+    60 / (Number.isFinite(requestedTempo) && requestedTempo > 0 ? requestedTempo : 120);
 
   let muted = loadMuted();
   let running = false;

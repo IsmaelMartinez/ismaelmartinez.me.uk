@@ -1,9 +1,15 @@
 # Arcade Candidates, Round 3: After Line Hold and Cascade
 
 Date: 2026-07-18
-Status: Proposed — design only, no code. This doc queues the arcade's next
-cabinet now that both games built from `2026-07-12-next-arcade-game-design.md`
-(Line Hold, then Cascade) have shipped.
+Status: Parked (2026-07-19) — the owner chose quality over quantity: the next
+arcade session is the consolidation round in
+`2026-07-19-arcade-consolidation-plan.md`, not a tenth cabinet. Revisit this
+queue after that round lands.
+
+Originally: Proposed — design only, no code. This doc queues the arcade's
+next cabinet now that both games built from
+`2026-07-12-next-arcade-game-design.md` (Line Hold, then Cascade) have
+shipped.
 
 ## Context
 

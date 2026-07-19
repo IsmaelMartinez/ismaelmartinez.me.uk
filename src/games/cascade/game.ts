@@ -344,7 +344,7 @@ export function initCascadeGame(): void {
     toast.className = 'toast';
     toast.textContent = text;
     toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
+    while (toastArea.children.length > 3) toastArea.firstElementChild?.remove();
     setTimeout(() => toast.remove(), 2400);
   }
 
@@ -631,10 +631,12 @@ export function initCascadeGame(): void {
     () => phase === 'play' && setSoftDrop(run, true),
     () => setSoftDrop(run, false),
     () => {
-      // One keyboard activation = a short soft-drop pulse.
+      // One keyboard activation = a short soft-drop pulse. Capture the run
+      // so the delayed release can't touch a successor run's state.
       if (phase !== 'play') return;
-      setSoftDrop(run, true);
-      setTimeout(() => setSoftDrop(run, false), 150);
+      const target = run;
+      setSoftDrop(target, true);
+      setTimeout(() => setSoftDrop(target, false), 150);
     }
   );
   wireHoldButton('btn-rotate', () => doRotate(1));

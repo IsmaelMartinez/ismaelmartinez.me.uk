@@ -34,7 +34,7 @@ export const LOCK_DELAY = 0.5;
 export const MAX_LOCK_RESETS = 15;
 /** Seconds each chain link's rows stay lit before the landslide. */
 export const CLEAR_TIME = 0.32;
-/** Rows per soft-drop step — much faster than any level's gravity. */
+/** Seconds per row while soft-dropping — much faster than any level's gravity. */
 export const SOFT_DROP_INTERVAL = 0.04;
 export const LINES_PER_LEVEL = 10;
 
@@ -171,7 +171,8 @@ function spawnNext(run: CascadeRun, events: RunEvent[]): void {
 }
 
 function lockNow(run: CascadeRun, events: RunEvent[]): void {
-  const piece = run.piece!;
+  if (!run.piece) return;
+  const piece = run.piece;
   let above = false;
   for (const c of cellsOf(piece)) {
     if (c.y < 0) {

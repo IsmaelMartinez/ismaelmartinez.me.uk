@@ -142,6 +142,71 @@ describe('createGameAudio with a stubbed AudioContext', () => {
   });
 });
 
+describe('setTempo', () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  /** Scheduled length of the nth note: osc.stop time minus osc.start time. */
+  function noteLength(ctx: ReturnType<typeof makeFakeContext>, n: number): number {
+    const osc = ctx.createOscillator.mock.results[n].value;
+    return osc.stop.mock.calls[0][0] - osc.start.mock.calls[0][0];
+  }
+
+  it('changes the duration of subsequently scheduled notes and rejects junk', () => {
+    vi.useFakeTimers();
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    // One whole-beat note at 60 bpm = 1s; playTone trims to 0.9 + 0.02 stop pad.
+    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 60 });
+    audio.start();
+    expect(noteLength(ctx, 0)).toBeCloseTo(0.92);
+
+    // Double the tempo: the next scheduled note is half as long.
+    audio.setTempo(120);
+    ctx.currentTime = 1.0; // first note ended at 1.05; lookahead window reaches it
+    vi.advanceTimersByTime(25);
+    expect(ctx.createOscillator.mock.results.length).toBeGreaterThan(1);
+    expect(noteLength(ctx, 1)).toBeCloseTo(0.47);
+
+    // Zero, negative, NaN, and Infinity must all be ignored — Infinity
+    // would zero the beat length and spin the scheduler loop forever.
+    audio.setTempo(0);
+    audio.setTempo(-30);
+    audio.setTempo(NaN);
+    audio.setTempo(Infinity);
+    ctx.currentTime = 1.6; // next note due at 1.55
+    vi.advanceTimersByTime(25);
+    expect(noteLength(ctx, 2)).toBeCloseTo(0.47);
+
+    audio.stop();
+    vi.useRealTimers();
+  });
+
+  it('sanitises a non-finite constructor tempo to the 120 bpm default', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: Infinity });
+    audio.start(); // must not spin the lookahead loop
+    // One beat at the sanitised 120 bpm default = 0.5s → 0.45 + 0.02 pad.
+    expect(noteLength(ctx, 0)).toBeCloseTo(0.47);
+    audio.stop();
+  });
+});
+
 describe('navigation teardown via Astro ClientRouter', () => {
   beforeEach(() => {
     installLocalStorage();

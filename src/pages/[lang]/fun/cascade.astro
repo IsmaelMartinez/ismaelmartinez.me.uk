@@ -1,0 +1,327 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import { useTranslations, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+---
+
+<Layout title="Cascade" lang={lang}>
+  <section class="cascade-section">
+    <div class="container">
+      <div
+        class="game-container"
+        id="cascade-root"
+        data-t-title={t('fun.cascade.title')}
+        data-t-next={t('fun.cascade.next')}
+        data-t-chain={t('fun.cascade.chain')}
+        data-t-level-up={t('fun.cascade.levelUp')}
+        data-t-new-record={t('fun.cascade.newRecord')}
+      >
+        <div class="game-header">
+          <h1><span class="cascade-emoji">🧱</span> {t('fun.cascade.title')}</h1>
+          <button
+            id="sound-btn"
+            class="btn sound-btn"
+            aria-label={t('fun.arcade.soundOn')}
+            data-sound-on={t('fun.arcade.soundOn')}
+            data-sound-off={t('fun.arcade.soundOff')}
+          >🔊</button>
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label">{t('fun.cascade.score')}</span>
+              <span id="score" class="score-value">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.cascade.lines')}</span>
+              <span id="lines" class="score-value lines">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.cascade.level')}</span>
+              <span id="level" class="score-value level">1</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.cascade.record')}</span>
+              <span id="record" class="score-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-area">
+          <canvas id="game-canvas"></canvas>
+          <div id="toast-area" class="toast-area"></div>
+
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">🧱</span>
+              <h2>{t('fun.cascade.title')}</h2>
+              <p class="instructions">{t('fun.cascade.instructions')}</p>
+              <button id="start-btn" class="btn btn-primary btn-large">
+                {t('fun.cascade.start')}
+              </button>
+            </div>
+          </div>
+
+          <div id="over-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span class="play-icon">🌋</span>
+              <h2>{t('fun.cascade.gameOver')}</h2>
+              <p>{t('fun.cascade.gameOverDesc')}</p>
+              <p class="final-stats">
+                {t('fun.cascade.finalScore')}: <strong id="final-score">0</strong>
+              </p>
+              <HighScoreTable gameId="cascade" lang={lang} accent="#a855f7" />
+              <button id="again-btn" class="btn btn-primary btn-large">
+                {t('fun.cascade.playAgain')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pad">
+          <button id="btn-left" class="pad-btn" aria-label={t('fun.cascade.moveLeft')}>◀</button>
+          <button id="btn-down" class="pad-btn" aria-label={t('fun.cascade.softDrop')}>▼</button>
+          <button id="btn-right" class="pad-btn" aria-label={t('fun.cascade.moveRight')}>▶</button>
+          <button id="btn-rotate" class="pad-btn pad-action" aria-label={t('fun.cascade.rotate')}>⟳</button>
+          <button id="btn-drop" class="pad-btn pad-action" aria-label={t('fun.cascade.hardDrop')}>⤓</button>
+        </div>
+        <p class="hint">{t('fun.cascade.hint')}</p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initCascadeGame no-ops on pages without a fresh root.
+  import { initCascadeGame } from '../../../games/cascade';
+  initCascadeGame();
+  document.addEventListener('astro:after-swap', initCascadeGame);
+</script>
+
+<style>
+  .cascade-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .game-container {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-sm);
+  }
+
+  .game-header h1 {
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+  }
+
+  .cascade-emoji {
+    animation: brickDrop 2.6s ease-in-out infinite;
+  }
+
+  @keyframes brickDrop {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+
+  .scores {
+    display: flex;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .score-item {
+    text-align: center;
+  }
+
+  .score-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .score-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #a855f7;
+  }
+
+  .score-value.lines {
+    color: #22d3ee;
+  }
+
+  .score-value.level {
+    color: #facc15;
+  }
+
+  .game-area {
+    position: relative;
+    background: var(--color-bg-secondary);
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 2px solid var(--color-border);
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 432 / 548;
+    touch-action: manipulation;
+  }
+
+  .toast-area {
+    position: absolute;
+    bottom: var(--space-md);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    pointer-events: none;
+  }
+
+  .toast-area :global(.toast) {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 0.8rem;
+    padding: var(--space-xs) var(--space-md);
+    border-radius: 999px;
+    animation: toastIn 0.2s ease;
+    white-space: nowrap;
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .game-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(4px);
+    z-index: 2;
+  }
+
+  .overlay-content {
+    text-align: center;
+    margin: auto;
+    padding: var(--space-xl);
+    max-width: 460px;
+  }
+
+  .overlay-content h2 {
+    margin: 0 0 var(--space-sm);
+    color: #a855f7;
+  }
+
+  .overlay-content p {
+    margin: 0 0 var(--space-md);
+    color: var(--color-text);
+  }
+
+  .overlay-content .instructions {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .play-icon {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: var(--space-md);
+  }
+
+  .final-stats {
+    font-size: 1.1rem;
+  }
+
+  .final-stats strong {
+    color: #a855f7;
+  }
+
+  .pad {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .pad-btn {
+    min-width: 64px;
+    min-height: 48px;
+    font-size: 1.15rem;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .pad-btn:hover {
+    border-color: #a855f7;
+  }
+
+  .pad-btn:active {
+    background: rgba(168, 85, 247, 0.15);
+    transform: translateY(1px);
+  }
+
+  .pad-action {
+    border-color: rgba(168, 85, 247, 0.5);
+  }
+
+  .hint {
+    margin-top: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  @media (max-width: 600px) {
+    .game-header {
+      justify-content: center;
+      text-align: center;
+    }
+
+    .scores {
+      justify-content: center;
+      gap: var(--space-md);
+    }
+  }
+</style>

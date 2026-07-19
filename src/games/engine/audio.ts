@@ -46,6 +46,12 @@ export interface GameAudio {
   /** Play a one-shot sound effect. No-op when muted or audio is unavailable. */
   playSfx(name: SfxName): void;
   /**
+   * Change the loop's tempo on the fly (already-scheduled notes keep their
+   * old length; the ~100ms lookahead means the shift lands almost at once).
+   * Games whose pace ramps (Cascade's per-level speed-up) lean on this.
+   */
+  setTempo(bpm: number): void;
+  /**
    * Stop the music, drop the lifecycle listeners, and close the AudioContext.
    * Runs automatically when the page navigates away (the site uses Astro's
    * ClientRouter, so leaving a game is a DOM swap rather than a full unload and
@@ -75,10 +81,13 @@ function getAudioContextCtor(): AudioCtor | null {
 }
 
 export function createGameAudio(options: GameAudioOptions): GameAudio {
-  const tempo = options.tempo ?? 120;
   const wave = options.wave ?? 'square';
   const volume = options.volume ?? 0.14;
-  const secondsPerBeat = 60 / tempo;
+  // Same finite-positive rule as setTempo: a 0/NaN/Infinity tempo would give
+  // scheduleAhead zero-length notes and a non-terminating lookahead loop.
+  const requestedTempo = options.tempo ?? 120;
+  let secondsPerBeat =
+    60 / (Number.isFinite(requestedTempo) && requestedTempo > 0 ? requestedTempo : 120);
 
   let muted = loadMuted();
   let running = false;
@@ -289,6 +298,11 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     isMuted: () => muted,
     setMuted,
     playSfx,
+    setTempo(bpm: number) {
+      // Finite-positive only: Infinity would zero secondsPerBeat and spin
+      // scheduleAhead's lookahead loop forever.
+      if (Number.isFinite(bpm) && bpm > 0) secondsPerBeat = 60 / bpm;
+    },
     dispose
   };
 }

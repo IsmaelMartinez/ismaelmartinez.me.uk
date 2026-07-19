@@ -236,22 +236,18 @@ export function initCityGame(): void {
   let tornado: Tornado | null = null;
   let shake = 0; // seconds of screen shake left (earthquakes)
   let densityToastShown = false;
-  // The table best when this run started, so beating it is announced once.
-  let runStartRecord = 0;
-  let recordCelebrated = false;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let sparks: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
   let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
   const board = initScoreboard(document.getElementById('highscores'));
-  // The record readout shows the table's best, beaten live by the current run.
-  let record = board.top()?.score ?? 0;
   let powered = computePowered(tiles);
   let fireCover = computeFireCover(tiles);
   let stats = cityStats(tiles);
   let demand = computeDemand(stats);
 
-  recordEl.textContent = record.toString();
+  // The record readout shows the table's best, beaten live by the current run.
+  recordEl.textContent = board.best().toString();
 
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
@@ -304,8 +300,7 @@ export function initCityGame(): void {
     tornado = null;
     shake = 0;
     densityToastShown = false;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     activeEvents = [];
     smoke = [];
     sparks = [];
@@ -433,15 +428,11 @@ export function initCityGame(): void {
       }
 
       peakPop = Math.max(peakPop, stats.population);
-      if (peakPop > record) {
-        record = peakPop;
-        recordEl.textContent = record.toString();
-        // Persist immediately so a mid-run tab close keeps the record.
-        board.stash(peakPop);
-      }
-      // Beating an established best is worth a fanfare — once per run.
-      if (!recordCelebrated && runStartRecord > 0 && peakPop > runStartRecord) {
-        recordCelebrated = true;
+      // Banking stashes a grown peak immediately, so a mid-run tab close
+      // keeps the record; beating an established best is worth a fanfare.
+      const { best, newRecord } = board.bank(peakPop);
+      if (recordEl.textContent !== best.toString()) recordEl.textContent = best.toString();
+      if (newRecord) {
         showToast(`🏅 ${strings.newRecord}`);
         audio.playSfx('score');
       }

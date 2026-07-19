@@ -310,10 +310,7 @@ export function initCascadeGame(): void {
   const hud = { score: -1, lines: -1, level: -1 };
 
   const board = initScoreboard(document.getElementById('highscores'));
-  let record = board.top()?.score ?? 0;
-  let runStartRecord = 0;
-  let recordCelebrated = false;
-  recordEl.textContent = `${record}`;
+  recordEl.textContent = `${board.best()}`;
 
   // A driving minor-key loop that setTempo() winds up level by level.
   const audio = createGameAudio({
@@ -376,20 +373,11 @@ export function initCascadeGame(): void {
     floaters.push({ x, y, text, color, life: size > 13 ? 1.5 : 1.1, size });
   }
 
-  /** Announces (once per run) that the score beat the table's best. */
-  function celebrateRecord() {
-    if (recordCelebrated || runStartRecord <= 0) return;
-    if (run.score <= runStartRecord) return;
-    recordCelebrated = true;
-    showToast(`🏅 ${strings.newRecord}`);
-  }
-
-  /** Celebrates, banks the run's best into the HUD, and stashes it. */
+  /** Banks the run's score; announces (once per run) a beaten table best. */
   function bankScore() {
-    celebrateRecord();
-    board.stash(run.score);
-    record = Math.max(record, run.score);
-    recordEl.textContent = `${record}`;
+    const { best, newRecord } = board.bank(run.score);
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+    recordEl.textContent = `${best}`;
   }
 
   function applyTempo() {
@@ -403,8 +391,7 @@ export function initCascadeGame(): void {
     bannerTimer = 0;
     chainGlow = 0;
     chainGlowTimer = 0;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     held.left = held.right = false;
     dasDir = 0;
     phase = 'play';

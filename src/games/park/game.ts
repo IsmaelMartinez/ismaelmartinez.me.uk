@@ -449,9 +449,6 @@ export function initParkGame(): void {
   let coasters: Coaster[] = [];
   let breakdowns: RideBreakdown[] = [];
   let surge: Surge | null = null;
-  // The table best when this run started, so beating it is announced once.
-  let runStartRecord = 0;
-  let recordCelebrated = false;
   // A drafted segment's `dir` and `kind` are placeholders until the *next*
   // tap fixes them (see handleTrackTap) — trackClosed flips true once the
   // closing tap sets the last segment's dir back to the start tile.
@@ -469,10 +466,9 @@ export function initParkGame(): void {
    */
   let draftSteps: { headKind: SegmentKind }[] = [];
   const board = initScoreboard(document.getElementById('highscores'));
-  // The record readout shows the table's best, beaten live by the current run.
-  let record = board.top()?.score ?? 0;
 
-  recordEl.textContent = record.toString();
+  // The record readout shows the table's best, beaten live by the current run.
+  recordEl.textContent = board.best().toString();
 
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
@@ -1179,15 +1175,11 @@ export function initParkGame(): void {
     }
 
     peakGuests = Math.max(peakGuests, guests.length);
-    if (peakGuests > record) {
-      record = peakGuests;
-      recordEl.textContent = record.toString();
-      // Persist immediately so a mid-run tab close keeps the record.
-      board.stash(peakGuests);
-    }
-    // Beating an established best is worth a fanfare — once per run.
-    if (!recordCelebrated && runStartRecord > 0 && peakGuests > runStartRecord) {
-      recordCelebrated = true;
+    // Banking stashes a grown peak immediately, so a mid-run tab close
+    // keeps the record; beating an established best is worth a fanfare.
+    const { best, newRecord } = board.bank(peakGuests);
+    if (recordEl.textContent !== best.toString()) recordEl.textContent = best.toString();
+    if (newRecord) {
       showToast(`🏅 ${strings.newRecord}`);
       audio.playSfx('score');
     }
@@ -1253,8 +1245,7 @@ export function initParkGame(): void {
     coasters = [];
     breakdowns = [];
     surge = null;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     cancelTrackDraft();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     board.hide();

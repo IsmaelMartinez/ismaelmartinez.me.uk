@@ -294,7 +294,7 @@ export function initLemmingsGame(): void {
   let levelTicks = 0;
   // Progress lives in its own key; older installs stored it as the table's
   // "score", which loadClearedLevels migrates on first read.
-  let cleared = loadClearedLevels(board.top()?.score ?? 0, LEVELS.length);
+  let cleared = loadClearedLevels(board.best(), LEVELS.length);
 
   bestLevel.textContent = cleared.toString();
 

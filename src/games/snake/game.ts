@@ -119,7 +119,7 @@ export function initSnakeGame(): void {
   let floaters: Floater[] = [];
 
   const syncHighScore = () => {
-    highScoreEl.textContent = (board.top()?.score ?? 0).toString();
+    highScoreEl.textContent = board.best().toString();
   };
   const board = initScoreboard(document.getElementById('highscores'), {
     onSave: syncHighScore
@@ -241,10 +241,11 @@ export function initSnakeGame(): void {
         phase = 'over';
         finalScoreEl.textContent = state.score.toString();
         gameOverOverlay.style.display = 'flex';
+        // The table commits only when initials land, so bank the score and
+        // show the fresh best in the HUD ourselves meanwhile.
+        const { best } = board.bank(state.score);
         board.show(state.score);
-        // The table commits only when initials land, so show the fresh best
-        // in the HUD ourselves meanwhile.
-        highScoreEl.textContent = Math.max(board.top()?.score ?? 0, state.score).toString();
+        highScoreEl.textContent = best.toString();
       }
     }
   }

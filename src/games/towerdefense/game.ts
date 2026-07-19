@@ -334,10 +334,7 @@ export function initTowerDefenseGame(): void {
   let keepFlash = 0;
 
   const board = initScoreboard(document.getElementById('highscores'));
-  let record = board.top()?.score ?? 0;
-  let runStartRecord = 0;
-  let recordCelebrated = false;
-  recordEl.textContent = `${record}`;
+  recordEl.textContent = `${board.best()}`;
 
   // A brisk minor-key march — drums to hold a line to.
   const audio = createGameAudio({
@@ -392,12 +389,11 @@ export function initTowerDefenseGame(): void {
     }
   }
 
-  /** Announces (once per run) that the score beat the table's best. */
-  function celebrateRecord() {
-    if (recordCelebrated || runStartRecord <= 0) return;
-    if (score(eco) <= runStartRecord) return;
-    recordCelebrated = true;
-    showToast(`🏅 ${strings.newRecord}`);
+  /** Banks the run's score; announces (once per run) a beaten table best. */
+  function bankScore() {
+    const { best, newRecord } = board.bank(score(eco));
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+    recordEl.textContent = `${best}`;
   }
 
   function towerAt(tile: number): Tower | null {
@@ -419,8 +415,7 @@ export function initTowerDefenseGame(): void {
     floaters = [];
     bannerTimer = 0;
     keepFlash = 0;
-    runStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     phase = 'build';
     audio.start();
     refreshToolbar();
@@ -439,9 +434,7 @@ export function initTowerDefenseGame(): void {
     selectedTower = null;
     audio.playSfx('gameover');
     audio.stop();
-    celebrateRecord();
-    record = Math.max(record, score(eco));
-    recordEl.textContent = `${record}`;
+    bankScore();
     overIcon.textContent = victory ? '🏆' : '💥';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
     overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
@@ -453,12 +446,9 @@ export function initTowerDefenseGame(): void {
 
   function waveCleared() {
     const interest = clearWave(eco);
-    celebrateRecord();
-    record = Math.max(record, score(eco));
-    recordEl.textContent = `${record}`;
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
-    board.stash(score(eco));
+    bankScore();
     const gp = routePosition(map.route, routeLast);
     addFloater(gp.x, gp.y - 1, `+${interest} ${strings.interest}`, '#4ade80');
     showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);

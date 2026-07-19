@@ -184,12 +184,7 @@ export function initSyndicateGame(): void {
   let extraction = -1;
   let money = 0;
   const board = initScoreboard(document.getElementById('highscores'));
-  // The record readout shows the table's best, beaten live by the current campaign.
-  let record = board.top()?.score ?? 0;
   let agentWeapons: WeaponId[] = Array(SQUAD_SIZE).fill('pistol');
-  // The table best when the campaign started, so beating it is announced once.
-  let campaignStartRecord = 0;
-  let recordCelebrated = false;
   let selected = new Set<number>([0, 1, 2, 3]);
   let boostCooldown = 0;
   let clock = 0;
@@ -209,7 +204,8 @@ export function initSyndicateGame(): void {
     speed: 320 + Math.random() * 220
   }));
 
-  recordEl.textContent = `£${record}`;
+  // The record readout shows the table's best, beaten live by the current campaign.
+  recordEl.textContent = `£${board.best()}`;
 
   // Dark, brooding cyber-noir bassline in E minor.
   const audio = createGameAudio({
@@ -302,21 +298,18 @@ export function initSyndicateGame(): void {
     });
   }
 
-  /** Announces (once per campaign) that the takings beat the table's best. */
-  function celebrateRecord() {
-    if (recordCelebrated || campaignStartRecord <= 0) return;
-    if (Math.floor(money) <= campaignStartRecord) return;
-    recordCelebrated = true;
-    showToast(`🏅 ${strings.newRecord}`);
+  /** Banks the takings; announces (once per campaign) a beaten table best. */
+  function bankTakings() {
+    const { best, newRecord } = board.bank(Math.floor(money));
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+    recordEl.textContent = `£${best}`;
   }
 
   function endCampaign(victory: boolean) {
     phase = 'over';
     audio.playSfx('gameover');
     audio.stop();
-    celebrateRecord();
-    record = Math.max(record, Math.floor(money));
-    recordEl.textContent = `£${record}`;
+    bankTakings();
     overIcon.textContent = victory ? '🏆' : '☠️';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
     overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
@@ -335,12 +328,9 @@ export function initSyndicateGame(): void {
       return;
     }
     phase = 'debrief';
-    celebrateRecord();
-    record = Math.max(record, Math.floor(money));
-    recordEl.textContent = `£${record}`;
-    // Persist the campaign's takings at each debrief, like the old record
-    // key did, so quitting mid-campaign keeps the run on the table.
-    board.stash(Math.floor(money));
+    // Banking persists the campaign's takings at each debrief, like the old
+    // record key did, so quitting mid-campaign keeps the run on the table.
+    bankTakings();
     overIcon.textContent = '💼';
     overTitle.textContent = `${strings.missionComplete} · +£${spec.reward}`;
     overDesc.textContent = `${strings.missionNames[missionIdx + 1]} — ${strings.missionBriefs[missionIdx + 1]}`;
@@ -1032,8 +1022,7 @@ export function initSyndicateGame(): void {
     startOverlay.style.display = 'none';
     money = 0;
     agentWeapons = Array(SQUAD_SIZE).fill('pistol');
-    campaignStartRecord = record;
-    recordCelebrated = false;
+    board.beginRun();
     startMission(0);
   });
 
@@ -1045,8 +1034,7 @@ export function initSyndicateGame(): void {
     } else {
       money = 0;
       agentWeapons = Array(SQUAD_SIZE).fill('pistol');
-      campaignStartRecord = record;
-      recordCelebrated = false;
+      board.beginRun();
       startMission(0);
     }
   });

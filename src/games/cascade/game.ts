@@ -19,6 +19,7 @@ import {
   shadeColor,
   createGameAudio,
   wireSoundButton,
+  createToaster,
   hash01 as hash
 } from '../engine';
 import { WELL_W, WELL_H } from './well';
@@ -132,6 +133,7 @@ export function initCascadeGame(): void {
   const levelEl = el('level');
   const recordEl = el('record');
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
 
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
   const strings = {
@@ -338,15 +340,6 @@ export function initCascadeGame(): void {
     ]
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.firstElementChild?.remove();
-    setTimeout(() => toast.remove(), 2400);
-  }
 
   const cellPx = (cx: number, cy: number) => ({
     x: WELL_X + cx * TILE,

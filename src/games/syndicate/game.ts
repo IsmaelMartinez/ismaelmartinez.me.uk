@@ -20,6 +20,7 @@ import {
   shadeColor,
   createGameAudio,
   wireSoundButton,
+  createToaster,
   type IsoView,
   hash01 as hash
 } from '../engine';
@@ -116,6 +117,7 @@ export function initSyndicateGame(): void {
   const objectiveEl = el('objective-text');
   const boostBtn = el('boost-btn') as HTMLButtonElement;
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
   const chips = Array.from(root.querySelectorAll<HTMLButtonElement>('.agent-chip'));
   const allBtn = el('select-all') as HTMLButtonElement;
 
@@ -267,15 +269,6 @@ export function initSyndicateGame(): void {
   function spawnSparkle(wx: number, wy: number, color = '#67e8f9') {
     const p = isoProject(VIEW, wx, wy);
     spawnBurst(p.x, p.y - 10, 10, color, { speed: 40, life: 0.7, size: 1.4, glow: true });
-  }
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2400);
   }
 
   function addFloater(x: number, y: number, text: string, color: string) {

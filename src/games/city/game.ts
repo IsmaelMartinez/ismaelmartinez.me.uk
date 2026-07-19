@@ -23,6 +23,7 @@ import {
   createViewRotator,
   createGameAudio,
   wireSoundButton,
+  createToaster,
   type IsoView,
   type Rotation
 } from '../engine';
@@ -155,6 +156,7 @@ export function initCityGame(): void {
   const finalMonthsEl = el('final-months');
   const finalPopEl = el('final-pop');
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
   const demandBars: Record<ZoneType, HTMLElement> = {
     res: el('demand-res'),
     com: el('demand-com'),
@@ -278,15 +280,6 @@ export function initCityGame(): void {
         color
       });
     }
-  }
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2400);
   }
 
   function refreshDerivedState() {

@@ -26,6 +26,7 @@ import {
   chebyshev,
   createGameAudio,
   wireSoundButton,
+  createToaster,
   type IsoView,
   hash01 as hash
 } from '../engine';
@@ -151,6 +152,7 @@ export function initTowerDefenseGame(): void {
   const upgradeBtn = el('upgrade-btn') as HTMLButtonElement;
   const towerInfoEl = el('tower-info');
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.tower-tool'));
 
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
@@ -358,15 +360,6 @@ export function initTowerDefenseGame(): void {
     ]
   });
   wireSoundButton(document.getElementById('sound-btn'), audio);
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2400);
-  }
 
   function addFloater(tx: number, ty: number, text: string, color: string) {
     const p = isoProject(VIEW, tx, ty);

@@ -24,6 +24,7 @@ import {
   createViewRotator,
   createGameAudio,
   wireSoundButton,
+  createToaster,
   type IsoView,
   type Rotation
 } from '../engine';
@@ -332,6 +333,8 @@ export function initParkGame(): void {
   const finalDaysEl = el('final-days');
   const finalPeakEl = el('final-peak');
   const toastArea = el('toast-area');
+  // Park's toasts linger slightly less than the arcade default (2.2s vs 2.4s).
+  const { show: showToast } = createToaster(toastArea, { durationMs: 2200 });
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.tool-btn'));
   const speedButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.speed-btn'));
   const trackPalette = el('track-palette');
@@ -483,15 +486,6 @@ export function initParkGame(): void {
     p.y -= heights[tile] * TERRAIN_STEP;
     const buildingHeight = BUILDING_STYLE[tiles[tile]]?.height ?? BLOCK_HEIGHT;
     floaters.push({ x: p.x, y: p.y - buildingHeight - 6, text, color, life: 1 });
-  }
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2200);
   }
 
   const treeCount = () => tiles.filter(t => t === 'tree').length;

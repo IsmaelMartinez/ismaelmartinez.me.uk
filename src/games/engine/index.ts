@@ -10,6 +10,8 @@ export type { Scoreboard, ScoreboardOptions } from './scoreboard';
 export { createGameAudio, loadMuted } from './audio';
 export type { GameAudio, GameAudioOptions, Note, SfxName } from './audio';
 export { wireSoundButton } from './soundButton';
+export { createToaster } from './toast';
+export type { Toaster, ToasterOptions } from './toast';
 export { gridNeighbours, chebyshev } from './grid2d';
 export { bfsFrom, buildPath, findPath } from './pathfind';
 export type { BfsResult } from './pathfind';

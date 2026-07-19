@@ -13,14 +13,12 @@ import {
   fillTile,
   strokeTile,
   drawBlock,
-  drawRamp,
   shadeColor,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,
   unrotateTile,
   rotatePoint,
-  rotateDir,
   createViewRotator,
   createGameAudio,
   wireSoundButton,
@@ -118,14 +116,13 @@ const LOAD_WAIT = 3;
 /** Guests waiting for a cart, per coaster. */
 const QUEUE_CAP = 6;
 
-const TRACK_KIND_EMOJI: Record<SegmentKind, string> = {
-  flat: '🛤️',
-  up: '⬆️',
-  down: '⬇️',
-  turnL: '↩️',
-  turnR: '↪️',
-  station: '🚉'
-};
+/** World-space step vector per track direction (0=N, 1=E, 2=S, 3=W). */
+const DIR_VEC = [
+  { dx: 0, dy: -1 },
+  { dx: 1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: -1, dy: 0 }
+];
 
 // No ferris or flume entry: the Big Wheel and Log Flume are custom-drawn
 // (see drawFerris / drawFlume), never an emoji on a block. Food and drink
@@ -221,6 +218,9 @@ const NEED_EMOJI: Record<string, string> = {
 };
 
 const GUEST_COLORS = ['#f472b6', '#60a5fa', '#fbbf24', '#34d399', '#c084fc', '#fb923c'];
+/** Skin/hair variety for drawn guests, picked per guest from its style roll. */
+const GUEST_SKINS = ['#eec9a2', '#d9a06b', '#a06a42', '#7a4a2e'];
+const GUEST_HAIR = ['#2b2118', '#5a3a1e', '#c9a227', '#8a4a2f', '#3a3a45', '#b0b6c0'];
 
 interface Pt {
   x: number;
@@ -259,6 +259,35 @@ function drawAwningFace(
   }
 }
 
+/**
+ * drawStall's scalloped valance along one awning's outer edge (aOut–bOut):
+ * half-discs hanging off the edge, alternating canvas/stripe to match the
+ * strips above. Module-scope for the same per-frame-allocation reason as
+ * drawAwningFace.
+ */
+function drawScallops(
+  ctx: CanvasRenderingContext2D,
+  aOut: Pt,
+  bOut: Pt,
+  outerLift: number,
+  stripe: string
+) {
+  const strips = 4;
+  for (let k = 0; k < strips; k++) {
+    const t = (k + 0.5) / strips;
+    ctx.fillStyle = k % 2 === 0 ? '#e8e4da' : stripe;
+    ctx.beginPath();
+    ctx.arc(
+      aOut.x + (bOut.x - aOut.x) * t,
+      aOut.y + (bOut.y - aOut.y) * t - outerLift,
+      1.5,
+      0,
+      Math.PI
+    );
+    ctx.fill();
+  }
+}
+
 /** drawStall's pale counter band across one front face (a–b), under the awning's shade. */
 function drawCounterFace(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, liftPx: number, color: string) {
   ctx.fillStyle = color;
@@ -282,6 +311,12 @@ interface Guest {
   idleTimer: number;
   needs: Needs;
   color: string;
+  /**
+   * Cosmetic style roll fixed at spawn: drives walk-cycle phase (so crowds
+   * don't stride in lockstep), idle facing, and skin/hair picks. Rendering
+   * only — no simulation logic reads it.
+   */
+  styleRoll: number;
 }
 
 /**
@@ -517,7 +552,8 @@ export function initParkGame(): void {
       useTimer: 0,
       idleTimer: 0.3,
       needs: createNeeds(),
-      color: GUEST_COLORS[Math.floor(Math.random() * GUEST_COLORS.length)]
+      color: GUEST_COLORS[Math.floor(Math.random() * GUEST_COLORS.length)],
+      styleRoll: Math.random()
     });
   }
 
@@ -1265,19 +1301,114 @@ export function initParkGame(): void {
    * bordering the next tile) sit at `nextLift`, the two on the opposite
    * edge sit at `curLift` — a single-axis tilt along the direction of
    * travel, not a partial average (which would twist the quad instead of
-   * sloping it). Corner layout matches iso.ts's `drawBlock`/`drawRamp`:
-   * n=(x,y), e=(x+1,y), s=(x+1,y+1), w=(x,y+1), so the N–E edge borders the
-   * north neighbour, S–W borders south, N–W borders west, E–S borders east.
+   * sloping it). Superseded by drawTrackTile's curve geometry, which slopes
+   * the rails themselves by interpolating z from entry edge to exit edge.
+   *
+   * Track geometry runs entry-edge → centre → exit-edge as a quadratic
+   * curve in world tile space (projectWorld handles view rotation). All
+   * scalar math — this draws every committed and drafted track tile every
+   * frame, so no arrays or point objects beyond isoProject's returns.
    */
-  function rampCorners(
-    dir: Dir,
-    curLift: number,
-    nextLift: number
-  ): { n: number; e: number; s: number; w: number } {
-    if (dir === 0) return { n: nextLift, e: nextLift, s: curLift, w: curLift };
-    if (dir === 2) return { n: curLift, e: curLift, s: nextLift, w: nextLift };
-    if (dir === 1) return { n: curLift, w: curLift, e: nextLift, s: nextLift };
-    return { n: nextLift, w: nextLift, e: curLift, s: curLift }; // dir === 3
+  function drawTrackTile(i: number, seg: Segment, prevDir: Dir, pending: boolean) {
+    const cx = (i % GRID_W) + 0.5;
+    const cy = Math.floor(i / GRID_W) + 0.5;
+    const zC = heights[i] * TERRAIN_STEP;
+    if (pending) {
+      // The draft tail's direction is still a placeholder (see
+      // handleTrackTap) — mark the tile with a ballast pad, no rails.
+      const p = projectWorld(cx, cy);
+      ctx.fillStyle = '#4c4741';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - zC, 8, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    const inV = DIR_VEC[prevDir];
+    const outV = DIR_VEC[seg.dir];
+    // Climb segments slope from their own height at the entry edge to the
+    // next tile's height at the exit edge; everything else is level.
+    const next = seg.kind === 'up' || seg.kind === 'down' ? stepTile(i, seg.dir) : null;
+    const zE = zC;
+    const zX = next !== null ? heights[next] * TERRAIN_STEP : zC;
+    // rot90 of the entry/exit direction: the rail offset axis at each end.
+    const pInX = -inV.dy;
+    const pInY = inV.dx;
+    const pOutX = -outV.dy;
+    const pOutY = outV.dx;
+    const e0 = projectWorld(cx - inV.dx * 0.5, cy - inV.dy * 0.5);
+    const x0 = projectWorld(cx + outV.dx * 0.5, cy + outV.dy * 0.5);
+    const c0 = projectWorld(cx, cy);
+
+    // Ballast bed: one wide stroke along the centre line.
+    ctx.strokeStyle = '#4c4741';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(e0.x, e0.y - zE);
+    ctx.quadraticCurveTo(c0.x, c0.y - (zE + zX) / 2, x0.x, x0.y - zX);
+    ctx.stroke();
+
+    // Sleepers: short perpendicular ties along the curve.
+    ctx.strokeStyle = '#5f4a33';
+    ctx.lineWidth = 1.75;
+    for (let k = 0; k < 5; k++) {
+      const t = 0.1 + k * 0.2;
+      const mt = 1 - t;
+      // Quadratic point/tangent on the centre curve, in tile space.
+      const bx = mt * mt * (cx - inV.dx * 0.5) + 2 * mt * t * cx + t * t * (cx + outV.dx * 0.5);
+      const by = mt * mt * (cy - inV.dy * 0.5) + 2 * mt * t * cy + t * t * (cy + outV.dy * 0.5);
+      const tx = mt * (inV.dx * 0.5) + t * (outV.dx * 0.5);
+      const ty = mt * (inV.dy * 0.5) + t * (outV.dy * 0.5);
+      const tl = Math.hypot(tx, ty) || 1;
+      const px = -ty / tl;
+      const py = tx / tl;
+      const z = zE + (zX - zE) * t;
+      const sa = projectWorld(bx + px * 0.19, by + py * 0.19);
+      const sb = projectWorld(bx - px * 0.19, by - py * 0.19);
+      ctx.beginPath();
+      ctx.moveTo(sa.x, sa.y - z);
+      ctx.lineTo(sb.x, sb.y - z);
+      ctx.stroke();
+    }
+
+    // Twin rails: dark understroke for contrast, bright steel on top.
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.strokeStyle = pass === 0 ? '#26262e' : '#c9ced8';
+      ctx.lineWidth = pass === 0 ? 2 : 1;
+      for (let s = -1; s <= 1; s += 2) {
+        const off = 0.14 * s;
+        const ea = projectWorld(cx - inV.dx * 0.5 + pInX * off, cy - inV.dy * 0.5 + pInY * off);
+        const xa = projectWorld(cx + outV.dx * 0.5 + pOutX * off, cy + outV.dy * 0.5 + pOutY * off);
+        const ca = projectWorld(cx + (pInX + pOutX) * off * 0.5, cy + (pInY + pOutY) * off * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(ea.x, ea.y - zE);
+        ctx.quadraticCurveTo(ca.x, ca.y - (zE + zX) / 2, xa.x, xa.y - zX);
+        ctx.stroke();
+      }
+    }
+
+    if (seg.kind === 'station') {
+      // Boarding platform along the right-hand side of travel, with a pale
+      // edge line so the station reads at a glance.
+      const a1 = projectWorld(cx - outV.dx * 0.45 + pOutX * 0.24, cy - outV.dy * 0.45 + pOutY * 0.24);
+      const a2 = projectWorld(cx + outV.dx * 0.45 + pOutX * 0.24, cy + outV.dy * 0.45 + pOutY * 0.24);
+      const b2 = projectWorld(cx + outV.dx * 0.45 + pOutX * 0.46, cy + outV.dy * 0.45 + pOutY * 0.46);
+      const b1 = projectWorld(cx - outV.dx * 0.45 + pOutX * 0.46, cy - outV.dy * 0.45 + pOutY * 0.46);
+      ctx.fillStyle = '#b3ab99';
+      ctx.beginPath();
+      ctx.moveTo(a1.x, a1.y - zC - 2);
+      ctx.lineTo(a2.x, a2.y - zC - 2);
+      ctx.lineTo(b2.x, b2.y - zC - 2);
+      ctx.lineTo(b1.x, b1.y - zC - 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#efe9dc';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(a1.x, a1.y - zC - 2);
+      ctx.lineTo(a2.x, a2.y - zC - 2);
+      ctx.stroke();
+    }
   }
 
   /**
@@ -1305,6 +1436,31 @@ export function initParkGame(): void {
     const angle = broken ? 0.6 : clock * (busy ? spin.busy : spin.idle);
     ctx.save();
     if (broken) ctx.globalAlpha = 0.45;
+
+    // Round deck over the block: planked turntable with a lit rim, so the
+    // platform reads as a carousel floor instead of a square box top.
+    ctx.fillStyle = shadeColor(color, 0.72);
+    ctx.beginPath();
+    ctx.ellipse(c.x, topY + 1, 14.5, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = shadeColor(color, 1.12);
+    ctx.beginPath();
+    ctx.ellipse(c.x, topY, 14.5, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = shadeColor(color, 0.8);
+    ctx.lineWidth = 0.75;
+    for (let k = 0; k < 8; k++) {
+      const a = angle * 0.5 + (k * Math.PI) / 4;
+      ctx.beginPath();
+      ctx.moveTo(c.x, topY);
+      ctx.lineTo(c.x + Math.cos(a) * 14.5, topY + Math.sin(a) * 6);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = shadeColor(color, 1.4);
+    ctx.beginPath();
+    ctx.ellipse(c.x, topY, 14.5, 6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
     // Depth order: mounts behind the pole (pass 0), the pole, mounts in
     // front (pass 1). Two plain passes over the three mounts, no per-frame
     // arrays or closures — this runs every frame for every carousel.
@@ -1316,6 +1472,9 @@ export function initParkGame(): void {
         ctx.moveTo(c.x, topY);
         ctx.lineTo(c.x, rimY);
         ctx.stroke();
+        // Brass collar where the pole meets the deck.
+        ctx.fillStyle = '#c9a227';
+        ctx.fillRect(c.x - 1.5, topY - 2, 3, 1.5);
       }
       for (let k = 0; k < 3; k++) {
         const a = angle + (k * Math.PI * 2) / 3;
@@ -1334,30 +1493,66 @@ export function initParkGame(): void {
         ctx.fillText(glyph, mx, my);
       }
     }
-    // Canopy: elliptical rim underside, cone on top, stripes, finial.
+
+    // Canopy: rim underside, rounding board with fairground lights, a
+    // striped cone in alternating wedges, scalloped valance, and a finial.
     ctx.fillStyle = shadeColor(color, 0.85);
     ctx.beginPath();
     ctx.ellipse(c.x, rimY, 13, 4, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = shadeColor(color, 1.25);
+    const apexY = rimY - 10;
+    const stripe = '#efe9dc';
+    for (let k = 0; k < 6; k++) {
+      const a0 = (k * Math.PI) / 6; // front half of the ellipse, right to left
+      const a1 = a0 + Math.PI / 6;
+      ctx.fillStyle = k % 2 === 0 ? shadeColor(color, 1.25) : stripe;
+      ctx.beginPath();
+      ctx.moveTo(c.x, apexY);
+      ctx.lineTo(c.x + 13 * Math.cos(a0), rimY + 4 * Math.sin(a0));
+      ctx.lineTo(c.x + 13 * Math.cos(a1), rimY + 4 * Math.sin(a1));
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Scalloped valance along the front rim edge.
+    for (let k = 0; k < 7; k++) {
+      const a = (Math.PI * (k + 0.5)) / 7;
+      ctx.fillStyle = k % 2 === 0 ? stripe : shadeColor(color, 1.25);
+      ctx.beginPath();
+      ctx.arc(c.x + 13 * Math.cos(a), rimY + 4 * Math.sin(a), 1.7, 0, Math.PI);
+      ctx.fill();
+    }
+    // Rounding board: lit rim band, bulbs chasing while the ride is busy.
+    ctx.strokeStyle = shadeColor(color, 1.45);
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(c.x - 13, rimY);
-    ctx.lineTo(c.x, rimY - 9);
-    ctx.lineTo(c.x + 13, rimY);
+    ctx.ellipse(c.x, rimY - 1, 13, 4, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    const lit = Math.floor(clock * 6) % 3;
+    for (let k = 0; k < 6; k++) {
+      const a = (Math.PI * (k + 0.5)) / 6;
+      ctx.fillStyle = !broken && (busy ? k % 3 === lit : k % 2 === 0) ? '#fde68a' : shadeColor(color, 0.7);
+      ctx.beginPath();
+      ctx.arc(c.x + 12.4 * Math.cos(a), rimY - 1 + 3.8 * Math.sin(a), 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Finial ball and a fluttering pennant.
+    ctx.fillStyle = '#c9a227';
+    ctx.beginPath();
+    ctx.arc(c.x, apexY - 1, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e05a6b';
+    ctx.beginPath();
+    ctx.moveTo(c.x, apexY - 6);
+    ctx.lineTo(c.x + 5 + Math.sin(clock * 5) * 0.8, apexY - 4.8);
+    ctx.lineTo(c.x, apexY - 3.6);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = shadeColor(color, 0.7);
-    ctx.lineWidth = 1;
-    for (const t of [-0.5, 0, 0.5]) {
-      ctx.beginPath();
-      ctx.moveTo(c.x, rimY - 9);
-      ctx.lineTo(c.x + 13 * t, rimY);
-      ctx.stroke();
-    }
-    ctx.fillStyle = shadeColor(color, 1.4);
+    ctx.strokeStyle = shadeColor(color, 0.6);
+    ctx.lineWidth = 0.75;
     ctx.beginPath();
-    ctx.arc(c.x, rimY - 10, 1.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(c.x, apexY - 6.2);
+    ctx.lineTo(c.x, apexY);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -1384,37 +1579,101 @@ export function initParkGame(): void {
     const angle = broken ? 0.4 : clock * (busy ? spin.busy : spin.idle);
     ctx.save();
     if (broken) ctx.globalAlpha = 0.45;
-    ctx.strokeStyle = shadeColor(color, 0.55);
-    ctx.lineWidth = 2;
+
+    // Back A-frame first, so the wheel turns between two supports.
+    ctx.strokeStyle = shadeColor(color, 0.35);
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(c.x - 8, baseY);
-    ctx.lineTo(c.x, hubY);
-    ctx.lineTo(c.x + 8, baseY);
+    ctx.moveTo(c.x - 5.5, baseY - 1.5);
+    ctx.lineTo(c.x + 2.5, hubY - 1);
+    ctx.lineTo(c.x + 10.5, baseY - 1.5);
     ctx.stroke();
+
+    // Wheel: double rim with cross-braced spokes and tie ticks.
     ctx.strokeStyle = shadeColor(color, 0.9);
     ctx.lineWidth = 1;
-    for (let k = 0; k < 6; k++) {
-      const a = angle + (k * Math.PI) / 3;
+    for (let k = 0; k < 8; k++) {
+      const a = angle + (k * Math.PI) / 4;
       ctx.beginPath();
       ctx.moveTo(c.x, hubY);
       ctx.lineTo(c.x + Math.cos(a) * radius, hubY + Math.sin(a) * radius);
       ctx.stroke();
     }
+    ctx.strokeStyle = shadeColor(color, 1.1);
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.arc(c.x, hubY, radius - 2.2, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.strokeStyle = shadeColor(color, 1.3);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(c.x, hubY, radius, 0, Math.PI * 2);
     ctx.stroke();
+    // Tie ticks between the rims at each spoke end.
+    ctx.strokeStyle = shadeColor(color, 1.2);
+    ctx.lineWidth = 0.75;
+    for (let k = 0; k < 8; k++) {
+      const a = angle + (k * Math.PI) / 4 + Math.PI / 8;
+      ctx.beginPath();
+      ctx.moveTo(c.x + Math.cos(a) * (radius - 2.2), hubY + Math.sin(a) * (radius - 2.2));
+      ctx.lineTo(c.x + Math.cos(a) * radius, hubY + Math.sin(a) * radius);
+      ctx.stroke();
+    }
+
+    // Gondolas hang upright from the outer rim: tiny cabins with a roof
+    // bar and a lit window, swinging slightly with the motion.
     for (let k = 0; k < 6; k++) {
       const a = angle + (k * Math.PI) / 3;
-      ctx.fillStyle = GUEST_COLORS[k % GUEST_COLORS.length];
+      const gx = c.x + Math.cos(a) * radius;
+      const gy = hubY + Math.sin(a) * radius;
+      const sway = broken ? 0 : Math.sin(clock * 2.4 + k) * 0.6;
+      const cabin = GUEST_COLORS[k % GUEST_COLORS.length];
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.7)';
+      ctx.lineWidth = 0.75;
       ctx.beginPath();
-      ctx.arc(c.x + Math.cos(a) * radius, hubY + Math.sin(a) * radius + 2.5, 2.2, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(gx, gy);
+      ctx.lineTo(gx + sway, gy + 2);
+      ctx.stroke();
+      ctx.fillStyle = shadeColor(cabin, 0.65);
+      ctx.fillRect(gx + sway - 2.4, gy + 2, 4.8, 1);
+      ctx.fillStyle = cabin;
+      ctx.fillRect(gx + sway - 2, gy + 3, 4, 3);
+      ctx.fillStyle = 'rgba(255, 244, 214, 0.9)';
+      ctx.fillRect(gx + sway - 0.7, gy + 3.7, 1.4, 1.4);
     }
+
+    // Front A-frame, cross-member, axle cap and footing blocks.
+    ctx.strokeStyle = shadeColor(color, 0.55);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 10.5, baseY + 1.5);
+    ctx.lineTo(c.x - 2.5, hubY + 1);
+    ctx.lineTo(c.x + 5.5, baseY + 1.5);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 6.8, baseY - 8);
+    ctx.lineTo(c.x + 1.8, baseY - 8);
+    ctx.stroke();
+    ctx.fillStyle = shadeColor(color, 0.45);
+    ctx.fillRect(c.x - 12, baseY, 3.5, 2);
+    ctx.fillRect(c.x + 4, baseY, 3.5, 2);
+    ctx.fillRect(c.x - 7, baseY - 2, 3.5, 2);
+    ctx.fillRect(c.x + 9, baseY - 2, 3.5, 2);
+    // Axle between the two frames, capped at the hub.
+    ctx.strokeStyle = shadeColor(color, 1.5);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 2.5, hubY + 1);
+    ctx.lineTo(c.x + 2.5, hubY - 1);
+    ctx.stroke();
     ctx.fillStyle = shadeColor(color, 1.5);
     ctx.beginPath();
     ctx.arc(c.x, hubY, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = shadeColor(color, 0.7);
+    ctx.beginPath();
+    ctx.arc(c.x, hubY, 0.9, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -1441,19 +1700,57 @@ export function initParkGame(): void {
     const topY = c.y - liftPx - platformH;
     ctx.save();
     if (broken) ctx.globalAlpha = 0.45;
-    // The circuit: stone rim, shimmering water ring, island in the middle.
+    // The circuit: jointed stone rim, shimmering water ring with drifting
+    // highlight streaks, and a planted island in the middle.
     ctx.fillStyle = shadeColor(color, 0.55);
     ctx.beginPath();
     ctx.ellipse(c.x, topY, 14, 6.2, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = shadeColor(color, 0.35);
+    ctx.lineWidth = 0.75;
+    for (let k = 0; k < 10; k++) {
+      const a = (k * Math.PI) / 5;
+      ctx.beginPath();
+      ctx.moveTo(c.x + 12.4 * Math.cos(a), topY + 5.4 * Math.sin(a));
+      ctx.lineTo(c.x + 14 * Math.cos(a), topY + 6.2 * Math.sin(a));
+      ctx.stroke();
+    }
     ctx.fillStyle = shadeColor('#2f8fc4', 0.9 + 0.2 * Math.sin(clock * 2.1 + vx + vy));
     ctx.beginPath();
     ctx.ellipse(c.x, topY, 12, 5, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Two moving water highlights chase each other round the channel.
+    ctx.strokeStyle = 'rgba(214, 236, 248, 0.55)';
+    ctx.lineWidth = 1;
+    for (let k = 0; k < 2; k++) {
+      const a0 = clock * (busy ? 2.6 : 0.9) + k * Math.PI + 0.9;
+      ctx.beginPath();
+      ctx.ellipse(c.x, topY, 9.2, 3.7, 0, a0, a0 + 0.85);
+      ctx.stroke();
+    }
     ctx.fillStyle = shadeColor(color, 1.15);
     ctx.beginPath();
     ctx.ellipse(c.x, topY, 6.5, 2.5, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Island planting: a rock and a stub palm.
+    ctx.fillStyle = shadeColor(color, 0.8);
+    ctx.beginPath();
+    ctx.ellipse(c.x + 2.6, topY + 0.6, 1.6, 0.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6a4a26';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 1.5, topY + 1);
+    ctx.lineTo(c.x - 2, topY - 3.5);
+    ctx.stroke();
+    ctx.strokeStyle = '#3f7a3f';
+    ctx.lineWidth = 1;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.moveTo(c.x - 2, topY - 3.5);
+      ctx.quadraticCurveTo(c.x - 2 + (k - 1) * 3, topY - 6, c.x - 2 + (k - 1) * 4.5, topY - 4.2);
+      ctx.stroke();
+    }
     // The log rides the ring between island and rim.
     const angle = broken ? 1.2 : clock * (busy ? 2.6 : 0.9);
     const lx = c.x + Math.cos(angle) * 9.2;
@@ -1462,7 +1759,8 @@ export function initParkGame(): void {
       ctx.font = '10px serif';
       ctx.fillText(vehicle, lx, ly - 3);
     } else {
-      ctx.fillStyle = '#7a4a22';
+      // A hollowed log: bark shell, pale rings on the stern, seat channel.
+      ctx.fillStyle = '#5f3a1b';
       ctx.beginPath();
       ctx.ellipse(lx, ly - 1.5, 4.2, 2, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1470,6 +1768,15 @@ export function initParkGame(): void {
       ctx.beginPath();
       ctx.ellipse(lx, ly - 2.2, 3, 1.1, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = '#7a5230';
+      ctx.beginPath();
+      ctx.ellipse(lx, ly - 2.2, 1.9, 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#d9b98a';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.ellipse(lx - 3.4, ly - 1.6, 0.8, 1.1, 0, 0, Math.PI * 2);
+      ctx.stroke();
     }
     // Spray while a loaded log shoots the front of the circuit
     // (sin(angle) ≈ 1 is the point nearest the viewer).
@@ -1518,8 +1825,35 @@ export function initParkGame(): void {
     if (broken) ctx.globalAlpha = 0.45;
     drawAwningFace(ctx, w, s, wOut, sOut, rimLift, outerLift, stripe);
     drawAwningFace(ctx, s, e, sOut, eOut, rimLift, outerLift, stripe);
+    drawScallops(ctx, wOut, sOut, outerLift, stripe);
+    drawScallops(ctx, sOut, eOut, outerLift, stripe);
     drawCounterFace(ctx, w, s, liftPx, counterCol);
     drawCounterFace(ctx, s, e, liftPx, counterCol);
+    // Awning corner posts ground the overhang.
+    ctx.strokeStyle = shadeColor(color, 0.5);
+    ctx.lineWidth = 1;
+    for (const corner of [wOut, sOut, eOut]) {
+      ctx.beginPath();
+      ctx.moveTo(corner.x, corner.y - outerLift);
+      ctx.lineTo(corner.x, corner.y - liftPx + 1);
+      ctx.stroke();
+    }
+    // Counter goods: a few product blobs sitting on the near counter band.
+    ctx.fillStyle = '#f4e8d0';
+    for (let k = 0; k < 3; k++) {
+      const t = 0.3 + k * 0.2;
+      ctx.beginPath();
+      ctx.arc(s.x + (e.x - s.x) * t, s.y + (e.y - s.y) * t - liftPx - 6.6, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Menu board hung on the west face under the counter.
+    const mbx = (w.x + s.x) / 2;
+    const mby = (w.y + s.y) / 2 - liftPx - 1;
+    ctx.fillStyle = '#2b2620';
+    ctx.fillRect(mbx - 2.2, mby - 3.4, 4.4, 3);
+    ctx.fillStyle = 'rgba(244, 238, 224, 0.8)';
+    ctx.fillRect(mbx - 1.6, mby - 2.8, 3.2, 0.6);
+    ctx.fillRect(mbx - 1.6, mby - 1.6, 2.4, 0.6);
     const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
     const bob = busy && !broken ? Math.sin(clock * 3) : 0;
     ctx.font = '11px serif';
@@ -1540,40 +1874,214 @@ export function initParkGame(): void {
     broken: boolean
   ) {
     const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.45;
+
+    // Shaft detail: floor seams and a window column on the two visible
+    // faces of the (0.22-inset) block drawn just before this call.
+    const inset = 0.22;
+    const w = isoProject(VIEW, vx + inset, vy + 1 - inset);
+    const s = isoProject(VIEW, vx + 1 - inset, vy + 1 - inset);
+    const e = isoProject(VIEW, vx + 1 - inset, vy + inset);
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.25)';
+    ctx.lineWidth = 0.75;
+    for (let r = 1; r < 4; r++) {
+      const ry = (towerH * r) / 4;
+      ctx.beginPath();
+      ctx.moveTo(w.x, w.y - liftPx - ry);
+      ctx.lineTo(s.x, s.y - liftPx - ry);
+      ctx.lineTo(e.x, e.y - liftPx - ry);
+      ctx.stroke();
+    }
+    for (let f = 0; f < 2; f++) {
+      const a = f === 0 ? w : s;
+      const b = f === 0 ? s : e;
+      for (let r = 0; r < 4; r++) {
+        for (let col = 0; col < 2; col++) {
+          const t = 0.35 + col * 0.3;
+          const wx = a.x + (b.x - a.x) * t;
+          const wy = a.y + (b.y - a.y) * t - liftPx - 4 - (towerH - 10) * (r / 4);
+          ctx.fillStyle = (r + col + f) % 2 === 0 ? 'rgba(214, 236, 248, 0.55)' : 'rgba(10, 16, 28, 0.45)';
+          ctx.fillRect(wx - 0.7, wy - 2.4, 1.4, 2.4);
+        }
+      }
+    }
+
+    // Observation ring: windowed cabin ring with a roof cap, riding the shaft.
     const travel = towerH - 14;
     const deckLift = busy && !broken ? 6 + (Math.sin(clock * 1.1) * 0.5 + 0.5) * travel : 6;
     const y = c.y - liftPx - deckLift;
-    ctx.save();
-    if (broken) ctx.globalAlpha = 0.45;
-    ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+    ctx.fillStyle = 'rgba(148, 160, 176, 0.9)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, y + 1.2, 13, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
     ctx.beginPath();
     ctx.ellipse(c.x, y, 13, 4.5, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = 'rgba(15, 23, 42, 0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
+    // Window band round the front of the ring.
+    ctx.fillStyle = 'rgba(58, 76, 96, 0.85)';
+    for (let k = 0; k < 7; k++) {
+      const a = (Math.PI * (k + 0.5)) / 7;
+      ctx.fillRect(c.x + 11.6 * Math.cos(a) - 0.8, y + 3.6 * Math.sin(a) - 0.9, 1.6, 1.8);
+    }
+    ctx.fillStyle = 'rgba(196, 206, 218, 0.9)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, y - 2, 9, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mast and blinking beacon over the shaft top.
+    const topY = c.y - liftPx - towerH;
+    ctx.strokeStyle = 'rgba(203, 213, 225, 0.9)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x, topY);
+    ctx.lineTo(c.x, topY - 7);
+    ctx.stroke();
+    if (!broken && Math.floor(clock * 1.5) % 2 === 0) {
+      ctx.fillStyle = '#f87171';
+      ctx.beginPath();
+      ctx.arc(c.x, topY - 7.5, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
-  /** The cart's current position, interpolated along its current rail segment. */
-  function drawCoaster(coaster: Coaster) {
+  /**
+   * Zone Gates as built archways instead of a flat emoji sticker: two
+   * stone posts with capitals, an arched span in the zone's colour, pennant
+   * bunting, and the zone emoji as the keystone sign.
+   */
+  function drawGate(vx: number, vy: number, liftPx: number, emoji: string, zoneColor: string) {
+    const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    const gy = c.y - liftPx + 3;
+    const postH = 15;
+    // Posts: lit face plus a darker side sliver, capital on top.
+    for (let s = -1; s <= 1; s += 2) {
+      const px = c.x + s * 9;
+      ctx.fillStyle = '#8d8577';
+      ctx.fillRect(px - 1.5, gy - postH, 3, postH);
+      ctx.fillStyle = '#6e6759';
+      ctx.fillRect(px + 0.5, gy - postH, 1, postH);
+      ctx.fillStyle = '#a29a8a';
+      ctx.fillRect(px - 2.25, gy - postH - 1.5, 4.5, 1.5);
+      ctx.fillStyle = '#6e6759';
+      ctx.fillRect(px - 2, gy - 1, 4, 1);
+    }
+    // Arch span: a colour band between the capitals with a rise.
+    ctx.strokeStyle = shadeColor(zoneColor, 1.2);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 9, gy - postH - 1);
+    ctx.quadraticCurveTo(c.x, gy - postH - 6.5, c.x + 9, gy - postH - 1);
+    ctx.stroke();
+    ctx.strokeStyle = shadeColor(zoneColor, 0.7);
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 9, gy - postH + 0.5);
+    ctx.quadraticCurveTo(c.x, gy - postH - 5, c.x + 9, gy - postH + 0.5);
+    ctx.stroke();
+    // Pennant bunting under the span.
+    for (let k = 0; k < 3; k++) {
+      const bx = c.x - 4.5 + k * 4.5;
+      const by = gy - postH - 4 + Math.abs(k - 1) * 1.4;
+      ctx.fillStyle = k % 2 === 0 ? '#efe9dc' : shadeColor(zoneColor, 1.35);
+      ctx.beginPath();
+      ctx.moveTo(bx - 1.4, by);
+      ctx.lineTo(bx + 1.4, by);
+      ctx.lineTo(bx + Math.sin(clock * 3 + k) * 0.5, by + 2.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Keystone sign: the zone emoji riding above the span.
+    ctx.font = '11px serif';
+    ctx.fillText(emoji, c.x, gy - postH - 10);
+  }
+
+  /** Screen position at `u` laps along a coaster's track (wraps; z applied). */
+  function cartPoint(coaster: Coaster, u: number): { x: number; y: number } {
     const n = coaster.segments.length;
-    const segIndex = Math.floor(coaster.cartU) % n;
-    const frac = coaster.cartU - Math.floor(coaster.cartU);
+    const uu = ((u % n) + n) % n;
+    const segIndex = Math.floor(uu) % n;
+    const frac = uu - Math.floor(uu);
     const curSeg = coaster.segments[segIndex];
     const nextSeg = coaster.segments[(segIndex + 1) % n];
     const from = tileCenter(curSeg.tile);
     const to = tileCenter(nextSeg.tile);
-    const curH = heights[curSeg.tile];
-    const nextH = heights[nextSeg.tile];
     const p = projectWorld(from.x + (to.x - from.x) * frac, from.y + (to.y - from.y) * frac);
-    p.y -= (curH + (nextH - curH) * frac) * TERRAIN_STEP + 10;
-    ctx.font = '15px serif';
-    ctx.fillText('🚃', p.x, p.y);
-    if (coaster.riders.length > 0) {
+    p.y -= (heights[curSeg.tile] + (heights[nextSeg.tile] - heights[curSeg.tile]) * frac) * TERRAIN_STEP;
+    return p;
+  }
+
+  /**
+   * One train car at screen point (px, py) heading along screen delta
+   * (dx, dy): mirrored so the nose leads and the wheels stay down whatever
+   * the travel direction, tilted to the local track slope.
+   */
+  function drawTrainCar(px: number, py: number, dx: number, dy: number, riders: number, lead: boolean) {
+    const flip = dx < 0;
+    const ang = Math.atan2(dy, flip ? -dx : dx);
+    ctx.save();
+    ctx.translate(px, py - 4);
+    if (flip) ctx.scale(-1, 1);
+    ctx.rotate(ang);
+    // Wheels under the chassis, riding the rails.
+    ctx.fillStyle = '#171a22';
+    ctx.beginPath();
+    ctx.arc(-3.2, 1.6, 1.4, 0, Math.PI * 2);
+    ctx.arc(3.2, 1.6, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    // Body: rounded tub with a nose wedge on the lead car.
+    ctx.fillStyle = '#c23b4e';
+    ctx.beginPath();
+    ctx.moveTo(-5, 1);
+    ctx.lineTo(-5, -2.6);
+    ctx.lineTo(-3.8, -3.6);
+    ctx.lineTo(lead ? 3 : 3.8, -3.6);
+    ctx.lineTo(5, lead ? -1.2 : -2.6);
+    ctx.lineTo(5, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
+    // Lit trim line along the tub.
+    ctx.fillStyle = '#e8899a';
+    ctx.fillRect(-4.4, -3, lead ? 7 : 8, 0.8);
+    // Riders' heads peeking over the tub rim.
+    for (let k = 0; k < riders && k < CAR_CAPACITY; k++) {
+      ctx.fillStyle = GUEST_COLORS[k % GUEST_COLORS.length];
+      ctx.beginPath();
+      ctx.arc(-3 + k * 2, -4, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** The two-car train, oriented along the rails; back car drawn first. */
+  function drawCoaster(coaster: Coaster) {
+    const front = cartPoint(coaster, coaster.cartU);
+    const ahead = cartPoint(coaster, coaster.cartU + 0.12);
+    const rear = cartPoint(coaster, coaster.cartU - 0.42);
+    const rearAhead = cartPoint(coaster, coaster.cartU - 0.3);
+    const riders = coaster.riders.length;
+    const rearRiders = Math.max(0, riders - 2);
+    const frontRiders = Math.min(2, riders);
+    // Painter's order: whichever car sits higher on screen goes first.
+    if (rear.y <= front.y) {
+      drawTrainCar(rear.x, rear.y, rearAhead.x - rear.x, rearAhead.y - rear.y, rearRiders, false);
+      drawTrainCar(front.x, front.y, ahead.x - front.x, ahead.y - front.y, frontRiders, true);
+    } else {
+      drawTrainCar(front.x, front.y, ahead.x - front.x, ahead.y - front.y, frontRiders, true);
+      drawTrainCar(rear.x, rear.y, rearAhead.x - rear.x, rearAhead.y - rear.y, rearRiders, false);
+    }
+    if (riders > 0) {
       ctx.font = 'bold 9px monospace';
       ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`×${coaster.riders.length}`, p.x, p.y - 13);
+      ctx.fillText(`×${riders}`, front.x, front.y - 16);
     }
   }
 
@@ -1640,19 +2148,86 @@ export function initParkGame(): void {
     const pos = guestPos(guest);
     const p = projectWorld(pos.x, pos.y);
     p.y -= Math.max(0, pos.z) * TERRAIN_STEP;
+    const walking =
+      (guest.state === 'walking' || guest.state === 'leaving') && guest.step < guest.path.length;
+    // Facing: screen-space sign of the current step; idle guests keep the
+    // facing their style roll gave them.
+    let dir = guest.styleRoll < 0.5 ? -1 : 1;
+    if (walking) {
+      const from = tileCenter(guest.path[guest.step - 1] ?? guest.tile);
+      const to = tileCenter(guest.path[guest.step]);
+      const sa = projectWorld(from.x, from.y);
+      const sb = projectWorld(to.x, to.y);
+      if (sb.x !== sa.x) dir = sb.x > sa.x ? 1 : -1;
+    }
+    const phase = guest.styleRoll * Math.PI * 2;
+    const stride = walking ? Math.sin(clock * 9 + phase) : 0;
+    const bob = walking
+      ? Math.abs(Math.cos(clock * 9 + phase)) * 0.8
+      : guest.state === 'using'
+        ? Math.abs(Math.sin(clock * 4 + phase)) * 1.2
+        : 0;
+    const skin = GUEST_SKINS[Math.floor(guest.styleRoll * 16) % GUEST_SKINS.length];
+    const hair = GUEST_HAIR[Math.floor(guest.styleRoll * 96) % GUEST_HAIR.length];
+
     ctx.save();
     ctx.globalAlpha = visibility;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y, 4.5, 2, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Legs: trouser-dark swings around the hip; feet stay on the ground line.
+    ctx.strokeStyle = shadeColor(guest.color, 0.4);
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(p.x - 0.9, p.y - 4 - bob);
+    ctx.lineTo(p.x - 0.9 + stride * 1.6, p.y);
+    ctx.moveTo(p.x + 0.9, p.y - 4 - bob);
+    ctx.lineTo(p.x + 0.9 - stride * 1.6, p.y);
+    ctx.stroke();
+
+    // Torso: slightly tapered coat in the guest's colour, hem shadow, lit rim.
+    const hipY = p.y - 3.5 - bob;
+    const shoulderY = p.y - 9 - bob;
     ctx.fillStyle = guest.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 5, 4, 0, Math.PI * 2);
+    ctx.moveTo(p.x - 2.4, hipY);
+    ctx.lineTo(p.x - 1.9, shoulderY);
+    ctx.lineTo(p.x + 1.9, shoulderY);
+    ctx.lineTo(p.x + 2.4, hipY);
+    ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.lineWidth = 0.75;
     ctx.stroke();
+    ctx.fillStyle = shadeColor(guest.color, 0.6);
+    ctx.fillRect(p.x - 2.2, hipY - 1, 4.4, 1);
+    ctx.fillStyle = shadeColor(guest.color, 1.35);
+    ctx.fillRect(p.x + dir * 1.1, shoulderY + 0.5, 0.8, 4);
+
+    // Arms swing opposite the legs while walking.
+    ctx.strokeStyle = shadeColor(guest.color, 0.75);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p.x - 2, shoulderY + 1);
+    ctx.lineTo(p.x - 2 - stride * 1.1, shoulderY + 4);
+    ctx.moveTo(p.x + 2, shoulderY + 1);
+    ctx.lineTo(p.x + 2 + stride * 1.1, shoulderY + 4);
+    ctx.stroke();
+
+    // Head: skin with a hair cap and a leading-side eye.
+    const headY = shoulderY - 2;
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.arc(p.x, headY, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = hair;
+    ctx.beginPath();
+    ctx.arc(p.x, headY - 0.3, 2, Math.PI * 0.9, Math.PI * 2.1);
+    ctx.fill();
+    ctx.fillStyle = '#10131c';
+    ctx.fillRect(p.x + dir * 0.8 - 0.3, headY - 0.2, 0.7, 0.7);
 
     // Theme Park-style thought bubble: what this guest badly wants right now
     const urgent = mostUrgentNeed(guest.needs);
@@ -1663,7 +2238,7 @@ export function initParkGame(): void {
           ? NEED_EMOJI[urgent]
           : undefined;
     if (thought) {
-      const by = p.y - 17;
+      const by = p.y - 19;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
       ctx.beginPath();
       ctx.arc(p.x, by, 7, 0, Math.PI * 2);
@@ -1717,16 +2292,26 @@ export function initParkGame(): void {
     // until the next tap fixes it, so its ramp orientation isn't known yet
     // — `pending` flags it so the renderer falls back to a flat marker
     // instead of guessing a slope direction.
-    const trackByTile = new Map<number, { seg: Segment; draft: boolean; pending: boolean }>();
+    const trackByTile = new Map<number, { seg: Segment; prevDir: Dir; draft: boolean; pending: boolean }>();
     for (const coaster of coasters) {
-      for (const seg of coaster.segments) trackByTile.set(seg.tile, { seg, draft: false, pending: false });
+      const n = coaster.segments.length;
+      coaster.segments.forEach((seg, idx) => {
+        // The previous segment's dir is the direction of travel INTO this
+        // tile — drawTrackTile bends the rails from that entry edge to
+        // seg.dir's exit edge.
+        const prevDir = coaster.segments[(idx - 1 + n) % n].dir;
+        trackByTile.set(seg.tile, { seg, prevDir, draft: false, pending: false });
+      });
     }
     if (trackDraft) {
+      const n = trackDraft.length;
       trackDraft.forEach((seg, idx) => {
         // Once the loop is closed the tail's dir was fixed by the closing
-        // tap (see handleTrackTap), so nothing is pending any more.
-        const pending = !trackClosed && idx === trackDraft!.length - 1;
-        trackByTile.set(seg.tile, { seg, draft: true, pending });
+        // tap (see handleTrackTap), so nothing is pending any more. The
+        // open draft's first tile has no entry yet — treat it as straight.
+        const pending = !trackClosed && idx === n - 1;
+        const prevDir = idx > 0 ? trackDraft![idx - 1].dir : trackClosed ? trackDraft![n - 1].dir : seg.dir;
+        trackByTile.set(seg.tile, { seg, prevDir, draft: true, pending });
       });
     }
 
@@ -1751,10 +2336,10 @@ export function initParkGame(): void {
         const ripple = 0.85 + 0.25 * Math.sin(clock * 1.5 + (x + y) * 0.6);
         fillTile(ctx, VIEW, vx, vy, shadeColor('#1f6fa8', ripple));
       } else {
+        // Track tiles keep their grass under the drawn ballast-and-rails
+        // bed (drawTrackTile) — a coaster loop shouldn't pave the lawn.
         const groundColor =
-          tile === 'track'
-            ? '#3a3a42'
-            : tile === 'path' || tile === 'entrance'
+          tile === 'path' || tile === 'entrance'
               ? '#8a7a5c'
               : zone
                 ? shadeColor(ZONES[zone].groundColor, (x + y) % 2 === 0 ? 1 : 0.88)
@@ -1795,8 +2380,7 @@ export function initParkGame(): void {
         ctx.font = '17px serif';
         ctx.fillText('🌳', top.x, top.y - 7);
       } else if (GATE_EMOJI[tile]) {
-        ctx.font = '17px serif';
-        ctx.fillText(GATE_EMOJI[tile]!, top.x, top.y - 7);
+        drawGate(vx, vy, liftPx, GATE_EMOJI[tile]!, ZONES[gateZone(tile)!].groundColor);
       } else if (BUILDINGS[tile]) {
         const style = BUILDING_STYLE[tile] ?? { color: '#44447a', height: BLOCK_HEIGHT };
         const reskin = zone ? ZONE_BUILDING_STYLE[zone][tile] : undefined;
@@ -1835,25 +2419,10 @@ export function initParkGame(): void {
 
       const trackInfo = trackByTile.get(i);
       if (trackInfo) {
-        const { seg, draft, pending } = trackInfo;
-        // A pending tail segment's dir is still a placeholder (see
-        // handleTrackTap), so its slope direction isn't known yet — render
-        // it flat rather than guess a ramp orientation from a bogus dir.
-        const isRamp = (seg.kind === 'up' || seg.kind === 'down') && !pending;
-        const nextTile = isRamp ? stepTile(seg.tile, seg.dir) : null;
-        const nextLift = nextTile !== null ? heights[nextTile] * TERRAIN_STEP : liftPx;
+        const { seg, prevDir, draft, pending } = trackInfo;
         ctx.save();
         if (draft) ctx.globalAlpha = 0.55;
-        if (isRamp) {
-          drawRamp(ctx, VIEW, vx, vy, rampCorners(rotateDir(seg.dir, rotation) as Dir, liftPx, nextLift), '#8a8a95');
-        } else {
-          fillTile(ctx, VIEW, vx, vy, '#8a8a95', liftPx);
-        }
-        const emojiLift = isRamp ? (liftPx + nextLift) / 2 : liftPx;
-        const railTop = isoProject(VIEW, vx + 0.5, vy + 0.5);
-        railTop.y -= emojiLift + 6;
-        ctx.font = '12px serif';
-        ctx.fillText(TRACK_KIND_EMOJI[seg.kind], railTop.x, railTop.y);
+        drawTrackTile(i, seg, prevDir, pending);
         ctx.restore();
       }
     });

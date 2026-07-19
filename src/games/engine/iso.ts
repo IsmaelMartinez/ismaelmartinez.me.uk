@@ -44,12 +44,32 @@ export function isoTileFromPoint(
   return y * w + x;
 }
 
-/** Multiplies each RGB channel of a #rrggbb colour; factor <1 darkens. */
-export function shadeColor(hex: string, factor: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const channel = (shift: number) =>
-    Math.round(Math.min(255, Math.max(0, ((n >> shift) & 0xff) * factor)));
-  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
+/**
+ * Multiplies each RGB channel of a colour; factor <1 darkens. Accepts
+ * #rrggbb and the `rgb(r, g, b)` form this function itself returns, so a
+ * shaded colour can be shaded again (e.g. Pixel Park's zone-tinted ground
+ * fed back through drawBlock for raised tiles — which used to come out as
+ * NaN channels and paint hills black).
+ */
+export function shadeColor(color: string, factor: number): string {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (color.charCodeAt(0) === 35 /* '#' */) {
+    const n = parseInt(color.slice(1), 16);
+    r = (n >> 16) & 0xff;
+    g = (n >> 8) & 0xff;
+    b = n & 0xff;
+  } else {
+    const m = color.match(/\d+/g);
+    if (m) {
+      r = +m[0];
+      g = +m[1];
+      b = +m[2];
+    }
+  }
+  const ch = (v: number) => Math.round(Math.min(255, Math.max(0, v * factor)));
+  return `rgb(${ch(r)}, ${ch(g)}, ${ch(b)})`;
 }
 
 function diamondPath(ctx: CanvasRenderingContext2D, view: IsoView, x: number, y: number, lift: number) {

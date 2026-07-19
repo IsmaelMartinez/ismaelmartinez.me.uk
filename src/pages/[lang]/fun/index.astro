@@ -11,11 +11,14 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
+type Shelf = 'action' | 'puzzle' | 'simulation';
+
 interface ArcadeGame {
   id: string;
   title: string;
   taglineKey: TranslationKey;
   genreKey: TranslationKey;
+  shelf: Shelf;
   twoPlayer: boolean;
   icon: string;
   color: string;
@@ -26,6 +29,7 @@ interface ArcadeGame {
 const arcadeGames: ArcadeGame[] = [
   {
     id: 'snake',
+    shelf: 'action',
     title: 'SNAKE',
     taglineKey: 'fun.snake.description',
     genreKey: 'fun.arcade.genre.snake',
@@ -36,6 +40,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'poo-poo-land',
+    shelf: 'puzzle',
     title: 'POO POO LAND',
     taglineKey: 'fun.pooLand.description',
     genreKey: 'fun.arcade.genre.pooLand',
@@ -46,6 +51,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'tanks',
+    shelf: 'action',
     title: 'TANK DUEL',
     taglineKey: 'fun.tanks.description',
     genreKey: 'fun.arcade.genre.tanks',
@@ -56,6 +62,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'park',
+    shelf: 'simulation',
     title: 'PIXEL PARK',
     taglineKey: 'fun.park.description',
     genreKey: 'fun.arcade.genre.park',
@@ -66,6 +73,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'city',
+    shelf: 'simulation',
     title: 'MICROCITY',
     taglineKey: 'fun.city.description',
     genreKey: 'fun.arcade.genre.city',
@@ -76,6 +84,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'syndicate',
+    shelf: 'simulation',
     title: 'SYNDICATE',
     taglineKey: 'fun.syndicate.description',
     genreKey: 'fun.arcade.genre.syndicate',
@@ -86,6 +95,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'lemmings',
+    shelf: 'puzzle',
     title: 'CRITTER RESCUE',
     taglineKey: 'fun.lemmings.description',
     genreKey: 'fun.arcade.genre.lemmings',
@@ -96,6 +106,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'towerdefense',
+    shelf: 'action',
     title: 'LINE HOLD',
     taglineKey: 'fun.towerdefense.description',
     genreKey: 'fun.arcade.genre.towerdefense',
@@ -106,6 +117,7 @@ const arcadeGames: ArcadeGame[] = [
   },
   {
     id: 'cascade',
+    shelf: 'puzzle',
     title: 'CASCADE',
     taglineKey: 'fun.cascade.description',
     genreKey: 'fun.arcade.genre.cascade',
@@ -115,6 +127,13 @@ const arcadeGames: ArcadeGame[] = [
     path: '/fun/cascade',
     isNew: true
   }
+];
+
+// Aisle order on the floor; each shelf renders its own labelled row.
+const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
+  { id: 'action', labelKey: 'fun.arcade.shelf.action' },
+  { id: 'puzzle', labelKey: 'fun.arcade.shelf.puzzle' },
+  { id: 'simulation', labelKey: 'fun.arcade.shelf.simulation' }
 ];
 ---
 
@@ -131,22 +150,29 @@ const arcadeGames: ArcadeGame[] = [
     </div>
 
     <div class="arcade-floor">
-      <div class="cabinets-row">
-        {arcadeGames.map(game => (
-          <ArcadeCabinet
-            id={game.id}
-            title={game.title}
-            tagline={t(game.taglineKey)}
-            genre={t(game.genreKey)}
-            players={game.twoPlayer ? t('fun.arcade.twoPlayers') : t('fun.arcade.onePlayer')}
-            icon={game.icon}
-            color={game.color}
-            href={getLocalizedPath(game.path, lang)}
-            bestLabel={t('fun.arcade.best')}
-            newBadge={game.isNew ? t('fun.arcade.new') : undefined}
-          />
-        ))}
-      </div>
+      {shelves.map(shelf => (
+        <section class="arcade-shelf">
+          <h2 class="shelf-sign">{t(shelf.labelKey)}</h2>
+          <div class="cabinets-row">
+            {arcadeGames
+              .filter(game => game.shelf === shelf.id)
+              .map(game => (
+                <ArcadeCabinet
+                  id={game.id}
+                  title={game.title}
+                  tagline={t(game.taglineKey)}
+                  genre={t(game.genreKey)}
+                  players={game.twoPlayer ? t('fun.arcade.twoPlayers') : t('fun.arcade.onePlayer')}
+                  icon={game.icon}
+                  color={game.color}
+                  href={getLocalizedPath(game.path, lang)}
+                  bestLabel={t('fun.arcade.best')}
+                  newBadge={game.isNew ? t('fun.arcade.new') : undefined}
+                />
+              ))}
+          </div>
+        </section>
+      ))}
     </div>
 
     <div class="arcade-decorations">
@@ -302,6 +328,35 @@ const arcadeGames: ArcadeGame[] = [
     z-index: 10;
     max-width: 1100px;
     margin: 0 auto;
+  }
+
+  .arcade-shelf + .arcade-shelf {
+    margin-top: var(--space-2xl);
+  }
+
+  /* Aisle signage: same neon family as the main sign, much smaller, with a
+     hairline shelf rail running off both sides. */
+  .shelf-sign {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.35em;
+    color: var(--sign-accent);
+    text-shadow: var(--sign-accent-glow);
+  }
+
+  .shelf-sign::before,
+  .shelf-sign::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--sign-accent), transparent);
+    opacity: 0.35;
   }
 
   /* flex-wrap centres partial rows, so an orphan pair of cabinets doesn't

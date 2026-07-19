@@ -188,8 +188,12 @@ export function createEffects(options: EffectsOptions = {}): Effects {
         part.y += part.vy * dt;
         part.vy += part.gravity * gravityScale * dt;
         if (part.drag > 0) {
-          part.vx *= 1 - part.drag * dt;
-          part.vy *= 1 - part.drag * dt;
+          // Clamped so an oversized dt can only stop a particle, not
+          // reverse it (unreachable via createGameLoop's fixed step, but
+          // this module doesn't get to assume its caller).
+          const damping = Math.max(0, 1 - part.drag * dt);
+          part.vx *= damping;
+          part.vy *= damping;
         }
         return part.life > 0 && (cullBelowY === undefined || part.y < cullBelowY);
       });
@@ -201,16 +205,18 @@ export function createEffects(options: EffectsOptions = {}): Effects {
     },
     drawParticles(ctx) {
       for (const part of particles) {
-        ctx.globalAlpha = Math.max(0, part.life / part.maxLife);
+        // maxLife 0 would make the alpha NaN; treat such a particle as spent.
+        ctx.globalAlpha = part.maxLife > 0 ? Math.max(0, part.life / part.maxLife) : 0;
         if (part.glow) {
-          ctx.save();
+          // Resetting shadowBlur beats a per-particle save/restore pair;
+          // a lingering shadowColor draws nothing at blur 0.
           ctx.shadowColor = part.color;
           ctx.shadowBlur = glowBlur;
           ctx.fillStyle = part.color;
           ctx.beginPath();
           ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
           ctx.fill();
-          ctx.restore();
+          ctx.shadowBlur = 0;
         } else if (part.shape === 'circle') {
           ctx.fillStyle = part.color;
           ctx.beginPath();
@@ -228,12 +234,11 @@ export function createEffects(options: EffectsOptions = {}): Effects {
         ctx.globalAlpha = Math.max(0, Math.min(1, f.life / FLOATER_FADE));
         ctx.font = `bold ${f.size}px monospace`;
         if (f.glow) {
-          ctx.save();
           ctx.shadowColor = f.color;
           ctx.shadowBlur = floaterGlowBlur;
           ctx.fillStyle = f.color;
           ctx.fillText(f.text, f.x, f.y);
-          ctx.restore();
+          ctx.shadowBlur = 0;
         } else {
           ctx.fillStyle = f.color;
           ctx.fillText(f.text, f.x, f.y);

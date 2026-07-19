@@ -18,13 +18,14 @@ describe('createEffects', () => {
   });
 
   it('applies the launch kick and vy squash to gravity bursts', () => {
-    // angle = 0.25 * 2π = straight down (+y), full speed jitter 0.4+0.6.
-    vi.spyOn(Math, 'random').mockReturnValue(1);
+    // First random picks the angle (0.25 → π/2, straight down), second the
+    // speed jitter (1 → full speed), so the squash is actually observable.
+    vi.spyOn(Math, 'random').mockReturnValueOnce(0.25).mockReturnValueOnce(1);
     const fx = createEffects({ burstSpeed: 100, vySquash: 0.5, launchKick: 30 });
     fx.burst(0, 0, 1, '#fff', { gravity: 1 });
     const p = fx.particles[0];
-    // sin(2π) ≈ 0 → squash invisible here; check squash via a fixed angle instead.
-    expect(p.vy).toBeCloseTo(Math.sin(Math.PI * 2) * 100 * 0.5 - 30);
+    expect(p.vy).toBeCloseTo(100 * 0.5 - 30);
+    expect(p.vx).toBeCloseTo(0);
   });
 
   it('ages, moves, and culls particles in update', () => {

@@ -741,18 +741,19 @@ export function initLemmingsGame(): void {
     builder: '#fbbf24'
   };
 
-  function drawUmbrella(c: Critter, top: number) {
+  /** Canopy shifted by `sway` whole pixels; the shaft stays anchored. */
+  function drawUmbrella(c: Critter, top: number, sway: number) {
     const uy = top - 4;
     ctx.fillStyle = '#38bdf8';
-    ctx.fillRect(c.x - 4, uy, 8, 1);
+    ctx.fillRect(c.x - 4 + sway, uy, 8, 1);
     ctx.fillStyle = '#0ea5e9';
-    ctx.fillRect(c.x - 3, uy + 1, 6, 1);
+    ctx.fillRect(c.x - 3 + sway, uy + 1, 6, 1);
     ctx.fillStyle = '#0284c7';
-    ctx.fillRect(c.x - 1, uy + 2, 2, 1);
+    ctx.fillRect(c.x - 1 + sway, uy + 2, 2, 1);
     // Bright panel tips.
     ctx.fillStyle = '#e0f2fe';
-    ctx.fillRect(c.x - 4, uy, 1, 1);
-    ctx.fillRect(c.x + 3, uy, 1, 1);
+    ctx.fillRect(c.x - 4 + sway, uy, 1, 1);
+    ctx.fillRect(c.x + 3 + sway, uy, 1, 1);
     // Shaft down to the body.
     ctx.fillStyle = '#cbd5e1';
     ctx.fillRect(c.x, uy + 3, 1, top - (uy + 3) + 1);
@@ -761,23 +762,31 @@ export function initLemmingsGame(): void {
   function drawCritter(c: Critter) {
     const top = c.y - CRITTER_H;
     const body = SKILL_COLOR[c.state] || '#a3e635';
+    // Shared animation phases, offset per critter so crowds don't lockstep.
+    // Everything stays on whole pixels — this is the 1x bitmap cabinet.
+    const tick = (Math.floor(frame / 4) + c.id) % 2;
+    const slow = (Math.floor(frame / 8) + c.id) % 4;
     // Contact shadow (skip while airborne).
     if (c.state !== 'faller') {
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.fillRect(c.x - 2, c.y, 4, 1);
     }
-    if (c.floater) drawUmbrella(c, top);
-    // Legs — a two-frame walk cycle, phased per critter so a crowd isn't in lockstep.
+    if (c.floater) drawUmbrella(c, top, slow === 1 ? 1 : slow === 3 ? -1 : 0);
+    // Legs — a two-frame walk cycle.
     if (c.state === 'walker') {
-      const stride = (Math.floor(frame / 4) + c.id) % 2;
       ctx.fillStyle = '#3f6212';
-      if (stride === 0) {
+      if (tick === 0) {
         ctx.fillRect(c.x - 2, c.y - 1, 1, 1);
         ctx.fillRect(c.x + 1, c.y - 1, 1, 1);
       } else {
         ctx.fillRect(c.x - 1, c.y - 1, 1, 1);
         ctx.fillRect(c.x, c.y - 1, 1, 1);
       }
+    } else if (c.state === 'faller') {
+      // Legs splay in the air.
+      ctx.fillStyle = '#3f6212';
+      ctx.fillRect(c.x - 3, c.y - 1, 1, 1);
+      ctx.fillRect(c.x + 2, c.y - 1, 1, 1);
     }
     // Body with top highlight and belly shadow for a bit of roundness.
     ctx.fillStyle = body;
@@ -786,6 +795,16 @@ export function initLemmingsGame(): void {
     ctx.fillRect(c.x - 2, top + 2, 4, 1);
     ctx.fillStyle = shade(body, -36);
     ctx.fillRect(c.x - 2, c.y - 2, 4, 1);
+    // Arms — walkers counter-swing the legs; fallers throw them up.
+    if (c.state === 'walker') {
+      ctx.fillStyle = shade(body, -20);
+      ctx.fillRect(c.x - 3, top + (tick === 0 ? 3 : 4), 1, 2);
+      ctx.fillRect(c.x + 2, top + (tick === 0 ? 4 : 3), 1, 2);
+    } else if (c.state === 'faller') {
+      ctx.fillStyle = shade(body, -20);
+      ctx.fillRect(c.x - 3, top + 2, 1, 2);
+      ctx.fillRect(c.x + 2, top + 2, 1, 2);
+    }
     // Head + hair tuft.
     ctx.fillStyle = '#e2f7c0';
     ctx.fillRect(c.x - 1, top, 2, 2);
@@ -794,21 +813,37 @@ export function initLemmingsGame(): void {
     // Eye, on the leading side.
     ctx.fillStyle = '#0b1120';
     ctx.fillRect(c.dir > 0 ? c.x : c.x - 1, top + 1, 1, 1);
-    // Per-skill flourishes.
+    // Per-skill flourishes, animated on the shared ticks.
     if (c.state === 'blocker') {
+      // Arms wave slowly: level, or one up one down.
       ctx.fillStyle = '#fed7aa';
-      ctx.fillRect(c.x - 3, top + 3, 6, 1); // arms thrown wide
+      if (slow < 2) {
+        ctx.fillRect(c.x - 3, top + 3, 6, 1);
+      } else {
+        ctx.fillRect(c.x - 3, top + 2, 3, 1);
+        ctx.fillRect(c.x, top + 4, 3, 1);
+      }
       ctx.fillStyle = '#ef4444';
       ctx.fillRect(c.x - 1, top - 1, 2, 1); // red hard hat
     } else if (c.state === 'digger') {
+      // The spade glint swings side to side, kicking a dirt fleck.
       ctx.fillStyle = '#fde68a';
-      ctx.fillRect(c.x - 1, c.y - 1, 2, 1); // spade glint at its feet
+      ctx.fillRect(tick === 0 ? c.x - 2 : c.x, c.y - 1, 2, 1);
+      ctx.fillStyle = '#a16207';
+      ctx.fillRect(tick === 0 ? c.x + 2 : c.x - 3, c.y - 2, 1, 1);
     } else if (c.state === 'basher') {
+      // The fist jabs out and back; the rear arm braces.
+      const reach = tick === 0 ? 3 : 2;
       ctx.fillStyle = '#fbcfe8';
-      ctx.fillRect(c.dir > 0 ? c.x + 2 : c.x - 3, top + 3, 1, 2); // outstretched fist
+      ctx.fillRect(c.dir > 0 ? c.x + reach : c.x - reach - 1, top + 3, 1, 2);
+      ctx.fillStyle = shade(body, -20);
+      ctx.fillRect(c.dir > 0 ? c.x - 3 : c.x + 2, top + 4, 1, 1);
     } else if (c.state === 'builder') {
+      // The brick hand bobs as each row goes down.
       ctx.fillStyle = '#fca5a5';
-      ctx.fillRect(c.dir > 0 ? c.x + 2 : c.x - 3, top + 4, 1, 1); // brick in hand
+      ctx.fillRect(c.dir > 0 ? c.x + 2 : c.x - 3, top + (tick === 0 ? 4 : 3), 1, 1);
+      ctx.fillStyle = shade(body, -20);
+      ctx.fillRect(c.dir > 0 ? c.x - 3 : c.x + 2, top + 4, 1, 1);
     }
   }
 

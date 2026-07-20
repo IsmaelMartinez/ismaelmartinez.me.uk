@@ -39,7 +39,12 @@ export const CART_MIN_SPEED = 1.5;
 export const CART_MAX_SPEED = 6;
 export const CART_CRUISE_SPEED = 2.5;
 
-const DIR_DELTA: { dx: number; dy: number }[] = [
+/**
+ * World-space step vector per direction — the single source of truth for
+ * the 0=N, 1=E, 2=S, 3=W encoding (game.ts's track renderer bends rails
+ * between the same edges these vectors step across).
+ */
+export const DIR_DELTA: { dx: number; dy: number }[] = [
   { dx: 0, dy: -1 }, // 0 north
   { dx: 1, dy: 0 }, // 1 east
   { dx: 0, dy: 1 }, // 2 south

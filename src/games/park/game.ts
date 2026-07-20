@@ -75,6 +75,7 @@ import {
 } from './mayhem';
 import {
   MIN_TRACK_LENGTH,
+  DIR_DELTA,
   CAR_CAPACITY,
   CART_MIN_SPEED,
   stepTile,
@@ -116,13 +117,6 @@ const LOAD_WAIT = 3;
 /** Guests waiting for a cart, per coaster. */
 const QUEUE_CAP = 6;
 
-/** World-space step vector per track direction (0=N, 1=E, 2=S, 3=W). */
-const DIR_VEC = [
-  { dx: 0, dy: -1 },
-  { dx: 1, dy: 0 },
-  { dx: 0, dy: 1 },
-  { dx: -1, dy: 0 }
-];
 
 // No ferris or flume entry: the Big Wheel and Log Flume are custom-drawn
 // (see drawFerris / drawFlume), never an emoji on a block. Food and drink
@@ -221,6 +215,33 @@ const GUEST_COLORS = ['#f472b6', '#60a5fa', '#fbbf24', '#34d399', '#c084fc', '#f
 /** Skin/hair variety for drawn guests, picked per guest from its style roll. */
 const GUEST_SKINS = ['#eec9a2', '#d9a06b', '#a06a42', '#7a4a2e'];
 const GUEST_HAIR = ['#2b2118', '#5a3a1e', '#c9a227', '#8a4a2f', '#3a3a45', '#b0b6c0'];
+/**
+ * drawGuest's four tints per palette colour, precomputed once — shading
+ * strings per guest per frame would re-parse and re-allocate hundreds of
+ * identical colours a frame in a full park.
+ */
+const GUEST_SHADES = new Map(
+  GUEST_COLORS.map(c => [
+    c,
+    {
+      trouser: shadeColor(c, 0.4),
+      hem: shadeColor(c, 0.6),
+      rim: shadeColor(c, 1.35),
+      arm: shadeColor(c, 0.75)
+    }
+  ])
+);
+
+/**
+ * Zone ground checkerboard tints, precomputed once per zone — the render
+ * loop was re-shading the zone colour for every tinted tile every frame.
+ */
+const ZONE_GROUND_CHECKER = Object.fromEntries(
+  (Object.keys(ZONES) as ZoneId[]).map(z => [
+    z,
+    [shadeColor(ZONES[z].groundColor, 1), shadeColor(ZONES[z].groundColor, 0.88)]
+  ])
+) as Record<ZoneId, [string, string]>;
 
 interface Pt {
   x: number;
@@ -1315,16 +1336,20 @@ export function initParkGame(): void {
     const zC = heights[i] * TERRAIN_STEP;
     if (pending) {
       // The draft tail's direction is still a placeholder (see
-      // handleTrackTap) — mark the tile with a ballast pad, no rails.
+      // handleTrackTap) — mark the tile with a bright-rimmed ballast pad
+      // (no rails yet) that clearly registers the tap on dark grass.
       const p = projectWorld(cx, cy);
-      ctx.fillStyle = '#4c4741';
+      ctx.fillStyle = '#6b655c';
       ctx.beginPath();
       ctx.ellipse(p.x, p.y - zC, 8, 4, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = '#c9ced8';
+      ctx.lineWidth = 1;
+      ctx.stroke();
       return;
     }
-    const inV = DIR_VEC[prevDir];
-    const outV = DIR_VEC[seg.dir];
+    const inV = DIR_DELTA[prevDir];
+    const outV = DIR_DELTA[seg.dir];
     // Climb segments slope from their own height at the entry edge to the
     // next tile's height at the exit edge; everything else is level.
     const next = seg.kind === 'up' || seg.kind === 'down' ? stepTile(i, seg.dir) : null;
@@ -1371,20 +1396,30 @@ export function initParkGame(): void {
       ctx.stroke();
     }
 
-    // Twin rails: dark understroke for contrast, bright steel on top.
+    // Twin rails: dark understroke for contrast, bright steel on top. The
+    // three points per rail depend only on the side, so they project once
+    // and both stroke passes reuse them. The offset curve's control point
+    // is where the two offset tangent lines meet — the miter
+    // (pIn+pOut)·off/(1+pIn·pOut) — which keeps the gauge constant on
+    // straights (÷2) and through corners (÷1); a flat ·0.5 pinched the
+    // rails to ~71% gauge at every corner apex.
+    const miter = 0.14 / (1 + (pInX * pOutX + pInY * pOutY));
+    const eaL = projectWorld(cx - inV.dx * 0.5 - pInX * 0.14, cy - inV.dy * 0.5 - pInY * 0.14);
+    const xaL = projectWorld(cx + outV.dx * 0.5 - pOutX * 0.14, cy + outV.dy * 0.5 - pOutY * 0.14);
+    const caL = projectWorld(cx - (pInX + pOutX) * miter, cy - (pInY + pOutY) * miter);
+    const eaR = projectWorld(cx - inV.dx * 0.5 + pInX * 0.14, cy - inV.dy * 0.5 + pInY * 0.14);
+    const xaR = projectWorld(cx + outV.dx * 0.5 + pOutX * 0.14, cy + outV.dy * 0.5 + pOutY * 0.14);
+    const caR = projectWorld(cx + (pInX + pOutX) * miter, cy + (pInY + pOutY) * miter);
+    const zM = (zE + zX) / 2;
     for (let pass = 0; pass < 2; pass++) {
       ctx.strokeStyle = pass === 0 ? '#26262e' : '#c9ced8';
       ctx.lineWidth = pass === 0 ? 2 : 1;
-      for (let s = -1; s <= 1; s += 2) {
-        const off = 0.14 * s;
-        const ea = projectWorld(cx - inV.dx * 0.5 + pInX * off, cy - inV.dy * 0.5 + pInY * off);
-        const xa = projectWorld(cx + outV.dx * 0.5 + pOutX * off, cy + outV.dy * 0.5 + pOutY * off);
-        const ca = projectWorld(cx + (pInX + pOutX) * off * 0.5, cy + (pInY + pOutY) * off * 0.5);
-        ctx.beginPath();
-        ctx.moveTo(ea.x, ea.y - zE);
-        ctx.quadraticCurveTo(ca.x, ca.y - (zE + zX) / 2, xa.x, xa.y - zX);
-        ctx.stroke();
-      }
+      ctx.beginPath();
+      ctx.moveTo(eaL.x, eaL.y - zE);
+      ctx.quadraticCurveTo(caL.x, caL.y - zM, xaL.x, xaL.y - zX);
+      ctx.moveTo(eaR.x, eaR.y - zE);
+      ctx.quadraticCurveTo(caR.x, caR.y - zM, xaR.x, xaR.y - zX);
+      ctx.stroke();
     }
 
     if (seg.kind === 'station') {
@@ -1450,7 +1485,8 @@ export function initParkGame(): void {
     ctx.strokeStyle = shadeColor(color, 0.8);
     ctx.lineWidth = 0.75;
     for (let k = 0; k < 8; k++) {
-      const a = angle * 0.5 + (k * Math.PI) / 4;
+      // Planks turn WITH the mounts — the deck is one rigid platform.
+      const a = angle + (k * Math.PI) / 4;
       ctx.beginPath();
       ctx.moveTo(c.x, topY);
       ctx.lineTo(c.x + Math.cos(a) * 14.5, topY + Math.sin(a) * 6);
@@ -2001,7 +2037,23 @@ export function initParkGame(): void {
     ctx.fillText(emoji, c.x, gy - postH - 10);
   }
 
-  /** Screen position at `u` laps along a coaster's track (wraps; z applied). */
+  /** Rail height (in height steps) at fraction `t` through a segment's tile, entry edge → exit edge. */
+  function railZ(seg: Segment, t: number): number {
+    const z0 = heights[seg.tile];
+    if (seg.kind !== 'up' && seg.kind !== 'down') return z0;
+    const next = stepTile(seg.tile, seg.dir);
+    return next === null ? z0 : z0 + (heights[next] - z0) * t;
+  }
+
+  /**
+   * Screen position at `u` laps along a coaster's track (wraps). The x/y
+   * path runs tile centre to tile centre, but z follows the *rail*
+   * profile — a climb tile's rails slope from its own height at the entry
+   * edge to the next tile's height at the exit edge, so interpolating z
+   * between tile-centre heights would sink the train half a step into
+   * every climb (and float it above every drop). Integer u = a tile
+   * centre = halfway (t = 0.5) through that tile's rails.
+   */
   function cartPoint(coaster: Coaster, u: number): { x: number; y: number } {
     const n = coaster.segments.length;
     const uu = ((u % n) + n) % n;
@@ -2012,8 +2064,26 @@ export function initParkGame(): void {
     const from = tileCenter(curSeg.tile);
     const to = tileCenter(nextSeg.tile);
     const p = projectWorld(from.x + (to.x - from.x) * frac, from.y + (to.y - from.y) * frac);
-    p.y -= (heights[curSeg.tile] + (heights[nextSeg.tile] - heights[curSeg.tile]) * frac) * TERRAIN_STEP;
+    const z = frac < 0.5 ? railZ(curSeg, 0.5 + frac) : railZ(nextSeg, frac - 0.5);
+    p.y -= z * TERRAIN_STEP;
     return p;
+  }
+
+  /**
+   * Screen tangent at `u`, sampled strictly within the current
+   * centre-to-centre span — the path bends at integer u, and a sample
+   * straddling the bend can produce a near-vertical screen delta that
+   * would pirouette the car to ±90° on corners.
+   */
+  function cartTangent(coaster: Coaster, u: number): { dx: number; dy: number } {
+    const n = coaster.segments.length;
+    const uu = ((u % n) + n) % n;
+    const base = Math.floor(uu);
+    const frac = uu - base;
+    const t0 = base + Math.min(frac, 0.87);
+    const a = cartPoint(coaster, t0);
+    const b = cartPoint(coaster, t0 + 0.12);
+    return { dx: b.x - a.x, dy: b.y - a.y };
   }
 
   /**
@@ -2064,19 +2134,14 @@ export function initParkGame(): void {
   /** The two-car train, oriented along the rails; back car drawn first. */
   function drawCoaster(coaster: Coaster) {
     const front = cartPoint(coaster, coaster.cartU);
-    const ahead = cartPoint(coaster, coaster.cartU + 0.12);
+    const frontT = cartTangent(coaster, coaster.cartU);
     const rear = cartPoint(coaster, coaster.cartU - 0.42);
-    const rearAhead = cartPoint(coaster, coaster.cartU - 0.3);
+    const rearT = cartTangent(coaster, coaster.cartU - 0.42);
     const riders = coaster.riders.length;
-    const rearRiders = Math.max(0, riders - 2);
-    const frontRiders = Math.min(2, riders);
     // Painter's order: whichever car sits higher on screen goes first.
-    if (rear.y <= front.y) {
-      drawTrainCar(rear.x, rear.y, rearAhead.x - rear.x, rearAhead.y - rear.y, rearRiders, false);
-      drawTrainCar(front.x, front.y, ahead.x - front.x, ahead.y - front.y, frontRiders, true);
-    } else {
-      drawTrainCar(front.x, front.y, ahead.x - front.x, ahead.y - front.y, frontRiders, true);
-      drawTrainCar(rear.x, rear.y, rearAhead.x - rear.x, rearAhead.y - rear.y, rearRiders, false);
+    for (const car of rear.y <= front.y ? [0, 1] : [1, 0]) {
+      if (car === 0) drawTrainCar(rear.x, rear.y, rearT.dx, rearT.dy, Math.max(0, riders - 2), false);
+      else drawTrainCar(front.x, front.y, frontT.dx, frontT.dy, Math.min(2, riders), true);
     }
     if (riders > 0) {
       ctx.font = 'bold 9px monospace';
@@ -2178,7 +2243,8 @@ export function initParkGame(): void {
     ctx.fill();
 
     // Legs: trouser-dark swings around the hip; feet stay on the ground line.
-    ctx.strokeStyle = shadeColor(guest.color, 0.4);
+    const shades = GUEST_SHADES.get(guest.color)!;
+    ctx.strokeStyle = shades.trouser;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(p.x - 0.9, p.y - 4 - bob);
@@ -2201,13 +2267,13 @@ export function initParkGame(): void {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.lineWidth = 0.75;
     ctx.stroke();
-    ctx.fillStyle = shadeColor(guest.color, 0.6);
+    ctx.fillStyle = shades.hem;
     ctx.fillRect(p.x - 2.2, hipY - 1, 4.4, 1);
-    ctx.fillStyle = shadeColor(guest.color, 1.35);
+    ctx.fillStyle = shades.rim;
     ctx.fillRect(p.x + dir * 1.1, shoulderY + 0.5, 0.8, 4);
 
     // Arms swing opposite the legs while walking.
-    ctx.strokeStyle = shadeColor(guest.color, 0.75);
+    ctx.strokeStyle = shades.arm;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(p.x - 2, shoulderY + 1);
@@ -2342,7 +2408,7 @@ export function initParkGame(): void {
           tile === 'path' || tile === 'entrance'
               ? '#8a7a5c'
               : zone
-                ? shadeColor(ZONES[zone].groundColor, (x + y) % 2 === 0 ? 1 : 0.88)
+                ? ZONE_GROUND_CHECKER[zone][(x + y) % 2 === 0 ? 0 : 1]
                 : (x + y) % 2 === 0
                   ? '#1d3b24'
                   : '#1f4028';

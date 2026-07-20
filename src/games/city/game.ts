@@ -111,8 +111,13 @@ const ZONE_ICON_FONT = 13;
 /** Rooftop mechanical units (AC boxes, tower plant) share one light grey so
  *  they read as equipment, not as a dark hole punched in the roofline. */
 const ROOFTOP_UNIT = '#c9ced6';
-/** Hashed per-tile picks so grown blocks don't repeat identically. */
-const AWNING_COLORS = ['#c0503a', '#2f7a55', '#a3823a', '#7a4a8a'];
+/**
+ * Hashed per-tile picks so grown blocks don't repeat identically.
+ * ACCENT_COLORS is the shared accent palette: commercial awnings AND the
+ * industrial silo company bands both draw from it — retune with both in
+ * view.
+ */
+const ACCENT_COLORS = ['#c0503a', '#2f7a55', '#a3823a', '#7a4a8a'];
 const SIGN_COLORS = ['#f6f8ff', '#e0b040', '#d06a8a'];
 /** Overall silhouette height per (type, level) — tallest architectural
  *  feature — so floaters/warnings/emoji sit above the actual building. */
@@ -579,9 +584,14 @@ export function initCityGame(): void {
 
   /**
    * Pitched-roof ridge silhouette over an explicit footprint, sitting on
-   * top of a box whose roofline is at zBase. `axis` flips which diagonal
-   * the ridge runs along (construction variety); the triangle splits into
-   * a lit and a shaded slope with a ridge highlight so the pitch reads.
+   * top of a box whose roofline is at zBase. The eave line runs between
+   * the W and E diamond corners — the N–S pair projects to a single
+   * screen x (iso x is (tx−ty)·halfW, and the corners share tx−ty on any
+   * square-ish footprint), which would collapse the triangles to zero
+   * area. The triangle splits into a lit and a shaded slope with a ridge
+   * highlight so the pitch reads; roof *variety* comes from callers
+   * alternating this with drawPyramidCap (hipped), not from re-aiming
+   * the ridge.
    */
   function drawGableRoof(
     x0: number,
@@ -590,11 +600,10 @@ export function initCityGame(): void {
     y1: number,
     zBase: number,
     peakRise: number,
-    color: string,
-    axis = 0
+    color: string
   ) {
-    const a = axis === 0 ? isoProject(VIEW, x0, y0) : isoProject(VIEW, x0, y1);
-    const b = axis === 0 ? isoProject(VIEW, x1, y1) : isoProject(VIEW, x1, y0);
+    const a = isoProject(VIEW, x0, y1);
+    const b = isoProject(VIEW, x1, y0);
     const peak = isoProject(VIEW, (x0 + x1) / 2, (y0 + y1) / 2);
     const py = peak.y - zBase - peakRise;
     const mx = (a.x + b.x) / 2;
@@ -729,26 +738,44 @@ export function initCityGame(): void {
     const e = isoProject(VIEW, x1, y0);
     const faces: [{ x: number; y: number }, { x: number; y: number }][] = [[w, s], [s, e]];
     const rise = zTop - zBase;
-    faces.forEach(([a, b], f) => {
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < 2; c++) {
-          const t = 0.3 + c * 0.4;
-          const bx = a.x + (b.x - a.x) * t;
-          const by = a.y + (b.y - a.y) * t - zBase - rise * ((r + 0.5) / rows);
-          // Stable per-window pattern: most lit, some dark
-          const lit = (i * 31 + f * 17 + r * 7 + c * 13 + salt * 19) % 5 < 3;
-          // Framed two-pane window: frame, glass, mullion, sill.
-          ctx.fillStyle = 'rgba(12, 18, 32, 0.65)';
-          ctx.fillRect(bx - 1.4, by - 2, 2.8, 4);
-          ctx.fillStyle = lit ? 'rgba(254, 240, 138, 0.9)' : 'rgba(64, 84, 110, 0.65)';
-          ctx.fillRect(bx - 1, by - 1.6, 2, 3.2);
-          ctx.fillStyle = 'rgba(12, 18, 32, 0.5)';
-          ctx.fillRect(bx - 0.25, by - 1.6, 0.5, 3.2);
-          ctx.fillStyle = 'rgba(226, 232, 240, 0.3)';
-          ctx.fillRect(bx - 1.6, by + 2, 3.2, 0.5);
+    // Framed two-pane windows, batched into one path per colour (frame,
+    // lit glass, dark glass, mullion+sill) instead of four fillStyle
+    // swaps per window — a grown city redraws every window every frame,
+    // so draw-call count is the budget, not the arithmetic.
+    for (let pass = 0; pass < 4; pass++) {
+      ctx.fillStyle =
+        pass === 0
+          ? 'rgba(12, 18, 32, 0.65)'
+          : pass === 1
+            ? 'rgba(254, 240, 138, 0.9)'
+            : pass === 2
+              ? 'rgba(64, 84, 110, 0.65)'
+              : 'rgba(226, 232, 240, 0.3)';
+      ctx.beginPath();
+      faces.forEach(([a, b], f) => {
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < 2; c++) {
+            // Stable per-window pattern: most lit, some dark
+            const lit = (i * 31 + f * 17 + r * 7 + c * 13 + salt * 19) % 5 < 3;
+            if (pass === 1 && !lit) continue;
+            if (pass === 2 && lit) continue;
+            const t = 0.3 + c * 0.4;
+            const bx = a.x + (b.x - a.x) * t;
+            const by = a.y + (b.y - a.y) * t - zBase - rise * ((r + 0.5) / rows);
+            if (pass === 0) ctx.rect(bx - 1.4, by - 2, 2.8, 4);
+            else if (pass === 3) ctx.rect(bx - 1.6, by + 2, 3.2, 0.5);
+            else if (lit) {
+              // Lit glass as two half-panes; the gap reads as the mullion.
+              ctx.rect(bx - 1, by - 1.6, 0.75, 3.2);
+              ctx.rect(bx + 0.25, by - 1.6, 0.75, 3.2);
+            } else {
+              ctx.rect(bx - 1, by - 1.6, 2, 3.2);
+            }
+          }
         }
-      }
-    });
+      });
+      ctx.fill();
+    }
   }
 
   /** Street door on the south-west face of a box, at fraction `t` along it. */
@@ -817,7 +844,9 @@ export function initCityGame(): void {
     const wall = shadeColor(p.wall, 0.88 + hash01(i, 21) * 0.28);
     const x0 = vx + 0.27, y0 = vy + 0.24, x1 = vx + 0.73, y1 = vy + 0.7;
     drawBox(x0, y0, x1, y1, 0, 6, wall);
-    drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof, hash01(i, 22) < 0.5 ? 0 : 1);
+    // Construction variety: half the cottages get a gable, half a hip.
+    if (hash01(i, 22) < 0.5) drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof);
+    else drawPyramidCap(x0, y0, x1, y1, 6, 4, p.roof);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 6);
     drawDoor(x0, y0, x1, y1, hash01(i, 25) < 0.5 ? 0.3 : 0.7, shadeColor(p.roof, 0.8));
     if (hash01(i, 23) > 0.45) drawChimney(vx + 0.38, vy + 0.34, 8);
@@ -830,7 +859,8 @@ export function initCityGame(): void {
     const wall = shadeColor(p.wall, 0.88 + hash01(i, 24) * 0.28);
     const mx0 = vx + 0.18, my0 = vy + 0.16, mx1 = vx + 0.66, my1 = vy + 0.7;
     drawBox(mx0, my0, mx1, my1, 0, 10, wall);
-    drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof, hash01(i, 22) < 0.5 ? 0 : 1);
+    if (hash01(i, 22) < 0.5) drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof);
+    else drawPyramidCap(mx0, my0, mx1, my1, 10, 4, p.roof);
     drawWindows(mx0, my0, mx1, my1, i, 2, 0, 10);
     drawDoor(mx0, my0, mx1, my1, 0.5, shadeColor(p.roof, 0.8));
     if (hash01(i, 26) > 0.4) drawChimney(vx + 0.3, vy + 0.28, 12);
@@ -907,7 +937,7 @@ export function initCityGame(): void {
     ctx.closePath();
     ctx.fill();
     // Thin awning strip flush with the front wall, overhanging it slightly.
-    drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, AWNING_COLORS[Math.floor(hash01(i, 31) * AWNING_COLORS.length)]);
+    drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, ACCENT_COLORS[Math.floor(hash01(i, 31) * ACCENT_COLORS.length)]);
   }
 
   /** Com L2: taller storefront with more window rows and a sign board
@@ -1005,7 +1035,7 @@ export function initCityGame(): void {
     drawPyramidCap(six0, siy0, six1, siy1, 12, 3, silo);
     // Company band round the silo, colour hashed per plot.
     const bandY = isoProject(VIEW, vx + 0.78, vy + 0.38);
-    ctx.fillStyle = AWNING_COLORS[Math.floor(hash01(i, 42) * AWNING_COLORS.length)];
+    ctx.fillStyle = ACCENT_COLORS[Math.floor(hash01(i, 42) * ACCENT_COLORS.length)];
     ctx.fillRect(bandY.x - 4.4, bandY.y - 9.5, 8.8, 1.6);
     drawRust(sx0, sy0, sx1, sy1, i, 43, 7);
 

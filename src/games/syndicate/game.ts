@@ -61,6 +61,14 @@ const PERSUADE_BONUS: Partial<Record<Unit['kind'], number>> = {
 const SHOT_LIFE = 0.12;
 const RAIN_DROPS = 90;
 
+/**
+ * Deterministic facade patterns, module-scope so drawWindows allocates no
+ * closures per building per frame (it runs for every facade every frame).
+ */
+const facadeStrip = (i: number, f: number, r: number) => (i * 13 + f * 29 + r * 11) % 7 === 0;
+const facadeLit = (i: number, f: number, r: number, c: number) =>
+  (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
+
 interface Decal {
   x: number;
   y: number;
@@ -174,7 +182,7 @@ export function initSyndicateGame(): void {
       const tile = tiles[i];
       if (tile.kind === 'road') {
         drawRoad(g, i, x, y);
-        if (hash(i, 7) < 0.05) drawLamp(g, x, y);
+        if (hash(i, 7) < 0.05) drawLampPool(g, x, y);
       } else if (tile.kind === 'pavement') {
         fillTile(g, VIEW, x, y, (x + y) % 2 === 0 ? '#30374a' : '#343b4d');
       } else if (tile.kind === 'plaza') {
@@ -184,10 +192,8 @@ export function initSyndicateGame(): void {
       }
     }
   });
-  let groundDpr = 1;
   const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, {
     onApply: dpr => {
-      groundDpr = dpr;
       atmosphere.rebuild(dpr);
       ground.rebuild(dpr);
     }
@@ -278,7 +284,8 @@ export function initSyndicateGame(): void {
     missionIdx = index;
     spec = MISSIONS[index];
     tiles = generateCity(Math.random);
-    ground.rebuild(groundDpr);
+    // Content changed, resolution didn't: re-bake at the last-known dpr.
+    ground.rebuild();
     const setup = spawnMission(spec, tiles, agentWeapons, Math.random);
     world = createWorld(tiles, setup.units, Math.random);
     extraction = setup.extraction;
@@ -474,8 +481,6 @@ export function initSyndicateGame(): void {
     // Syndicate draws ~300 facades a frame, so draw-call count, not the
     // arithmetic, is the budget. (Positions are recomputed per pass; the
     // math is cheap, the state changes are not.)
-    const strip = (f: number, r: number) => (i * 13 + f * 29 + r * 11) % 7 === 0;
-    const lit = (f: number, r: number, c: number) => (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
 
     // Frames go only under lit windows — a dark frame on a dark facade
     // paints pixels nobody sees, and the facades are the frame budget.
@@ -483,9 +488,9 @@ export function initSyndicateGame(): void {
     ctx.beginPath();
     faces.forEach(([a, b], f) => {
       for (let r = 0; r < rows; r++) {
-        if (strip(f, r)) continue;
+        if (facadeStrip(i, f, r)) continue;
         for (let c = 0; c < 2; c++) {
-          if (!lit(f, r, c)) continue;
+          if (!facadeLit(i, f, r, c)) continue;
           const t = 0.3 + c * 0.4;
           const bx = a.x + (b.x - a.x) * t;
           const by = a.y + (b.y - a.y) * t - height * ((r + 0.5) / rows);
@@ -502,9 +507,9 @@ export function initSyndicateGame(): void {
       ctx.beginPath();
       faces.forEach(([a, b], f) => {
         for (let r = 0; r < rows; r++) {
-          if (strip(f, r)) continue;
+          if (facadeStrip(i, f, r)) continue;
           for (let c = 0; c < 2; c++) {
-            const on = lit(f, r, c);
+            const on = facadeLit(i, f, r, c);
             if (pass === 0 ? !on : on) continue;
             const t = 0.3 + c * 0.4;
             const bx = a.x + (b.x - a.x) * t;
@@ -526,7 +531,7 @@ export function initSyndicateGame(): void {
     ctx.beginPath();
     faces.forEach(([a, b], f) => {
       for (let r = 0; r < rows; r++) {
-        if (!strip(f, r)) continue;
+        if (!facadeStrip(i, f, r)) continue;
         const sy = height * ((r + 0.5) / rows);
         const ax = a.x + (b.x - a.x) * 0.18;
         const ay = a.y + (b.y - a.y) * 0.18 - sy;
@@ -548,7 +553,8 @@ export function initSyndicateGame(): void {
    * trade.
    */
   function drawStorefront(x: number, y: number, i: number, height: number, palette: number) {
-    if (height >= 24 || hash(i, 8) < 0.35) return;
+    // Only a minority of low-rise blocks trade — most of the city sleeps.
+    if (height >= 24 || hash(i, 8) < 0.65) return;
     const inset = 0.08;
     const w = isoProject(VIEW, x + inset, y + 1 - inset);
     const sCorner = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
@@ -899,7 +905,8 @@ export function initSyndicateGame(): void {
     }
   }
 
-  function drawLamp(g: CanvasRenderingContext2D, x: number, y: number) {
+  /** The lamp's flat light pool — ground content, safe to bake. */
+  function drawLampPool(g: CanvasRenderingContext2D, x: number, y: number) {
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
     const pool = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, VIEW.halfW * 1.3);
     pool.addColorStop(0, 'rgba(253, 224, 130, 0.16)');
@@ -908,20 +915,29 @@ export function initSyndicateGame(): void {
     g.beginPath();
     g.ellipse(c.x, c.y, VIEW.halfW * 1.3, VIEW.halfH * 1.3, 0, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = '#0b0f17';
-    g.lineWidth = 1;
-    g.beginPath();
-    g.moveTo(c.x, c.y);
-    g.lineTo(c.x, c.y - 11);
-    g.stroke();
-    g.save();
-    g.shadowColor = '#fde68a';
-    g.shadowBlur = 5;
-    g.fillStyle = '#fef3c7';
-    g.beginPath();
-    g.arc(c.x, c.y - 11, 1.2, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
+  }
+
+  /**
+   * The standing post and bulb — vertical scenery, so it draws in the
+   * back-to-front sweep (NOT the ground bake) to keep painter occlusion:
+   * a building south-east of the lamp must still paint over the post.
+   */
+  function drawLampPost(x: number, y: number) {
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
+    ctx.strokeStyle = '#0b0f17';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x, c.y - 11);
+    ctx.stroke();
+    ctx.save();
+    ctx.shadowColor = '#fde68a';
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y - 11, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawExtraction() {
@@ -1002,10 +1018,13 @@ export function initSyndicateGame(): void {
         }
         lastDiag = diag;
       }
-      // Flat ground (roads, pavement, plazas, lamps) comes pre-baked from
-      // the `ground` layer — only buildings still paint in the sweep.
+      // Flat ground (roads, pavement, plazas, lamp light pools) comes
+      // pre-baked from the `ground` layer — buildings and standing lamp
+      // posts still paint in the sweep so occlusion stays correct.
       const tile = tiles[i];
-      if (tile.kind === 'building') {
+      if (tile.kind === 'road') {
+        if (hash(i, 7) < 0.05) drawLampPost(x, y);
+      } else if (tile.kind === 'building') {
         drawBlock(ctx, VIEW, x, y, tile.height, FACADES[tile.palette]);
         drawWindows(x, y, i, tile.height);
         drawStorefront(x, y, i, tile.height, tile.palette);

@@ -33,6 +33,7 @@ export {
   strokeTile,
   blockFaceCorners,
   blockSeamPath,
+  faceBandPath,
   drawBlock,
   drawRamp,
   forEachTileBackToFront,

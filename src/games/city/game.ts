@@ -15,6 +15,7 @@ import {
   strokeTile,
   blockFaceCorners,
   blockSeamPath,
+  faceBandPath,
   drawBlock,
   shadeColor,
   hash01,
@@ -932,11 +933,7 @@ export function initCityGame(): void {
     const s = isoProject(VIEW, x1, y1);
     ctx.fillStyle = 'rgba(140, 200, 240, 0.45)';
     ctx.beginPath();
-    ctx.moveTo(w.x + (s.x - w.x) * 0.12, w.y + (s.y - w.y) * 0.12 - 0.8);
-    ctx.lineTo(w.x + (s.x - w.x) * 0.88, w.y + (s.y - w.y) * 0.88 - 0.8);
-    ctx.lineTo(w.x + (s.x - w.x) * 0.88, w.y + (s.y - w.y) * 0.88 - 3.6);
-    ctx.lineTo(w.x + (s.x - w.x) * 0.12, w.y + (s.y - w.y) * 0.12 - 3.6);
-    ctx.closePath();
+    faceBandPath(ctx, w, s, 0.12, 0.88, 0.8, 3.6);
     ctx.fill();
     // Thin awning strip flush with the front wall, overhanging it slightly.
     drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, ACCENT_COLORS[Math.floor(hash01(i, 31) * ACCENT_COLORS.length)]);

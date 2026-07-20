@@ -6,6 +6,7 @@ import {
   shadeColor,
   blockFaceCorners,
   blockSeamPath,
+  faceBandPath,
   forEachTileBackToFront,
   rotateTile,
   rotateDir,
@@ -106,6 +107,48 @@ describe('blockSeamPath', () => {
       ['moveTo', c.w.x, c.w.y - 7],
       ['lineTo', c.s.x, c.s.y - 7],
       ['lineTo', c.e.x, c.e.y - 7]
+    ]);
+  });
+});
+
+describe('faceBandPath', () => {
+  const recorder = () => {
+    const ops: unknown[] = [];
+    const ctx = {
+      moveTo: (x: number, y: number) => ops.push(['moveTo', x, y]),
+      lineTo: (x: number, y: number) => ops.push(['lineTo', x, y]),
+      closePath: () => ops.push(['closePath'])
+    } as unknown as CanvasRenderingContext2D;
+    return { ops, ctx };
+  };
+
+  it('spans t0–t1 along one edge between two lifts', () => {
+    const { ops, ctx } = recorder();
+    const a = { x: 10, y: 40 };
+    const b = { x: 50, y: 60 };
+    faceBandPath(ctx, a, b, 0.25, 0.75, 2, 6);
+    expect(ops).toEqual([
+      ['moveTo', 20, 43],
+      ['lineTo', 40, 53],
+      ['lineTo', 40, 49],
+      ['lineTo', 20, 39],
+      ['closePath']
+    ]);
+  });
+
+  it('closes along a second far edge when given one (awning form)', () => {
+    const { ops, ctx } = recorder();
+    const a = { x: 0, y: 0 };
+    const b = { x: 8, y: 4 };
+    const aOut = { x: -2, y: 6 };
+    const bOut = { x: 10, y: 12 };
+    faceBandPath(ctx, a, b, 0, 0.5, 10, 5, aOut, bOut);
+    expect(ops).toEqual([
+      ['moveTo', 0, -10],
+      ['lineTo', 4, -8],
+      ['lineTo', 4, 4],
+      ['lineTo', -2, 1],
+      ['closePath']
     ]);
   });
 });

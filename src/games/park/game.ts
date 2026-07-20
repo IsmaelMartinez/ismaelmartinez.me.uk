@@ -14,6 +14,7 @@ import {
   strokeTile,
   blockFaceCorners,
   blockSeamPath,
+  faceBandPath,
   drawBlock,
   shadeColor,
   forEachTileBackToFront,
@@ -269,15 +270,9 @@ function drawAwningFace(
 ) {
   const strips = 4;
   for (let k = 0; k < strips; k++) {
-    const t0 = k / strips;
-    const t1 = (k + 1) / strips;
     ctx.fillStyle = k % 2 === 0 ? '#e8e4da' : stripe;
     ctx.beginPath();
-    ctx.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0 - rimLift);
-    ctx.lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1 - rimLift);
-    ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t1, aOut.y + (bOut.y - aOut.y) * t1 - outerLift);
-    ctx.lineTo(aOut.x + (bOut.x - aOut.x) * t0, aOut.y + (bOut.y - aOut.y) * t0 - outerLift);
-    ctx.closePath();
+    faceBandPath(ctx, a, b, k / strips, (k + 1) / strips, rimLift, outerLift, aOut, bOut);
     ctx.fill();
   }
 }
@@ -315,11 +310,7 @@ function drawScallops(
 function drawCounterFace(ctx: CanvasRenderingContext2D, a: Pt, b: Pt, liftPx: number, color: string) {
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(a.x, a.y - liftPx - 6);
-  ctx.lineTo(b.x, b.y - liftPx - 6);
-  ctx.lineTo(b.x, b.y - liftPx - 3.5);
-  ctx.lineTo(a.x, a.y - liftPx - 3.5);
-  ctx.closePath();
+  faceBandPath(ctx, a, b, 0, 1, liftPx + 6, liftPx + 3.5);
   ctx.fill();
 }
 

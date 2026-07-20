@@ -174,6 +174,34 @@ export function blockSeamPath(
 }
 
 /**
+ * Appends to the current path the quad spanning fraction `t0`–`t1` along a
+ * projected edge a→b raised by `lift0` pixels, closed along `aFar→bFar`
+ * (defaulting to the same edge) raised by `lift1` — the face-band idiom
+ * behind glazed shopfronts, lit office strips, counter bands, and (via the
+ * two-edge form) sagging awning canvas. Path-append rather than fill, so
+ * batched callers — Syndicate fills every late-shift strip of a building in
+ * one path — keep their draw-call budget; single-band callers wrap it in
+ * their own beginPath/fill.
+ */
+export function faceBandPath(
+  ctx: CanvasRenderingContext2D,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  t0: number,
+  t1: number,
+  lift0: number,
+  lift1: number,
+  aFar = a,
+  bFar = b
+): void {
+  ctx.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0 - lift0);
+  ctx.lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1 - lift0);
+  ctx.lineTo(aFar.x + (bFar.x - aFar.x) * t1, aFar.y + (bFar.y - aFar.y) * t1 - lift1);
+  ctx.lineTo(aFar.x + (bFar.x - aFar.x) * t0, aFar.y + (bFar.y - aFar.y) * t0 - lift1);
+  ctx.closePath();
+}
+
+/**
  * Extruded block on tile (x, y): lit top, shaded south-west and south-east
  * faces. `inset` shrinks the footprint within the tile (0–0.5). `zOffset`
  * lifts the block's *base* by that many pixels before drawing `height` on

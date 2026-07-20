@@ -16,6 +16,7 @@ import {
   fillTile,
   strokeTile,
   blockFaceCorners,
+  faceBandPath,
   drawBlock,
   forEachTileBackToFront,
   shadeColor,
@@ -531,15 +532,7 @@ export function initSyndicateGame(): void {
       for (let r = 0; r < rows; r++) {
         if (!facadeStrip(i, f, r)) continue;
         const sy = height * ((r + 0.5) / rows);
-        const ax = a.x + (b.x - a.x) * 0.18;
-        const ay = a.y + (b.y - a.y) * 0.18 - sy;
-        const bx2 = a.x + (b.x - a.x) * 0.82;
-        const by2 = a.y + (b.y - a.y) * 0.82 - sy;
-        ctx.moveTo(ax, ay - 1.5);
-        ctx.lineTo(bx2, by2 - 1.5);
-        ctx.lineTo(bx2, by2 + 1.5);
-        ctx.lineTo(ax, ay + 1.5);
-        ctx.closePath();
+        faceBandPath(ctx, a, b, 0.18, 0.82, sy + 1.5, sy - 1.5);
       }
     });
     ctx.fill();
@@ -564,11 +557,7 @@ export function initSyndicateGame(): void {
       const b = f === 0 ? sCorner : e;
       ctx.fillStyle = 'rgba(253, 224, 130, 0.22)';
       ctx.beginPath();
-      ctx.moveTo(a.x + (b.x - a.x) * 0.15, a.y + (b.y - a.y) * 0.15 - 0.5);
-      ctx.lineTo(a.x + (b.x - a.x) * 0.85, a.y + (b.y - a.y) * 0.85 - 0.5);
-      ctx.lineTo(a.x + (b.x - a.x) * 0.85, a.y + (b.y - a.y) * 0.85 - 4);
-      ctx.lineTo(a.x + (b.x - a.x) * 0.15, a.y + (b.y - a.y) * 0.15 - 4);
-      ctx.closePath();
+      faceBandPath(ctx, a, b, 0.15, 0.85, 0.5, 4);
       ctx.fill();
       // Doorway and a neon sign dot beside it.
       const dx = a.x + (b.x - a.x) * 0.5;

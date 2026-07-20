@@ -55,6 +55,17 @@ export function hash01(i: number, salt: number): number {
   return n - Math.floor(n);
 }
 
+/**
+ * The arcade's shared beacon cadence: true for the "on" half of a ~1.33 s
+ * cycle. `phase` offsets the cycle so a skyline of beacons doesn't blink in
+ * lockstep — games pass the tile index. The 1.5 Hz half-phase rate is the
+ * one deliberate choice all rooftop/mast warning lights share; alarm-style
+ * strobes at other rates are a different idiom and stay per-game.
+ */
+export function blink(clock: number, phase = 0): boolean {
+  return Math.floor(clock * 1.5 + phase) % 2 === 0;
+}
+
 export function createStaticLayer(
   logicalW: number,
   logicalH: number,

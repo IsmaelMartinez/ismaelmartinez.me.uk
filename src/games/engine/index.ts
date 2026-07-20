@@ -1,5 +1,5 @@
 export { createGameLoop } from './loop';
-export { setupHiDpiCanvas, createStaticLayer, hash01 } from './canvas';
+export { setupHiDpiCanvas, createStaticLayer, hash01, blink } from './canvas';
 export type { HiDpiCanvas, StaticLayer } from './canvas';
 export type { GameLoop } from './loop';
 export { loadScore, saveScore } from './storage';
@@ -31,6 +31,9 @@ export {
   shadeColor,
   fillTile,
   strokeTile,
+  blockFaceCorners,
+  blockSeamPath,
+  faceBandPath,
   drawBlock,
   drawRamp,
   forEachTileBackToFront,
@@ -40,6 +43,6 @@ export {
   rotatePoint,
   rotateDir
 } from './iso';
-export type { IsoView, Rotation } from './iso';
+export type { BlockCorners, IsoView, Rotation } from './iso';
 export { createViewRotator } from './rotator';
 export type { ViewRotator } from './rotator';

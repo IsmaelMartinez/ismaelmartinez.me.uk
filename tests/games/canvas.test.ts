@@ -1,5 +1,28 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { setupHiDpiCanvas, createStaticLayer } from '../../src/games/engine/canvas';
+import { setupHiDpiCanvas, createStaticLayer, blink } from '../../src/games/engine/canvas';
+
+describe('blink', () => {
+  it('is on for the first half-phase and off for the second', () => {
+    expect(blink(0)).toBe(true); // floor(0·1.5) = 0 → on
+    expect(blink(0.5)).toBe(true); // floor(0.75) = 0 → on
+    expect(blink(1)).toBe(false); // floor(1.5) = 1 → off
+    expect(blink(4 / 3)).toBe(true); // floor(2) = 2 → on again
+  });
+
+  it('cycles at 1.5 half-phases per second', () => {
+    // Consecutive half-phases flip: t and t + 2/3 always disagree.
+    for (const t of [0, 0.4, 1.1, 7.77]) {
+      expect(blink(t)).toBe(!blink(t + 2 / 3));
+    }
+  });
+
+  it('offsets the cycle by integer phase', () => {
+    for (const t of [0, 0.4, 1.1]) {
+      expect(blink(t, 1)).toBe(!blink(t));
+      expect(blink(t, 2)).toBe(blink(t));
+    }
+  });
+});
 
 /**
  * The suite runs under node, so window/document/canvas are hand-rolled fakes:

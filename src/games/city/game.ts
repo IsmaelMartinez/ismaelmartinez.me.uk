@@ -19,6 +19,7 @@ import {
   drawBlock,
   shadeColor,
   hash01,
+  blink,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,
@@ -980,7 +981,7 @@ export function initCityGame(): void {
     ctx.moveTo(mast.x, mast.y - 31);
     ctx.lineTo(mast.x, mast.y - 37);
     ctx.stroke();
-    ctx.fillStyle = Math.floor(clock * 1.5 + i) % 2 === 0 ? '#f87171' : '#7a3a3a';
+    ctx.fillStyle = blink(clock, i) ? '#f87171' : '#7a3a3a';
     ctx.fillRect(mast.x - 1, mast.y - 38, 2, 2);
   }
 
@@ -1174,7 +1175,7 @@ export function initCityGame(): void {
           drawWindows(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, i, 1, 0, 8);
           // Hazard-striped smokestack with a blinking warning light.
           drawStack(vx + 0.62, vy + 0.28, 22, 14, 6, '#3d3252');
-          if (Math.floor(clock * 1.5) % 2 === 0) {
+          if (blink(clock)) {
             const tip = isoProject(VIEW, vx + 0.62, vy + 0.28);
             ctx.fillStyle = '#f87171';
             ctx.beginPath();

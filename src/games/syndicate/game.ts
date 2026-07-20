@@ -24,6 +24,7 @@ import {
   wireSoundButton,
   createToaster,
   createEffects,
+  blink,
   type IsoView,
   hash01 as hash
 } from '../engine';
@@ -858,7 +859,7 @@ export function initSyndicateGame(): void {
       ctx.moveTo(c.x, ty);
       ctx.lineTo(c.x, ty - 7);
       ctx.stroke();
-      if (Math.floor(clock * 1.5 + i) % 2 === 0) {
+      if (blink(clock, i)) {
         ctx.save();
         ctx.shadowColor = '#f87171';
         ctx.shadowBlur = 5;

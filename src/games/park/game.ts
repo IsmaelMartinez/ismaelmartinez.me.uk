@@ -17,6 +17,7 @@ import {
   faceBandPath,
   drawBlock,
   shadeColor,
+  blink,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,
@@ -1963,7 +1964,7 @@ export function initParkGame(): void {
     ctx.moveTo(c.x, topY);
     ctx.lineTo(c.x, topY - 7);
     ctx.stroke();
-    if (!broken && Math.floor(clock * 1.5) % 2 === 0) {
+    if (!broken && blink(clock)) {
       ctx.fillStyle = '#f87171';
       ctx.beginPath();
       ctx.arc(c.x, topY - 7.5, 1, 0, Math.PI * 2);

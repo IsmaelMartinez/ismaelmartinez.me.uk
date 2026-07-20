@@ -853,74 +853,139 @@ export function initCityGame(): void {
     });
   }
 
+  /**
+   * Per-tile memo for hashed variety. The hash01 rolls — and the shadeColor
+   * strings and palette picks derived from them — are pure in (tile index,
+   * type, level), i.e. they only change when a tile is built, grows,
+   * decays, or is destroyed. Each drawer recomputes its variety through
+   * here only when its `${type}:${level}` key changes, instead of
+   * re-hashing and rebuilding colour strings every frame. Computes are
+   * named functions (not inline closures) so a cache hit allocates
+   * nothing.
+   */
+  const variety: ({ key: string; value: unknown } | null)[] = new Array(tiles.length).fill(null);
+  function varietyFor<T>(i: number, key: string, compute: (tile: number) => T): T {
+    const hit = variety[i];
+    if (hit && hit.key === key) return hit.value as T;
+    const value = compute(i);
+    variety[i] = { key, value };
+    return value;
+  }
+
   /** House (res L1): small gabled cottage, footprint well inside the tile.
    *  Hashed variety: wall tint, ridge axis, chimney, door position. */
+  const res1Variety = (i: number) => ({
+    wall: shadeColor(ZONE_PALETTE.res.wall, 0.88 + hash01(i, 21) * 0.28),
+    gable: hash01(i, 22) < 0.5,
+    doorT: hash01(i, 25) < 0.5 ? 0.3 : 0.7,
+    chimney: hash01(i, 23) > 0.45
+  });
+
   function drawResLevel1(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
-    const wall = shadeColor(p.wall, 0.88 + hash01(i, 21) * 0.28);
+    const v = varietyFor(i, 'res:1', res1Variety);
     const x0 = vx + 0.27, y0 = vy + 0.24, x1 = vx + 0.73, y1 = vy + 0.7;
-    drawBox(x0, y0, x1, y1, 0, 6, wall);
+    drawBox(x0, y0, x1, y1, 0, 6, v.wall);
     // Construction variety: half the cottages get a gable, half a hip.
-    if (hash01(i, 22) < 0.5) drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof);
+    if (v.gable) drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof);
     else drawPyramidCap(x0, y0, x1, y1, 6, 4, p.roof);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 6);
-    drawDoor(x0, y0, x1, y1, hash01(i, 25) < 0.5 ? 0.3 : 0.7, shadeColor(p.roof, 0.8));
-    if (hash01(i, 23) > 0.45) drawChimney(vx + 0.38, vy + 0.34, 8);
+    drawDoor(x0, y0, x1, y1, v.doorT, shadeColor(p.roof, 0.8));
+    if (v.chimney) drawChimney(vx + 0.38, vy + 0.34, 8);
   }
 
   /** Res L2: the L1 cottage enlarged, plus a lower extension massed off to
    *  one side rather than centred — reads as "someone built onto the house". */
+  const res2Variety = (i: number) => ({
+    wall: shadeColor(ZONE_PALETTE.res.wall, 0.88 + hash01(i, 24) * 0.28),
+    gable: hash01(i, 22) < 0.5,
+    chimney: hash01(i, 26) > 0.4
+  });
+
   function drawResLevel2(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
-    const wall = shadeColor(p.wall, 0.88 + hash01(i, 24) * 0.28);
+    const v = varietyFor(i, 'res:2', res2Variety);
     const mx0 = vx + 0.18, my0 = vy + 0.16, mx1 = vx + 0.66, my1 = vy + 0.7;
-    drawBox(mx0, my0, mx1, my1, 0, 10, wall);
-    if (hash01(i, 22) < 0.5) drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof);
+    drawBox(mx0, my0, mx1, my1, 0, 10, v.wall);
+    if (v.gable) drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof);
     else drawPyramidCap(mx0, my0, mx1, my1, 10, 4, p.roof);
     drawWindows(mx0, my0, mx1, my1, i, 2, 0, 10);
     drawDoor(mx0, my0, mx1, my1, 0.5, shadeColor(p.roof, 0.8));
-    if (hash01(i, 26) > 0.4) drawChimney(vx + 0.3, vy + 0.28, 12);
+    if (v.chimney) drawChimney(vx + 0.3, vy + 0.28, 12);
 
     // Touches the main block's east wall (mx1) without overlapping its
     // footprint, so the two full-height volumes don't paint over each other.
     const ex0 = mx1, ey0 = vy + 0.5, ex1 = vx + 0.95, ey1 = vy + 0.92;
-    drawBox(ex0, ey0, ex1, ey1, 0, 6, wall);
+    drawBox(ex0, ey0, ex1, ey1, 0, 6, v.wall);
     drawWindows(ex0, ey0, ex1, ey1, i, 1, 0, 6, 1);
   }
 
   /** Res L3: a proper apartment block — flat roof, balcony ledges, and a
    *  couple of rooftop AC units instead of one more storey of the cottage. */
+  const res3Variety = (i: number) => ({
+    wall: shadeColor(ZONE_PALETTE.res.wall, 0.92 + hash01(i, 27) * 0.18),
+    acBox: hash01(i, 28) > 0.5
+  });
+
   function drawResLevel3(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
-    const wall = shadeColor(p.wall, 0.92 + hash01(i, 27) * 0.18);
+    const v = varietyFor(i, 'res:3', res3Variety);
     const x0 = vx + 0.12, y0 = vy + 0.12, x1 = vx + 0.88, y1 = vy + 0.88;
-    drawBox(x0, y0, x1, y1, 0, 20, wall);
+    drawBox(x0, y0, x1, y1, 0, 20, v.wall);
     drawWindows(x0, y0, x1, y1, i, 4, 0, 20);
     drawLedges(x0, y0, x1, y1, 4, 0, 20, 'rgba(226, 232, 240, 0.55)');
     drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
     drawBox(vx + 0.2, vy + 0.2, vx + 0.34, vy + 0.34, 20, 22, ROOFTOP_UNIT);
     drawBox(vx + 0.55, vy + 0.6, vx + 0.72, vy + 0.75, 20, 21.5, ROOFTOP_UNIT);
-    if (hash01(i, 28) > 0.5) drawBox(vx + 0.62, vy + 0.24, vx + 0.74, vy + 0.36, 20, 21.8, ROOFTOP_UNIT);
+    if (v.acBox) drawBox(vx + 0.62, vy + 0.24, vx + 0.74, vy + 0.36, 20, 21.8, ROOFTOP_UNIT);
   }
 
   /** Res L4: a slim high-rise — the dense-city payoff. Two stacked volumes
    *  with a rooftop plant box, noticeably taller than anything at L3. */
+  const res4Variety = (i: number) => {
+    const wall = shadeColor(ZONE_PALETTE.res.wall, 0.92 + hash01(i, 29) * 0.18);
+    return {
+      wall,
+      wallTop: shadeColor(wall, 1.12),
+      mast: hash01(i, 30) > 0.55
+    };
+  };
+
   function drawResLevel4(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
-    const wall = shadeColor(p.wall, 0.92 + hash01(i, 29) * 0.18);
+    const v = varietyFor(i, 'res:4', res4Variety);
     const x0 = vx + 0.16, y0 = vy + 0.16, x1 = vx + 0.84, y1 = vy + 0.84;
-    drawBox(x0, y0, x1, y1, 0, 24, wall);
+    drawBox(x0, y0, x1, y1, 0, 24, v.wall);
     drawWindows(x0, y0, x1, y1, i, 5, 0, 24);
     drawLedges(x0, y0, x1, y1, 5, 0, 24, 'rgba(226, 232, 240, 0.55)');
     drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
     const tx0 = vx + 0.3, ty0 = vy + 0.3, tx1 = vx + 0.7, ty1 = vy + 0.7;
-    drawBox(tx0, ty0, tx1, ty1, 24, 29, shadeColor(wall, 1.12));
+    drawBox(tx0, ty0, tx1, ty1, 24, 29, v.wallTop);
     drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 29, 30.5, ROOFTOP_UNIT);
-    if (hash01(i, 30) > 0.55) {
+    if (v.mast) {
       const mast = isoProject(VIEW, vx + 0.5, vy + 0.5);
       drawMast(mast.x, mast.y - 30.5, mast.y - 35);
     }
   }
+
+  /** Canopy blob layout + flower roll for park/tree landscaping. The
+   *  flower roll is computed for trees too (unused) — the record is shared
+   *  and the rolls are pure in the tile index either way. */
+  const greenVariety = (i: number) => ({
+    blobs: [0, 1, 2].map(k => ({
+      bx: 0.2 + hash01(i, 51 + k) * 0.6,
+      by: 0.2 + hash01(i, 54 + k) * 0.6,
+      r: 1.6 + hash01(i, 57 + k) * 1.6
+    })),
+    flower:
+      hash01(i, 60) > 0.4
+        ? {
+            fdx: hash01(i, 61) * 0.4,
+            fdy: hash01(i, 62) * 0.4,
+            color: hash01(i, 63) > 0.5 ? '#f0a8bc' : '#f6d860'
+          }
+        : null
+  });
 
   function drawResZone(vx: number, vy: number, i: number, level: number) {
     if (level === 1) drawResLevel1(vx, vy, i);
@@ -931,6 +996,10 @@ export function initCityGame(): void {
 
   /** Shop (com L1): flat-roofed box with a glazed shopfront and an awning
    *  in a hashed colour, so a parade of shops doesn't repeat. */
+  const com1Variety = (i: number) => ({
+    awning: ACCENT_COLORS[Math.floor(hash01(i, 31) * ACCENT_COLORS.length)]
+  });
+
   function drawComLevel1(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.com;
     const x0 = vx + 0.2, y0 = vy + 0.2, x1 = vx + 0.8, y1 = vy + 0.8;
@@ -944,22 +1013,28 @@ export function initCityGame(): void {
     faceBandPath(ctx, w, s, 0.12, 0.88, 0.8, 3.6);
     ctx.fill();
     // Thin awning strip flush with the front wall, overhanging it slightly.
-    drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, ACCENT_COLORS[Math.floor(hash01(i, 31) * ACCENT_COLORS.length)]);
+    drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, varietyFor(i, 'com:1', com1Variety).awning);
   }
 
   /** Com L2: taller storefront with more window rows and a sign board
    *  standing proud of the roofline. */
+  const com2Variety = (i: number) => ({
+    sign: SIGN_COLORS[Math.floor(hash01(i, 32) * SIGN_COLORS.length)]
+  });
+
   function drawComLevel2(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.com;
     const x0 = vx + 0.15, y0 = vy + 0.15, x1 = vx + 0.85, y1 = vy + 0.85;
     drawBox(x0, y0, x1, y1, 0, 12, p.wall);
     drawWindows(x0, y0, x1, y1, i, 2, 0, 12);
     drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.roof, 1.3));
-    drawBox(vx + 0.3, vy + 0.58, vx + 0.7, vy + 0.78, 12, 16, SIGN_COLORS[Math.floor(hash01(i, 32) * SIGN_COLORS.length)]);
+    drawBox(vx + 0.3, vy + 0.58, vx + 0.7, vy + 0.78, 12, 16, varietyFor(i, 'com:2', com2Variety).sign);
   }
 
   /** Com L3: a small tower — main block, a setback top floor, and a
    *  rooftop mechanical unit, instead of one taller box. */
+  const com3Variety = (i: number) => ({ acBox: hash01(i, 33) > 0.5 });
+
   function drawComLevel3(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.com;
     const x0 = vx + 0.18, y0 = vy + 0.18, x1 = vx + 0.82, y1 = vy + 0.82;
@@ -970,7 +1045,7 @@ export function initCityGame(): void {
     const tx0 = vx + 0.3, ty0 = vy + 0.3, tx1 = vx + 0.7, ty1 = vy + 0.7;
     drawBox(tx0, ty0, tx1, ty1, 19, 23, '#7fb0f0');
     drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 23, 25, ROOFTOP_UNIT);
-    if (hash01(i, 33) > 0.5) drawBox(vx + 0.62, vy + 0.5, vx + 0.72, vy + 0.6, 19, 20.5, ROOFTOP_UNIT);
+    if (varietyFor(i, 'com:3', com3Variety).acBox) drawBox(vx + 0.62, vy + 0.5, vx + 0.72, vy + 0.6, 19, 20.5, ROOFTOP_UNIT);
   }
 
   /** Com L4: a glass tower with a setback crown and an antenna mast. */
@@ -994,37 +1069,53 @@ export function initCityGame(): void {
     else drawComLevel4(vx, vy, i);
   }
 
-  /** Weathering streaks down a box's south-west face — hashed, so only
-   *  some industrial sheds rust. */
-  function drawRust(x0: number, y0: number, x1: number, y1: number, i: number, salt: number, zTop: number) {
-    if (hash01(i, salt) < 0.45) return;
+  /** Weathering streaks down a box's south-west face — hashed (in the
+   *  levels' variety records), so only some industrial sheds rust. */
+  type RustRolls = { t: number; lenFrac: number }[] | null;
+  const rustRolls = (i: number, salt: number): RustRolls =>
+    hash01(i, salt) < 0.45
+      ? null
+      : [0, 1].map(k => ({
+          t: 0.25 + k * 0.35 + hash01(i, salt + k + 1) * 0.15,
+          lenFrac: 0.5 + hash01(i, salt + k + 3) * 0.5
+        }));
+
+  function drawRust(x0: number, y0: number, x1: number, y1: number, rolls: RustRolls, zTop: number) {
+    if (!rolls) return;
     const w = isoProject(VIEW, x0, y1);
     const s = isoProject(VIEW, x1, y1);
     ctx.fillStyle = 'rgba(122, 68, 34, 0.4)';
-    for (let k = 0; k < 2; k++) {
-      const t = 0.25 + k * 0.35 + hash01(i, salt + k + 1) * 0.15;
+    for (const { t, lenFrac } of rolls) {
       const bx = w.x + (s.x - w.x) * t;
       const by = w.y + (s.y - w.y) * t;
-      const len = zTop * (0.5 + hash01(i, salt + k + 3) * 0.5);
+      const len = zTop * lenFrac;
       ctx.fillRect(bx - 0.5, by - len, 1, len);
     }
   }
 
   /** Shed (ind L1): squat low warehouse with a couple of roof vents. */
+  const ind1Variety = (i: number) => ({ rust: rustRolls(i, 41) });
+
   function drawIndLevel1(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.ind;
     const x0 = vx + 0.1, y0 = vy + 0.25, x1 = vx + 0.9, y1 = vy + 0.85;
     drawBox(x0, y0, x1, y1, 0, 5, p.wall);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 5);
-    drawRust(x0, y0, x1, y1, i, 41, 5);
+    drawRust(x0, y0, x1, y1, varietyFor(i, 'ind:1', ind1Variety).rust, 5);
     drawBox(vx + 0.28, vy + 0.34, vx + 0.37, vy + 0.43, 5, 8, p.roof);
     drawBox(vx + 0.55, vy + 0.55, vx + 0.64, vy + 0.64, 5, 7.5, p.roof);
   }
 
   /** Ind L2: the shed plus a tall silo and a low loading dock, offset
    *  beside it rather than one bigger shed. */
+  const ind2Variety = (i: number) => ({
+    band: ACCENT_COLORS[Math.floor(hash01(i, 42) * ACCENT_COLORS.length)],
+    rust: rustRolls(i, 43)
+  });
+
   function drawIndLevel2(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.ind;
+    const v = varietyFor(i, 'ind:2', ind2Variety);
     const sx0 = vx + 0.12, sy0 = vy + 0.3, sx1 = vx + 0.6, sy1 = vy + 0.9;
     drawBox(sx0, sy0, sx1, sy1, 0, 7, p.wall);
     drawWindows(sx0, sy0, sx1, sy1, i, 1, 0, 7);
@@ -1037,9 +1128,9 @@ export function initCityGame(): void {
     drawPyramidCap(six0, siy0, six1, siy1, 12, 3, silo);
     // Company band round the silo, colour hashed per plot.
     const bandY = isoProject(VIEW, vx + 0.78, vy + 0.38);
-    ctx.fillStyle = ACCENT_COLORS[Math.floor(hash01(i, 42) * ACCENT_COLORS.length)];
+    ctx.fillStyle = v.band;
     ctx.fillRect(bandY.x - 4.4, bandY.y - 9.5, 8.8, 1.6);
-    drawRust(sx0, sy0, sx1, sy1, i, 43, 7);
+    drawRust(sx0, sy0, sx1, sy1, v.rust, 7);
 
     const lox0 = vx + 0.6, loy0 = vy + 0.62, lox1 = vx + 0.94, loy1 = vy + 0.92;
     drawBox(lox0, loy0, lox1, loy1, 0, 3, p.roof);
@@ -1047,8 +1138,14 @@ export function initCityGame(): void {
 
   /** Ind L3: a larger complex — two offset stacked volumes plus a tall
    *  smokestack, rather than a single bigger shed. */
+  const ind3Variety = (i: number) => ({
+    rust: rustRolls(i, 44),
+    stackJitter: hash01(i, 45) * 0.08
+  });
+
   function drawIndLevel3(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.ind;
+    const v = varietyFor(i, 'ind:3', ind3Variety);
     const hx0 = vx + 0.1, hy0 = vy + 0.35, hx1 = vx + 0.62, hy1 = vy + 0.92;
     drawBox(hx0, hy0, hx1, hy1, 0, 9, p.wall);
     drawWindows(hx0, hy0, hx1, hy1, i, 1, 0, 9);
@@ -1059,13 +1156,20 @@ export function initCityGame(): void {
     drawBox(bx0, by0, bx1, by1, 0, 13, '#7d8a94');
     drawWindows(bx0, by0, bx1, by1, i, 1, 0, 13, 3);
 
-    drawRust(hx0, hy0, hx1, hy1, i, 44, 9);
-    drawStack(vx + 0.74 + hash01(i, 45) * 0.08, vy + 0.3, 13, 11, 5, p.roof);
+    drawRust(hx0, hy0, hx1, hy1, v.rust, 9);
+    drawStack(vx + 0.74 + v.stackJitter, vy + 0.3, 13, 11, 5, p.roof);
   }
 
   /** Ind L4: heavy industry — the L3 complex scaled up with twin stacks. */
+  const ind4Variety = (i: number) => ({
+    rust: rustRolls(i, 46),
+    jitter: hash01(i, 47) * 0.06,
+    stackH: 12 + hash01(i, 48) * 3
+  });
+
   function drawIndLevel4(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.ind;
+    const v = varietyFor(i, 'ind:4', ind4Variety);
     const hx0 = vx + 0.08, hy0 = vy + 0.3, hx1 = vx + 0.6, hy1 = vy + 0.94;
     drawBox(hx0, hy0, hx1, hy1, 0, 12, p.wall);
     drawWindows(hx0, hy0, hx1, hy1, i, 2, 0, 12);
@@ -1074,10 +1178,9 @@ export function initCityGame(): void {
     drawBox(bx0, by0, bx1, by1, 0, 18, '#7d8a94');
     drawWindows(bx0, by0, bx1, by1, i, 2, 0, 18, 3);
 
-    drawRust(hx0, hy0, hx1, hy1, i, 46, 12);
-    const jitter = hash01(i, 47) * 0.06;
-    drawStack(vx + 0.7 + jitter, vy + 0.28, 18, 12 + hash01(i, 48) * 3, 5, p.roof);
-    drawStack(vx + 0.84 + jitter, vy + 0.28, 18, 10, 4.5, p.roof);
+    drawRust(hx0, hy0, hx1, hy1, v.rust, 12);
+    drawStack(vx + 0.7 + v.jitter, vy + 0.28, 18, v.stackH, 5, p.roof);
+    drawStack(vx + 0.84 + v.jitter, vy + 0.28, 18, 10, 4.5, p.roof);
   }
 
   function drawIndZone(vx: number, vy: number, i: number, level: number) {
@@ -1201,11 +1304,10 @@ export function initCityGame(): void {
             ctx.quadraticCurveTo(top.x, top.y + 3, pb.x, pb.y);
             ctx.stroke();
           }
+          const v = varietyFor(i, tile.type, greenVariety);
           for (let k = 0; k < 3; k++) {
-            const bx = 0.2 + hash01(i, 51 + k) * 0.6;
-            const by = 0.2 + hash01(i, 54 + k) * 0.6;
+            const { bx, by, r } = v.blobs[k];
             const b = isoProject(VIEW, vx + bx, vy + by);
-            const r = 1.6 + hash01(i, 57 + k) * 1.6;
             ctx.fillStyle = k % 2 === 0 ? '#2e6b48' : '#1f4a32';
             ctx.beginPath();
             ctx.ellipse(b.x, b.y - 1.5, r, r * 0.7, 0, 0, Math.PI * 2);
@@ -1215,9 +1317,9 @@ export function initCityGame(): void {
             ctx.ellipse(b.x - r * 0.3, b.y - 2, r * 0.4, r * 0.3, 0, 0, Math.PI * 2);
             ctx.fill();
           }
-          if (isPark && hash01(i, 60) > 0.4) {
-            const f = isoProject(VIEW, vx + 0.3 + hash01(i, 61) * 0.4, vy + 0.3 + hash01(i, 62) * 0.4);
-            ctx.fillStyle = hash01(i, 63) > 0.5 ? '#f0a8bc' : '#f6d860';
+          if (isPark && v.flower) {
+            const f = isoProject(VIEW, vx + 0.3 + v.flower.fdx, vy + 0.3 + v.flower.fdy);
+            ctx.fillStyle = v.flower.color;
             ctx.fillRect(f.x - 0.6, f.y - 1, 1.2, 1.2);
           }
           drawFlatShadow(top, isPark ? 6 : 5, isPark ? 2.5 : 2);

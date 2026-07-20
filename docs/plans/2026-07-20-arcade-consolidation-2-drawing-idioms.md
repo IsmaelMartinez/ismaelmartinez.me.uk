@@ -1,7 +1,14 @@
 # Arcade Consolidation Round 2 — Drawing Idioms & Render Baking
 
 Date: 2026-07-20
-Status: In progress.
+Status: Done — all four extractions and both baking wins landed 2026-07-20,
+one commit each, every commit verified byte-identical against the
+pre-round baseline by the deterministic screenshot harness (seeded PRNG +
+manually stepped rAF; nine captures across Line Hold, Syndicate, Microcity,
+and Pixel Park, covering drafting, a committed coaster, and a rotated
+view). Zone levels the captures can't reach deterministically (res/com L4)
+are covered by preserved float-expression shapes plus unit tests.
+Queue returns to `2026-07-18-arcade-candidates-3.md`.
 Follows `2026-07-19-arcade-consolidation-plan.md` (support-code round) and
 `2026-07-19-arcade-art-definition.md` (the art round whose new detail work
 created most of these copies). The cabinet queue at
@@ -224,7 +231,9 @@ One commit per extraction, full verification between each:
    and captures the canvas. Before-images are taken once from the
    pre-round commit; after each commit the same script must reproduce them
    byte-for-byte (fall back to a pixel-diff report only if the browser
-   itself introduces nondeterminism).
+   itself introduces nondeterminism). The harness shipped with the round
+   as `scripts/screenshot-games.js` (usage in its header) so future render
+   refactors inherit the same bar.
 
 ## Risk
 

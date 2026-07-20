@@ -823,6 +823,18 @@ export function initCityGame(): void {
     ctx.fillRect(c.x - w / 2, c.y - zBase - h - 3, w, 1.4);
   }
 
+  /** Thin rooftop mast/flagpole: one pale stroke rising from screen-space
+   *  yBase to yTop — shared by the high-rise antennas and the school's
+   *  flagpole. Whatever tops it (beacon, flag) stays at the call site. */
+  function drawMast(x: number, yBase: number, yTop: number, width = 0.75) {
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(x, yBase);
+    ctx.lineTo(x, yTop);
+    ctx.stroke();
+  }
+
   /** Small ledge accents (balconies, AC units) protruding from a face at a
    *  given row height — reuses the window face geometry but wider/flatter. */
   function drawLedges(x0: number, y0: number, x1: number, y1: number, rows: number, zBase: number, zTop: number, color: string) {
@@ -906,12 +918,7 @@ export function initCityGame(): void {
     drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 29, 30.5, ROOFTOP_UNIT);
     if (hash01(i, 30) > 0.55) {
       const mast = isoProject(VIEW, vx + 0.5, vy + 0.5);
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 0.75;
-      ctx.beginPath();
-      ctx.moveTo(mast.x, mast.y - 30.5);
-      ctx.lineTo(mast.x, mast.y - 35);
-      ctx.stroke();
+      drawMast(mast.x, mast.y - 30.5, mast.y - 35);
     }
   }
 
@@ -975,12 +982,7 @@ export function initCityGame(): void {
     drawBox(vx + 0.28, vy + 0.28, vx + 0.72, vy + 0.72, 26, 31, '#7fb0f0');
     // Antenna mast with a blinking aircraft light
     const mast = isoProject(VIEW, vx + 0.5, vy + 0.5);
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(mast.x, mast.y - 31);
-    ctx.lineTo(mast.x, mast.y - 37);
-    ctx.stroke();
+    drawMast(mast.x, mast.y - 31, mast.y - 37, 1);
     ctx.fillStyle = blink(clock, i) ? '#f87171' : '#7a3a3a';
     ctx.fillRect(mast.x - 1, mast.y - 38, 2, 2);
   }
@@ -1231,12 +1233,7 @@ export function initCityGame(): void {
           drawDoor(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, 0.5, '#5a3a20');
           drawRoofRidge(vx, vy, 14, '#8a5f2c');
           // Flagpole on the ridge.
-          ctx.strokeStyle = '#cbd5e1';
-          ctx.lineWidth = 0.75;
-          ctx.beginPath();
-          ctx.moveTo(top.x, top.y - 20);
-          ctx.lineTo(top.x, top.y - 27);
-          ctx.stroke();
+          drawMast(top.x, top.y - 20, top.y - 27);
           ctx.fillStyle = '#4f86d6';
           ctx.beginPath();
           ctx.moveTo(top.x, top.y - 27);

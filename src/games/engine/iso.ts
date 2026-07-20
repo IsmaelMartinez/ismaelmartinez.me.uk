@@ -50,20 +50,25 @@ export function isoTileFromPoint(
  * itself returns, so a shaded colour can be shaded again (e.g. Pixel
  * Park's zone-tinted ground fed back through drawBlock for raised tiles —
  * which used to come out as NaN channels and paint hills black). An rgba
- * input keeps its alpha. Other formats (named colours, #rgb shorthand)
- * are not understood and come back black — pass six-digit hex.
+ * input keeps its alpha; #rgb shorthand expands. Other formats (named
+ * colours, hsl()) are not understood and come back black.
  */
 export function shadeColor(color: string, factor: number): string {
   let r = 0;
   let g = 0;
   let b = 0;
   let alpha: string | null = null;
-  if (color.charCodeAt(0) === 35 /* '#' */) {
+  if (color.charCodeAt(0) === 35 /* '#' */ && color.length === 7) {
     const n = parseInt(color.slice(1), 16);
     r = (n >> 16) & 0xff;
     g = (n >> 8) & 0xff;
     b = n & 0xff;
-  } else {
+  } else if (color.charCodeAt(0) === 35 && color.length === 4) {
+    const n = parseInt(color.slice(1), 16);
+    r = ((n >> 8) & 0xf) * 17;
+    g = ((n >> 4) & 0xf) * 17;
+    b = (n & 0xf) * 17;
+  } else if (color.charCodeAt(0) !== 35) {
     const m = color.match(/[\d.]+/g);
     if (m && m.length >= 3) {
       r = +m[0];

@@ -12,6 +12,8 @@ import {
   isoProject,
   fillTile,
   strokeTile,
+  blockFaceCorners,
+  blockSeamPath,
   drawBlock,
   shadeColor,
   forEachTileBackToFront,
@@ -1845,9 +1847,7 @@ export function initParkGame(): void {
     const bodyH = 10;
     const inset = 0.18;
     drawBlock(ctx, VIEW, vx, vy, bodyH, color, inset, liftPx);
-    const e = isoProject(VIEW, vx + 1 - inset, vy + inset);
-    const s = isoProject(VIEW, vx + 1 - inset, vy + 1 - inset);
-    const w = isoProject(VIEW, vx + inset, vy + 1 - inset);
+    const { e, s, w } = blockFaceCorners(VIEW, vx, vy, inset);
     // The awning's outer corners overhang the footprint and sag a little.
     const eOut = isoProject(VIEW, vx + 1 - inset + 0.2, vy + inset - 0.08);
     const sOut = isoProject(VIEW, vx + 1 - inset + 0.14, vy + 1 - inset + 0.14);
@@ -1915,18 +1915,13 @@ export function initParkGame(): void {
 
     // Shaft detail: floor seams and a window column on the two visible
     // faces of the (0.22-inset) block drawn just before this call.
-    const inset = 0.22;
-    const w = isoProject(VIEW, vx + inset, vy + 1 - inset);
-    const s = isoProject(VIEW, vx + 1 - inset, vy + 1 - inset);
-    const e = isoProject(VIEW, vx + 1 - inset, vy + inset);
+    const fc = blockFaceCorners(VIEW, vx, vy, 0.22);
+    const { w, s, e } = fc;
     ctx.strokeStyle = 'rgba(15, 23, 42, 0.25)';
     ctx.lineWidth = 0.75;
     for (let r = 1; r < 4; r++) {
-      const ry = (towerH * r) / 4;
       ctx.beginPath();
-      ctx.moveTo(w.x, w.y - liftPx - ry);
-      ctx.lineTo(s.x, s.y - liftPx - ry);
-      ctx.lineTo(e.x, e.y - liftPx - ry);
+      blockSeamPath(ctx, fc, liftPx + (towerH * r) / 4);
       ctx.stroke();
     }
     for (let f = 0; f < 2; f++) {

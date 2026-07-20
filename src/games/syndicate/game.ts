@@ -15,6 +15,7 @@ import {
   isoTileFromPoint,
   fillTile,
   strokeTile,
+  blockFaceCorners,
   drawBlock,
   forEachTileBackToFront,
   shadeColor,
@@ -467,10 +468,7 @@ export function initSyndicateGame(): void {
   }
 
   function drawWindows(x: number, y: number, i: number, height: number) {
-    const inset = 0.08;
-    const w = isoProject(VIEW, x + inset, y + 1 - inset);
-    const sCorner = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
-    const e = isoProject(VIEW, x + 1 - inset, y + inset);
+    const { w, s: sCorner, e } = blockFaceCorners(VIEW, x, y);
     const rows = Math.floor(height / 8);
     const faces: [{ x: number; y: number }, { x: number; y: number }][] = [
       [w, sCorner],
@@ -555,10 +553,7 @@ export function initSyndicateGame(): void {
   function drawStorefront(x: number, y: number, i: number, height: number, palette: number) {
     // Only a minority of low-rise blocks trade — most of the city sleeps.
     if (height >= 24 || hash(i, 8) < 0.65) return;
-    const inset = 0.08;
-    const w = isoProject(VIEW, x + inset, y + 1 - inset);
-    const sCorner = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
-    const e = isoProject(VIEW, x + 1 - inset, y + inset);
+    const { w, s: sCorner, e } = blockFaceCorners(VIEW, x, y);
     for (let f = 0; f < 2; f++) {
       const open =
         f === 0
@@ -586,11 +581,7 @@ export function initSyndicateGame(): void {
   }
 
   function drawNeonTrim(x: number, y: number, height: number, palette: number) {
-    const inset = 0.08;
-    const n = isoProject(VIEW, x + inset, y + inset);
-    const e = isoProject(VIEW, x + 1 - inset, y + inset);
-    const sCorner = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
-    const w = isoProject(VIEW, x + inset, y + 1 - inset);
+    const { n, e, s: sCorner, w } = blockFaceCorners(VIEW, x, y);
     ctx.strokeStyle = NEON[palette];
     ctx.lineWidth = 1.2;
     ctx.globalAlpha = 0.85;

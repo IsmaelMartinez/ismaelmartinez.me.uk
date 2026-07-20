@@ -20,6 +20,8 @@ import {
   isoTileFromPoint,
   fillTile,
   strokeTile,
+  blockFaceCorners,
+  blockSeamPath,
   drawBlock,
   forEachTileBackToFront,
   shadeColor,
@@ -541,19 +543,15 @@ export function initTowerDefenseGame(): void {
     // Stone plinth under every tower, then the coloured body on top of it.
     drawBlock(ctx, VIEW, x, y, 4, '#57534e', 0.1);
     // Mortar coursing on the plinth faces.
-    const pw = isoProject(VIEW, x + 0.1, y + 0.9);
-    const ps = isoProject(VIEW, x + 0.9, y + 0.9);
-    const pe = isoProject(VIEW, x + 0.9, y + 0.1);
+    const pc = blockFaceCorners(VIEW, x, y, 0.1);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
     ctx.lineWidth = 0.75;
     ctx.beginPath();
-    ctx.moveTo(pw.x, pw.y - 2);
-    ctx.lineTo(ps.x, ps.y - 2);
-    ctx.lineTo(pe.x, pe.y - 2);
-    ctx.moveTo((pw.x + ps.x) / 2, (pw.y + ps.y) / 2 - 2);
-    ctx.lineTo((pw.x + ps.x) / 2, (pw.y + ps.y) / 2);
-    ctx.moveTo((ps.x + pe.x) / 2, (ps.y + pe.y) / 2 - 4);
-    ctx.lineTo((ps.x + pe.x) / 2, (ps.y + pe.y) / 2 - 2);
+    blockSeamPath(ctx, pc, 2);
+    ctx.moveTo((pc.w.x + pc.s.x) / 2, (pc.w.y + pc.s.y) / 2 - 2);
+    ctx.lineTo((pc.w.x + pc.s.x) / 2, (pc.w.y + pc.s.y) / 2);
+    ctx.moveTo((pc.s.x + pc.e.x) / 2, (pc.s.y + pc.e.y) / 2 - 4);
+    ctx.lineTo((pc.s.x + pc.e.x) / 2, (pc.s.y + pc.e.y) / 2 - 2);
     ctx.stroke();
     drawBlock(ctx, VIEW, x, y, height, color, 0.2, 4);
     const topY = c.y - height - 4;
@@ -795,17 +793,12 @@ export function initTowerDefenseGame(): void {
     drawBlock(ctx, VIEW, x, y, 20, '#6b7280', 0.1);
     const topY = c.y - 20;
     // Stone coursing and an arrow slit on each visible face.
-    const kw = isoProject(VIEW, x + 0.1, y + 0.9);
-    const ks = isoProject(VIEW, x + 0.9, y + 0.9);
-    const ke = isoProject(VIEW, x + 0.9, y + 0.1);
+    const kc = blockFaceCorners(VIEW, x, y, 0.1);
+    const { w: kw, s: ks, e: ke } = kc;
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
     ctx.lineWidth = 0.75;
     ctx.beginPath();
-    for (const zz of [6, 11, 16]) {
-      ctx.moveTo(kw.x, kw.y - zz);
-      ctx.lineTo(ks.x, ks.y - zz);
-      ctx.lineTo(ke.x, ke.y - zz);
-    }
+    for (const zz of [6, 11, 16]) blockSeamPath(ctx, kc, zz);
     // Staggered vertical joints between the courses.
     for (let j = 0; j < 3; j++) {
       const t = 0.25 + j * 0.25;

@@ -125,6 +125,55 @@ export function strokeTile(
 }
 
 /**
+ * Projected screen corners of the inset footprint on tile (x, y) — the four
+ * points drawBlock extrudes between. Face-detail passes (mortar seams,
+ * window grids, storefront bands, awning rims) draw on a block's faces by
+ * interpolating between these corners; they must derive them through this
+ * helper so the footprint math exists exactly once.
+ */
+export interface BlockCorners {
+  n: { x: number; y: number };
+  e: { x: number; y: number };
+  s: { x: number; y: number };
+  w: { x: number; y: number };
+}
+
+export function blockFaceCorners(
+  view: IsoView,
+  x: number,
+  y: number,
+  inset = 0.08
+): BlockCorners {
+  const x0 = x + inset;
+  const y0 = y + inset;
+  const x1 = x + 1 - inset;
+  const y1 = y + 1 - inset;
+  return {
+    n: isoProject(view, x0, y0),
+    e: isoProject(view, x1, y0),
+    s: isoProject(view, x1, y1),
+    w: isoProject(view, x0, y1)
+  };
+}
+
+/**
+ * Appends the W→S→E seam polyline at pixel height `z` to the current path —
+ * the horizontal course line across a block's two visible faces (stone
+ * coursing, panel seams, floor lines). Path-append rather than stroke, so
+ * callers batch several seams plus any bespoke joints into one
+ * beginPath/stroke with their own style.
+ */
+export function blockSeamPath(
+  ctx: CanvasRenderingContext2D,
+  c: BlockCorners,
+  z: number
+): void {
+  ctx.moveTo(c.w.x, c.w.y - z);
+  ctx.lineTo(c.s.x, c.s.y - z);
+  ctx.lineTo(c.e.x, c.e.y - z);
+}
+
+/**
  * Extruded block on tile (x, y): lit top, shaded south-west and south-east
  * faces. `inset` shrinks the footprint within the tile (0–0.5). `zOffset`
  * lifts the block's *base* by that many pixels before drawing `height` on
@@ -142,14 +191,7 @@ export function drawBlock(
   inset = 0.08,
   zOffset = 0
 ): void {
-  const x0 = x + inset;
-  const y0 = y + inset;
-  const x1 = x + 1 - inset;
-  const y1 = y + 1 - inset;
-  const n = isoProject(view, x0, y0);
-  const e = isoProject(view, x1, y0);
-  const s = isoProject(view, x1, y1);
-  const w = isoProject(view, x0, y1);
+  const { n, e, s, w } = blockFaceCorners(view, x, y, inset);
   const top = height + zOffset;
 
   // South-west face (between W and S corners)
@@ -214,14 +256,7 @@ export function drawRamp(
   color: string,
   inset = 0.08
 ): void {
-  const x0 = x + inset;
-  const y0 = y + inset;
-  const x1 = x + 1 - inset;
-  const y1 = y + 1 - inset;
-  const n = isoProject(view, x0, y0);
-  const e = isoProject(view, x1, y0);
-  const s = isoProject(view, x1, y1);
-  const w = isoProject(view, x0, y1);
+  const { n, e, s, w } = blockFaceCorners(view, x, y, inset);
 
   ctx.fillStyle = shadeColor(color, 1.05);
   ctx.beginPath();

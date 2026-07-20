@@ -4,6 +4,8 @@ import {
   isoUnproject,
   isoTileFromPoint,
   shadeColor,
+  blockFaceCorners,
+  blockSeamPath,
   forEachTileBackToFront,
   rotateTile,
   rotateDir,
@@ -74,6 +76,37 @@ describe('rotateDir', () => {
     expect(rotateDir(0, -1)).toBe(3);
     expect(rotateDir(3, -3)).toBe(0);
     expect(rotateDir(2, 6)).toBe(0);
+  });
+});
+
+describe('blockFaceCorners', () => {
+  it('projects the four inset footprint corners', () => {
+    const c = blockFaceCorners(view, 3, 5, 0.1);
+    expect(c.n).toEqual(isoProject(view, 3.1, 5.1));
+    expect(c.e).toEqual(isoProject(view, 3.9, 5.1));
+    expect(c.s).toEqual(isoProject(view, 3.9, 5.9));
+    expect(c.w).toEqual(isoProject(view, 3.1, 5.9));
+  });
+
+  it('defaults to drawBlock’s 0.08 inset', () => {
+    expect(blockFaceCorners(view, 2, 2)).toEqual(blockFaceCorners(view, 2, 2, 0.08));
+  });
+});
+
+describe('blockSeamPath', () => {
+  it('appends the W→S→E polyline raised by z', () => {
+    const c = blockFaceCorners(view, 4, 4, 0.1);
+    const ops: unknown[] = [];
+    const ctx = {
+      moveTo: (x: number, y: number) => ops.push(['moveTo', x, y]),
+      lineTo: (x: number, y: number) => ops.push(['lineTo', x, y])
+    } as unknown as CanvasRenderingContext2D;
+    blockSeamPath(ctx, c, 7);
+    expect(ops).toEqual([
+      ['moveTo', c.w.x, c.w.y - 7],
+      ['lineTo', c.s.x, c.s.y - 7],
+      ['lineTo', c.e.x, c.e.y - 7]
+    ]);
   });
 });
 

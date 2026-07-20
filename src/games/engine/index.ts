@@ -31,6 +31,8 @@ export {
   shadeColor,
   fillTile,
   strokeTile,
+  blockFaceCorners,
+  blockSeamPath,
   drawBlock,
   drawRamp,
   forEachTileBackToFront,
@@ -40,6 +42,6 @@ export {
   rotatePoint,
   rotateDir
 } from './iso';
-export type { IsoView, Rotation } from './iso';
+export type { BlockCorners, IsoView, Rotation } from './iso';
 export { createViewRotator } from './rotator';
 export type { ViewRotator } from './rotator';

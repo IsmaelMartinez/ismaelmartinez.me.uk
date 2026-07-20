@@ -13,6 +13,8 @@ import {
   isoTileFromPoint,
   fillTile,
   strokeTile,
+  blockFaceCorners,
+  blockSeamPath,
   drawBlock,
   shadeColor,
   hash01,
@@ -1164,16 +1166,12 @@ export function initCityGame(): void {
           drawBlock(ctx, VIEW, vx, vy, 22, '#5b4a7a');
           // Panel seams and a lit window row so the plant reads as a
           // working building rather than a purple slab.
-          const pw = isoProject(VIEW, vx + 0.08, vy + 0.92);
-          const ps = isoProject(VIEW, vx + 0.92, vy + 0.92);
-          const pe = isoProject(VIEW, vx + 0.92, vy + 0.08);
+          const pc = blockFaceCorners(VIEW, vx, vy, 0.08);
           ctx.strokeStyle = 'rgba(20, 16, 34, 0.4)';
           ctx.lineWidth = 0.75;
           for (const zz of [8, 15]) {
             ctx.beginPath();
-            ctx.moveTo(pw.x, pw.y - zz);
-            ctx.lineTo(ps.x, ps.y - zz);
-            ctx.lineTo(pe.x, pe.y - zz);
+            blockSeamPath(ctx, pc, zz);
             ctx.stroke();
           }
           drawWindows(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, i, 1, 0, 8);

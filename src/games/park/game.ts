@@ -494,6 +494,10 @@ export function initParkGame(): void {
   let hoverCacheKey = '';
   let hoverCachePlaceable = false;
   let hoverCacheCost = 0;
+  // Baked screen-space rail geometry per track tile (committed + draft),
+  // keyed on the same worldVersion (plus rotation) — see computeTrackGeom.
+  const railCache = new Map<number, TrackGeom>();
+  let railCacheKey = '';
   let clock = 0;
   // Floaters live in the shared effects module; balloons stay local (their
   // sway drift has no analogue in its physics).
@@ -1282,6 +1286,9 @@ export function initParkGame(): void {
    */
   function resetPark(regenerate = true) {
     if (regenerate) ({ tiles, heights, tunnels, entrance } = createPark());
+    // Fresh terrain and cleared coasters: stale hover/rail cache entries
+    // must not survive into the new park.
+    bumpWorldVersion();
     money = START_MONEY;
     day = 1;
     dayTimer = 0;
@@ -1316,31 +1323,73 @@ export function initParkGame(): void {
    * bordering the next tile) sit at `nextLift`, the two on the opposite
    * edge sit at `curLift` — a single-axis tilt along the direction of
    * travel, not a partial average (which would twist the quad instead of
-   * sloping it). Superseded by drawTrackTile's curve geometry, which slopes
-   * the rails themselves by interpolating z from entry edge to exit edge.
+   * sloping it). Superseded by computeTrackGeom's curve geometry, which
+   * slopes the rails themselves by interpolating z from entry edge to exit
+   * edge.
    *
    * Track geometry runs entry-edge → centre → exit-edge as a quadratic
-   * curve in world tile space (projectWorld handles view rotation). All
-   * scalar math — this draws every committed and drafted track tile every
-   * frame, so no arrays or point objects beyond isoProject's returns.
+   * curve in world tile space (projectWorld handles view rotation). The
+   * geometry is a pure function of (track layout, terrain, rotation), so
+   * computeTrackGeom bakes it into railCache — rebuilt only when the
+   * `worldVersion:rotation` key changes — and drawTrackGeom just replays
+   * the strokes; the old per-frame version re-projected ~15 points per
+   * track tile per frame.
    */
-  function drawTrackTile(i: number, seg: Segment, prevDir: Dir, pending: boolean) {
+  interface TrackGeom {
+    draft: boolean;
+    /**
+     * The draft tail's direction is still a placeholder (see
+     * handleTrackTap) — mark the tile with a bright-rimmed ballast pad (no
+     * rails yet) that clearly registers the tap on dark grass. `pad` is
+     * that marker's screen point (terrain lift folded in); when set, the
+     * full-geometry fields stay unused defaults.
+     */
+    pad: Pt | null;
+    e0: Pt;
+    x0: Pt;
+    c0: Pt;
+    zE: number;
+    zX: number;
+    zM: number;
+    sleepers: { sa: Pt; sb: Pt; z: number }[];
+    eaL: Pt;
+    xaL: Pt;
+    caL: Pt;
+    eaR: Pt;
+    xaR: Pt;
+    caR: Pt;
+    /** Station platform quad + its rim height, or null off stations. */
+    station: { a1: Pt; a2: Pt; b2: Pt; b1: Pt; z: number } | null;
+  }
+
+  const ORIGIN_PT: Pt = { x: 0, y: 0 };
+
+  function computeTrackGeom(i: number, seg: Segment, prevDir: Dir, draft: boolean, pending: boolean): TrackGeom {
     const cx = (i % GRID_W) + 0.5;
     const cy = Math.floor(i / GRID_W) + 0.5;
     const zC = heights[i] * TERRAIN_STEP;
+    const geom: TrackGeom = {
+      draft,
+      pad: null,
+      e0: ORIGIN_PT,
+      x0: ORIGIN_PT,
+      c0: ORIGIN_PT,
+      zE: 0,
+      zX: 0,
+      zM: 0,
+      sleepers: [],
+      eaL: ORIGIN_PT,
+      xaL: ORIGIN_PT,
+      caL: ORIGIN_PT,
+      eaR: ORIGIN_PT,
+      xaR: ORIGIN_PT,
+      caR: ORIGIN_PT,
+      station: null
+    };
     if (pending) {
-      // The draft tail's direction is still a placeholder (see
-      // handleTrackTap) — mark the tile with a bright-rimmed ballast pad
-      // (no rails yet) that clearly registers the tap on dark grass.
       const p = projectWorld(cx, cy);
-      ctx.fillStyle = '#6b655c';
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y - zC, 8, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#c9ced8';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      return;
+      geom.pad = { x: p.x, y: p.y - zC };
+      return geom;
     }
     const inV = DIR_DELTA[prevDir];
     const outV = DIR_DELTA[seg.dir];
@@ -1354,22 +1403,14 @@ export function initParkGame(): void {
     const pInY = inV.dx;
     const pOutX = -outV.dy;
     const pOutY = outV.dx;
-    const e0 = projectWorld(cx - inV.dx * 0.5, cy - inV.dy * 0.5);
-    const x0 = projectWorld(cx + outV.dx * 0.5, cy + outV.dy * 0.5);
-    const c0 = projectWorld(cx, cy);
-
-    // Ballast bed: one wide stroke along the centre line.
-    ctx.strokeStyle = '#4c4741';
-    ctx.lineWidth = 10;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.moveTo(e0.x, e0.y - zE);
-    ctx.quadraticCurveTo(c0.x, c0.y - (zE + zX) / 2, x0.x, x0.y - zX);
-    ctx.stroke();
+    geom.zE = zE;
+    geom.zX = zX;
+    geom.zM = (zE + zX) / 2;
+    geom.e0 = projectWorld(cx - inV.dx * 0.5, cy - inV.dy * 0.5);
+    geom.x0 = projectWorld(cx + outV.dx * 0.5, cy + outV.dy * 0.5);
+    geom.c0 = projectWorld(cx, cy);
 
     // Sleepers: short perpendicular ties along the curve.
-    ctx.strokeStyle = '#5f4a33';
-    ctx.lineWidth = 1.75;
     for (let k = 0; k < 5; k++) {
       const t = 0.1 + k * 0.2;
       const mt = 1 - t;
@@ -1381,61 +1422,97 @@ export function initParkGame(): void {
       const tl = Math.hypot(tx, ty) || 1;
       const px = -ty / tl;
       const py = tx / tl;
-      const z = zE + (zX - zE) * t;
-      const sa = projectWorld(bx + px * 0.19, by + py * 0.19);
-      const sb = projectWorld(bx - px * 0.19, by - py * 0.19);
+      geom.sleepers.push({
+        sa: projectWorld(bx + px * 0.19, by + py * 0.19),
+        sb: projectWorld(bx - px * 0.19, by - py * 0.19),
+        z: zE + (zX - zE) * t
+      });
+    }
+
+    // Twin rails: three points per rail. The offset curve's control point
+    // is where the two offset tangent lines meet — the miter
+    // (pIn+pOut)·off/(1+pIn·pOut) — which keeps the gauge constant on
+    // straights (÷2) and through corners (÷1); a flat ·0.5 pinched the
+    // rails to ~71% gauge at every corner apex.
+    const miter = 0.14 / (1 + (pInX * pOutX + pInY * pOutY));
+    geom.eaL = projectWorld(cx - inV.dx * 0.5 - pInX * 0.14, cy - inV.dy * 0.5 - pInY * 0.14);
+    geom.xaL = projectWorld(cx + outV.dx * 0.5 - pOutX * 0.14, cy + outV.dy * 0.5 - pOutY * 0.14);
+    geom.caL = projectWorld(cx - (pInX + pOutX) * miter, cy - (pInY + pOutY) * miter);
+    geom.eaR = projectWorld(cx - inV.dx * 0.5 + pInX * 0.14, cy - inV.dy * 0.5 + pInY * 0.14);
+    geom.xaR = projectWorld(cx + outV.dx * 0.5 + pOutX * 0.14, cy + outV.dy * 0.5 + pOutY * 0.14);
+    geom.caR = projectWorld(cx + (pInX + pOutX) * miter, cy + (pInY + pOutY) * miter);
+
+    if (seg.kind === 'station') {
+      // Boarding platform along the right-hand side of travel.
+      geom.station = {
+        a1: projectWorld(cx - outV.dx * 0.45 + pOutX * 0.24, cy - outV.dy * 0.45 + pOutY * 0.24),
+        a2: projectWorld(cx + outV.dx * 0.45 + pOutX * 0.24, cy + outV.dy * 0.45 + pOutY * 0.24),
+        b2: projectWorld(cx + outV.dx * 0.45 + pOutX * 0.46, cy + outV.dy * 0.45 + pOutY * 0.46),
+        b1: projectWorld(cx - outV.dx * 0.45 + pOutX * 0.46, cy - outV.dy * 0.45 + pOutY * 0.46),
+        z: zC
+      };
+    }
+    return geom;
+  }
+
+  function drawTrackGeom(g: TrackGeom) {
+    if (g.pad) {
+      ctx.fillStyle = '#6b655c';
+      ctx.beginPath();
+      ctx.ellipse(g.pad.x, g.pad.y, 8, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#c9ced8';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      return;
+    }
+
+    // Ballast bed: one wide stroke along the centre line.
+    ctx.strokeStyle = '#4c4741';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(g.e0.x, g.e0.y - g.zE);
+    ctx.quadraticCurveTo(g.c0.x, g.c0.y - g.zM, g.x0.x, g.x0.y - g.zX);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#5f4a33';
+    ctx.lineWidth = 1.75;
+    for (const { sa, sb, z } of g.sleepers) {
       ctx.beginPath();
       ctx.moveTo(sa.x, sa.y - z);
       ctx.lineTo(sb.x, sb.y - z);
       ctx.stroke();
     }
 
-    // Twin rails: dark understroke for contrast, bright steel on top. The
-    // three points per rail depend only on the side, so they project once
-    // and both stroke passes reuse them. The offset curve's control point
-    // is where the two offset tangent lines meet — the miter
-    // (pIn+pOut)·off/(1+pIn·pOut) — which keeps the gauge constant on
-    // straights (÷2) and through corners (÷1); a flat ·0.5 pinched the
-    // rails to ~71% gauge at every corner apex.
-    const miter = 0.14 / (1 + (pInX * pOutX + pInY * pOutY));
-    const eaL = projectWorld(cx - inV.dx * 0.5 - pInX * 0.14, cy - inV.dy * 0.5 - pInY * 0.14);
-    const xaL = projectWorld(cx + outV.dx * 0.5 - pOutX * 0.14, cy + outV.dy * 0.5 - pOutY * 0.14);
-    const caL = projectWorld(cx - (pInX + pOutX) * miter, cy - (pInY + pOutY) * miter);
-    const eaR = projectWorld(cx - inV.dx * 0.5 + pInX * 0.14, cy - inV.dy * 0.5 + pInY * 0.14);
-    const xaR = projectWorld(cx + outV.dx * 0.5 + pOutX * 0.14, cy + outV.dy * 0.5 + pOutY * 0.14);
-    const caR = projectWorld(cx + (pInX + pOutX) * miter, cy + (pInY + pOutY) * miter);
-    const zM = (zE + zX) / 2;
+    // Twin rails: dark understroke for contrast, bright steel on top.
     for (let pass = 0; pass < 2; pass++) {
       ctx.strokeStyle = pass === 0 ? '#26262e' : '#c9ced8';
       ctx.lineWidth = pass === 0 ? 2 : 1;
       ctx.beginPath();
-      ctx.moveTo(eaL.x, eaL.y - zE);
-      ctx.quadraticCurveTo(caL.x, caL.y - zM, xaL.x, xaL.y - zX);
-      ctx.moveTo(eaR.x, eaR.y - zE);
-      ctx.quadraticCurveTo(caR.x, caR.y - zM, xaR.x, xaR.y - zX);
+      ctx.moveTo(g.eaL.x, g.eaL.y - g.zE);
+      ctx.quadraticCurveTo(g.caL.x, g.caL.y - g.zM, g.xaL.x, g.xaL.y - g.zX);
+      ctx.moveTo(g.eaR.x, g.eaR.y - g.zE);
+      ctx.quadraticCurveTo(g.caR.x, g.caR.y - g.zM, g.xaR.x, g.xaR.y - g.zX);
       ctx.stroke();
     }
 
-    if (seg.kind === 'station') {
-      // Boarding platform along the right-hand side of travel, with a pale
-      // edge line so the station reads at a glance.
-      const a1 = projectWorld(cx - outV.dx * 0.45 + pOutX * 0.24, cy - outV.dy * 0.45 + pOutY * 0.24);
-      const a2 = projectWorld(cx + outV.dx * 0.45 + pOutX * 0.24, cy + outV.dy * 0.45 + pOutY * 0.24);
-      const b2 = projectWorld(cx + outV.dx * 0.45 + pOutX * 0.46, cy + outV.dy * 0.45 + pOutY * 0.46);
-      const b1 = projectWorld(cx - outV.dx * 0.45 + pOutX * 0.46, cy - outV.dy * 0.45 + pOutY * 0.46);
+    if (g.station) {
+      // A pale edge line so the station reads at a glance.
+      const { a1, a2, b2, b1, z } = g.station;
       ctx.fillStyle = '#b3ab99';
       ctx.beginPath();
-      ctx.moveTo(a1.x, a1.y - zC - 2);
-      ctx.lineTo(a2.x, a2.y - zC - 2);
-      ctx.lineTo(b2.x, b2.y - zC - 2);
-      ctx.lineTo(b1.x, b1.y - zC - 2);
+      ctx.moveTo(a1.x, a1.y - z - 2);
+      ctx.lineTo(a2.x, a2.y - z - 2);
+      ctx.lineTo(b2.x, b2.y - z - 2);
+      ctx.lineTo(b1.x, b1.y - z - 2);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = '#efe9dc';
       ctx.lineWidth = 0.75;
       ctx.beginPath();
-      ctx.moveTo(a1.x, a1.y - zC - 2);
-      ctx.lineTo(a2.x, a2.y - zC - 2);
+      ctx.moveTo(a1.x, a1.y - z - 2);
+      ctx.lineTo(a2.x, a2.y - z - 2);
       ctx.stroke();
     }
   }
@@ -2344,28 +2421,34 @@ export function initParkGame(): void {
     // The draft's tail segment has a placeholder `dir` (see handleTrackTap)
     // until the next tap fixes it, so its ramp orientation isn't known yet
     // — `pending` flags it so the renderer falls back to a flat marker
-    // instead of guessing a slope direction.
-    const trackByTile = new Map<number, { seg: Segment; prevDir: Dir; draft: boolean; pending: boolean }>();
-    for (const coaster of coasters) {
-      const n = coaster.segments.length;
-      coaster.segments.forEach((seg, idx) => {
-        // The previous segment's dir is the direction of travel INTO this
-        // tile — drawTrackTile bends the rails from that entry edge to
-        // seg.dir's exit edge.
-        const prevDir = coaster.segments[(idx - 1 + n) % n].dir;
-        trackByTile.set(seg.tile, { seg, prevDir, draft: false, pending: false });
-      });
-    }
-    if (trackDraft) {
-      const n = trackDraft.length;
-      trackDraft.forEach((seg, idx) => {
-        // Once the loop is closed the tail's dir was fixed by the closing
-        // tap (see handleTrackTap), so nothing is pending any more. The
-        // open draft's first tile has no entry yet — treat it as straight.
-        const pending = !trackClosed && idx === n - 1;
-        const prevDir = idx > 0 ? trackDraft![idx - 1].dir : trackClosed ? trackDraft![n - 1].dir : seg.dir;
-        trackByTile.set(seg.tile, { seg, prevDir, draft: true, pending });
-      });
+    // instead of guessing a slope direction. The baked geometry only moves
+    // when track, terrain, or rotation changes: every mutation route bumps
+    // worldVersion, and rotation is in the key.
+    const railKey = `${worldVersion}:${rotation}`;
+    if (railKey !== railCacheKey) {
+      railCacheKey = railKey;
+      railCache.clear();
+      for (const coaster of coasters) {
+        const n = coaster.segments.length;
+        coaster.segments.forEach((seg, idx) => {
+          // The previous segment's dir is the direction of travel INTO this
+          // tile — the rails bend from that entry edge to seg.dir's exit
+          // edge.
+          const prevDir = coaster.segments[(idx - 1 + n) % n].dir;
+          railCache.set(seg.tile, computeTrackGeom(seg.tile, seg, prevDir, false, false));
+        });
+      }
+      if (trackDraft) {
+        const n = trackDraft.length;
+        trackDraft.forEach((seg, idx) => {
+          // Once the loop is closed the tail's dir was fixed by the closing
+          // tap (see handleTrackTap), so nothing is pending any more. The
+          // open draft's first tile has no entry yet — treat it as straight.
+          const pending = !trackClosed && idx === n - 1;
+          const prevDir = idx > 0 ? trackDraft![idx - 1].dir : trackClosed ? trackDraft![n - 1].dir : seg.dir;
+          railCache.set(seg.tile, computeTrackGeom(seg.tile, seg, prevDir, true, pending));
+        });
+      }
     }
 
     // The world grid never moves; rendering walks the *view* grid (rotated
@@ -2390,7 +2473,7 @@ export function initParkGame(): void {
         fillTile(ctx, VIEW, vx, vy, shadeColor('#1f6fa8', ripple));
       } else {
         // Track tiles keep their grass under the drawn ballast-and-rails
-        // bed (drawTrackTile) — a coaster loop shouldn't pave the lawn.
+        // bed (drawTrackGeom) — a coaster loop shouldn't pave the lawn.
         const groundColor =
           tile === 'path' || tile === 'entrance'
               ? '#8a7a5c'
@@ -2470,12 +2553,11 @@ export function initParkGame(): void {
         }
       }
 
-      const trackInfo = trackByTile.get(i);
-      if (trackInfo) {
-        const { seg, prevDir, draft, pending } = trackInfo;
+      const trackGeom = railCache.get(i);
+      if (trackGeom) {
         ctx.save();
-        if (draft) ctx.globalAlpha = 0.55;
-        drawTrackTile(i, seg, prevDir, pending);
+        if (trackGeom.draft) ctx.globalAlpha = 0.55;
+        drawTrackGeom(trackGeom);
         ctx.restore();
       }
     });

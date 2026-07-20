@@ -27,7 +27,7 @@
 import { chromium } from 'playwright-core';
 import http from 'node:http';
 import { createReadStream, existsSync, statSync, mkdirSync } from 'node:fs';
-import { extname, join, dirname } from 'node:path';
+import { extname, join, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CHROMIUM = process.env.CHROMIUM || '/opt/pw-browsers/chromium';
@@ -39,14 +39,17 @@ mkdirSync(OUT, { recursive: true });
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp' };
 const server = http.createServer((req, res) => {
-  let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  let file = join(DIST, p);
+  const p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  // Contain resolved paths to DIST — decoded `..` segments must not escape.
+  let file = resolve(DIST, '.' + p);
+  if (file !== DIST && !file.startsWith(DIST + sep)) { res.writeHead(403); res.end('forbidden'); return; }
   if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
   if (!existsSync(file)) { res.writeHead(404); res.end('nope'); return; }
   res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream' });
   createReadStream(file).pipe(res);
 });
-await new Promise(r => server.listen(4173, r));
+// Loopback only: the harness has no business being reachable off-machine.
+await new Promise(r => server.listen(4173, '127.0.0.1', r));
 
 const browser = await chromium.launch({ executablePath: CHROMIUM });
 const context = await browser.newContext({ viewport: { width: 1100, height: 800 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });

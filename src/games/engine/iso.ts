@@ -68,7 +68,7 @@ export function shadeColor(color: string, factor: number): string {
     r = ((n >> 8) & 0xf) * 17;
     g = ((n >> 4) & 0xf) * 17;
     b = (n & 0xf) * 17;
-  } else if (color.charCodeAt(0) !== 35) {
+  } else if (color.startsWith('rgb')) {
     const m = color.match(/[\d.]+/g);
     if (m && m.length >= 3) {
       r = +m[0];

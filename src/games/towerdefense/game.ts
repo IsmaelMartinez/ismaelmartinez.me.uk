@@ -540,6 +540,21 @@ export function initTowerDefenseGame(): void {
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
     // Stone plinth under every tower, then the coloured body on top of it.
     drawBlock(ctx, VIEW, x, y, 4, '#57534e', 0.1);
+    // Mortar coursing on the plinth faces.
+    const pw = isoProject(VIEW, x + 0.1, y + 0.9);
+    const ps = isoProject(VIEW, x + 0.9, y + 0.9);
+    const pe = isoProject(VIEW, x + 0.9, y + 0.1);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(pw.x, pw.y - 2);
+    ctx.lineTo(ps.x, ps.y - 2);
+    ctx.lineTo(pe.x, pe.y - 2);
+    ctx.moveTo((pw.x + ps.x) / 2, (pw.y + ps.y) / 2 - 2);
+    ctx.lineTo((pw.x + ps.x) / 2, (pw.y + ps.y) / 2);
+    ctx.moveTo((ps.x + pe.x) / 2, (ps.y + pe.y) / 2 - 4);
+    ctx.lineTo((ps.x + pe.x) / 2, (ps.y + pe.y) / 2 - 2);
+    ctx.stroke();
     drawBlock(ctx, VIEW, x, y, height, color, 0.2, 4);
     const topY = c.y - height - 4;
     const charging = tower.cooldown <= 0.08;
@@ -555,6 +570,10 @@ export function initTowerDefenseGame(): void {
       ctx.moveTo(c.x - 3.5, topY - 4);
       ctx.lineTo(c.x + 3.5, topY - 4);
       ctx.stroke();
+      // Ceramic insulator rings up the mast.
+      ctx.fillStyle = '#e7e5e4';
+      ctx.fillRect(c.x - 1.5, topY - 6.4, 3, 1);
+      ctx.fillRect(c.x - 1.2, topY - 8, 2.4, 1);
       ctx.save();
       ctx.shadowColor = '#fde68a';
       ctx.shadowBlur = charging ? 10 : 5 + pulse * 3;
@@ -592,6 +611,21 @@ export function initTowerDefenseGame(): void {
         ctx.ellipse(c.x, topY - 0.6, 1.6 + pulse, 0.9 + pulse * 0.5, 0, 0, Math.PI * 2);
         ctx.fill();
       }
+      // Reinforcing band round the tub and a shell stack ready beside it.
+      ctx.strokeStyle = shadeColor(color, 0.8);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(c.x, topY + 1.2, 6.1, 3.1, 0, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      ctx.fillStyle = '#292524';
+      ctx.beginPath();
+      ctx.arc(c.x - 5.5, topY + 3.4, 1.1, 0, Math.PI * 2);
+      ctx.arc(c.x - 3.3, topY + 3.8, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#44403c';
+      ctx.beginPath();
+      ctx.arc(c.x - 4.4, topY + 2, 1.1, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       // Frost crystal cluster catching the light.
       ctx.save();
@@ -619,6 +653,16 @@ export function initTowerDefenseGame(): void {
       ctx.closePath();
       ctx.fill();
       ctx.restore();
+      // Ice fringe skirting the crystal's base.
+      ctx.fillStyle = 'rgba(186, 230, 253, 0.8)';
+      for (let ice = -2; ice <= 2; ice++) {
+        ctx.beginPath();
+        ctx.moveTo(c.x + ice * 2.4 - 0.9, topY + 0.6);
+        ctx.lineTo(c.x + ice * 2.4, topY + 2.6 + (ice % 2 === 0 ? 1 : 0));
+        ctx.lineTo(c.x + ice * 2.4 + 0.9, topY + 0.6);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
     // Level pips on the near face.
     ctx.fillStyle = '#fef9c3';
@@ -694,6 +738,24 @@ export function initTowerDefenseGame(): void {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y - h / 2 - 2, 4.5 + pulse * 1.5, (h / 2) * 0.7, 0.4, 0, Math.PI * 2);
     ctx.stroke();
+    // Counter-rotating inner swirl deepens the vortex.
+    ctx.strokeStyle = `rgba(233, 213, 255, ${0.35 + pulse * 0.3})`;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y - h / 2 - 2, 2.6 + (1 - pulse) * 1.4, (h / 2) * 0.45, -0.5, 0, Math.PI * 2);
+    ctx.stroke();
+    // Cracked flagstones where the horde has worn the threshold.
+    ctx.strokeStyle = 'rgba(30, 24, 46, 0.55)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 6, c.y + 2);
+    ctx.lineTo(c.x - 2.5, c.y + 3.6);
+    ctx.lineTo(c.x - 3.5, c.y + 5.4);
+    ctx.moveTo(c.x + 4, c.y + 1.6);
+    ctx.lineTo(c.x + 6.5, c.y + 3.4);
+    ctx.moveTo(c.x - 0.5, c.y + 4);
+    ctx.lineTo(c.x + 1.8, c.y + 5.2);
+    ctx.stroke();
     // Weathered pillars and the lintel across them.
     for (const side of [-1, 1]) {
       ctx.fillStyle = side < 0 ? '#7b8494' : '#5b6472';
@@ -706,11 +768,25 @@ export function initTowerDefenseGame(): void {
         ctx.lineTo(c.x + side * 9 + 2.5, c.y - (h / 4) * seg);
         ctx.stroke();
       }
+      // Carved rune, glowing faintly with the portal's pulse.
+      ctx.strokeStyle = `rgba(196, 181, 253, ${0.35 + pulse * 0.35})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      const rx = c.x + side * 9;
+      const ry = c.y - h * 0.55;
+      ctx.moveTo(rx - 1.2, ry - 2.4);
+      ctx.lineTo(rx + 1.2, ry - 1.2);
+      ctx.lineTo(rx - 1.2, ry);
+      ctx.lineTo(rx + 1.2, ry + 1.2);
+      ctx.stroke();
     }
     ctx.fillStyle = '#8b93a3';
     ctx.fillRect(c.x - 13, c.y - h - 5, 26, 6);
     ctx.fillStyle = '#6b7280';
     ctx.fillRect(c.x - 13, c.y - h - 1, 26, 2);
+    // Keystone notch on the lintel.
+    ctx.fillStyle = '#79808f';
+    ctx.fillRect(c.x - 2, c.y - h - 5, 4, 6);
   }
 
   /** The keep the line defends: walls, gate, crenellations, waving banner. */
@@ -718,10 +794,57 @@ export function initTowerDefenseGame(): void {
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
     drawBlock(ctx, VIEW, x, y, 20, '#6b7280', 0.1);
     const topY = c.y - 20;
-    // Crenellations along the two visible top rims.
+    // Stone coursing and an arrow slit on each visible face.
+    const kw = isoProject(VIEW, x + 0.1, y + 0.9);
+    const ks = isoProject(VIEW, x + 0.9, y + 0.9);
+    const ke = isoProject(VIEW, x + 0.9, y + 0.1);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    for (const zz of [6, 11, 16]) {
+      ctx.moveTo(kw.x, kw.y - zz);
+      ctx.lineTo(ks.x, ks.y - zz);
+      ctx.lineTo(ke.x, ke.y - zz);
+    }
+    // Staggered vertical joints between the courses.
+    for (let j = 0; j < 3; j++) {
+      const t = 0.25 + j * 0.25;
+      const jx = kw.x + (ks.x - kw.x) * t;
+      const jy = kw.y + (ks.y - kw.y) * t;
+      ctx.moveTo(jx, jy - (j % 2 === 0 ? 11 : 16));
+      ctx.lineTo(jx, jy - (j % 2 === 0 ? 6 : 11));
+      const kx = ks.x + (ke.x - ks.x) * t;
+      const ky = ks.y + (ke.y - ks.y) * t;
+      ctx.moveTo(kx, ky - (j % 2 === 0 ? 16 : 11));
+      ctx.lineTo(kx, ky - (j % 2 === 0 ? 11 : 6));
+    }
+    ctx.stroke();
+    // Arrow slits with a pale reveal on the lit side.
+    ctx.fillStyle = '#1c2028';
+    const slitW = kw.x + (ks.x - kw.x) * 0.62;
+    const slitWy = kw.y + (ks.y - kw.y) * 0.62;
+    ctx.fillRect(slitW - 0.6, slitWy - 14.5, 1.2, 4);
+    const slitE = ks.x + (ke.x - ks.x) * 0.38;
+    const slitEy = ks.y + (ke.y - ks.y) * 0.38;
+    ctx.fillRect(slitE - 0.6, slitEy - 14.5, 1.2, 4);
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.35)';
+    ctx.fillRect(slitW - 1.1, slitWy - 14.5, 0.5, 4);
+    ctx.fillRect(slitE - 1.1, slitEy - 14.5, 0.5, 4);
+    // Crenellations along the two visible top rims, over a walkway line.
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 13, topY + 0.5);
+    ctx.lineTo(c.x + 13, topY + 0.5);
+    ctx.stroke();
     ctx.fillStyle = shadeColor('#6b7280', 1.1);
     for (let m = -2; m <= 2; m++) {
       ctx.fillRect(c.x + m * 6 - 1.6, topY - 4, 3.2, 4);
+    }
+    // Shadowed embrasure notches between the merlons.
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    for (let m = -2; m < 2; m++) {
+      ctx.fillRect(c.x + m * 6 + 1.8, topY - 1.4, 2.4, 1.4);
     }
     // Gate facing the road (the SW face), with a raised portcullis grid.
     const gw = isoProject(VIEW, x + 0.24, y + 0.76);
@@ -751,8 +874,15 @@ export function initTowerDefenseGame(): void {
     ctx.fillStyle = '#4ade80';
     ctx.beginPath();
     ctx.moveTo(c.x + 0.5, topY - 17);
-    ctx.quadraticCurveTo(c.x + 6, topY - 16 + wave1, c.x + 11, topY - 14.5 + wave2);
-    ctx.lineTo(c.x + 0.5, topY - 12);
+    ctx.quadraticCurveTo(c.x + 7, topY - 16 + wave1, c.x + 13, topY - 14 + wave2);
+    ctx.lineTo(c.x + 0.5, topY - 11.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#22c55e';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 0.5, topY - 13.5);
+    ctx.quadraticCurveTo(c.x + 5, topY - 13 + wave1 * 0.6, c.x + 9, topY - 12.4 + wave2 * 0.7);
+    ctx.lineTo(c.x + 0.5, topY - 11.5);
     ctx.closePath();
     ctx.fill();
     // Breach flash: the whole keep blinks red as a marcher gets in.
@@ -800,11 +930,22 @@ export function initTowerDefenseGame(): void {
       ctx.beginPath();
       ctx.ellipse(p.x, p.y - 5 - bob * 0.4, 4.4, 5, 0, 0, Math.PI * 2);
       ctx.fill();
+      // Grounding outline so the shell reads against the road.
+      ctx.strokeStyle = 'rgba(10, 16, 28, 0.5)';
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
+      // Segmented carapace lines across the shell.
       ctx.strokeStyle = shadeColor(color, 0.6);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - 9 - bob * 0.4);
       ctx.lineTo(p.x, p.y - 2);
+      ctx.stroke();
+      ctx.strokeStyle = shadeColor(color, 0.7);
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 5 - bob * 0.4, 4.4, 5, 0, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.ellipse(p.x, p.y - 3.4 - bob * 0.4, 4.2, 4.4, 0, Math.PI * 1.2, Math.PI * 1.8);
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(p.x - 2, p.y - 9 - bob * 0.4);
@@ -831,6 +972,21 @@ export function initTowerDefenseGame(): void {
       ctx.lineTo(p.x - dir * 1, p.y - 6.5);
       ctx.closePath();
       ctx.fill();
+      // Dorsal fin cutting the air behind the nose.
+      ctx.fillStyle = shadeColor(color, 0.7);
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 1.5, p.y - 8.6 + stride * 0.3);
+      ctx.lineTo(p.x - dir * 4.2, p.y - 12.2 + stride * 0.5);
+      ctx.lineTo(p.x - dir * 4.6, p.y - 8.8 + stride * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      // Grounding outline along the belly edge.
+      ctx.strokeStyle = 'rgba(10, 16, 28, 0.5)';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(p.x + dir * 7, p.y - 5.5 - bob * 0.3);
+      ctx.lineTo(p.x - dir * 3.2, p.y - 1.5);
+      ctx.stroke();
       ctx.strokeStyle = shadeColor(color, 0.55);
       ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -865,6 +1021,20 @@ export function initTowerDefenseGame(): void {
         ctx.lineTo(p.x + plate * 5.4, p.y - 6);
         ctx.stroke();
       }
+      // Rivets stud the armour plates.
+      ctx.fillStyle = shadeColor(color, 1.5);
+      for (let plate = -1; plate <= 1; plate++) {
+        ctx.beginPath();
+        ctx.arc(p.x + plate * 4.9 - 1.6, p.y - 11 - bob * 0.3, 0.6, 0, Math.PI * 2);
+        ctx.arc(p.x + plate * 4.9 - 1.8, p.y - 8, 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Grounding outline over the shell dome.
+      ctx.strokeStyle = 'rgba(10, 16, 28, 0.5)';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 8 - bob * 0.3, 7.5, 6.4, 0, Math.PI, 0);
+      ctx.stroke();
       // Horn stubs and sullen eyes.
       ctx.fillStyle = shadeColor(color, 1.35);
       ctx.beginPath();
@@ -910,6 +1080,12 @@ export function initTowerDefenseGame(): void {
       ctx.moveTo(p.x - 9, p.y - 15.5);
       ctx.lineTo(p.x + 9, p.y - 15.5);
       ctx.stroke();
+      // Jewels glint along the crown band.
+      for (let jewel = -1; jewel <= 1; jewel++) {
+        const glint = 0.5 + 0.5 * Math.sin(clock * 5 + jewel * 2 + enemy.id);
+        ctx.fillStyle = jewel === 0 ? `rgba(252, 211, 77, ${0.5 + glint * 0.5})` : `rgba(125, 211, 252, ${0.4 + glint * 0.5})`;
+        ctx.fillRect(p.x + jewel * 5 - 0.9, p.y - 16.4, 1.8, 1.8);
+      }
       ctx.fillStyle = '#fef08a';
       ctx.fillRect(p.x + dir * 3 - 3, p.y - 10.5, 2.6, 2.6);
       ctx.fillRect(p.x + dir * 3 + 1.4, p.y - 10.5, 2.6, 2.6);

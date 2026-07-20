@@ -61,6 +61,14 @@ const PERSUADE_BONUS: Partial<Record<Unit['kind'], number>> = {
 const SHOT_LIFE = 0.12;
 const RAIN_DROPS = 90;
 
+/**
+ * Deterministic facade patterns, module-scope so drawWindows allocates no
+ * closures per building per frame (it runs for every facade every frame).
+ */
+const facadeStrip = (i: number, f: number, r: number) => (i * 13 + f * 29 + r * 11) % 7 === 0;
+const facadeLit = (i: number, f: number, r: number, c: number) =>
+  (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
+
 interface Decal {
   x: number;
   y: number;
@@ -138,6 +146,10 @@ export function initSyndicateGame(): void {
     } as Partial<Record<Unit['kind'], string>>
   };
 
+  // Declared ahead of the static layers: the ground bake's paint closure
+  // reads it, and onApply rebuilds the layers during setup below.
+  let tiles: MapTile[] = generateCity(Math.random);
+
   // Pre-rendered scanlines + vignette overlay (both are static, so drawing
   // them every frame would waste a full-canvas gradient fill), rebuilt at
   // device resolution whenever the DPR changes so the 1px CRT lines stay
@@ -158,14 +170,38 @@ export function initSyndicateGame(): void {
     target.fillStyle = vig;
     target.fillRect(0, 0, CANVAS_W, CANVAS_H);
   });
+  // The flat city floor — roads with their dashes and lamps, pavement
+  // checkerboard, plazas, and the dark ground under buildings — never
+  // changes within a mission, so it bakes once instead of ~680 fills and
+  // dashed strokes per frame. Drawn first each frame, it sits behind
+  // everything; buildings and units still paint over it in painter order.
+  const ground = createStaticLayer(CANVAS_W, CANVAS_H, g => {
+    for (let i = 0; i < tiles.length; i++) {
+      const x = i % MAP_W;
+      const y = Math.floor(i / MAP_W);
+      const tile = tiles[i];
+      if (tile.kind === 'road') {
+        drawRoad(g, i, x, y);
+        if (hash(i, 7) < 0.05) drawLampPool(g, x, y);
+      } else if (tile.kind === 'pavement') {
+        fillTile(g, VIEW, x, y, (x + y) % 2 === 0 ? '#30374a' : '#343b4d');
+      } else if (tile.kind === 'plaza') {
+        fillTile(g, VIEW, x, y, '#283148');
+      } else {
+        fillTile(g, VIEW, x, y, '#10141f');
+      }
+    }
+  });
   const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, {
-    onApply: atmosphere.rebuild
+    onApply: dpr => {
+      atmosphere.rebuild(dpr);
+      ground.rebuild(dpr);
+    }
   });
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
   let phase: Phase = 'idle';
-  let tiles: MapTile[] = generateCity(Math.random);
   let world: World = createWorld(tiles, [], Math.random);
   let missionIdx = 0;
   let spec: MissionSpec = MISSIONS[0];
@@ -248,6 +284,8 @@ export function initSyndicateGame(): void {
     missionIdx = index;
     spec = MISSIONS[index];
     tiles = generateCity(Math.random);
+    // Content changed, resolution didn't: re-bake at the last-known dpr.
+    ground.rebuild();
     const setup = spawnMission(spec, tiles, agentWeapons, Math.random);
     world = createWorld(tiles, setup.units, Math.random);
     extraction = setup.extraction;
@@ -405,11 +443,11 @@ export function initSyndicateGame(): void {
 
   // --- Rendering ---
 
-  function drawRoad(i: number, x: number, y: number) {
-    fillTile(ctx, VIEW, x, y, '#262c3a');
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.22)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 5]);
+  function drawRoad(g: CanvasRenderingContext2D, i: number, x: number, y: number) {
+    fillTile(g, VIEW, x, y, '#262c3a');
+    g.strokeStyle = 'rgba(250, 204, 21, 0.22)';
+    g.lineWidth = 1.5;
+    g.setLineDash([3, 5]);
     const centre = isoProject(VIEW, x + 0.5, y + 0.5);
     const links: Array<[boolean, number, number]> = [
       [x > 0 && tiles[i - 1].kind === 'road', x, y + 0.5],
@@ -420,12 +458,12 @@ export function initSyndicateGame(): void {
     for (const [connected, tx, ty] of links) {
       if (!connected) continue;
       const edge = isoProject(VIEW, tx, ty);
-      ctx.beginPath();
-      ctx.moveTo(centre.x, centre.y);
-      ctx.lineTo(edge.x, edge.y);
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(centre.x, centre.y);
+      g.lineTo(edge.x, edge.y);
+      g.stroke();
     }
-    ctx.setLineDash([]);
+    g.setLineDash([]);
   }
 
   function drawWindows(x: number, y: number, i: number, height: number) {
@@ -438,18 +476,113 @@ export function initSyndicateGame(): void {
       [w, sCorner],
       [sCorner, e]
     ];
+    // Batched passes: every window's category accumulates into one path,
+    // one fill/stroke per category per building instead of per window —
+    // Syndicate draws ~300 facades a frame, so draw-call count, not the
+    // arithmetic, is the budget. (Positions are recomputed per pass; the
+    // math is cheap, the state changes are not.)
+
+    // Frames go only under lit windows — a dark frame on a dark facade
+    // paints pixels nobody sees, and the facades are the frame budget.
+    ctx.fillStyle = 'rgba(5, 8, 18, 0.7)';
+    ctx.beginPath();
     faces.forEach(([a, b], f) => {
       for (let r = 0; r < rows; r++) {
+        if (facadeStrip(i, f, r)) continue;
         for (let c = 0; c < 2; c++) {
+          if (!facadeLit(i, f, r, c)) continue;
           const t = 0.3 + c * 0.4;
           const bx = a.x + (b.x - a.x) * t;
           const by = a.y + (b.y - a.y) * t - height * ((r + 0.5) / rows);
-          const lit = (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
-          ctx.fillStyle = lit ? 'rgba(165, 243, 252, 0.5)' : 'rgba(5, 8, 18, 0.6)';
-          ctx.fillRect(bx - 1, by - 1.5, 2, 3);
+          ctx.rect(bx - 1.3, by - 1.9, 2.6, 3.8);
         }
       }
     });
+    ctx.fill();
+
+    // Panes: lit glass as two half-panes (the gap reads as a mullion
+    // without a third pass), unlit as a single dark pane.
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.fillStyle = pass === 0 ? 'rgba(165, 243, 252, 0.55)' : 'rgba(28, 38, 58, 0.65)';
+      ctx.beginPath();
+      faces.forEach(([a, b], f) => {
+        for (let r = 0; r < rows; r++) {
+          if (facadeStrip(i, f, r)) continue;
+          for (let c = 0; c < 2; c++) {
+            const on = facadeLit(i, f, r, c);
+            if (pass === 0 ? !on : on) continue;
+            const t = 0.3 + c * 0.4;
+            const bx = a.x + (b.x - a.x) * t;
+            const by = a.y + (b.y - a.y) * t - height * ((r + 0.5) / rows);
+            if (pass === 0) {
+              ctx.rect(bx - 1, by - 1.5, 0.8, 3);
+              ctx.rect(bx + 0.2, by - 1.5, 0.8, 3);
+            } else {
+              ctx.rect(bx - 1, by - 1.5, 2, 3);
+            }
+          }
+        }
+      });
+      ctx.fill();
+    }
+
+    // Late-shift floors: one wide lit office strip instead of panes.
+    ctx.fillStyle = 'rgba(165, 243, 252, 0.32)';
+    ctx.beginPath();
+    faces.forEach(([a, b], f) => {
+      for (let r = 0; r < rows; r++) {
+        if (!facadeStrip(i, f, r)) continue;
+        const sy = height * ((r + 0.5) / rows);
+        const ax = a.x + (b.x - a.x) * 0.18;
+        const ay = a.y + (b.y - a.y) * 0.18 - sy;
+        const bx2 = a.x + (b.x - a.x) * 0.82;
+        const by2 = a.y + (b.y - a.y) * 0.82 - sy;
+        ctx.moveTo(ax, ay - 1.5);
+        ctx.lineTo(bx2, by2 - 1.5);
+        ctx.lineTo(bx2, by2 + 1.5);
+        ctx.lineTo(ax, ay + 1.5);
+        ctx.closePath();
+      }
+    });
+    ctx.fill();
+  }
+
+  /**
+   * Warm shopfront glow at the base of low-rise faces that meet a street
+   * tile — a lit doorway with a neon sign dot. Hashed so only some blocks
+   * trade.
+   */
+  function drawStorefront(x: number, y: number, i: number, height: number, palette: number) {
+    // Only a minority of low-rise blocks trade — most of the city sleeps.
+    if (height >= 24 || hash(i, 8) < 0.65) return;
+    const inset = 0.08;
+    const w = isoProject(VIEW, x + inset, y + 1 - inset);
+    const sCorner = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
+    const e = isoProject(VIEW, x + 1 - inset, y + inset);
+    for (let f = 0; f < 2; f++) {
+      const open =
+        f === 0
+          ? y + 1 < MAP_H && tiles[i + MAP_W].kind !== 'building'
+          : x + 1 < MAP_W && tiles[i + 1].kind !== 'building';
+      if (!open) continue;
+      const a = f === 0 ? w : sCorner;
+      const b = f === 0 ? sCorner : e;
+      ctx.fillStyle = 'rgba(253, 224, 130, 0.22)';
+      ctx.beginPath();
+      ctx.moveTo(a.x + (b.x - a.x) * 0.15, a.y + (b.y - a.y) * 0.15 - 0.5);
+      ctx.lineTo(a.x + (b.x - a.x) * 0.85, a.y + (b.y - a.y) * 0.85 - 0.5);
+      ctx.lineTo(a.x + (b.x - a.x) * 0.85, a.y + (b.y - a.y) * 0.85 - 4);
+      ctx.lineTo(a.x + (b.x - a.x) * 0.15, a.y + (b.y - a.y) * 0.15 - 4);
+      ctx.closePath();
+      ctx.fill();
+      // Doorway and a neon sign dot beside it.
+      const dx = a.x + (b.x - a.x) * 0.5;
+      const dy = a.y + (b.y - a.y) * 0.5;
+      ctx.fillStyle = 'rgba(255, 236, 180, 0.6)';
+      ctx.fillRect(dx - 1, dy - 4.2, 2, 4.2);
+      ctx.fillStyle = NEON[palette];
+      ctx.fillRect(dx + 2.2, dy - 5.2, 1, 1);
+    }
   }
 
   function drawNeonTrim(x: number, y: number, height: number, palette: number) {
@@ -543,29 +676,103 @@ export function initSyndicateGame(): void {
     ctx.lineTo(p.x + 1.3 - stride * 0.4, p.y);
     ctx.stroke();
 
-    // Torso / coat — a tapered silhouette
+    // Torso — each kind cuts a distinct silhouette on the shared skeleton.
     ctx.fillStyle = coat;
     ctx.beginPath();
-    ctx.moveTo(p.x - 3, p.y - 3.5);
-    ctx.lineTo(p.x + 3, p.y - 3.5);
-    ctx.lineTo(p.x + 2.4, p.y - 9.5);
-    ctx.lineTo(p.x - 2.4, p.y - 9.5);
+    if (u.kind === 'agent') {
+      // Long trench coat flaring past the hip, with a belt line.
+      ctx.moveTo(p.x - 3.4, p.y - 2.2);
+      ctx.lineTo(p.x + 3.4, p.y - 2.2);
+      ctx.lineTo(p.x + 2.3, p.y - 9.5);
+      ctx.lineTo(p.x - 2.3, p.y - 9.5);
+    } else if (u.kind === 'enemy') {
+      // Broader rival build with armoured shoulders.
+      ctx.moveTo(p.x - 3.4, p.y - 3.5);
+      ctx.lineTo(p.x + 3.4, p.y - 3.5);
+      ctx.lineTo(p.x + 3, p.y - 9.2);
+      ctx.lineTo(p.x - 3, p.y - 9.2);
+    } else if (u.kind === 'civilian') {
+      // Slighter frame; coat length varies with the tint roll.
+      const hem = p.y - 3.2 - (u.tint % 3) * 0.5;
+      ctx.moveTo(p.x - 2.6, hem);
+      ctx.lineTo(p.x + 2.6, hem);
+      ctx.lineTo(p.x + 2.1, p.y - 9.3);
+      ctx.lineTo(p.x - 2.1, p.y - 9.3);
+    } else {
+      ctx.moveTo(p.x - 3, p.y - 3.5);
+      ctx.lineTo(p.x + 3, p.y - 3.5);
+      ctx.lineTo(p.x + 2.4, p.y - 9.5);
+      ctx.lineTo(p.x - 2.4, p.y - 9.5);
+    }
     ctx.closePath();
     ctx.fill();
     // Lit edge down the facing side
     ctx.fillStyle = trim;
     ctx.fillRect(p.x + dir * 2 - 0.5, p.y - 9.5, 1, 6);
+    if (u.kind === 'agent') {
+      // Belt over the trench coat.
+      ctx.fillStyle = shadeColor(coat, 0.45);
+      ctx.fillRect(p.x - 2.7, p.y - 5.6, 5.4, 1);
+    } else if (u.kind === 'enemy') {
+      // Shoulder spikes silhouette the rivals even at a glance.
+      ctx.fillStyle = shadeColor(coat, 1.5);
+      ctx.beginPath();
+      ctx.moveTo(p.x - 3.6, p.y - 9);
+      ctx.lineTo(p.x - 1.9, p.y - 9);
+      ctx.lineTo(p.x - 3.2, p.y - 11.4);
+      ctx.closePath();
+      ctx.moveTo(p.x + 3.6, p.y - 9);
+      ctx.lineTo(p.x + 1.9, p.y - 9);
+      ctx.lineTo(p.x + 3.2, p.y - 11.4);
+      ctx.closePath();
+      ctx.fill();
+    } else if (u.kind === 'guard') {
+      // Baton on the off-hand hip.
+      ctx.strokeStyle = '#1b2230';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 2.5, p.y - 4.2);
+      ctx.lineTo(p.x - dir * 3.5, p.y - 1.6);
+      ctx.stroke();
+    } else if (u.kind === 'target') {
+      // Pinstripe suit: shirt wedge and a briefcase in hand.
+      ctx.fillStyle = '#e8e4da';
+      ctx.beginPath();
+      ctx.moveTo(p.x + dir * 0.2, p.y - 9);
+      ctx.lineTo(p.x + dir * 1.6, p.y - 8.6);
+      ctx.lineTo(p.x + dir * 0.4, p.y - 6.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#3a2c18';
+      ctx.fillRect(p.x + dir * 2.6 - 1.3, p.y - 3.6, 2.6, 2);
+      ctx.fillStyle = '#c9a227';
+      ctx.fillRect(p.x + dir * 2.6 - 0.25, p.y - 3.2, 0.5, 0.5);
+    }
 
-    // Weapon arm — armed units level a gun in their heading
+    // Weapon arm — armed units level their actual hardware in their heading.
     if (u.weapon) {
       ctx.strokeStyle = '#1b2230';
-      ctx.lineWidth = 2.2;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - 7);
-      ctx.lineTo(p.x + dir * 5, p.y - 6.5);
+      ctx.lineTo(p.x + dir * 4, p.y - 6.6);
       ctx.stroke();
-      ctx.fillStyle = '#11161f';
-      ctx.fillRect(dir > 0 ? p.x + 4 : p.x - 6.5, p.y - 7.4, 2.5, 1.8);
+      if (u.weapon === 'pistol') {
+        ctx.fillStyle = '#11161f';
+        ctx.fillRect(dir > 0 ? p.x + 3.6 : p.x - 5.8, p.y - 7.4, 2.2, 1.4);
+      } else if (u.weapon === 'uzi') {
+        ctx.fillStyle = '#11161f';
+        ctx.fillRect(dir > 0 ? p.x + 3.2 : p.x - 6.6, p.y - 7.6, 3.4, 1.6);
+        // Hanging magazine
+        ctx.fillRect(dir > 0 ? p.x + 4.4 : p.x - 5.2, p.y - 6, 1.2, 2);
+      } else {
+        // Minigun: heavy receiver and twin barrels
+        ctx.fillStyle = '#0d1119';
+        ctx.fillRect(dir > 0 ? p.x + 2.6 : p.x - 5.4, p.y - 8.4, 2.8, 2.8);
+        ctx.fillStyle = '#2a3242';
+        ctx.fillRect(dir > 0 ? p.x + 5.2 : p.x - 9.4, p.y - 8.2, 4.2, 1);
+        ctx.fillRect(dir > 0 ? p.x + 5.2 : p.x - 9.4, p.y - 6.8, 4.2, 1);
+      }
     }
 
     // Head
@@ -576,6 +783,8 @@ export function initSyndicateGame(): void {
     if (cap) {
       ctx.fillStyle = cap;
       ctx.fillRect(p.x - 2.3, p.y - 12.6, 4.6, 1.6);
+      // Cap brim on the facing side
+      ctx.fillRect(dir > 0 ? p.x + 2.3 : p.x - 3.5, p.y - 12.2, 1.2, 0.8);
     }
     if (visor) {
       ctx.save();
@@ -631,7 +840,36 @@ export function initSyndicateGame(): void {
     if (height < 18) return;
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
     const ty = c.y - height;
-    const variant = Math.floor(hash(i, 1) * 3);
+    // Two extra clutter variants over the original three; the helipad is
+    // reserved for the tall band so it reads at scale.
+    const variant = Math.floor(hash(i, 1) * (height >= 30 ? 5 : 4));
+    if (variant === 3) {
+      // Vent cluster with a stub exhaust pipe
+      ctx.fillStyle = shadeColor(FACADES[palette], 0.55);
+      ctx.fillRect(c.x - 4.5, ty - 2, 3, 2);
+      ctx.fillRect(c.x - 0.5, ty - 2.6, 2.6, 2.6);
+      ctx.fillRect(c.x + 3, ty - 1.8, 2.2, 1.8);
+      ctx.strokeStyle = shadeColor(FACADES[palette], 0.8);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x + 0.8, ty - 2.6);
+      ctx.lineTo(c.x + 0.8, ty - 5.5);
+      ctx.stroke();
+      return;
+    }
+    if (variant === 4) {
+      // Helipad ring with an H
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(c.x, ty, 6.5, 3.2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
+      ctx.fillRect(c.x - 2, ty - 1.6, 1, 3.2);
+      ctx.fillRect(c.x + 1, ty - 1.6, 1, 3.2);
+      ctx.fillRect(c.x - 1, ty - 0.5, 2, 1);
+      return;
+    }
     if (variant === 0) {
       // Antenna with a blinking aircraft light
       ctx.strokeStyle = '#0b0f17';
@@ -667,15 +905,25 @@ export function initSyndicateGame(): void {
     }
   }
 
-  function drawLamp(x: number, y: number) {
+  /** The lamp's flat light pool — ground content, safe to bake. */
+  function drawLampPool(g: CanvasRenderingContext2D, x: number, y: number) {
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
-    const pool = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, VIEW.halfW * 1.3);
+    const pool = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, VIEW.halfW * 1.3);
     pool.addColorStop(0, 'rgba(253, 224, 130, 0.16)');
     pool.addColorStop(1, 'rgba(253, 224, 130, 0)');
-    ctx.fillStyle = pool;
-    ctx.beginPath();
-    ctx.ellipse(c.x, c.y, VIEW.halfW * 1.3, VIEW.halfH * 1.3, 0, 0, Math.PI * 2);
-    ctx.fill();
+    g.fillStyle = pool;
+    g.beginPath();
+    g.ellipse(c.x, c.y, VIEW.halfW * 1.3, VIEW.halfH * 1.3, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  /**
+   * The standing post and bulb — vertical scenery, so it draws in the
+   * back-to-front sweep (NOT the ground bake) to keep painter occlusion:
+   * a building south-east of the lamp must still paint over the post.
+   */
+  function drawLampPost(x: number, y: number) {
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
     ctx.strokeStyle = '#0b0f17';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -727,6 +975,7 @@ export function initSyndicateGame(): void {
   function render() {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ground.draw(ctx);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -769,18 +1018,16 @@ export function initSyndicateGame(): void {
         }
         lastDiag = diag;
       }
+      // Flat ground (roads, pavement, plazas, lamp light pools) comes
+      // pre-baked from the `ground` layer — buildings and standing lamp
+      // posts still paint in the sweep so occlusion stays correct.
       const tile = tiles[i];
       if (tile.kind === 'road') {
-        drawRoad(i, x, y);
-        if (hash(i, 7) < 0.05) drawLamp(x, y);
-      } else if (tile.kind === 'pavement') {
-        fillTile(ctx, VIEW, x, y, (x + y) % 2 === 0 ? '#30374a' : '#343b4d');
-      } else if (tile.kind === 'plaza') {
-        fillTile(ctx, VIEW, x, y, '#283148');
-      } else {
-        fillTile(ctx, VIEW, x, y, '#10141f');
+        if (hash(i, 7) < 0.05) drawLampPost(x, y);
+      } else if (tile.kind === 'building') {
         drawBlock(ctx, VIEW, x, y, tile.height, FACADES[tile.palette]);
         drawWindows(x, y, i, tile.height);
+        drawStorefront(x, y, i, tile.height, tile.palette);
         drawNeonTrim(x, y, tile.height, tile.palette);
         drawRooftop(x, y, i, tile.height, tile.palette);
       }

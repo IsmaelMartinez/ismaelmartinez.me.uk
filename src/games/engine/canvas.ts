@@ -34,8 +34,13 @@ export interface HiDpiCanvas {
  * pre-scaled by `dpr`), exactly as it would draw on the main context.
  */
 export interface StaticLayer {
-  /** Rebuild the bake for a new device-pixel ratio. */
-  rebuild(dpr: number): void;
+  /**
+   * Rebuild the bake — for a new device-pixel ratio, or (with no argument)
+   * at the last-known dpr when the layer's *content* changed (e.g. a new
+   * mission map). setupHiDpiCanvas's onApply always passes the fresh dpr,
+   * so content rebuilds never need to track it themselves.
+   */
+  rebuild(dpr?: number): void;
   /** Blit the bake (or paint live if the layer couldn't be built). */
   draw(ctx: CanvasRenderingContext2D): void;
 }
@@ -56,8 +61,10 @@ export function createStaticLayer(
   paint: (ctx: CanvasRenderingContext2D) => void
 ): StaticLayer {
   let layer: HTMLCanvasElement | null = null;
+  let lastDpr = 1;
   return {
-    rebuild(dpr) {
+    rebuild(dpr = lastDpr) {
+      lastDpr = dpr;
       layer = null;
       const next = document.createElement('canvas');
       next.width = logicalW * dpr;

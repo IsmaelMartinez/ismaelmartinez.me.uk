@@ -44,12 +44,43 @@ export function isoTileFromPoint(
   return y * w + x;
 }
 
-/** Multiplies each RGB channel of a #rrggbb colour; factor <1 darkens. */
-export function shadeColor(hex: string, factor: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const channel = (shift: number) =>
-    Math.round(Math.min(255, Math.max(0, ((n >> shift) & 0xff) * factor)));
-  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
+/**
+ * Multiplies each RGB channel of a colour; factor <1 darkens. Accepts
+ * #rrggbb plus the `rgb(r, g, b)` / `rgba(r, g, b, a)` forms this function
+ * itself returns, so a shaded colour can be shaded again (e.g. Pixel
+ * Park's zone-tinted ground fed back through drawBlock for raised tiles —
+ * which used to come out as NaN channels and paint hills black). An rgba
+ * input keeps its alpha; #rgb shorthand expands. Other formats (named
+ * colours, hsl()) are not understood and come back black.
+ */
+export function shadeColor(color: string, factor: number): string {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let alpha: string | null = null;
+  if (color.charCodeAt(0) === 35 /* '#' */ && color.length === 7) {
+    const n = parseInt(color.slice(1), 16);
+    r = (n >> 16) & 0xff;
+    g = (n >> 8) & 0xff;
+    b = n & 0xff;
+  } else if (color.charCodeAt(0) === 35 && color.length === 4) {
+    const n = parseInt(color.slice(1), 16);
+    r = ((n >> 8) & 0xf) * 17;
+    g = ((n >> 4) & 0xf) * 17;
+    b = (n & 0xf) * 17;
+  } else if (color.startsWith('rgb')) {
+    const m = color.match(/[\d.]+/g);
+    if (m && m.length >= 3) {
+      r = +m[0];
+      g = +m[1];
+      b = +m[2];
+      if (m.length > 3) alpha = m[3];
+    }
+  }
+  const ch = (v: number) => Math.round(Math.min(255, Math.max(0, v * factor)));
+  return alpha === null
+    ? `rgb(${ch(r)}, ${ch(g)}, ${ch(b)})`
+    : `rgba(${ch(r)}, ${ch(g)}, ${ch(b)}, ${alpha})`;
 }
 
 function diamondPath(ctx: CanvasRenderingContext2D, view: IsoView, x: number, y: number, lift: number) {
@@ -167,6 +198,12 @@ export function drawBlock(
  * different pixel height — generalizes drawBlock's flat-topped corner math
  * (one uniform height per tile) to bridge two different heights, e.g. a
  * coaster track climbing a hillside between two adjacent terrain steps.
+ *
+ * Corner lifts are given in *view* orientation: under view rotation the
+ * caller must map its world slope direction through rotateDir before
+ * computing the lifts (no live call site currently — Pixel Park's track
+ * moved to world-space curve geometry; kept as the engine's sloped-tile
+ * primitive).
  */
 export function drawRamp(
   ctx: CanvasRenderingContext2D,

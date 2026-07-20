@@ -15,6 +15,7 @@ import {
   strokeTile,
   drawBlock,
   shadeColor,
+  hash01,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,
@@ -110,6 +111,14 @@ const ZONE_ICON_FONT = 13;
 /** Rooftop mechanical units (AC boxes, tower plant) share one light grey so
  *  they read as equipment, not as a dark hole punched in the roofline. */
 const ROOFTOP_UNIT = '#c9ced6';
+/**
+ * Hashed per-tile picks so grown blocks don't repeat identically.
+ * ACCENT_COLORS is the shared accent palette: commercial awnings AND the
+ * industrial silo company bands both draw from it — retune with both in
+ * view.
+ */
+const ACCENT_COLORS = ['#c0503a', '#2f7a55', '#a3823a', '#7a4a8a'];
+const SIGN_COLORS = ['#f6f8ff', '#e0b040', '#d06a8a'];
 /** Overall silhouette height per (type, level) — tallest architectural
  *  feature — so floaters/warnings/emoji sit above the actual building. */
 const ZONE_TOP_HEIGHT: Record<ZoneType, number[]> = {
@@ -573,19 +582,60 @@ export function initCityGame(): void {
     ctx.stroke();
   }
 
-  /** Pitched-roof ridge silhouette over an explicit footprint, sitting on
-   *  top of a box whose roofline is at zBase. */
-  function drawGableRoof(x0: number, y0: number, x1: number, y1: number, zBase: number, peakRise: number, color: string) {
-    const n = isoProject(VIEW, x0, y0);
-    const s = isoProject(VIEW, x1, y1);
+  /**
+   * Pitched-roof ridge silhouette over an explicit footprint, sitting on
+   * top of a box whose roofline is at zBase. The eave line runs between
+   * the W and E diamond corners — the N–S pair projects to a single
+   * screen x (iso x is (tx−ty)·halfW, and the corners share tx−ty on any
+   * square-ish footprint), which would collapse the triangles to zero
+   * area. The triangle splits into a lit and a shaded slope with a ridge
+   * highlight so the pitch reads; roof *variety* comes from callers
+   * alternating this with drawPyramidCap (hipped), not from re-aiming
+   * the ridge.
+   */
+  function drawGableRoof(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    zBase: number,
+    peakRise: number,
+    color: string
+  ) {
+    const a = isoProject(VIEW, x0, y1);
+    const b = isoProject(VIEW, x1, y0);
     const peak = isoProject(VIEW, (x0 + x1) / 2, (y0 + y1) / 2);
-    ctx.fillStyle = shadeColor(color, 1.2);
+    const py = peak.y - zBase - peakRise;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2 - zBase;
+    ctx.fillStyle = shadeColor(color, 1.05);
     ctx.beginPath();
-    ctx.moveTo(n.x, n.y - zBase);
-    ctx.lineTo(peak.x, peak.y - zBase - peakRise);
-    ctx.lineTo(s.x, s.y - zBase);
+    ctx.moveTo(a.x, a.y - zBase);
+    ctx.lineTo(peak.x, py);
+    ctx.lineTo(mx, my);
     ctx.closePath();
     ctx.fill();
+    ctx.fillStyle = shadeColor(color, 1.35);
+    ctx.beginPath();
+    ctx.moveTo(peak.x, py);
+    ctx.lineTo(b.x, b.y - zBase);
+    ctx.lineTo(mx, my);
+    ctx.closePath();
+    ctx.fill();
+    // Ridge highlight and eave shadow line.
+    ctx.strokeStyle = shadeColor(color, 1.6);
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y - zBase);
+    ctx.lineTo(peak.x, py);
+    ctx.lineTo(b.x, b.y - zBase);
+    ctx.stroke();
+    ctx.strokeStyle = shadeColor(color, 0.6);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y - zBase);
+    ctx.lineTo(mx, my);
+    ctx.lineTo(b.x, b.y - zBase);
+    ctx.stroke();
   }
 
   function drawRoofRidge(vx: number, vy: number, height: number, color: string) {
@@ -688,19 +738,85 @@ export function initCityGame(): void {
     const e = isoProject(VIEW, x1, y0);
     const faces: [{ x: number; y: number }, { x: number; y: number }][] = [[w, s], [s, e]];
     const rise = zTop - zBase;
-    faces.forEach(([a, b], f) => {
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < 2; c++) {
-          const t = 0.3 + c * 0.4;
-          const bx = a.x + (b.x - a.x) * t;
-          const by = a.y + (b.y - a.y) * t - zBase - rise * ((r + 0.5) / rows);
-          // Stable per-window pattern: most lit, some dark
-          const lit = (i * 31 + f * 17 + r * 7 + c * 13 + salt * 19) % 5 < 3;
-          ctx.fillStyle = lit ? 'rgba(254, 240, 138, 0.85)' : 'rgba(2, 6, 23, 0.5)';
-          ctx.fillRect(bx - 1, by - 1.5, 2, 3.5);
+    // Framed two-pane windows, batched into one path per colour (frame,
+    // lit glass, dark glass, mullion+sill) instead of four fillStyle
+    // swaps per window — a grown city redraws every window every frame,
+    // so draw-call count is the budget, not the arithmetic.
+    for (let pass = 0; pass < 4; pass++) {
+      ctx.fillStyle =
+        pass === 0
+          ? 'rgba(12, 18, 32, 0.65)'
+          : pass === 1
+            ? 'rgba(254, 240, 138, 0.9)'
+            : pass === 2
+              ? 'rgba(64, 84, 110, 0.65)'
+              : 'rgba(226, 232, 240, 0.3)';
+      ctx.beginPath();
+      faces.forEach(([a, b], f) => {
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < 2; c++) {
+            // Stable per-window pattern: most lit, some dark
+            const lit = (i * 31 + f * 17 + r * 7 + c * 13 + salt * 19) % 5 < 3;
+            if (pass === 1 && !lit) continue;
+            if (pass === 2 && lit) continue;
+            const t = 0.3 + c * 0.4;
+            const bx = a.x + (b.x - a.x) * t;
+            const by = a.y + (b.y - a.y) * t - zBase - rise * ((r + 0.5) / rows);
+            if (pass === 0) ctx.rect(bx - 1.4, by - 2, 2.8, 4);
+            else if (pass === 3) ctx.rect(bx - 1.6, by + 2, 3.2, 0.5);
+            else if (lit) {
+              // Lit glass as two half-panes; the gap reads as the mullion.
+              ctx.rect(bx - 1, by - 1.6, 0.75, 3.2);
+              ctx.rect(bx + 0.25, by - 1.6, 0.75, 3.2);
+            } else {
+              ctx.rect(bx - 1, by - 1.6, 2, 3.2);
+            }
+          }
         }
-      }
-    });
+      });
+      ctx.fill();
+    }
+  }
+
+  /** Street door on the south-west face of a box, at fraction `t` along it. */
+  function drawDoor(x0: number, y0: number, x1: number, y1: number, t: number, leaf: string) {
+    const w = isoProject(VIEW, x0, y1);
+    const s = isoProject(VIEW, x1, y1);
+    const dx = w.x + (s.x - w.x) * t;
+    const dy = w.y + (s.y - w.y) * t;
+    ctx.fillStyle = 'rgba(10, 14, 24, 0.85)';
+    ctx.fillRect(dx - 1.5, dy - 4.8, 3, 4.8);
+    ctx.fillStyle = leaf;
+    ctx.fillRect(dx - 1.05, dy - 4.3, 2.1, 4.3);
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.7)';
+    ctx.fillRect(dx - 1.05, dy - 4.3, 2.1, 0.8);
+  }
+
+  /** Brick chimney poking through a roof at tile-space (px, py). */
+  function drawChimney(px: number, py: number, zBase: number) {
+    const c = isoProject(VIEW, px, py);
+    ctx.fillStyle = '#7a4a3a';
+    ctx.fillRect(c.x - 1.25, c.y - zBase - 4, 2.5, 4);
+    ctx.fillStyle = '#4f2f24';
+    ctx.fillRect(c.x + 0.25, c.y - zBase - 4, 1, 4);
+    ctx.fillStyle = '#9a6a52';
+    ctx.fillRect(c.x - 1.5, c.y - zBase - 4.9, 3, 1);
+  }
+
+  /**
+   * Industrial smokestack with a lit edge and a hazard-striped tip —
+   * shared by the heavy-industry tiers and the power plant.
+   */
+  function drawStack(px: number, py: number, zBase: number, h: number, w: number, color: string) {
+    const c = isoProject(VIEW, px, py);
+    ctx.fillStyle = shadeColor(color, 0.7);
+    ctx.fillRect(c.x - w / 2, c.y - zBase - h, w, h);
+    ctx.fillStyle = shadeColor(color, 1.05);
+    ctx.fillRect(c.x - w / 2, c.y - zBase - h, w * 0.35, h);
+    ctx.fillStyle = '#ded8ca';
+    ctx.fillRect(c.x - w / 2, c.y - zBase - h - 3, w, 3);
+    ctx.fillStyle = '#c0503a';
+    ctx.fillRect(c.x - w / 2, c.y - zBase - h - 3, w, 1.4);
   }
 
   /** Small ledge accents (balconies, AC units) protruding from a face at a
@@ -721,28 +837,38 @@ export function initCityGame(): void {
     });
   }
 
-  /** House (res L1): small gabled cottage, footprint well inside the tile. */
+  /** House (res L1): small gabled cottage, footprint well inside the tile.
+   *  Hashed variety: wall tint, ridge axis, chimney, door position. */
   function drawResLevel1(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
+    const wall = shadeColor(p.wall, 0.88 + hash01(i, 21) * 0.28);
     const x0 = vx + 0.27, y0 = vy + 0.24, x1 = vx + 0.73, y1 = vy + 0.7;
-    drawBox(x0, y0, x1, y1, 0, 6, p.wall);
-    drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof);
+    drawBox(x0, y0, x1, y1, 0, 6, wall);
+    // Construction variety: half the cottages get a gable, half a hip.
+    if (hash01(i, 22) < 0.5) drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof);
+    else drawPyramidCap(x0, y0, x1, y1, 6, 4, p.roof);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 6);
+    drawDoor(x0, y0, x1, y1, hash01(i, 25) < 0.5 ? 0.3 : 0.7, shadeColor(p.roof, 0.8));
+    if (hash01(i, 23) > 0.45) drawChimney(vx + 0.38, vy + 0.34, 8);
   }
 
   /** Res L2: the L1 cottage enlarged, plus a lower extension massed off to
    *  one side rather than centred — reads as "someone built onto the house". */
   function drawResLevel2(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
+    const wall = shadeColor(p.wall, 0.88 + hash01(i, 24) * 0.28);
     const mx0 = vx + 0.18, my0 = vy + 0.16, mx1 = vx + 0.66, my1 = vy + 0.7;
-    drawBox(mx0, my0, mx1, my1, 0, 10, p.wall);
-    drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof);
+    drawBox(mx0, my0, mx1, my1, 0, 10, wall);
+    if (hash01(i, 22) < 0.5) drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof);
+    else drawPyramidCap(mx0, my0, mx1, my1, 10, 4, p.roof);
     drawWindows(mx0, my0, mx1, my1, i, 2, 0, 10);
+    drawDoor(mx0, my0, mx1, my1, 0.5, shadeColor(p.roof, 0.8));
+    if (hash01(i, 26) > 0.4) drawChimney(vx + 0.3, vy + 0.28, 12);
 
     // Touches the main block's east wall (mx1) without overlapping its
     // footprint, so the two full-height volumes don't paint over each other.
     const ex0 = mx1, ey0 = vy + 0.5, ex1 = vx + 0.95, ey1 = vy + 0.92;
-    drawBox(ex0, ey0, ex1, ey1, 0, 6, p.wall);
+    drawBox(ex0, ey0, ex1, ey1, 0, 6, wall);
     drawWindows(ex0, ey0, ex1, ey1, i, 1, 0, 6, 1);
   }
 
@@ -750,25 +876,39 @@ export function initCityGame(): void {
    *  couple of rooftop AC units instead of one more storey of the cottage. */
   function drawResLevel3(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
+    const wall = shadeColor(p.wall, 0.92 + hash01(i, 27) * 0.18);
     const x0 = vx + 0.12, y0 = vy + 0.12, x1 = vx + 0.88, y1 = vy + 0.88;
-    drawBox(x0, y0, x1, y1, 0, 20, p.wall);
+    drawBox(x0, y0, x1, y1, 0, 20, wall);
     drawWindows(x0, y0, x1, y1, i, 4, 0, 20);
     drawLedges(x0, y0, x1, y1, 4, 0, 20, 'rgba(226, 232, 240, 0.55)');
+    drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
     drawBox(vx + 0.2, vy + 0.2, vx + 0.34, vy + 0.34, 20, 22, ROOFTOP_UNIT);
     drawBox(vx + 0.55, vy + 0.6, vx + 0.72, vy + 0.75, 20, 21.5, ROOFTOP_UNIT);
+    if (hash01(i, 28) > 0.5) drawBox(vx + 0.62, vy + 0.24, vx + 0.74, vy + 0.36, 20, 21.8, ROOFTOP_UNIT);
   }
 
   /** Res L4: a slim high-rise — the dense-city payoff. Two stacked volumes
    *  with a rooftop plant box, noticeably taller than anything at L3. */
   function drawResLevel4(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.res;
+    const wall = shadeColor(p.wall, 0.92 + hash01(i, 29) * 0.18);
     const x0 = vx + 0.16, y0 = vy + 0.16, x1 = vx + 0.84, y1 = vy + 0.84;
-    drawBox(x0, y0, x1, y1, 0, 24, p.wall);
+    drawBox(x0, y0, x1, y1, 0, 24, wall);
     drawWindows(x0, y0, x1, y1, i, 5, 0, 24);
     drawLedges(x0, y0, x1, y1, 5, 0, 24, 'rgba(226, 232, 240, 0.55)');
+    drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
     const tx0 = vx + 0.3, ty0 = vy + 0.3, tx1 = vx + 0.7, ty1 = vy + 0.7;
-    drawBox(tx0, ty0, tx1, ty1, 24, 29, shadeColor(p.wall, 1.12));
+    drawBox(tx0, ty0, tx1, ty1, 24, 29, shadeColor(wall, 1.12));
     drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 29, 30.5, ROOFTOP_UNIT);
+    if (hash01(i, 30) > 0.55) {
+      const mast = isoProject(VIEW, vx + 0.5, vy + 0.5);
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(mast.x, mast.y - 30.5);
+      ctx.lineTo(mast.x, mast.y - 35);
+      ctx.stroke();
+    }
   }
 
   function drawResZone(vx: number, vy: number, i: number, level: number) {
@@ -778,14 +918,26 @@ export function initCityGame(): void {
     else drawResLevel4(vx, vy, i);
   }
 
-  /** Shop (com L1): flat-roofed box with a canopy/awning strip out front. */
+  /** Shop (com L1): flat-roofed box with a glazed shopfront and an awning
+   *  in a hashed colour, so a parade of shops doesn't repeat. */
   function drawComLevel1(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.com;
     const x0 = vx + 0.2, y0 = vy + 0.2, x1 = vx + 0.8, y1 = vy + 0.8;
     drawBox(x0, y0, x1, y1, 0, 7, p.wall);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 7);
+    // Glazed shopfront band along the street face, under the awning.
+    const w = isoProject(VIEW, x0, y1);
+    const s = isoProject(VIEW, x1, y1);
+    ctx.fillStyle = 'rgba(140, 200, 240, 0.45)';
+    ctx.beginPath();
+    ctx.moveTo(w.x + (s.x - w.x) * 0.12, w.y + (s.y - w.y) * 0.12 - 0.8);
+    ctx.lineTo(w.x + (s.x - w.x) * 0.88, w.y + (s.y - w.y) * 0.88 - 0.8);
+    ctx.lineTo(w.x + (s.x - w.x) * 0.88, w.y + (s.y - w.y) * 0.88 - 3.6);
+    ctx.lineTo(w.x + (s.x - w.x) * 0.12, w.y + (s.y - w.y) * 0.12 - 3.6);
+    ctx.closePath();
+    ctx.fill();
     // Thin awning strip flush with the front wall, overhanging it slightly.
-    drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, '#c0503a');
+    drawBox(vx + 0.14, vy + 0.72, vx + 0.86, vy + 0.9, 3, 3.8, ACCENT_COLORS[Math.floor(hash01(i, 31) * ACCENT_COLORS.length)]);
   }
 
   /** Com L2: taller storefront with more window rows and a sign board
@@ -795,7 +947,8 @@ export function initCityGame(): void {
     const x0 = vx + 0.15, y0 = vy + 0.15, x1 = vx + 0.85, y1 = vy + 0.85;
     drawBox(x0, y0, x1, y1, 0, 12, p.wall);
     drawWindows(x0, y0, x1, y1, i, 2, 0, 12);
-    drawBox(vx + 0.3, vy + 0.58, vx + 0.7, vy + 0.78, 12, 16, p.trim);
+    drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.roof, 1.3));
+    drawBox(vx + 0.3, vy + 0.58, vx + 0.7, vy + 0.78, 12, 16, SIGN_COLORS[Math.floor(hash01(i, 32) * SIGN_COLORS.length)]);
   }
 
   /** Com L3: a small tower — main block, a setback top floor, and a
@@ -810,6 +963,7 @@ export function initCityGame(): void {
     const tx0 = vx + 0.3, ty0 = vy + 0.3, tx1 = vx + 0.7, ty1 = vy + 0.7;
     drawBox(tx0, ty0, tx1, ty1, 19, 23, '#7fb0f0');
     drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 23, 25, ROOFTOP_UNIT);
+    if (hash01(i, 33) > 0.5) drawBox(vx + 0.62, vy + 0.5, vx + 0.72, vy + 0.6, 19, 20.5, ROOFTOP_UNIT);
   }
 
   /** Com L4: a glass tower with a setback crown and an antenna mast. */
@@ -819,7 +973,7 @@ export function initCityGame(): void {
     drawBox(x0, y0, x1, y1, 0, 26, p.wall);
     drawWindows(x0, y0, x1, y1, i, 5, 0, 26);
     drawBox(vx + 0.28, vy + 0.28, vx + 0.72, vy + 0.72, 26, 31, '#7fb0f0');
-    // Antenna mast
+    // Antenna mast with a blinking aircraft light
     const mast = isoProject(VIEW, vx + 0.5, vy + 0.5);
     ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 1;
@@ -827,7 +981,7 @@ export function initCityGame(): void {
     ctx.moveTo(mast.x, mast.y - 31);
     ctx.lineTo(mast.x, mast.y - 37);
     ctx.stroke();
-    ctx.fillStyle = '#f87171';
+    ctx.fillStyle = Math.floor(clock * 1.5 + i) % 2 === 0 ? '#f87171' : '#7a3a3a';
     ctx.fillRect(mast.x - 1, mast.y - 38, 2, 2);
   }
 
@@ -838,12 +992,29 @@ export function initCityGame(): void {
     else drawComLevel4(vx, vy, i);
   }
 
+  /** Weathering streaks down a box's south-west face — hashed, so only
+   *  some industrial sheds rust. */
+  function drawRust(x0: number, y0: number, x1: number, y1: number, i: number, salt: number, zTop: number) {
+    if (hash01(i, salt) < 0.45) return;
+    const w = isoProject(VIEW, x0, y1);
+    const s = isoProject(VIEW, x1, y1);
+    ctx.fillStyle = 'rgba(122, 68, 34, 0.4)';
+    for (let k = 0; k < 2; k++) {
+      const t = 0.25 + k * 0.35 + hash01(i, salt + k + 1) * 0.15;
+      const bx = w.x + (s.x - w.x) * t;
+      const by = w.y + (s.y - w.y) * t;
+      const len = zTop * (0.5 + hash01(i, salt + k + 3) * 0.5);
+      ctx.fillRect(bx - 0.5, by - len, 1, len);
+    }
+  }
+
   /** Shed (ind L1): squat low warehouse with a couple of roof vents. */
   function drawIndLevel1(vx: number, vy: number, i: number) {
     const p = ZONE_PALETTE.ind;
     const x0 = vx + 0.1, y0 = vy + 0.25, x1 = vx + 0.9, y1 = vy + 0.85;
     drawBox(x0, y0, x1, y1, 0, 5, p.wall);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 5);
+    drawRust(x0, y0, x1, y1, i, 41, 5);
     drawBox(vx + 0.28, vy + 0.34, vx + 0.37, vy + 0.43, 5, 8, p.roof);
     drawBox(vx + 0.55, vy + 0.55, vx + 0.64, vy + 0.64, 5, 7.5, p.roof);
   }
@@ -862,6 +1033,11 @@ export function initCityGame(): void {
     const six0 = vx + 0.66, siy0 = vy + 0.12, six1 = vx + 0.9, siy1 = vy + 0.38;
     drawBox(six0, siy0, six1, siy1, 0, 12, silo);
     drawPyramidCap(six0, siy0, six1, siy1, 12, 3, silo);
+    // Company band round the silo, colour hashed per plot.
+    const bandY = isoProject(VIEW, vx + 0.78, vy + 0.38);
+    ctx.fillStyle = ACCENT_COLORS[Math.floor(hash01(i, 42) * ACCENT_COLORS.length)];
+    ctx.fillRect(bandY.x - 4.4, bandY.y - 9.5, 8.8, 1.6);
+    drawRust(sx0, sy0, sx1, sy1, i, 43, 7);
 
     const lox0 = vx + 0.6, loy0 = vy + 0.62, lox1 = vx + 0.94, loy1 = vy + 0.92;
     drawBox(lox0, loy0, lox1, loy1, 0, 3, p.roof);
@@ -881,11 +1057,8 @@ export function initCityGame(): void {
     drawBox(bx0, by0, bx1, by1, 0, 13, '#7d8a94');
     drawWindows(bx0, by0, bx1, by1, i, 1, 0, 13, 3);
 
-    const stack = isoProject(VIEW, vx + 0.78, vy + 0.3);
-    ctx.fillStyle = shadeColor(p.roof, 0.7);
-    ctx.fillRect(stack.x - 2.5, stack.y - 13 - 11, 5, 11);
-    ctx.fillStyle = shadeColor(p.roof, 1.15);
-    ctx.fillRect(stack.x - 2.5, stack.y - 13 - 13, 5, 3);
+    drawRust(hx0, hy0, hx1, hy1, i, 44, 9);
+    drawStack(vx + 0.74 + hash01(i, 45) * 0.08, vy + 0.3, 13, 11, 5, p.roof);
   }
 
   /** Ind L4: heavy industry — the L3 complex scaled up with twin stacks. */
@@ -899,13 +1072,10 @@ export function initCityGame(): void {
     drawBox(bx0, by0, bx1, by1, 0, 18, '#7d8a94');
     drawWindows(bx0, by0, bx1, by1, i, 2, 0, 18, 3);
 
-    for (const sxOff of [0.72, 0.84]) {
-      const stack = isoProject(VIEW, vx + sxOff, vy + 0.28);
-      ctx.fillStyle = shadeColor(p.roof, 0.7);
-      ctx.fillRect(stack.x - 2.5, stack.y - 18 - 12, 5, 12);
-      ctx.fillStyle = shadeColor(p.roof, 1.15);
-      ctx.fillRect(stack.x - 2.5, stack.y - 18 - 14, 5, 3);
-    }
+    drawRust(hx0, hy0, hx1, hy1, i, 46, 12);
+    const jitter = hash01(i, 47) * 0.06;
+    drawStack(vx + 0.7 + jitter, vy + 0.28, 18, 12 + hash01(i, 48) * 3, 5, p.roof);
+    drawStack(vx + 0.84 + jitter, vy + 0.28, 18, 10, 4.5, p.roof);
   }
 
   function drawIndZone(vx: number, vy: number, i: number, level: number) {
@@ -992,36 +1162,118 @@ export function initCityGame(): void {
 
         if (tile.type === 'power') {
           drawBlock(ctx, VIEW, vx, vy, 22, '#5b4a7a');
-          // A slim smokestack reads as "power plant" even without the emoji
-          const stack = isoProject(VIEW, vx + 0.62, vy + 0.28);
-          ctx.fillStyle = shadeColor('#3d3252', 0.7);
-          ctx.fillRect(stack.x - 3, stack.y - 22 - 14, 6, 14);
-          ctx.fillStyle = shadeColor('#3d3252', 1.15);
-          ctx.fillRect(stack.x - 3, stack.y - 22 - 16, 6, 3);
+          // Panel seams and a lit window row so the plant reads as a
+          // working building rather than a purple slab.
+          const pw = isoProject(VIEW, vx + 0.08, vy + 0.92);
+          const ps = isoProject(VIEW, vx + 0.92, vy + 0.92);
+          const pe = isoProject(VIEW, vx + 0.92, vy + 0.08);
+          ctx.strokeStyle = 'rgba(20, 16, 34, 0.4)';
+          ctx.lineWidth = 0.75;
+          for (const zz of [8, 15]) {
+            ctx.beginPath();
+            ctx.moveTo(pw.x, pw.y - zz);
+            ctx.lineTo(ps.x, ps.y - zz);
+            ctx.lineTo(pe.x, pe.y - zz);
+            ctx.stroke();
+          }
+          drawWindows(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, i, 1, 0, 8);
+          // Hazard-striped smokestack with a blinking warning light.
+          drawStack(vx + 0.62, vy + 0.28, 22, 14, 6, '#3d3252');
+          if (Math.floor(clock * 1.5) % 2 === 0) {
+            const tip = isoProject(VIEW, vx + 0.62, vy + 0.28);
+            ctx.fillStyle = '#f87171';
+            ctx.beginPath();
+            ctx.arc(tip.x, tip.y - 22 - 17.8, 1, 0, Math.PI * 2);
+            ctx.fill();
+          }
           ctx.font = '15px serif';
           ctx.fillText('⚡', top.x, top.y - 22);
-        } else if (tile.type === 'park') {
-          fillTile(ctx, VIEW, vx, vy, '#22543d');
-          drawFlatShadow(top, 6, 2.5);
-          ctx.font = '14px serif';
-          ctx.fillText('🌳', top.x, top.y - 5);
-        } else if (tile.type === 'tree') {
-          fillTile(ctx, VIEW, vx, vy, '#16301f');
-          drawFlatShadow(top, 5, 2);
-          ctx.font = '13px serif';
-          ctx.fillText('🌲', top.x, top.y - 5);
+        } else if (tile.type === 'park' || tile.type === 'tree') {
+          // Drawn landscaping under the emoji: canopy clusters, a path
+          // curve on parks, hashed so no two greens repeat.
+          const isPark = tile.type === 'park';
+          fillTile(ctx, VIEW, vx, vy, isPark ? '#22543d' : '#16301f');
+          if (isPark) {
+            ctx.strokeStyle = 'rgba(138, 122, 92, 0.5)';
+            ctx.lineWidth = 1.5;
+            const pa = isoProject(VIEW, vx + 0.15, vy + 0.6);
+            const pb = isoProject(VIEW, vx + 0.85, vy + 0.45);
+            ctx.beginPath();
+            ctx.moveTo(pa.x, pa.y);
+            ctx.quadraticCurveTo(top.x, top.y + 3, pb.x, pb.y);
+            ctx.stroke();
+          }
+          for (let k = 0; k < 3; k++) {
+            const bx = 0.2 + hash01(i, 51 + k) * 0.6;
+            const by = 0.2 + hash01(i, 54 + k) * 0.6;
+            const b = isoProject(VIEW, vx + bx, vy + by);
+            const r = 1.6 + hash01(i, 57 + k) * 1.6;
+            ctx.fillStyle = k % 2 === 0 ? '#2e6b48' : '#1f4a32';
+            ctx.beginPath();
+            ctx.ellipse(b.x, b.y - 1.5, r, r * 0.7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(190, 242, 100, 0.35)';
+            ctx.beginPath();
+            ctx.ellipse(b.x - r * 0.3, b.y - 2, r * 0.4, r * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          if (isPark && hash01(i, 60) > 0.4) {
+            const f = isoProject(VIEW, vx + 0.3 + hash01(i, 61) * 0.4, vy + 0.3 + hash01(i, 62) * 0.4);
+            ctx.fillStyle = hash01(i, 63) > 0.5 ? '#f0a8bc' : '#f6d860';
+            ctx.fillRect(f.x - 0.6, f.y - 1, 1.2, 1.2);
+          }
+          drawFlatShadow(top, isPark ? 6 : 5, isPark ? 2.5 : 2);
+          ctx.font = isPark ? '14px serif' : '13px serif';
+          ctx.fillText(isPark ? '🌳' : '🌲', top.x, top.y - 5);
         } else if (tile.type === 'rubble') {
           fillTile(ctx, VIEW, vx, vy, '#31302c');
           ctx.font = '11px serif';
           ctx.fillText('🪨', top.x, top.y - 3);
         } else if (tile.type === 'school') {
           drawBlock(ctx, VIEW, vx, vy, 14, '#b9813e');
+          drawWindows(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, i, 2, 0, 14);
+          drawDoor(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, 0.5, '#5a3a20');
           drawRoofRidge(vx, vy, 14, '#8a5f2c');
+          // Flagpole on the ridge.
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 0.75;
+          ctx.beginPath();
+          ctx.moveTo(top.x, top.y - 20);
+          ctx.lineTo(top.x, top.y - 27);
+          ctx.stroke();
+          ctx.fillStyle = '#4f86d6';
+          ctx.beginPath();
+          ctx.moveTo(top.x, top.y - 27);
+          ctx.lineTo(top.x + 4 + Math.sin(clock * 4) * 0.6, top.y - 26);
+          ctx.lineTo(top.x, top.y - 25);
+          ctx.closePath();
+          ctx.fill();
           ctx.font = '13px serif';
           ctx.fillText('🏫', top.x, top.y - 14);
         } else if (tile.type === 'firehouse') {
           drawBlock(ctx, VIEW, vx, vy, 14, '#a34141');
+          // Two garage doors with slat lines on the street face.
+          const fw = isoProject(VIEW, vx + 0.08, vy + 0.92);
+          const fs = isoProject(VIEW, vx + 0.92, vy + 0.92);
+          for (let g = 0; g < 2; g++) {
+            const t = 0.3 + g * 0.4;
+            const gx = fw.x + (fs.x - fw.x) * t;
+            const gy = fw.y + (fs.y - fw.y) * t;
+            ctx.fillStyle = '#d9d2c0';
+            ctx.fillRect(gx - 2.4, gy - 6, 4.8, 6);
+            ctx.strokeStyle = 'rgba(60, 40, 30, 0.45)';
+            ctx.lineWidth = 0.5;
+            for (let sl = 1; sl < 3; sl++) {
+              ctx.beginPath();
+              ctx.moveTo(gx - 2.4, gy - sl * 2);
+              ctx.lineTo(gx + 2.4, gy - sl * 2);
+              ctx.stroke();
+            }
+          }
           drawRoofRidge(vx, vy, 14, '#7a2e2e');
+          // Watch tower on the back corner.
+          drawBox(vx + 0.66, vy + 0.14, vx + 0.84, vy + 0.32, 14, 23, '#8a3636');
+          drawPyramidCap(vx + 0.66, vy + 0.14, vx + 0.84, vy + 0.32, 23, 2.5, '#6a2a2a');
           ctx.font = '13px serif';
           ctx.fillText('🚒', top.x, top.y - 14);
         } else if (isZone(tile.type)) {

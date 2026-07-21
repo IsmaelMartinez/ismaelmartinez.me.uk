@@ -59,7 +59,8 @@ import {
   DENSITY_UNLOCK_POP
 } from './simulation';
 import { monthlyIncome, monthlyExpenses } from './budget';
-import { targetCarCount, spawnCar, stepCar, type Car } from './traffic';
+import { targetCarCount, spawnCar, stepCar, computeCongestion, isCongested, type Car } from './traffic';
+import { POP_MILESTONES, MILESTONE_GRANTS, METROPOLIS_INDEX } from './milestones';
 import {
   isFlammable,
   ignitionChance,
@@ -91,7 +92,9 @@ const CANVAS_H = (CITY_W + CITY_H) * HALF_H + ORIGIN_Y + 10;
 const START_MONEY = 2500;
 const MONTH_LENGTH = 20; // seconds of game time
 const GROWTH_INTERVAL = 1.2;
-const MILESTONES = [100, 250, 500, 1000, 2000];
+/** Cars crawl to this fraction of their speed over a congested road tile, so
+ *  traffic visibly clots at chokepoints. */
+const CONGESTED_CAR_SPEED = 0.35;
 
 const ZONE_EMOJI: Record<ZoneType, string> = { res: '🏠', com: '🏬', ind: '🏭' };
 const ZONE_TINT: Record<ZoneType, string> = {
@@ -169,6 +172,7 @@ export function initCityGame(): void {
   const recordEl = el('record');
   const finalMonthsEl = el('final-months');
   const finalPopEl = el('final-pop');
+  const objectiveEl = el('objective');
   const toastArea = el('toast-area');
   const { show: showToast } = createToaster(toastArea);
   const demandBars: Record<ZoneType, HTMLElement> = {
@@ -185,6 +189,9 @@ export function initCityGame(): void {
     expenses: root.dataset.tExpenses || 'Upkeep',
     cantAfford: root.dataset.tCantAfford || 'Not enough funds!',
     milestone: root.dataset.tMilestone || 'Population',
+    goal: root.dataset.tGoal || 'Goal',
+    objPop: root.dataset.tObjPop || '{n} residents',
+    established: root.dataset.tEstablished || 'Metropolis — endless!',
     fireAlert: root.dataset.tFireAlert || 'Fire has broken out!',
     tornadoAlert: root.dataset.tTornadoAlert || 'Tornado touching down!',
     quakeAlert: root.dataset.tQuakeAlert || 'Earthquake!',
@@ -238,6 +245,8 @@ export function initCityGame(): void {
   let growthTimer = 0;
   let peakPop = 0;
   let milestoneIdx = 0;
+  /** Set once the metropolis milestone is reached — play continues endless. */
+  let established = false;
   let selectedTool: CityTool = 'road';
   let speedMult = 1;
   let hoverTile = -1;
@@ -261,9 +270,13 @@ export function initCityGame(): void {
   let fireCover = computeFireCover(tiles);
   let stats = cityStats(tiles);
   let demand = computeDemand(stats);
+  // Per-road traffic load; drives both the car slowdown and the growth choke.
+  let congestion = computeCongestion(tiles);
 
   // The record readout shows the table's best, beaten live by the current run.
   recordEl.textContent = board.best().toString();
+  // Seed the goal strip with the first milestone before the run starts.
+  renderObjective();
 
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
@@ -299,6 +312,20 @@ export function initCityGame(): void {
     fireCover = computeFireCover(tiles);
     stats = cityStats(tiles);
     demand = computeDemand(stats, sumDemandModifiers(activeEvents));
+    congestion = computeCongestion(tiles);
+  }
+
+  /** Paints the goal strip: the next population milestone and progress, or the
+   *  "metropolis" banner once the city is established. */
+  function renderObjective() {
+    if (established || milestoneIdx >= POP_MILESTONES.length) {
+      if (objectiveEl.textContent !== strings.established) objectiveEl.textContent = strings.established;
+      return;
+    }
+    const target = POP_MILESTONES[milestoneIdx];
+    const label = strings.objPop.replace('{n}', target.toString());
+    const text = `${label} (${Math.min(stats.population, target)}/${target})`;
+    if (objectiveEl.textContent !== text) objectiveEl.textContent = text;
   }
 
   function resetCity() {
@@ -310,6 +337,7 @@ export function initCityGame(): void {
     growthTimer = 0;
     peakPop = 0;
     milestoneIdx = 0;
+    established = false;
     speedMult = 1;
     cars = [];
     fires = [];
@@ -323,6 +351,7 @@ export function initCityGame(): void {
     fx.clear();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     refreshDerivedState();
+    renderObjective();
     board.hide();
     phase = 'play';
     audio.start();
@@ -362,8 +391,12 @@ export function initCityGame(): void {
     const simDt = dt * speedMult;
     clock += simDt;
 
-    // Cosmetic traffic scaled to the population
-    cars = cars.filter(car => stepCar(tiles, car, simDt));
+    // Traffic scaled to the population; cars crawl over congested tiles, so
+    // chokepoints visibly clot (the same congestion throttles growth below).
+    cars = cars.filter(car => {
+      const slow = isCongested(congestion[car.to]) || isCongested(congestion[car.from]);
+      return stepCar(tiles, car, simDt * (slow ? CONGESTED_CAR_SPEED : 1));
+    });
     if (cars.length < targetCarCount(stats.population)) {
       const car = spawnCar(tiles);
       if (car) cars.push(car);
@@ -389,7 +422,8 @@ export function initCityGame(): void {
     growthTimer += simDt;
     if (growthTimer >= GROWTH_INTERVAL) {
       growthTimer -= GROWTH_INTERVAL;
-      const result = growthStep(tiles, Math.random, sumDemandModifiers(activeEvents));
+      const congested = congestion.map(isCongested);
+      const result = growthStep(tiles, Math.random, sumDemandModifiers(activeEvents), congested);
       if (result.grown.length || result.decayed.length) refreshDerivedState();
       for (const i of result.grown) {
         addFloater(i, '▲', '#4ade80');
@@ -456,10 +490,20 @@ export function initCityGame(): void {
         showToast(`🏅 ${strings.newRecord}`);
         audio.playSfx('score');
       }
-      if (milestoneIdx < MILESTONES.length && stats.population >= MILESTONES[milestoneIdx]) {
-        showToast(`🏙️ ${strings.milestone} ${MILESTONES[milestoneIdx]}!`);
+      // Milestones with teeth: each crossing pays a cash grant, and the last
+      // (metropolis) is the prestige win — play continues endless after it.
+      while (milestoneIdx < POP_MILESTONES.length && stats.population >= POP_MILESTONES[milestoneIdx]) {
+        const grant = MILESTONE_GRANTS[milestoneIdx];
+        money += grant;
+        showToast(`🏙️ ${strings.milestone} ${POP_MILESTONES[milestoneIdx]} +£${grant}`);
+        if (milestoneIdx === METROPOLIS_INDEX) {
+          established = true;
+          showToast(`🏆 ${strings.established}`);
+        }
+        audio.playSfx('score');
         milestoneIdx++;
       }
+      renderObjective();
     }
 
     monthTimer += simDt;
@@ -467,7 +511,7 @@ export function initCityGame(): void {
       monthTimer -= MONTH_LENGTH;
       month++;
       const income = monthlyIncome(stats);
-      const expenses = monthlyExpenses(tiles);
+      const expenses = monthlyExpenses(tiles, stats);
       money += income - expenses;
       showToast(`${strings.month} ${month} · ${strings.income} +£${income} · ${strings.expenses} -£${expenses}`);
 

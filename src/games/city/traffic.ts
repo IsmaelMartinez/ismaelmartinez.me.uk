@@ -1,10 +1,39 @@
 /**
- * Cosmetic road traffic. Cars random-walk the road network, biased against
- * U-turns; they exist purely so a growing city looks busy. DOM-free so the
- * wander rules are testable.
+ * Road traffic. Cars random-walk the road network, biased against U-turns.
+ * Traffic also *matters*: `computeCongestion` scores how hard each road is
+ * worked by the dense zones it serves, which slows the cars over it (so
+ * chokepoints visibly clot) and throttles the growth of districts with no
+ * relief route (see simulation.ts). DOM-free so the rules are testable.
  */
 import { gridNeighbours } from '../engine/grid2d';
-import { CITY_W, CITY_H, isRoad, type CityTile } from './tiles';
+import { CITY_W, CITY_H, isRoad, isZone, type CityTile } from './tiles';
+
+/** Developed-zone level a road tile may carry before it saturates. */
+export const CONGESTION_THRESHOLD = 6;
+
+/**
+ * Per-tile traffic load: for each road tile, the summed development level of
+ * the zone tiles it directly serves (its orthogonal neighbours — the ones that
+ * use it for access). A road hemmed by dense zones with no parallel relief
+ * route scores high. Non-road tiles are 0.
+ */
+export function computeCongestion(tiles: CityTile[]): number[] {
+  const load = new Array<number>(tiles.length).fill(0);
+  tiles.forEach((tile, i) => {
+    if (!isRoad(tile.type)) return;
+    let sum = 0;
+    for (const n of gridNeighbours(i, CITY_W, CITY_H)) {
+      if (isZone(tiles[n].type)) sum += tiles[n].level;
+    }
+    load[i] = sum;
+  });
+  return load;
+}
+
+/** Whether a road tile's traffic load has tipped it into congestion. */
+export function isCongested(load: number): boolean {
+  return load > CONGESTION_THRESHOLD;
+}
 
 export interface Car {
   /** Tile the car is leaving. */

@@ -12,6 +12,7 @@ import {
   DIG_INTERVAL,
   BASH_INTERVAL,
   BUILD_INTERVAL,
+  BOMBER_FUSE,
   type Critter,
   type CritterWorld,
   type Skill
@@ -263,6 +264,24 @@ describe('critter — skills', () => {
     expect(faller.state).toBe('faller');
     expect(assignSkill(faller, 'digger')).toBe(false);
     expect(assignSkill(faller, 'floater')).toBe(true);
+  });
+
+  it('bomber lights a single critter\'s fuse and cannot be relit', () => {
+    // Unlike the terrain skills, a bomber pins on any active critter whatever
+    // its state (walker, blocker, mid-fall) — the pick-one counterpart to the
+    // mass nuke. game.ts counts the fuse down and fires the blast.
+    const c: Critter = { ...createCritter(1, 100, 159, 1), state: 'walker' };
+    expect(c.fuse).toBe(-1); // unlit by default
+    expect(assignSkill(c, 'bomber')).toBe(true);
+    expect(c.fuse).toBe(BOMBER_FUSE);
+    // A lit fuse can't be stacked or reset by a second bomber.
+    expect(assignSkill(c, 'bomber')).toBe(false);
+    expect(c.fuse).toBe(BOMBER_FUSE);
+
+    const blocker: Critter = { ...createCritter(2, 50, 159, 1), state: 'blocker' };
+    expect(assignSkill(blocker, 'bomber')).toBe(true);
+    const faller = createCritter(3, 10, 10, 1); // still airborne
+    expect(assignSkill(faller, 'bomber')).toBe(true);
   });
 
   it('blocker stands still and reverses passing walkers', () => {
@@ -532,7 +551,8 @@ function playLevel(
     digger: level.stock.digger ?? 0,
     basher: level.stock.basher ?? 0,
     builder: level.stock.builder ?? 0,
-    floater: level.stock.floater ?? 0
+    floater: level.stock.floater ?? 0,
+    bomber: level.stock.bomber ?? 0
   };
   let critters: Critter[] = [];
   let saved = 0;

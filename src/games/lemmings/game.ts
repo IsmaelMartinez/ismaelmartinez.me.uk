@@ -46,9 +46,10 @@ import { levelSelectItems, loadClearedLevels, saveClearedLevels } from './progre
 import { exitArrowAngle, rescueProgress } from './hud';
 import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
 
-const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater'];
+const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
 const NUKE_INTERVAL = 4; // ticks between successive detonations during a nuke
+const DEFAULT_BOMBER_STOCK = 2; // pick-one blasts each level grants when unspecified
 
 // Deliberately NOT engine/effects: these debris motes fade on a life*2 ramp
 // and step from 2px to 1px as they die, which the shared module's
@@ -307,7 +308,7 @@ export function initLemmingsGame(): void {
   bestLevel.textContent = cleared.toString();
 
   function blankStock(): Record<Skill, number> {
-    return { blocker: 0, digger: 0, basher: 0, builder: 0, floater: 0 };
+    return { blocker: 0, digger: 0, basher: 0, builder: 0, floater: 0, bomber: 0 };
   }
 
   function spawnInterval(): number {
@@ -355,6 +356,10 @@ export function initLemmingsGame(): void {
     levelTicks = 0;
     stock = blankStock();
     for (const key of SKILL_ORDER) stock[key] = def.stock[key] ?? 0;
+    // The bomber (pick-one blast) is the single-critter counterpart to the
+    // always-available nuke, so every level grants a small reserve rather than
+    // authoring it into each hand-tuned stock — unless a level sets its own.
+    stock.bomber = def.stock.bomber ?? DEFAULT_BOMBER_STOCK;
     selected = SKILL_ORDER.find(s => stock[s] > 0) ?? null;
     levelNum.textContent = (index + 1).toString();
     neededCount.textContent = def.needed.toString();
@@ -456,6 +461,21 @@ export function initLemmingsGame(): void {
     audio.playSfx('explosion');
   }
 
+  /**
+   * Blows a single critter up: a real crater out of the terrain (the bitmap's
+   * eraseCircle exists for exactly this) plus a two-tone fireball so the blast
+   * reads as an explosion, not a fizzle. Shared by the mass nuke's chain and a
+   * bomber's fuse — the pick-one and kill-all paths detonate identically.
+   */
+  function detonate(c: Critter) {
+    c.alive = false;
+    c.state = 'splatted';
+    bmp.eraseCircle(c.x, Math.round(c.y - CRITTER_H / 2), 8);
+    spawnParticles(c.x, c.y - CRITTER_H / 2, '#f97316', 14);
+    spawnParticles(c.x, c.y - CRITTER_H / 2, '#fde047', 8);
+    audio.playSfx('hit');
+  }
+
   /** Reveals a bonus row on the result overlay, or hides it for a zero bonus. */
   function setBonusRow(row: HTMLElement, val: HTMLElement, points: number) {
     row.hidden = points <= 0;
@@ -541,17 +561,7 @@ export function initLemmingsGame(): void {
       if (nukeTimer >= NUKE_INTERVAL) {
         nukeTimer = 0;
         const victim = critters.find(isActive);
-        if (victim) {
-          victim.alive = false;
-          victim.state = 'splatted';
-          // Each detonation blows a real crater out of the terrain — the
-          // bitmap's eraseCircle exists for exactly this — plus a two-tone
-          // fireball so the chain-reaction reads as explosions, not fizzles.
-          bmp.eraseCircle(victim.x, Math.round(victim.y - CRITTER_H / 2), 8);
-          spawnParticles(victim.x, victim.y - CRITTER_H / 2, '#f97316', 14);
-          spawnParticles(victim.x, victim.y - CRITTER_H / 2, '#fde047', 8);
-          audio.playSfx('hit');
-        }
+        if (victim) detonate(victim);
       }
     } else if (spawned < def.spawnCount) {
       spawnTimer--;
@@ -567,6 +577,16 @@ export function initLemmingsGame(): void {
 
     for (const c of critters) {
       if (!isActive(c)) continue;
+      // A lit bomber fuse ticks down whatever the critter is doing (walking,
+      // blocking, mid-fall); at zero it detonates in place — the pick-one
+      // counterpart to the mass nuke.
+      if (c.fuse >= 0) {
+        c.fuse--;
+        if (c.fuse <= 0) {
+          detonate(c);
+          continue;
+        }
+      }
       const wasAlive = c.alive;
       const wasFalling = c.state === 'faller';
       const fell = c.fallDist;
@@ -575,7 +595,10 @@ export function initLemmingsGame(): void {
       if (wasFalling && c.state === 'walker' && fell > 12) {
         spawnParticles(c.x, c.y, '#94a3b8', Math.min(8, 3 + fell / 20));
       }
-      if (isActive(c) && atExit(c, def)) {
+      // A lit fuse is a commitment: a critter counting down can't be rescued
+      // at the door, so lighting a bomber never quietly banks a rescue instead
+      // of a blast. It walks on and detonates on schedule.
+      if (isActive(c) && c.fuse < 0 && atExit(c, def)) {
         c.state = 'exited';
         c.alive = false;
         saved++;
@@ -844,6 +867,21 @@ export function initLemmingsGame(): void {
       ctx.fillRect(c.dir > 0 ? c.x + 2 : c.x - 3, top + (tick === 0 ? 4 : 3), 1, 1);
       ctx.fillStyle = shade(body, -20);
       ctx.fillRect(c.dir > 0 ? c.x - 3 : c.x + 2, top + 4, 1, 1);
+    }
+    // A lit bomber fuse: a red countdown (5…1) over the head, with a spark on
+    // the crown that blinks on the shared two-frame tick.
+    if (c.fuse >= 0) {
+      const count = Math.max(1, Math.ceil(c.fuse / 30));
+      if (tick === 0) {
+        ctx.fillStyle = '#fca5a5';
+        ctx.fillRect(c.x - 1, top - 2, 2, 1);
+      }
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#0b1120';
+      ctx.fillText(count.toString(), c.x + 1, top - 3);
+      ctx.fillStyle = '#f87171';
+      ctx.fillText(count.toString(), c.x, top - 4);
     }
   }
 

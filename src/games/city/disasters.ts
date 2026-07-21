@@ -1,5 +1,6 @@
 /**
- * Microcity chaos: fires that ignite, spread, and burn tiles down; roaming
+ * Microcity chaos: fires that ignite, spread, and burn tiles down — unless a
+ * firehouse in range fights them out first (see `EXTINGUISH_CHANCE`); roaming
  * tornadoes and earthquakes whose frequency ramps with the city's age and
  * size (see `disasterIntensity`); plus monthly political/civic events that
  * shake the treasury and RCI demand. DOM-free so every rule is testable
@@ -21,6 +22,13 @@ export const BURN_TICKS = 5;
 export const BURN_TICKS_COVERED = 3;
 export const SPREAD_CHANCE = 0.22;
 export const SPREAD_CHANCE_COVERED = 0.08;
+/**
+ * Chance per tick that a firehouse in range actually puts a covered fire out —
+ * the tile survives instead of burning down. This is the fire crews doing real
+ * work: an uncovered fire always burns to the end, a covered one is usually
+ * (but not always) contained before it does.
+ */
+export const EXTINGUISH_CHANCE = 0.4;
 
 /**
  * What can catch fire: nature, developed zones, and civic buildings.
@@ -82,21 +90,35 @@ export function startFire(
 }
 
 /**
- * One fire tick: active fires try to spread to flammable neighbours, then
- * burn down. Burnt-out buildings leave rubble (bulldoze to clear); nature
- * burns away to bare earth. Fires whose tile was bulldozed go out. Returns
- * the surviving fire list plus what changed for the UI.
+ * One fire tick: a firehouse in range fights each covered fire and may put it
+ * out this tick (the tile survives); whatever it doesn't contain tries to
+ * spread to flammable neighbours, then burns down. Burnt-out buildings leave
+ * rubble (bulldoze to clear); nature burns away to bare earth. Fires whose tile
+ * was bulldozed go out. Returns the surviving fire list plus what changed for
+ * the UI (`extinguished` tiles were saved by the fire crews, unharmed).
  */
 export function stepFires(
   tiles: CityTile[],
   fires: Fire[],
   fireCover: boolean[],
   random: () => number = Math.random
-): { fires: Fire[]; spread: number[]; burnedOut: number[] } {
+): { fires: Fire[]; spread: number[]; burnedOut: number[]; extinguished: number[] } {
   const alive = fires.filter(f => isFlammable(tiles[f.idx]));
+  // Active firefighting: a covered fire may be knocked out before it does
+  // anything else this tick — no spread, no burn, the tile left standing.
+  const extinguished: number[] = [];
+  const fighting: Fire[] = [];
+  for (const fire of alive) {
+    if (fireCover[fire.idx] && random() < EXTINGUISH_CHANCE) extinguished.push(fire.idx);
+    else fighting.push(fire);
+  }
+  // Seed the "already burning" guard from every fire alive at the start of the
+  // tick, not just the ones still fighting: a tile a crew put out this tick
+  // must stay off-limits to spread, or an adjacent blaze would reignite it the
+  // same tick and the extinguish would count for nothing.
   const burning = new Set(alive.map(f => f.idx));
   const spread: number[] = [];
-  for (const fire of alive) {
+  for (const fire of fighting) {
     for (const n of gridNeighbours(fire.idx, CITY_W, CITY_H)) {
       if (burning.has(n) || !isFlammable(tiles[n])) continue;
       // Coverage on either side of the boundary dampens the jump
@@ -110,7 +132,7 @@ export function stepFires(
 
   const burnedOut: number[] = [];
   const remaining: Fire[] = [];
-  for (const fire of alive) {
+  for (const fire of fighting) {
     const ticks = fire.ticks - 1;
     if (ticks > 0) {
       remaining.push({ idx: fire.idx, ticks });
@@ -124,7 +146,7 @@ export function stepFires(
   for (const idx of spread) {
     remaining.push({ idx, ticks: fireCover[idx] ? BURN_TICKS_COVERED : BURN_TICKS });
   }
-  return { fires: remaining, spread, burnedOut };
+  return { fires: remaining, spread, burnedOut, extinguished };
 }
 
 // --- Difficulty ramp ---

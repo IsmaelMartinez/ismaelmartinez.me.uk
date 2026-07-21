@@ -866,9 +866,12 @@ export function initTanksGame(): void {
     { once: true }
   );
 
+  const isDifficulty = (v: string | undefined): v is Difficulty =>
+    v === 'rookie' || v === 'gunner' || v === 'veteran';
   difficultyButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      difficulty = (btn.dataset.difficulty as Difficulty) || 'gunner';
+      const picked = btn.dataset.difficulty;
+      if (isDifficulty(picked)) difficulty = picked;
       for (const other of difficultyButtons) {
         other.classList.toggle('active', other === btn);
         other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');

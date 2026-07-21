@@ -34,7 +34,10 @@ export const DIFFICULTY_RAMP = 0.06;
  * long match is a crack shot; a rookie's opening round is forgiving.
  */
 export function cpuDifficulty(tier: Difficulty, roundsDecided: number): number {
-  return Math.min(1, DIFFICULTY_BASE[tier] + Math.max(0, roundsDecided) * DIFFICULTY_RAMP);
+  // Fall back to gunner if an unknown tier ever reaches here — a bad DOM
+  // dataset must not turn the aim maths into NaN and freeze the CPU turn.
+  const base = DIFFICULTY_BASE[tier] ?? DIFFICULTY_BASE.gunner;
+  return Math.min(1, base + Math.max(0, roundsDecided) * DIFFICULTY_RAMP);
 }
 
 /**

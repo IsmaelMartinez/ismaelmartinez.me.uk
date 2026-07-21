@@ -219,7 +219,9 @@ export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
     clearRows(run.well, run.clearingRows);
     run.clearingRows = [];
     run.phase = 'settling';
-    run.settleTimer = SETTLE_STEP_TIME;
+    // Carry the flash's overshoot (clearTimer is now ≤ 0) into the first
+    // settle so a long frame doesn't lose time at the phase boundary.
+    run.settleTimer = SETTLE_STEP_TIME + run.clearTimer;
     return events;
   }
 

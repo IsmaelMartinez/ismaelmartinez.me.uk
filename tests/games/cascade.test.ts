@@ -54,7 +54,8 @@ function at(well: Well, x: number, y: number): number {
 function drainCascade(run: CascadeRun): RunEvent[] {
   const events: RunEvent[] = [];
   let guard = 0;
-  while ((run.phase === 'clearing' || run.phase === 'settling') && guard++ < 500) {
+  while (run.phase === 'clearing' || run.phase === 'settling') {
+    if (guard++ >= 500) throw new Error(`cascade never settled (stuck in ${run.phase})`);
     events.push(...tickRun(run, CLEAR_TIME + 0.01));
   }
   return events;

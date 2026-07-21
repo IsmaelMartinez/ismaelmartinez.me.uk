@@ -292,6 +292,15 @@ describe('waves', () => {
       expect(waveDef(AUTHORED_WAVES)).toEqual(endlessWave(AUTHORED_WAVES));
     });
 
+    it('never returns undefined for a stray negative or non-finite index', () => {
+      // The primary accessor normalises bad input rather than handing back
+      // undefined (which would crash createSpawner downstream).
+      expect(waveDef(-5)).toBe(WAVES[0]);
+      expect(waveDef(NaN)).toBe(WAVES[0]);
+      // endlessWave clamps too, so an in-campaign index can't go negative.
+      expect(endlessWave(0)).toEqual(endlessWave(AUTHORED_WAVES));
+    });
+
     it('is deterministic and always sane', () => {
       for (let w = AUTHORED_WAVES; w < AUTHORED_WAVES + 30; w++) {
         const a = endlessWave(w);

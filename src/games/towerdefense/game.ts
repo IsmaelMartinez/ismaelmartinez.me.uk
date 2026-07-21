@@ -44,7 +44,7 @@ import {
   type Tower,
   type TowerKind
 } from './towers';
-import { waveDef, AUTHORED_WAVES, hpScale, createSpawner, spawnerDone, stepSpawner, type Spawner } from './waves';
+import { waveDef, AUTHORED_WAVES, hpScale, createSpawner, spawnerDone, stepSpawner, type Spawner, type WaveEntry } from './waves';
 import {
   WAVE_BASE,
   createEconomy,
@@ -301,7 +301,10 @@ export function initTowerDefenseGame(): void {
   let waveIdx = 0;
   // Set once the authored campaign is broken and the endless assault begins.
   let clearedCampaign = false;
-  let spawner: Spawner = createSpawner(waveDef(0));
+  // The launched wave, cached at each wave boundary — endless waves are built
+  // fresh by waveDef, so the per-frame loop must not call it every tick.
+  let currentWave: WaveEntry[] = waveDef(0);
+  let spawner: Spawner = createSpawner(currentWave);
   let buildTimer = BUILD_TIME;
   let selectedTool: TowerKind | null = 'bolt';
   let selectedTower: Tower | null = null;
@@ -376,7 +379,8 @@ export function initTowerDefenseGame(): void {
     enemies = [];
     waveIdx = 0;
     clearedCampaign = false;
-    spawner = createSpawner(waveDef(0));
+    currentWave = waveDef(0);
+    spawner = createSpawner(currentWave);
     buildTimer = BUILD_TIME;
     selectedTower = null;
     selectedTool = 'bolt';
@@ -393,7 +397,8 @@ export function initTowerDefenseGame(): void {
 
   function launchWave() {
     phase = 'wave';
-    spawner = createSpawner(waveDef(waveIdx));
+    currentWave = waveDef(waveIdx);
+    spawner = createSpawner(currentWave);
     bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
     bannerTimer = 1.8;
     showToast(`⚔️ ${bannerText}`);
@@ -454,7 +459,7 @@ export function initTowerDefenseGame(): void {
       buildTimer -= dt;
       if (buildTimer <= 0) launchWave();
     } else {
-      for (const kind of stepSpawner(spawner, waveDef(waveIdx), dt)) {
+      for (const kind of stepSpawner(spawner, currentWave, dt)) {
         enemies.push(spawnEnemy(kind, hpScale(waveIdx)));
         // Marchers materialise out of the arch in a purple shimmer.
         const sp = isoProject(VIEW, (map.spawn % GRID_W) + 0.5, Math.floor(map.spawn / GRID_W) + 0.5);
@@ -525,7 +530,7 @@ export function initTowerDefenseGame(): void {
     // Clean the fallen out of the march once their bursts have spawned.
     if (enemies.length > 32) enemies = enemies.filter(e => e.alive);
 
-    if (phase === 'wave' && spawnerDone(spawner, waveDef(waveIdx)) && enemies.every(e => !e.alive)) {
+    if (phase === 'wave' && spawnerDone(spawner, currentWave) && enemies.every(e => !e.alive)) {
       waveCleared();
     }
   }

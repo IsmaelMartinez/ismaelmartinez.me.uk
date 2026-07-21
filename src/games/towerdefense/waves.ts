@@ -90,7 +90,9 @@ export const AUTHORED_WAVES = WAVES.length;
  * and warlord tally climb every few waves, on top of the ever-rising hpScale.
  */
 export function endlessWave(waveIndex: number): WaveEntry[] {
-  const over = waveIndex - AUTHORED_WAVES; // 0, 1, 2, … past the campaign
+  // Clamp to the campaign's end: `over` is never negative, so counts stay sane
+  // even if a caller passes an in-campaign or non-finite index.
+  const over = Math.max(0, Math.floor(waveIndex) - AUTHORED_WAVES);
   const tier = Math.floor(over / 3);
   const scouts = 14 + tier * 3;
   const sprinters = 12 + tier * 3;
@@ -118,7 +120,10 @@ export function endlessWave(waveIndex: number): WaveEntry[] {
 
 /** The wave to run at `waveIndex`: authored while it lasts, else endless. */
 export function waveDef(waveIndex: number): WaveEntry[] {
-  return waveIndex < AUTHORED_WAVES ? WAVES[waveIndex] : endlessWave(waveIndex);
+  // Normalise so the primary accessor never returns undefined for a stray
+  // negative or non-finite index.
+  const i = Number.isFinite(waveIndex) ? Math.max(0, Math.floor(waveIndex)) : 0;
+  return i < AUTHORED_WAVES ? WAVES[i] : endlessWave(i);
 }
 
 /** Enemy hp multiplier on wave `waveIndex` (0-based). */

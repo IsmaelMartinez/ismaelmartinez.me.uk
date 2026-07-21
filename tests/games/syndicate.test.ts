@@ -281,4 +281,45 @@ describe('missions', () => {
     });
     expect(missionStatus(spec, units, 0, false)).toBe('won');
   });
+
+  it('fields a six-mission campaign with escalating rewards and re-tiered weapons', () => {
+    expect(MISSIONS).toHaveLength(6);
+    for (let m = 1; m < MISSIONS.length; m++) {
+      expect(MISSIONS[m].reward).toBeGreaterThan(MISSIONS[m - 1].reward);
+    }
+    // The minigun / executive target land at the mid-campaign assassinate (3
+    // of 6), not the finale — no last-mission-only reveal.
+    expect(MISSIONS[2].objective).toBe('assassinate');
+    expect(MISSIONS[2].enemyWeapon).toBe('minigun');
+    // The back half escalates: guards graduate to uzis, and minigun rivals
+    // appear in a non-assassinate mission before the finale.
+    expect(MISSIONS.slice(3).every(m => m.guardWeapon === 'uzi')).toBe(true);
+    expect(MISSIONS[4].objective).toBe('persuade');
+    expect(MISSIONS[4].enemyWeapon).toBe('minigun');
+    // Every objective mould is still represented across the longer campaign.
+    const objectives = new Set(MISSIONS.map(m => m.objective));
+    expect(objectives).toEqual(new Set(['eliminate', 'persuade', 'assassinate']));
+  });
+
+  it('leaves each new mission winnable through its objective', () => {
+    const tiles = generateCity(seededRandom(9));
+    for (const spec of MISSIONS.slice(3)) {
+      const { units } = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+      expect(missionStatus(spec, units, 0, false)).toBe('ongoing');
+      if (spec.objective === 'eliminate') {
+        units.forEach(u => {
+          if (u.kind === 'enemy') u.alive = false;
+        });
+        expect(missionStatus(spec, units, 0, false)).toBe('won');
+      } else if (spec.objective === 'persuade') {
+        expect(missionStatus(spec, units, spec.persuadeQuota, false)).toBe('ongoing');
+        expect(missionStatus(spec, units, spec.persuadeQuota, true)).toBe('won');
+      } else {
+        units.forEach(u => {
+          if (u.kind === 'target') u.alive = false;
+        });
+        expect(missionStatus(spec, units, 0, false)).toBe('won');
+      }
+    }
+  });
 });

@@ -1,7 +1,10 @@
 /**
- * Syndicate — campaign missions. Three contracts in the classic mould:
- * wipe out the rival agents, persuade a crowd and reach extraction, and
- * finally assassinate the rival executive.
+ * Syndicate — campaign missions. Six contracts across the three classic
+ * objective moulds, escalating the roster and weapon tiers: wipe out the
+ * rival agents, persuade a crowd and reach extraction, assassinate the rival
+ * executive, then a reinforced wipe, a recruitment under heavy fire, and the
+ * decapitation finale. The mid-campaign assassinate keeps the minigun and the
+ * executive `target` from being a last-mission-only reveal.
  */
 import { MAP_W, MAP_H, nearestWalkable, type MapTile } from './map';
 import { spreadTargets, walkableTiles } from './pathfind';
@@ -56,6 +59,45 @@ export const MISSIONS: MissionSpec[] = [
     enemyWeapon: 'minigun',
     persuadeQuota: 0,
     reward: 2500
+  },
+  {
+    // Reinforced wipe — the rivals regroup with heavier hardware; guards now
+    // carry uzis, so the streets bite back.
+    id: 4,
+    objective: 'eliminate',
+    civilians: 16,
+    guards: 4,
+    enemies: 5,
+    guardWeapon: 'uzi',
+    enemyWeapon: 'uzi',
+    persuadeQuota: 0,
+    reward: 3000
+  },
+  {
+    // Recruitment under fire — a bigger quota with minigun-armed rivals
+    // patrolling the crowd you have to win over.
+    id: 5,
+    objective: 'persuade',
+    civilians: 20,
+    guards: 5,
+    enemies: 4,
+    guardWeapon: 'uzi',
+    enemyWeapon: 'minigun',
+    persuadeQuota: 10,
+    reward: 3500
+  },
+  {
+    // Decapitation finale — the executive behind the deepest guard ring the
+    // campaign fields, every hostile on top-tier chrome.
+    id: 6,
+    objective: 'assassinate',
+    civilians: 12,
+    guards: 6,
+    enemies: 5,
+    guardWeapon: 'uzi',
+    enemyWeapon: 'minigun',
+    persuadeQuota: 0,
+    reward: 5000
   }
 ];
 

@@ -12,7 +12,7 @@ import {
   createWell,
   fullRows,
   clearRows,
-  cascadeGravity,
+  settleStep,
   resolveClears,
   WELL_W,
   type Well
@@ -34,6 +34,8 @@ export const LOCK_DELAY = 0.5;
 export const MAX_LOCK_RESETS = 15;
 /** Seconds each chain link's rows stay lit before the landslide. */
 export const CLEAR_TIME = 0.32;
+/** Seconds per one-row drop while the landslide settles between chain links. */
+export const SETTLE_STEP_TIME = 0.045;
 /** Seconds per row while soft-dropping — much faster than any level's gravity. */
 export const SOFT_DROP_INTERVAL = 0.04;
 export const LINES_PER_LEVEL = 10;
@@ -52,7 +54,7 @@ export function clearPoints(rowCount: number, level: number, chain: number): num
   return base * level * chain;
 }
 
-export type RunPhase = 'falling' | 'clearing' | 'over';
+export type RunPhase = 'falling' | 'clearing' | 'settling' | 'over';
 
 export type RunEvent =
   | { type: 'lock' }
@@ -85,6 +87,8 @@ export interface CascadeRun {
    */
   lowestY: number;
   clearTimer: number;
+  /** Seconds left before the next one-row drop during the `settling` phase. */
+  settleTimer: number;
   drawPiece: () => PieceId;
 }
 
@@ -107,6 +111,7 @@ export function createRun(random: () => number): CascadeRun {
     lockResets: 0,
     lowestY: piece.y,
     clearTimer: 0,
+    settleTimer: 0,
     drawPiece
   };
 }
@@ -207,15 +212,30 @@ export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
   if (run.phase === 'over') return events;
 
   if (run.phase === 'clearing') {
+    // The cleared rows are lit; once the flash elapses they vanish and the
+    // stack above is left hanging, ready to settle.
     run.clearTimer -= dt;
     if (run.clearTimer > 0) return events;
     clearRows(run.well, run.clearingRows);
-    cascadeGravity(run.well);
+    run.clearingRows = [];
+    run.phase = 'settling';
+    // Carry the flash's overshoot (clearTimer is now ≤ 0) into the first
+    // settle so a long frame doesn't lose time at the phase boundary.
+    run.settleTimer = SETTLE_STEP_TIME + run.clearTimer;
+    return events;
+  }
+
+  if (run.phase === 'settling') {
+    // The landslide falls one row per tick; a row completed mid-fall re-lights
+    // as the next chain link (this is what carries a cascade past ×2).
+    run.settleTimer -= dt;
+    if (run.settleTimer > 0) return events;
+    run.settleTimer = SETTLE_STEP_TIME;
+    const moved = settleStep(run.well);
     const rows = fullRows(run.well);
     if (rows.length > 0) {
       startClearStep(run, rows, events);
-    } else {
-      run.clearingRows = [];
+    } else if (!moved) {
       spawnNext(run, events);
     }
     return events;

@@ -44,7 +44,7 @@ import {
   type Tower,
   type TowerKind
 } from './towers';
-import { WAVES, hpScale, createSpawner, spawnerDone, stepSpawner, type Spawner } from './waves';
+import { waveDef, AUTHORED_WAVES, hpScale, createSpawner, spawnerDone, stepSpawner, type Spawner } from './waves';
 import {
   WAVE_BASE,
   createEconomy,
@@ -299,7 +299,9 @@ export function initTowerDefenseGame(): void {
   let towers: Tower[] = [];
   let enemies: Enemy[] = [];
   let waveIdx = 0;
-  let spawner: Spawner = createSpawner(WAVES[0]);
+  // Set once the authored campaign is broken and the endless assault begins.
+  let clearedCampaign = false;
+  let spawner: Spawner = createSpawner(waveDef(0));
   let buildTimer = BUILD_TIME;
   let selectedTool: TowerKind | null = 'bolt';
   let selectedTower: Tower | null = null;
@@ -373,7 +375,8 @@ export function initTowerDefenseGame(): void {
     towers = [];
     enemies = [];
     waveIdx = 0;
-    spawner = createSpawner(WAVES[0]);
+    clearedCampaign = false;
+    spawner = createSpawner(waveDef(0));
     buildTimer = BUILD_TIME;
     selectedTower = null;
     selectedTool = 'bolt';
@@ -390,21 +393,23 @@ export function initTowerDefenseGame(): void {
 
   function launchWave() {
     phase = 'wave';
-    spawner = createSpawner(WAVES[waveIdx]);
+    spawner = createSpawner(waveDef(waveIdx));
     bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
     bannerTimer = 1.8;
     showToast(`⚔️ ${bannerText}`);
   }
 
-  function endRun(victory: boolean) {
+  function endRun() {
     phase = 'over';
     selectedTower = null;
     audio.playSfx('gameover');
     audio.stop();
     bankScore();
-    overIcon.textContent = victory ? '🏆' : '💥';
-    overTitle.textContent = victory ? strings.victory : strings.gameOver;
-    overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
+    // A run only ends when the line falls; clearing the whole authored
+    // campaign first still earns the trophy screen for how far it held.
+    overIcon.textContent = clearedCampaign ? '🏆' : '💥';
+    overTitle.textContent = clearedCampaign ? strings.victory : strings.gameOver;
+    overDesc.textContent = clearedCampaign ? strings.victoryDesc : strings.gameOverDesc;
     finalScoreEl.textContent = `${score(eco)}`;
     overOverlay.style.display = 'flex';
     // After the overlay is visible, so the initials input can take focus.
@@ -421,9 +426,12 @@ export function initTowerDefenseGame(): void {
     showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);
     audio.playSfx('score');
     waveIdx++;
-    if (waveIdx >= WAVES.length) {
-      endRun(true);
-      return;
+    if (waveIdx === AUTHORED_WAVES) {
+      // No victory wall: clearing the last authored wave rolls the run into an
+      // endless assault so a strong defence keeps chasing score.
+      clearedCampaign = true;
+      showToast(`🏆 ${strings.victory}`);
+      audio.playSfx('score');
     }
     phase = 'build';
     buildTimer = BUILD_TIME;
@@ -446,7 +454,7 @@ export function initTowerDefenseGame(): void {
       buildTimer -= dt;
       if (buildTimer <= 0) launchWave();
     } else {
-      for (const kind of stepSpawner(spawner, WAVES[waveIdx], dt)) {
+      for (const kind of stepSpawner(spawner, waveDef(waveIdx), dt)) {
         enemies.push(spawnEnemy(kind, hpScale(waveIdx)));
         // Marchers materialise out of the arch in a purple shimmer.
         const sp = isoProject(VIEW, (map.spawn % GRID_W) + 0.5, Math.floor(map.spawn / GRID_W) + 0.5);
@@ -466,7 +474,7 @@ export function initTowerDefenseGame(): void {
       leakedThisStep = true;
       if (lives <= 0) {
         showToast(`💥 ${strings.breach}`);
-        endRun(false);
+        endRun();
         return;
       }
     }
@@ -517,7 +525,7 @@ export function initTowerDefenseGame(): void {
     // Clean the fallen out of the march once their bursts have spawned.
     if (enemies.length > 32) enemies = enemies.filter(e => e.alive);
 
-    if (phase === 'wave' && spawnerDone(spawner, WAVES[waveIdx]) && enemies.every(e => !e.alive)) {
+    if (phase === 'wave' && spawnerDone(spawner, waveDef(waveIdx)) && enemies.every(e => !e.alive)) {
       waveCleared();
     }
   }
@@ -1283,7 +1291,11 @@ export function initTowerDefenseGame(): void {
     livesEl.textContent = `${eco.lives}`;
     scoreEl.textContent = `${score(eco)}`;
     waveEl.textContent =
-      phase === 'idle' ? '—' : `${Math.min(waveIdx + 1, WAVES.length)}/${WAVES.length}`;
+      phase === 'idle'
+        ? '—'
+        : waveIdx < AUTHORED_WAVES
+          ? `${waveIdx + 1}/${AUTHORED_WAVES}`
+          : `${waveIdx + 1} ∞`;
 
     if (phase === 'build') {
       waveBtn.disabled = false;

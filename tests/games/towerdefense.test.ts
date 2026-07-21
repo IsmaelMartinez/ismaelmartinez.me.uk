@@ -32,10 +32,14 @@ import {
 } from '../../src/games/towerdefense/towers';
 import {
   WAVES,
+  AUTHORED_WAVES,
+  endlessWave,
+  waveDef,
   hpScale,
   createSpawner,
   stepSpawner,
-  spawnerDone
+  spawnerDone,
+  type WaveEntry
 } from '../../src/games/towerdefense/waves';
 import {
   START_MONEY,
@@ -251,9 +255,15 @@ describe('towers', () => {
   });
 });
 
+/** Sum of raw enemy hp a wave throws (before the per-wave hpScale). */
+function waveHp(wave: WaveEntry[]): number {
+  return wave.reduce((sum, e) => sum + e.count * ENEMIES[e.kind].hp, 0);
+}
+
 describe('waves', () => {
-  it('ships the fixed dozen, every entry sane', () => {
-    expect(WAVES).toHaveLength(12);
+  it('ships the authored campaign, every entry sane', () => {
+    expect(WAVES).toHaveLength(AUTHORED_WAVES);
+    expect(AUTHORED_WAVES).toBe(18);
     for (const wave of WAVES) {
       expect(wave.length).toBeGreaterThan(0);
       for (const entry of wave) {
@@ -262,8 +272,10 @@ describe('waves', () => {
         expect(entry.gap).toBeGreaterThan(0);
       }
     }
-    // The finale brings the warlord.
-    expect(WAVES[11].some(entry => entry.kind === 'warlord')).toBe(true);
+    // The warlord arrives before the finale now, and the last wave fields two.
+    expect(WAVES.slice(0, AUTHORED_WAVES - 1).some(w => w.some(e => e.kind === 'warlord'))).toBe(true);
+    const finale = WAVES[AUTHORED_WAVES - 1];
+    expect(finale.filter(e => e.kind === 'warlord').reduce((n, e) => n + e.count, 0)).toBe(2);
   });
 
   it('scales enemy hp up wave over wave', () => {
@@ -271,6 +283,46 @@ describe('waves', () => {
       expect(hpScale(w)).toBeGreaterThan(hpScale(w - 1));
     }
     expect(hpScale(0)).toBe(1);
+  });
+
+  describe('endless assault', () => {
+    it('waveDef serves authored waves in range and endless waves past it', () => {
+      expect(waveDef(0)).toBe(WAVES[0]);
+      expect(waveDef(AUTHORED_WAVES - 1)).toBe(WAVES[AUTHORED_WAVES - 1]);
+      expect(waveDef(AUTHORED_WAVES)).toEqual(endlessWave(AUTHORED_WAVES));
+    });
+
+    it('is deterministic and always sane', () => {
+      for (let w = AUTHORED_WAVES; w < AUTHORED_WAVES + 30; w++) {
+        const a = endlessWave(w);
+        const b = endlessWave(w);
+        expect(a).toEqual(b);
+        expect(a.length).toBeGreaterThan(0);
+        for (const entry of a) {
+          expect(ENEMIES[entry.kind]).toBeDefined();
+          expect(entry.count).toBeGreaterThan(0);
+          expect(entry.gap).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('escalates: each composition grows harder three waves on, and hp keeps scaling', () => {
+      // Same rotating composition recurs every 3 waves; its raw hp (and the
+      // per-wave hpScale multiplying it) both climb, so the effective threat
+      // strictly rises.
+      for (let w = AUTHORED_WAVES; w < AUTHORED_WAVES + 12; w++) {
+        expect(waveHp(endlessWave(w + 3))).toBeGreaterThan(waveHp(endlessWave(w)));
+        expect(hpScale(w + 3)).toBeGreaterThan(hpScale(w));
+      }
+    });
+
+    it('sends more warlords the deeper it runs', () => {
+      const warlords = (w: number) =>
+        endlessWave(w).filter(e => e.kind === 'warlord').reduce((n, e) => n + e.count, 0);
+      // Compare the same rotating composition (both +2 and +32 are the
+      // warlord-led variant) 30 waves apart: the tally climbs.
+      expect(warlords(AUTHORED_WAVES + 32)).toBeGreaterThan(warlords(AUTHORED_WAVES + 2));
+    });
   });
 
   it('spawns exactly the scripted count, spaced by the gap', () => {
@@ -350,7 +402,7 @@ interface BuildStep {
   upgrade?: boolean;
 }
 
-function playRun(plan: BuildStep[]) {
+function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
   const world = createTdMap();
   const eco = createEconomy();
   const towers: Tower[] = [];
@@ -378,9 +430,9 @@ function playRun(plan: BuildStep[]) {
     }
   };
 
-  for (let waveIdx = 0; waveIdx < WAVES.length; waveIdx++) {
+  for (let waveIdx = 0; waveIdx < maxWave; waveIdx++) {
     buy();
-    const wave = WAVES[waveIdx];
+    const wave = waveDef(waveIdx);
     const spawner = createSpawner(wave);
     let enemies: Enemy[] = [];
     for (let guard = 0; ; guard++) {
@@ -401,7 +453,7 @@ function playRun(plan: BuildStep[]) {
     clearWave(eco);
     buy();
   }
-  return { survived: true, eco, waveIdx: WAVES.length };
+  return { survived: true, eco, waveIdx: maxWave };
 }
 
 describe('headless playthrough', () => {
@@ -411,37 +463,72 @@ describe('headless playthrough', () => {
     expect(result.waveIdx).toBeLessThan(4);
   });
 
-  it('survives all 12 waves with a known layout', () => {
-    // The kill corridors: towers on the ridges between the path's straights
-    // cover two passes each; frost by the first corner slows the whole file.
-    const plan: BuildStep[] = [
-      { kind: 'bolt', x: 10, y: 4 },
-      { kind: 'frost', x: 16, y: 4 },
-      { kind: 'bolt', x: 10, y: 8 },
-      { kind: 'blast', x: 7, y: 8 },
-      { kind: 'bolt', x: 10, y: 4, upgrade: true },
-      { kind: 'blast', x: 13, y: 4 },
-      { kind: 'bolt', x: 10, y: 8, upgrade: true },
-      { kind: 'frost', x: 7, y: 4 },
-      { kind: 'bolt', x: 10, y: 4, upgrade: true },
-      { kind: 'blast', x: 13, y: 4, upgrade: true },
-      { kind: 'bolt', x: 10, y: 8, upgrade: true },
-      { kind: 'blast', x: 7, y: 8, upgrade: true },
-      { kind: 'bolt', x: 13, y: 8 },
-      { kind: 'blast', x: 13, y: 4, upgrade: true },
-      { kind: 'bolt', x: 13, y: 8, upgrade: true },
-      { kind: 'blast', x: 7, y: 8, upgrade: true },
-      { kind: 'bolt', x: 13, y: 8, upgrade: true },
-      { kind: 'bolt', x: 16, y: 8 },
-      { kind: 'bolt', x: 16, y: 8, upgrade: true },
-      { kind: 'bolt', x: 16, y: 8, upgrade: true }
-    ];
-    const result = playRun(plan);
+  // The kill corridors: bolts on the ridges between the path's straights
+  // (y=4 covers the top two passes, y=8 the bottom two) with blasts for the
+  // packs and frost to hobble the warlords; the exit approach on the long
+  // final straight gets its own guns. This layout is the completability proof
+  // for the whole 18-wave campaign — kept dense enough to also push into the
+  // endless assault. Ordered cheapest-essential-first, since the buyer stalls
+  // on the first step it can't afford and resumes at the next wave boundary.
+  const CAMPAIGN_PLAN: BuildStep[] = [
+    { kind: 'bolt', x: 10, y: 4 },
+    { kind: 'bolt', x: 10, y: 8 },
+    { kind: 'bolt', x: 13, y: 4 },
+    { kind: 'bolt', x: 13, y: 8 },
+    { kind: 'bolt', x: 7, y: 4 },
+    { kind: 'bolt', x: 7, y: 8 },
+    { kind: 'bolt', x: 10, y: 4, upgrade: true },
+    { kind: 'bolt', x: 10, y: 8, upgrade: true },
+    { kind: 'blast', x: 12, y: 4 },
+    { kind: 'blast', x: 12, y: 8 },
+    { kind: 'bolt', x: 16, y: 8 },
+    { kind: 'bolt', x: 13, y: 4, upgrade: true },
+    { kind: 'bolt', x: 13, y: 8, upgrade: true },
+    { kind: 'bolt', x: 10, y: 4, upgrade: true },
+    { kind: 'bolt', x: 10, y: 8, upgrade: true },
+    { kind: 'frost', x: 15, y: 4 },
+    { kind: 'frost', x: 15, y: 8 },
+    { kind: 'blast', x: 12, y: 4, upgrade: true },
+    { kind: 'blast', x: 12, y: 8, upgrade: true },
+    { kind: 'bolt', x: 7, y: 4, upgrade: true },
+    { kind: 'bolt', x: 7, y: 8, upgrade: true },
+    { kind: 'bolt', x: 13, y: 4, upgrade: true },
+    { kind: 'bolt', x: 13, y: 8, upgrade: true },
+    { kind: 'bolt', x: 19, y: 8 },
+    { kind: 'bolt', x: 21, y: 8 },
+    { kind: 'bolt', x: 16, y: 8, upgrade: true },
+    { kind: 'bolt', x: 16, y: 8, upgrade: true },
+    { kind: 'blast', x: 12, y: 4, upgrade: true },
+    { kind: 'blast', x: 12, y: 8, upgrade: true },
+    { kind: 'bolt', x: 7, y: 4, upgrade: true },
+    { kind: 'bolt', x: 7, y: 8, upgrade: true },
+    { kind: 'bolt', x: 19, y: 8, upgrade: true },
+    { kind: 'bolt', x: 21, y: 8, upgrade: true },
+    { kind: 'bolt', x: 19, y: 8, upgrade: true },
+    { kind: 'bolt', x: 21, y: 8, upgrade: true },
+    { kind: 'blast', x: 9, y: 4 },
+    { kind: 'blast', x: 9, y: 8 },
+    { kind: 'blast', x: 9, y: 4, upgrade: true },
+    { kind: 'blast', x: 9, y: 8, upgrade: true },
+    { kind: 'blast', x: 9, y: 4, upgrade: true },
+    { kind: 'blast', x: 9, y: 8, upgrade: true }
+  ];
+
+  it('survives all 18 authored waves with a known layout', () => {
+    const result = playRun(CAMPAIGN_PLAN);
     expect(result.survived).toBe(true);
-    expect(result.eco.wavesCleared).toBe(WAVES.length);
+    expect(result.eco.wavesCleared).toBe(AUTHORED_WAVES);
     // The score follows the design formula: waves × base + kill bounties.
-    expect(score(result.eco)).toBe(WAVES.length * WAVE_BASE + result.eco.killScore);
+    expect(score(result.eco)).toBe(AUTHORED_WAVES * WAVE_BASE + result.eco.killScore);
     expect(result.eco.killScore).toBeGreaterThan(0);
+  });
+
+  it('holds into the endless assault past the campaign', () => {
+    // The same layout keeps holding a few waves past the authored roster,
+    // proving the endless handoff spawns real (beatable) waves.
+    const result = playRun(CAMPAIGN_PLAN, AUTHORED_WAVES + 3);
+    expect(result.survived).toBe(true);
+    expect(result.eco.wavesCleared).toBe(AUTHORED_WAVES + 3);
   });
 
   it('a thin defence clears the opening waves but falls to the late script', () => {

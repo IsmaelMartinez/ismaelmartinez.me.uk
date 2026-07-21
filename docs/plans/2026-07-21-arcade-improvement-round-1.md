@@ -1,9 +1,9 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Round 1 done** — audit complete, ranking below, top round
-(**Refill the finite rosters**) planned and shipped. See "Execution notes" at
-the foot of this doc. Rounds 2-5 remain queued.
+Status: **Rounds 1-2 done.** Round 1 (**Refill the finite rosters**) and
+Round 2 (**Twitch-game gameplay & clarity**) are both planned and shipped.
+See "Execution notes" at the foot of this doc. Rounds 3-5 remain queued.
 
 ## Why this doc
 
@@ -341,3 +341,169 @@ untouched and no screenshot pairs were needed. Each game passed the full bar
 Nothing in the round changed a game's rendering, economy, or existing pure-
 module contracts, so the risk called out above did not materialise. Next up is
 Round 2 (Tank Duel difficulty + Cascade chains) when the arcade is revisited.
+
+---
+
+## Round 2 plan — Twitch-game gameplay & clarity
+
+Goal: fix the two HIGH gameplay findings that leave a signature mechanic
+effectively dead. Each ships as **one commit** with the full bar after it
+(`npm run lint && npm run typecheck && npm run build && npm test &&
+npm run check-links`). Both fixes are verified **empirically through the pure
+module** — Tank Duel's `ai.ts` grid-search and Cascade's `run.ts` state
+machine — so the "it actually works now" claim is a passing test, not a hope.
+
+### Commit A — Tank Duel: difficulty picker + per-round ramp (+ tactical CPU weapons)
+
+**Intent.** The CPU is a fixed-sharpness opponent: `CPU_DIFFICULTY = 0.72`
+passed unchanged every turn (audit's Tank Duel HIGH). Give the player a
+**start-screen difficulty picker** and make the CPU **tighten round-over-round
+within a match**, so a best-of-5 escalates. The `difficulty` parameter is
+already plumbed through the pure AI (`ai.ts` — grid-search + `±30·(1−difficulty)`
+scatter on angle and power), so the whole fix is choosing the number that goes
+in. Secondary: replace the CPU's **pure-random weapon pick** with a tactical
+one (range + target HP aware).
+
+**Intended effect (empirically stated & tested):** a higher difficulty value
+produces **measurably tighter shots** — smaller mean miss distance and smaller
+spread from the ideal grid-search solution. The per-round ramp raises the
+effective difficulty monotonically as rounds are decided, capped at 1.
+
+**Changes (`src/games/tanks/`):**
+- `ai.ts` (pure — the whole testable core):
+  - `export type Difficulty = 'rookie' | 'gunner' | 'veteran'` with
+    `DIFFICULTY_BASE = { rookie: 0.45, gunner: 0.7, veteran: 0.9 }` (gunner ≈
+    today's 0.72) and `DIFFICULTY_RAMP = 0.06`.
+  - `cpuDifficulty(tier, roundsDecided)` = `min(1, base[tier] + roundsDecided ·
+    RAMP)` — a pure function so the ramp is exact under test.
+  - `cpuPickWeapon(ammo, range, targetHp, random)` — tactical: prefer **heavy**
+    when the target still has real armour and a heavy is stocked (the 72-radius/
+    85-dmg finisher earns its scarce ammo), prefer **MIRV** at long range where
+    the horizontal fan covers aim error, else the unlimited **missile**. Keeps a
+    little randomness so it isn't robotic, but the bias is range/HP driven.
+- `game.ts` (wiring only — **no draw-code change**, so Round 4's art pass stays
+  untouched and no screenshot pairs are needed):
+  - Replace the `CPU_DIFFICULTY` constant with a selected `difficulty: Difficulty`
+    (default `'gunner'`) and a `roundsDecided` counter reset in `startMatch`,
+    incremented in `finishRound`.
+  - The CPU turn passes `cpuDifficulty(difficulty, roundsDecided)` into
+    `chooseAiShot`, and `cpuPickWeapon(...)` chooses the shell using the live
+    range/HP.
+  - Wire three start-overlay difficulty buttons (segmented, middle active by
+    default); the pick only matters for `vs CPU`.
+- `tanks.astro`: add the difficulty selector markup to the start overlay + the
+  `data-t-*` label attributes; 2-player mode ignores it.
+- `translations.ts` (×3 locales): `fun.tanks.difficulty` label +
+  `difficultyRookie/Gunner/Veteran` names.
+
+**Verification (`tests/games/tanks.test.ts`):**
+- `cpuDifficulty`: gunner base ≈ 0.7; monotonic in `roundsDecided`; clamped at 1.
+- **Empirical tightness**: over N seeded shots on flat terrain, veteran's mean
+  |impact − target| and spread are strictly smaller than rookie's (the "tighter
+  shots" proof), and both stay within the legal slider ranges.
+- `cpuPickWeapon`: high-HP target + heavy stocked → heavy; long range + mirv
+  stocked → mirv; empty specials → missile; deterministic under a fake random.
+
+### Commit B — Cascade: gradual-settle gravity (the real fix)
+
+**Intent.** The cascade-chain is the cabinet's signature and biggest
+multiplier, but `maxChain` never exceeds ×2 (audit's Cascade HIGH).
+
+**The discovery that reshaped this commit.** Investigating with the pure module
+turned up that ×3+ is not merely *rare* — it is **structurally impossible**
+under the current rule. `cascadeGravity` fully compacts every column in a
+single settle, so `resolveClears` can only ever reveal one new full-row block
+after the first compaction: **over 500k random boards it never exceeds 2
+links.** So the ×3-×5 lamps and the `base×level×chain` multiplier beyond ×2 can
+*never* fire, whatever garbage is seeded. This invalidated the original
+"chain-primed garbage" plan (garbage can't produce deep chains if the gravity
+rule caps them at 2) and moved the fix from *seeding around the rule* to
+*changing the rule*.
+
+**Chosen direction (of three weighed — accept the ×2 ceiling + polish it,
+rising-garbage survival, and this): gradual-settle gravity.** After a clear,
+the landslide falls **one row per step**, re-checking for full rows after every
+drop — so a plug tumbling past a gap completes a row *mid-fall*, at a height the
+instant full-compaction skipped straight past. That is exactly how a cascade
+chains beyond ×2, and it makes the name mean something.
+
+**Changes (`src/games/cascade/`):**
+- `well.ts` (pure): add `settleStep()` — one row of gravity per call. Rewrite
+  `resolveClears` to clear full rows, then `settleStep` one row at a time,
+  re-checking between drops. Iterated to a fixpoint it equals the old
+  `cascadeGravity` (kept as the instant form), so **final resting positions and
+  every existing invariant are unchanged** — only the intermediate reveals
+  differ.
+- `run.ts` (pure state machine): the interactive clearing phase becomes flash →
+  settle-one-row → re-check, via a new `'settling'` phase, so the live game
+  shows and scores the rippling cascade. Scoring path untouched
+  (`base×level×chain` already there).
+- `game.ts`: **no draw primitive changed** — `render`/`drawTile`/
+  `drawChainLamps`/backdrop are byte-identical; the sole edit keeps the chain
+  lamps lit through the settle. The new ripple is emergent from the state
+  machine, not a rendering change, so the screenshot obligation ("if you touch
+  their draw code") isn't triggered and a static capture would be byte-
+  identical anyway.
+
+**Garbage seeding: considered and dropped.** With gradual settle the greedy
+headless bot already hits ×3-×9 chains (was capped at ×2), so deep chains are
+reachable and rewarding without seeding. Rising garbage would add an
+unrequested difficulty change (a rising stack on top of the speed ramp) and
+top-out risk the audit never asked for, so it was cut to keep the commit clean
+and the balance intact.
+
+**Verification (`tests/games/cascade.test.ts`):**
+- `settleStep`: drops each floating cell exactly one row; iterated it settles
+  to the same rest as the instant compaction.
+- `resolveClears` now yields ≥3 links on a hand-primed overhang (was capped at
+  2 for any board).
+- Through `run.ts`: a primed overhang plugged by a vertical I detonates a ×3
+  cascade scored per link (100 → 600 → 300 — the rising multiplier), self-
+  clearing with no unfired rows; score stays the exact sum of link points; the
+  greedy playthrough still ends in a legal state.
+
+### Sequencing & risk (Round 2)
+- Order: doc → Tank Duel → Cascade. One commit each, full verification after
+  each, single PR for the round.
+- Tank Duel is low risk: pure-parameter change through an already-plumbed AI,
+  DOM-only picker, no draw-code touched (keeps Round 4 clean).
+- Cascade is the real design change: it alters the core settle *feel* (cascades
+  now visibly ripple), but the risk is contained because the final board is
+  provably identical to the old rule (gradual settle iterated = full
+  compaction), so existing invariants hold; the deep-chain behaviour is pinned
+  by headless tests through the pure module.
+
+## Round 2 execution notes (2026-07-21)
+
+Both commits landed and passed the full bar (lint, typecheck, build, tests,
+check-links) plus a real-browser boot smoke of both cabinets (no JS errors; the
+Tank Duel picker reports `aria-pressed` correctly, Cascade starts and takes
+input). Test count 526 → 529 net of the round (+9 Tank Duel, +3 Cascade, with
+the two Cascade timing tests rewritten for the new settling phase).
+
+- **Tank Duel** (commit "difficulty picker + per-round CPU accuracy ramp").
+  The fixed `CPU_DIFFICULTY = 0.72` became a selected tier
+  (`rookie`/`gunner`/`veteran` = 0.45/0.7/0.9, gunner ≈ the old value) plus a
+  `cpuDifficulty(tier, roundsDecided)` ramp (+0.06/round, capped at 1) so a
+  best-of-5 escalates. `cpuPickWeapon` went tactical (heavy on high-armour
+  targets, MIRV at long range, else missile). Start-overlay segmented picker +
+  i18n ×3 locales; no draw code touched (Round 4 stays clean). Empirically
+  verified: over 50 seeded shots a veteran's mean miss and grouping are strictly
+  tighter than a rookie's.
+
+- **Cascade** (commit "gradual-settle gravity so cascade chains reach past ×2").
+  The headline finding — ×3+ was *structurally impossible* under full-compaction
+  gravity (≤2 links across 500k random boards) — turned this from a garbage-
+  seeding job into a settle-rule change. `settleStep()` drops one row per call;
+  `resolveClears` and the new `'settling'` run phase re-check for full rows
+  between drops, so a plug completes rows mid-fall. Deep chains now reachable and
+  occurring: the greedy bot reaches ×3-×9 (was ×2), and a primed overhang
+  detonates a headless ×3 (100 → 600 → 300). Final resting positions are
+  unchanged (gradual iterated = the retained instant `cascadeGravity`), so the
+  render code and every invariant held; garbage seeding was considered and cut
+  as unnecessary and difficulty-distorting.
+
+Neither commit changed a game's render primitives, so no screenshot pairs were
+needed (Tank Duel: no draw change; Cascade: draw code byte-identical, the ripple
+is state-driven). Round 3 (sim stakes & goals — Pixel Park + Microcity) is next
+when the arcade is revisited.

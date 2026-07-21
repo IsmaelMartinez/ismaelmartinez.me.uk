@@ -66,6 +66,14 @@ const weapons = [
             <div class="overlay-content">
               <span class="play-icon">🎯</span>
               <p>{t('fun.tanks.instructions')}</p>
+              <div class="difficulty-select" role="group" aria-label={t('fun.tanks.difficulty')}>
+                <span class="difficulty-label">{t('fun.tanks.difficulty')}</span>
+                <div class="difficulty-buttons">
+                  <button type="button" class="difficulty-btn" data-difficulty="rookie" aria-pressed="false">{t('fun.tanks.difficultyRookie')}</button>
+                  <button type="button" class="difficulty-btn active" data-difficulty="gunner" aria-pressed="true">{t('fun.tanks.difficultyGunner')}</button>
+                  <button type="button" class="difficulty-btn" data-difficulty="veteran" aria-pressed="false">{t('fun.tanks.difficultyVeteran')}</button>
+                </div>
+              </div>
               <div class="mode-buttons">
                 <button id="vs-cpu-btn" class="btn btn-primary btn-large">{t('fun.tanks.vsCpu')}</button>
                 <button id="two-player-btn" class="btn btn-primary btn-large">{t('fun.tanks.twoPlayer')}</button>
@@ -261,6 +269,51 @@ const weapons = [
 
   .overlay-content p {
     margin-bottom: var(--space-xl);
+  }
+
+  .difficulty-select {
+    margin-bottom: var(--space-xl);
+  }
+
+  .difficulty-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-sm);
+  }
+
+  .difficulty-buttons {
+    display: inline-flex;
+    gap: var(--space-xs);
+    padding: 4px;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.7rem;
+  }
+
+  .difficulty-btn {
+    padding: var(--space-xs) var(--space-md);
+    min-height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 0.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .difficulty-btn:hover {
+    color: var(--color-text);
+  }
+
+  .difficulty-btn.active {
+    background: rgba(37, 99, 235, 0.18);
+    color: var(--color-text);
+    box-shadow: inset 0 0 0 2px var(--color-accent);
   }
 
   .mode-buttons {

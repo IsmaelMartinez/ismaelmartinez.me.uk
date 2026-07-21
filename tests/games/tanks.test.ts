@@ -10,7 +10,12 @@ import {
   GRAVITY,
   type FallBody
 } from '../../src/games/tanks/physics';
-import { chooseAiShot } from '../../src/games/tanks/ai';
+import {
+  chooseAiShot,
+  cpuDifficulty,
+  cpuPickWeapon,
+  DIFFICULTY_BASE
+} from '../../src/games/tanks/ai';
 import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster } from '../../src/games/tanks/weapons';
 import { seededRandom } from './seeded-random';
 
@@ -219,6 +224,79 @@ describe('ai', () => {
       expect(shot.power).toBeGreaterThanOrEqual(10);
       expect(shot.power).toBeLessThanOrEqual(100);
     }
+  });
+
+  // The empirical proof behind the difficulty picker: a higher difficulty must
+  // land measurably tighter shots. Same seeded noise sequence for every tier,
+  // so the only variable is the (1 - difficulty) scatter scale — a fair test.
+  function missDistances(difficulty: number, samples: number): number[] {
+    const ground = new Array(WIDTH).fill(350);
+    const from = { x: 650, y: 335 };
+    const target = { x: 150, y: 350 };
+    const random = seededRandom(123);
+    const dists: number[] = [];
+    for (let i = 0; i < samples; i++) {
+      const shot = chooseAiShot(ground, WIDTH, HEIGHT, from, target, 0, difficulty, random);
+      const impact = simulateShot(ground, WIDTH, HEIGHT, from.x, from.y, shot.angle, shot.power, 0);
+      // A shot that sails off the field is the worst possible miss.
+      dists.push(impact ? Math.abs(impact.x - target.x) : WIDTH);
+    }
+    return dists;
+  }
+
+  const mean = (xs: number[]) => xs.reduce((s, v) => s + v, 0) / xs.length;
+
+  it('lands tighter shots at higher difficulty (the picker actually bites)', () => {
+    const rookie = missDistances(DIFFICULTY_BASE.rookie, 50);
+    const veteran = missDistances(DIFFICULTY_BASE.veteran, 50);
+    // A veteran's average miss is smaller than a rookie's...
+    expect(mean(veteran)).toBeLessThan(mean(rookie));
+    // ...and its grouping is tighter (more shots land near the target).
+    const near = (xs: number[]) => xs.filter(d => d < 30).length;
+    expect(near(veteran)).toBeGreaterThan(near(rookie));
+  });
+
+  it('is a dead-eye at full accuracy', () => {
+    expect(mean(missDistances(1, 30))).toBeLessThan(20);
+  });
+});
+
+describe('cpuDifficulty ramp', () => {
+  it('gunner opens at the retired fixed accuracy', () => {
+    expect(cpuDifficulty('gunner', 0)).toBeCloseTo(DIFFICULTY_BASE.gunner);
+  });
+
+  it('tightens monotonically as rounds are decided', () => {
+    expect(cpuDifficulty('rookie', 1)).toBeGreaterThan(cpuDifficulty('rookie', 0));
+    expect(cpuDifficulty('rookie', 3)).toBeGreaterThan(cpuDifficulty('rookie', 1));
+    expect(cpuDifficulty('gunner', 2)).toBeGreaterThan(cpuDifficulty('gunner', 0));
+  });
+
+  it('never exceeds a perfect 1', () => {
+    expect(cpuDifficulty('veteran', 100)).toBe(1);
+    expect(cpuDifficulty('rookie', 1000)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('cpuPickWeapon', () => {
+  it('spends a heavy on a high-armour target', () => {
+    expect(cpuPickWeapon({ heavy: 2, mirv: 1 }, 300, 100, () => 0)).toBe('heavy');
+  });
+
+  it('lobs a MIRV at long range once the heavy branch passes', () => {
+    // First roll (0.9) skips the heavy branch; second (0.1) takes the MIRV.
+    let call = 0;
+    const rnd = () => (call++ === 0 ? 0.9 : 0.1);
+    expect(cpuPickWeapon({ heavy: 2, mirv: 1 }, 500, 100, rnd)).toBe('mirv');
+  });
+
+  it('does not waste a heavy on a nearly-dead, close target', () => {
+    // hp 45 fails the >45 guard; range 200 fails the long-range MIRV guard.
+    expect(cpuPickWeapon({ heavy: 2, mirv: 1 }, 200, 45, () => 0)).toBe('missile');
+  });
+
+  it('falls back to the unlimited missile with specials empty', () => {
+    expect(cpuPickWeapon({ heavy: 0, mirv: 0 }, 500, 100, () => 0)).toBe('missile');
   });
 });
 

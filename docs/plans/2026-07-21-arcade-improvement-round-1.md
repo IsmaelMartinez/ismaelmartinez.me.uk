@@ -1,9 +1,11 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Rounds 1-2 done.** Round 1 (**Refill the finite rosters**) and
-Round 2 (**Twitch-game gameplay & clarity**) are both planned and shipped.
-See "Execution notes" at the foot of this doc. Rounds 3-5 remain queued.
+Status: **Rounds 1-3 planned; 1-2 shipped, 3 in progress.** Round 1 (**Refill
+the finite rosters**) and Round 2 (**Twitch-game gameplay & clarity**) are
+shipped and merged. Round 3 (**Sim stakes & goals** — Pixel Park + Microcity)
+is planned in full below and under construction. See "Execution notes" at the
+foot of each round. Rounds 4-5 remain queued sketches.
 
 ## Why this doc
 
@@ -507,3 +509,165 @@ Neither commit changed a game's render primitives, so no screenshot pairs were
 needed (Tank Duel: no draw change; Cascade: draw code byte-identical, the ripple
 is state-driven). Round 3 (sim stakes & goals — Pixel Park + Microcity) is next
 when the arcade is revisited.
+
+---
+
+## Round 3 plan — Sim stakes & goals
+
+Goal: the two big iso sims stop being solved economies with no finish line.
+Both flagged HIGH for the **same root flaw** — per-unit revenue (a guest's
+spend, a resident's tax) is pure profit above a *flat* cost floor, so once the
+crowd/population arrives `money<0` can never fire again and the only lose
+condition dies. Park is additionally **score-capped**: it banks `peakGuests`
+and `maxGuests` tops out at 120 (`mayhem.ts`), so the leaderboard number can't
+grow past ~day 17. Each game ships as **one commit** and passes the full bar
+after it (`npm run lint && npm run typecheck && npm run build && npm test &&
+npm run check-links`).
+
+### The shared spine (three levers, applied to both)
+
+1. **Late-game failure pressure = running costs that scale with size and ramp
+   with age.** A static build slides into deficit, re-arming `money<0` as a
+   live threat. (Weighed against: per-guest/per-capita-only costs — still a
+   flat margin at scale; and making mayhem/disasters economically punishing —
+   swingier to tune. Rising, size-scaled costs are the cleanest testable lever
+   and the one both sims share.)
+2. **Objectives with teeth = a milestone chain with cash rewards + a final
+   "established" prestige win that continues endless** (mirrors Round 1's Line
+   Hold campaign-cleared handoff; the run still only *ends* on bankruptcy, so
+   the score chase is preserved).
+3. **An honest, uncapped score.** Park's is the one that's broken; Microcity's
+   `peakPop` is already unbounded.
+
+All new economy/objective logic goes into **pure, DOM-free modules** so the
+balance is pinned by headless tests. The objective/goal readouts are **DOM HUD
+elements**, and the screenshot harness (`scripts/screenshot-games.js`) captures
+**raw canvas pixels only** (`snap()` → `toDataURL`, immune to DOM overlays), so
+Park — whose economy is pure and whose objective UI is DOM — changes **no
+canvas draw code** and needs no screenshot pair. Microcity's traffic rework
+touches car rendering, so it ships before/after captures.
+
+### Commit A — Pixel Park: rising wages, objectives, lifetime-guests score
+
+**Intent.** Reintroduce late failure pressure, add a paced objective chain,
+and lift the 120-guest score cap.
+
+**1. Rising staff wages (`economy.ts`, pure).** Attractions accrue a per-head
+staff wage that ramps with park age, so a park that stops growing its takings
+slides into the red.
+- `WAGE_GRACE_DAYS = 5` (a learning window with no wages), `WAGE_RAMP = 1.4`.
+- `wagePerAttraction(day) = max(0, day − WAGE_GRACE_DAYS) · WAGE_RAMP` — linear
+  and **unbounded**.
+- `attractionCount(tiles)` = placed `BUILDINGS` entries (rides + stalls).
+- `operatingCost(tiles, day) = dailyUpkeep(tiles) + round(attractionCount ·
+  wagePerAttraction(day))`.
+- `maxAttractionDailyRevenue()` = `max` over `BUILDINGS` of
+  `(DAY_SECONDS / useTime) · price` — the throughput-capped daily takings
+  ceiling of a single attraction (a stall serves one guest per `useTime`).
+  Export `DAY_SECONDS = 24` here as the single source (game.ts's `DAY_LENGTH`
+  imports it) so the wage/revenue maths share one constant.
+- `game.ts`: the day tick charges `operatingCost(tiles, day)` instead of
+  `dailyUpkeep(tiles)`; toast and any HUD reflect it. Day-end `money<0` check
+  unchanged.
+
+**Intended effect (tested):** `operatingCost` is ≥ `dailyUpkeep`, equal during
+grace, monotonic non-decreasing in `day`, and linear in attraction count; and
+`wagePerAttraction(day)` **crosses `maxAttractionDailyRevenue()`** at a finite
+day — beyond which every attraction is net-negative regardless of park size, so
+the run is guaranteed to end (bankruptcy re-armed). The in-practice crossover
+(real crowds never max throughput) lands earlier and is skill/size-dependent.
+
+**2. Objective chain + established win (`objectives.ts`, pure; DOM readout).**
+An ordered `PARK_OBJECTIVES`, each `{ metric, target, reward, labelKey }` over a
+compact `ParkProgress` snapshot `{ welcomed, peak, rating }`:
+  1. `welcomed ≥ 10` → £250 · "Welcome {n} guests"
+  2. `rating ≥ 60` → £500 · "Reach a {n}% rating"
+  3. `peak ≥ 45` → £700 · "Draw a crowd of {n}"
+  4. `welcomed ≥ 400` → £900 · "Welcome {n} guests"
+  5. `peak ≥ 90` → **★ established** (win; endless) · "Draw a crowd of {n}"
+- `objectiveMet(obj, progress)` pure predicate; rewards inject capital that
+  offsets the rising wage bill (the intended economic loop).
+- `game.ts`: track the current objective index; on the relevant ticks, if met,
+  pay the reward, toast "Goal complete +£{n}", advance; the last one fires a
+  one-time "Park established! Endless." toast and marks the goal strip done.
+  Play continues; the run still ends only on bankruptcy.
+- DOM: a `#objective` goal strip in `park.astro` between header and canvas,
+  fed localized templates via `data-t-*`. No canvas draw change.
+
+**3. Lifetime-guests score.** `guestsWelcomed++` in `spawnGuest()` (the single
+admission hook); `board.bank(guestsWelcomed)` replaces `board.bank(peakGuests)`;
+the record readout and the over-screen show **guests welcomed** (unbounded,
+still crowd-driven). `peakGuests` stays tracked (objective metric + a secondary
+"peak crowd" stat). Over-screen: "Days open · Guests welcomed".
+
+**Verification (`tests/games/park.test.ts`):** economy — `operatingCost`
+monotonic/≥upkeep/linear-in-attractions, wage-vs-revenue crossover exists;
+objectives — targets non-decreasing within a metric, rewards positive, `≥`
+boundary correctness, exactly one terminal `win`. No canvas draw change (note
+byte-identical; not required to capture). Boot smoke against `dist`.
+
+### Commit B — Microcity: per-capita costs, milestone grants + win, live traffic
+
+**Intent.** Make a developed city bankruptable by shocks, give the pop
+milestones teeth and a finish, and turn the dead traffic mechanic into a real
+late-game planning constraint.
+
+**1. Per-capita running costs (`budget.ts`, pure).** Services cost more the
+bigger the city they serve, so income no longer runs away from a flat upkeep.
+- `SERVICE_COST_PER_CAPITA = 0.9`.
+- `monthlyExpenses(tiles, stats?)` — adds `round((pop + jobs) ·
+  SERVICE_COST_PER_CAPITA)` **when `stats` is supplied**; the existing no-stats
+  signature (and its tests) stay valid. `game.ts` passes live `stats`.
+- Net per resident 1.5 − 0.9 = £0.6, per job 1 − 0.9 = £0.1, minus tile upkeep:
+  a lean city runs a **thin surplus**; sprawl, over-servicing, political fines,
+  or a quake razing a district (lost income while costs lag + rebuild spend) can
+  drain the treasury to `money<0`. (Weighed against power-load/brownouts — more
+  sim + draw; and time-based inflation — more arbitrary. Per-capita is a
+  one-line pure change that directly closes the runaway-income gap.)
+
+**2. Milestone grants + metropolis win.** `MILESTONE_GRANTS = [400, 900, 1800,
+4000, 8000]` parallel to `MILESTONES = [100, 250, 500, 1000, 2000]`: crossing a
+pop milestone pays the grant (toast "Population {n} +£{g}"), funding growth
+against the tighter economy. The final (2000) fires a one-time "Metropolis!
+Endless." win toast and marks the goal strip done; play continues, `peakPop`
+still banks. DOM `#objective` strip shows the next milestone + progress.
+
+**3. Traffic that matters — congestion (`traffic.ts` pure + growth coupling +
+car rendering).** (Weighed against retiring the cosmetic cars — lower risk but
+the opposite of deepening; chosen: make it matter, scoped to the late game so
+it never blocks the early milestones.)
+- `computeCongestion(tiles): number[]` — per road tile, `load = Σ level of
+  developed zone tiles within Chebyshev ≤ 1`; `congested = load >
+  CONGESTION_THRESHOLD (6)`. A road hemmed by dense zones with no parallel
+  relief route saturates.
+- Growth coupling: `growthStep` takes optional `congested: boolean[]`; a zone
+  **all of whose adjacent roads are congested** grows at reduced probability and
+  is **barred from `DENSE_LEVEL`**. One uncongested frontage relieves it — so a
+  dense district needs a road *grid*, not a single spine. Scoped to the late
+  game (only bites at high zone levels), so early milestones are unaffected.
+- Visual: cars slow on congested tiles (speed scaled down), so traffic visibly
+  clots at chokepoints — the mechanic is legible. This is the canvas-visible
+  change → before/after captures.
+
+**Verification (`tests/games/city.test.ts`):** budget — per-capita term scales
+with pop+jobs, no-stats path unchanged; congestion — `computeCongestion`
+thresholds, a choked zone won't densify while a relieved one will, growthStep
+back-compat (no `congested` arg = today's behaviour); milestone grants array
+parity + rising. Screenshots: extend the `city` scenario with a denser cluster
+so the after-capture shows clotting; ship before/after (this is an intended
+visual change, not a byte-identical refactor). Boot smoke against `dist`.
+
+### Sequencing & risk (Round 3)
+- Order: this doc → Pixel Park → Microcity. One commit each, full bar after
+  each, single PR for the round.
+- **Balance is the real risk.** Park's revenue is emergent from the guest sim
+  (not cleanly headless), so the economy's *cost* side is pinned by pure tests
+  and the crossover guarantee, while the felt balance (when a good vs sloppy
+  park dies) is validated by a real-browser playtest and conservative constants;
+  if wages bite too hard, `WAGE_RAMP`/`WAGE_GRACE_DAYS` dial it in a fast loop.
+- Microcity's per-capita rate and congestion threshold are tuned so a
+  well-planned city still thrives (milestones stay reachable) but a careless or
+  unlucky one can fail — validated through the budget/simulation pure modules.
+- Congestion is the one mechanic with new gameplay coupling; it's gated to the
+  late game and threaded as an *optional* growthStep input so every existing
+  simulation test holds unchanged.

@@ -595,7 +595,10 @@ export function initLemmingsGame(): void {
       if (wasFalling && c.state === 'walker' && fell > 12) {
         spawnParticles(c.x, c.y, '#94a3b8', Math.min(8, 3 + fell / 20));
       }
-      if (isActive(c) && atExit(c, def)) {
+      // A lit fuse is a commitment: a critter counting down can't be rescued
+      // at the door, so lighting a bomber never quietly banks a rescue instead
+      // of a blast. It walks on and detonates on schedule.
+      if (isActive(c) && c.fuse < 0 && atExit(c, def)) {
         c.state = 'exited';
         c.alive = false;
         saved++;

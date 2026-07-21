@@ -112,7 +112,11 @@ export function stepFires(
     if (fireCover[fire.idx] && random() < EXTINGUISH_CHANCE) extinguished.push(fire.idx);
     else fighting.push(fire);
   }
-  const burning = new Set(fighting.map(f => f.idx));
+  // Seed the "already burning" guard from every fire alive at the start of the
+  // tick, not just the ones still fighting: a tile a crew put out this tick
+  // must stay off-limits to spread, or an adjacent blaze would reignite it the
+  // same tick and the extinguish would count for nothing.
+  const burning = new Set(alive.map(f => f.idx));
   const spread: number[] = [];
   for (const fire of fighting) {
     for (const n of gridNeighbours(fire.idx, CITY_W, CITY_H)) {

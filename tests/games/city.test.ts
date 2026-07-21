@@ -480,6 +480,26 @@ describe('city disasters', () => {
     expect(doomed.burnedOut).toEqual([cityIdx(5, 5)]);
   });
 
+  it('protects a just-extinguished tile from same-tick reignition by a neighbour', () => {
+    const tiles = firePlayground();
+    // Two adjacent fires: the industry tile is covered (crews reach it), the
+    // residential neighbour is not (it keeps burning and tries to spread).
+    const cover = tiles.map((_, i) => i === cityIdx(5, 5));
+    // random()=0 extinguishes the covered fire and would spread the uncovered
+    // one to every flammable neighbour — including the tile just put out.
+    const result = stepFires(
+      tiles,
+      [{ idx: cityIdx(5, 5), ticks: 5 }, { idx: cityIdx(6, 5), ticks: 5 }],
+      cover,
+      () => 0
+    );
+    expect(result.extinguished).toContain(cityIdx(5, 5));
+    // The neighbour must not reignite the saved tile the same tick.
+    expect(result.spread).not.toContain(cityIdx(5, 5));
+    expect(result.fires.some(f => f.idx === cityIdx(5, 5))).toBe(false);
+    expect(tiles[cityIdx(5, 5)].type).toBe('ind'); // saved, still standing
+  });
+
   it('never spreads when random rolls high, and drops bulldozed fires', () => {
     const tiles = firePlayground();
     const cover = tiles.map(() => false);

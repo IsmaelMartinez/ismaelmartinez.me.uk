@@ -404,61 +404,106 @@ effective difficulty monotonically as rounds are decided, capped at 1.
 - `cpuPickWeapon`: high-HP target + heavy stocked → heavy; long range + mirv
   stocked → mirv; empty specials → missile; deterministic under a fake random.
 
-### Commit B — Cascade: chain-primed garbage at level-up
+### Commit B — Cascade: gradual-settle gravity (the real fix)
 
-**Intent.** The cascade-chain is the cabinet's signature and biggest multiplier,
-but `maxChain` never exceeds ×2 in natural play (audit's Cascade HIGH): cascade-
-gravity flattens the stack, so the overhang structures a ×3+ chain needs never
-occur. Chosen direction (of three considered — telegraph+payout, rising-garbage
-survival, and this): **seed a chain-primed garbage structure at each level-up.**
-On level-up, inject a small pre-authored block at the well floor that is already
-primed — near-full rows with a single **feeder column** and staggered **plugs**
-above the gaps — so that dropping one piece into the feeder detonates a **×3+
-cascade that clears the whole block**. This makes deep chains *reachable* (the
-structure is baked, one feed triggers it), *rewarding* (the existing
-`base×level×chain` finally pays, lamps light), and *not punishing* (it is
-self-clearing — detonating it lowers the stack), while adding the per-level
-variety the audit also flagged (Cascade's "speed-only ramp"). The only pressure
-is to feed the column before your own stacking buries it.
+**Intent.** The cascade-chain is the cabinet's signature and biggest
+multiplier, but `maxChain` never exceeds ×2 (audit's Cascade HIGH).
 
-**Why this is safe to seed:** the garbage is authored so `resolveClears` on
-"feeder filled" yields a chain of length ≥3 that consumes every seeded cell —
-proven headlessly, so a level-up can never wall the player in.
+**The discovery that reshaped this commit.** Investigating with the pure module
+turned up that ×3+ is not merely *rare* — it is **structurally impossible**
+under the current rule. `cascadeGravity` fully compacts every column in a
+single settle, so `resolveClears` can only ever reveal one new full-row block
+after the first compaction: **over 500k random boards it never exceeds 2
+links.** So the ×3-×5 lamps and the `base×level×chain` multiplier beyond ×2 can
+*never* fire, whatever garbage is seeded. This invalidated the original
+"chain-primed garbage" plan (garbage can't produce deep chains if the gravity
+rule caps them at 2) and moved the fix from *seeding around the rule* to
+*changing the rule*.
+
+**Chosen direction (of three weighed — accept the ×2 ceiling + polish it,
+rising-garbage survival, and this): gradual-settle gravity.** After a clear,
+the landslide falls **one row per step**, re-checking for full rows after every
+drop — so a plug tumbling past a gap completes a row *mid-fall*, at a height the
+instant full-compaction skipped straight past. That is exactly how a cascade
+chains beyond ×2, and it makes the name mean something.
 
 **Changes (`src/games/cascade/`):**
-- `well.ts` or a new `garbage.ts` (pure): a `primedGarbage(level)` /
-  `seedGarbage(well, rows)` helper that returns/stamps the chain-primed layer
-  (rows chosen so the feeder-column fill cascades clean). Keep it a pure grid
-  transform so tests drive it exactly.
-- `run.ts` (pure state machine): on `levelUp`, if there is room, stamp the
-  primed garbage at the floor (shifting the existing stack up by the layer
-  height; if that would top the stack out, skip the seed rather than kill the
-  run). Emit a `garbage` event so the view can flash it. The scoring path is
-  unchanged — chains already pay `base×level×chain`.
-- `game.ts`: handle the `garbage` event (a rim flourish / toast); the chain
-  lamps and popups already exist and will finally fire. **This touches the draw
-  path** (a new flash + the seeded rows render), so per the methodology add a
-  Cascade scenario to `scripts/screenshot-games.js` and ship before/after
-  shots (the change is intentional-visual, not a byte-identical refactor).
-- `translations.ts` (×3 locales): a `fun.cascade.primed` / garbage toast string
-  if one is surfaced.
+- `well.ts` (pure): add `settleStep()` — one row of gravity per call. Rewrite
+  `resolveClears` to clear full rows, then `settleStep` one row at a time,
+  re-checking between drops. Iterated to a fixpoint it equals the old
+  `cascadeGravity` (kept as the instant form), so **final resting positions and
+  every existing invariant are unchanged** — only the intermediate reveals
+  differ.
+- `run.ts` (pure state machine): the interactive clearing phase becomes flash →
+  settle-one-row → re-check, via a new `'settling'` phase, so the live game
+  shows and scores the rippling cascade. Scoring path untouched
+  (`base×level×chain` already there).
+- `game.ts`: **no draw primitive changed** — `render`/`drawTile`/
+  `drawChainLamps`/backdrop are byte-identical; the sole edit keeps the chain
+  lamps lit through the settle. The new ripple is emergent from the state
+  machine, not a rendering change, so the screenshot obligation ("if you touch
+  their draw code") isn't triggered and a static capture would be byte-
+  identical anyway.
+
+**Garbage seeding: considered and dropped.** With gradual settle the greedy
+headless bot already hits ×3-×9 chains (was capped at ×2), so deep chains are
+reachable and rewarding without seeding. Rising garbage would add an
+unrequested difficulty change (a rising stack on top of the speed ramp) and
+top-out risk the audit never asked for, so it was cut to keep the commit clean
+and the balance intact.
 
 **Verification (`tests/games/cascade.test.ts`):**
-- `primedGarbage`: deterministic; the layer is a legal grid; filling the feeder
-  column resolves to a chain of length ≥3 that clears every seeded cell.
-- Through `run.ts`: force a level-up, assert the garbage is seeded (and skipped
-  when it would top out), then drive the feeder drop and assert a ×3+ `clear`
-  chain fires and the score reflects the rising multiplier. Re-confirm the
-  headless greedy playthrough still reaches an illegal-state-free end and that
-  seeding never leaves an unresolved full row between pieces.
+- `settleStep`: drops each floating cell exactly one row; iterated it settles
+  to the same rest as the instant compaction.
+- `resolveClears` now yields ≥3 links on a hand-primed overhang (was capped at
+  2 for any board).
+- Through `run.ts`: a primed overhang plugged by a vertical I detonates a ×3
+  cascade scored per link (100 → 600 → 300 — the rising multiplier), self-
+  clearing with no unfired rows; score stays the exact sum of link points; the
+  greedy playthrough still ends in a legal state.
 
 ### Sequencing & risk (Round 2)
 - Order: doc → Tank Duel → Cascade. One commit each, full verification after
   each, single PR for the round.
 - Tank Duel is low risk: pure-parameter change through an already-plumbed AI,
   DOM-only picker, no draw-code touched (keeps Round 4 clean).
-- Cascade is the real design risk: the seeded garbage must be provably self-
-  clearing (headless chain-length assertion is the guarantee) and must never
-  force a top-out — mitigated by skipping the seed when there's no room and by
-  authoring the layer against the `resolveClears` harness until it detonates
-  clean. It touches draw code, so it carries the screenshot obligation.
+- Cascade is the real design change: it alters the core settle *feel* (cascades
+  now visibly ripple), but the risk is contained because the final board is
+  provably identical to the old rule (gradual settle iterated = full
+  compaction), so existing invariants hold; the deep-chain behaviour is pinned
+  by headless tests through the pure module.
+
+## Round 2 execution notes (2026-07-21)
+
+Both commits landed and passed the full bar (lint, typecheck, build, tests,
+check-links) plus a real-browser boot smoke of both cabinets (no JS errors; the
+Tank Duel picker reports `aria-pressed` correctly, Cascade starts and takes
+input). Test count 526 → 529 net of the round (+9 Tank Duel, +3 Cascade, with
+the two Cascade timing tests rewritten for the new settling phase).
+
+- **Tank Duel** (commit "difficulty picker + per-round CPU accuracy ramp").
+  The fixed `CPU_DIFFICULTY = 0.72` became a selected tier
+  (`rookie`/`gunner`/`veteran` = 0.45/0.7/0.9, gunner ≈ the old value) plus a
+  `cpuDifficulty(tier, roundsDecided)` ramp (+0.06/round, capped at 1) so a
+  best-of-5 escalates. `cpuPickWeapon` went tactical (heavy on high-armour
+  targets, MIRV at long range, else missile). Start-overlay segmented picker +
+  i18n ×3 locales; no draw code touched (Round 4 stays clean). Empirically
+  verified: over 50 seeded shots a veteran's mean miss and grouping are strictly
+  tighter than a rookie's.
+
+- **Cascade** (commit "gradual-settle gravity so cascade chains reach past ×2").
+  The headline finding — ×3+ was *structurally impossible* under full-compaction
+  gravity (≤2 links across 500k random boards) — turned this from a garbage-
+  seeding job into a settle-rule change. `settleStep()` drops one row per call;
+  `resolveClears` and the new `'settling'` run phase re-check for full rows
+  between drops, so a plug completes rows mid-fall. Deep chains now reachable and
+  occurring: the greedy bot reaches ×3-×9 (was ×2), and a primed overhang
+  detonates a headless ×3 (100 → 600 → 300). Final resting positions are
+  unchanged (gradual iterated = the retained instant `cascadeGravity`), so the
+  render code and every invariant held; garbage seeding was considered and cut
+  as unnecessary and difficulty-distorting.
+
+Neither commit changed a game's render primitives, so no screenshot pairs were
+needed (Tank Duel: no draw change; Cascade: draw code byte-identical, the ripple
+is state-driven). Round 3 (sim stakes & goals — Pixel Park + Microcity) is next
+when the arcade is revisited.

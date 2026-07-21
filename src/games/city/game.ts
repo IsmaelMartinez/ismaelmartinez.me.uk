@@ -402,6 +402,14 @@ export function initCityGame(): void {
         const burnt = stepFires(tiles, fires, fireCover, Math.random);
         fires = burnt.fires;
         for (const i of burnt.spread) addFloater(i, '🔥', '#fb923c');
+        // Fire crews contained a blaze: the tile is saved, so cheer it with a
+        // splash floater and a soft chime (no derived-state refresh — nothing
+        // on the tile changed).
+        for (const i of burnt.extinguished) {
+          addFloater(i, '💧', '#38bdf8');
+          addSparks(i, '#38bdf8', 5);
+        }
+        if (burnt.extinguished.length) audio.playSfx('rescue');
         if (burnt.burnedOut.length) {
           audio.playSfx('explosion');
           refreshDerivedState();

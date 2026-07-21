@@ -34,7 +34,8 @@ export function computePowered(tiles: CityTile[]): boolean[] {
   return coverage(tiles, 'power', POWER_RADIUS);
 }
 
-/** Fire-station coverage: fires here ignite less, spread less, die faster. */
+/** Fire-station coverage: fires here ignite less, spread less, die faster, and
+ * are actively put out by the crews (see `stepFires`/`EXTINGUISH_CHANCE`). */
 export function computeFireCover(tiles: CityTile[]): boolean[] {
   return coverage(tiles, 'firehouse', FIRE_RADIUS);
 }

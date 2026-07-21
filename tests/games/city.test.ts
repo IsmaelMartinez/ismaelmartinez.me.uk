@@ -50,6 +50,7 @@ import {
   CITY_EVENTS,
   BURN_TICKS,
   BURN_TICKS_COVERED,
+  EXTINGUISH_CHANCE,
   EVENT_GRACE_MONTHS,
   disasterIntensity,
   DISASTER_GRACE_MONTHS,
@@ -440,15 +441,43 @@ describe('city disasters', () => {
 
   it('dampens spread when either side of the boundary has fire cover', () => {
     const tiles = firePlayground();
-    // Only the burning source tile is covered; neighbours are not
-    const cover = tiles.map((_, i) => i === cityIdx(5, 5));
+    // Cover the flammable neighbours but not the burning source, so the fire
+    // isn't simply put out — the covered boundary should still dampen the jump.
+    const cover = tiles.map((_, i) => i === cityIdx(6, 5) || i === cityIdx(5, 6));
     // 0.15 sits between SPREAD_CHANCE_COVERED (0.08) and SPREAD_CHANCE (0.22):
-    // without source-side dampening the fire would jump
+    // without the neighbour-side dampening the fire would jump
     const result = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 5 }], cover, () => 0.15);
     expect(result.spread).toEqual([]);
     const uncovered = tiles.map(() => false);
     const unprotected = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 5 }], uncovered, () => 0.15);
     expect(unprotected.spread.length).toBeGreaterThan(0);
+  });
+
+  it('sends fire crews to put covered fires out, sparing the tile', () => {
+    const tiles = firePlayground();
+    const covered = tiles.map(() => true);
+    // A roll below EXTINGUISH_CHANCE means the crews reach it this tick: the
+    // fire is out, the tile untouched, and a fire being fought never spreads.
+    const roll = EXTINGUISH_CHANCE / 2;
+    const out = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 5 }], covered, () => roll);
+    expect(out.extinguished).toEqual([cityIdx(5, 5)]);
+    expect(out.fires).toEqual([]);
+    expect(out.burnedOut).toEqual([]);
+    expect(out.spread).toEqual([]);
+    expect(tiles[cityIdx(5, 5)].type).toBe('ind'); // saved, not burnt to rubble
+    expect(tiles[cityIdx(5, 5)].level).toBe(2);
+
+    // A roll at/above the chance means the crews miss it this tick: it behaves
+    // like an ordinary covered fire and just loses one tick.
+    const missed = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 5 }], covered, () => 0.999);
+    expect(missed.extinguished).toEqual([]);
+    expect(missed.fires).toEqual([{ idx: cityIdx(5, 5), ticks: 4 }]);
+
+    // An uncovered fire gets no help and always burns to the end.
+    const uncovered = tiles.map(() => false);
+    const doomed = stepFires(tiles, [{ idx: cityIdx(5, 5), ticks: 1 }], uncovered, () => roll);
+    expect(doomed.extinguished).toEqual([]);
+    expect(doomed.burnedOut).toEqual([cityIdx(5, 5)]);
   });
 
   it('never spreads when random rolls high, and drops bulldozed fires', () => {

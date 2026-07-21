@@ -1,8 +1,9 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: Round 1 executing — audit complete, ranking below, top round
-(**Refill the finite rosters**) planned and in progress.
+Status: **Round 1 done** — audit complete, ranking below, top round
+(**Refill the finite rosters**) planned and shipped. See "Execution notes" at
+the foot of this doc. Rounds 2-5 remain queued.
 
 ## Why this doc
 
@@ -307,3 +308,36 @@ Syndicate opportunity #3).
 - Syndicate is pure data + i18n with no logic branches added, so its risk is
   low; the main care is keeping missions 1-3 objective-indexed for the
   existing tests.
+
+## Execution notes (2026-07-21)
+
+Both commits landed as planned; no draw code changed, so the render output is
+untouched and no screenshot pairs were needed. Each game passed the full bar
+(lint, typecheck, build, tests, check-links) and a boot smoke against `dist`.
+
+- **Line Hold** (commit "18-wave escalating campaign + endless assault").
+  `WAVES` grew 12 → 18; the wave-12 `endRun(true)` victory wall was replaced
+  by a `clearedCampaign` handoff into a deterministic `endlessWave(waveIndex)`
+  generator, with `waveDef(waveIndex)` fronting both. `game.ts` now routes
+  every wave lookup through `waveDef`; the run ends only on `lives ≤ 0`, and
+  clearing all 18 waves earns a one-time trophy toast plus a distinct
+  campaign-cleared over-screen (the repurposed `victory`/`victoryDesc`
+  strings, reworded across all three locales; instructions updated off "12
+  waves"). The reference completability layout was strengthened to a 41-step
+  plan and iterated against the headless `playRun` harness until it cleared all
+  18 authored waves and held three waves into the endless tail — no wave in the
+  authored campaign proved unbeatable, so no roster dial-back was needed. New
+  tests cover `endlessWave`/`waveDef` (deterministic, strictly escalating,
+  rising warlord tally) alongside the two completability proofs. +5 tests.
+- **Syndicate** (commit "extend the campaign from three missions to six").
+  `MISSIONS` grew 3 → 6, pure data reusing the existing objective moulds;
+  missions 1-3 unchanged so the objective-indexed tests held. Weapon tiers were
+  re-spread (uzi guards in the back half, minigun rivals in mission 5) so the
+  minigun/target land at the mid-campaign assassinate. Six name/brief keys per
+  locale + `data-t` wiring; the `missionNames`/`missionBriefs` arrays extended
+  to six. New tests assert the six-mission roster, rising rewards, the weapon
+  re-tiering, and per-objective winnability. +2 tests.
+
+Nothing in the round changed a game's rendering, economy, or existing pure-
+module contracts, so the risk called out above did not materialise. Next up is
+Round 2 (Tank Duel difficulty + Cascade chains) when the arcade is revisited.

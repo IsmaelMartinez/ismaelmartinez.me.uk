@@ -1,9 +1,9 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Round 1 done** — audit complete, ranking below, top round
-(**Refill the finite rosters**) planned and shipped. See "Execution notes" at
-the foot of this doc. Rounds 2-5 remain queued.
+Status: **Rounds 1-2 done.** Round 1 (**Refill the finite rosters**) and
+Round 2 (**Twitch-game gameplay & clarity**) are both planned and shipped.
+See "Execution notes" at the foot of this doc. Rounds 3-5 remain queued.
 
 ## Why this doc
 
@@ -341,3 +341,124 @@ untouched and no screenshot pairs were needed. Each game passed the full bar
 Nothing in the round changed a game's rendering, economy, or existing pure-
 module contracts, so the risk called out above did not materialise. Next up is
 Round 2 (Tank Duel difficulty + Cascade chains) when the arcade is revisited.
+
+---
+
+## Round 2 plan — Twitch-game gameplay & clarity
+
+Goal: fix the two HIGH gameplay findings that leave a signature mechanic
+effectively dead. Each ships as **one commit** with the full bar after it
+(`npm run lint && npm run typecheck && npm run build && npm test &&
+npm run check-links`). Both fixes are verified **empirically through the pure
+module** — Tank Duel's `ai.ts` grid-search and Cascade's `run.ts` state
+machine — so the "it actually works now" claim is a passing test, not a hope.
+
+### Commit A — Tank Duel: difficulty picker + per-round ramp (+ tactical CPU weapons)
+
+**Intent.** The CPU is a fixed-sharpness opponent: `CPU_DIFFICULTY = 0.72`
+passed unchanged every turn (audit's Tank Duel HIGH). Give the player a
+**start-screen difficulty picker** and make the CPU **tighten round-over-round
+within a match**, so a best-of-5 escalates. The `difficulty` parameter is
+already plumbed through the pure AI (`ai.ts` — grid-search + `±30·(1−difficulty)`
+scatter on angle and power), so the whole fix is choosing the number that goes
+in. Secondary: replace the CPU's **pure-random weapon pick** with a tactical
+one (range + target HP aware).
+
+**Intended effect (empirically stated & tested):** a higher difficulty value
+produces **measurably tighter shots** — smaller mean miss distance and smaller
+spread from the ideal grid-search solution. The per-round ramp raises the
+effective difficulty monotonically as rounds are decided, capped at 1.
+
+**Changes (`src/games/tanks/`):**
+- `ai.ts` (pure — the whole testable core):
+  - `export type Difficulty = 'rookie' | 'gunner' | 'veteran'` with
+    `DIFFICULTY_BASE = { rookie: 0.45, gunner: 0.7, veteran: 0.9 }` (gunner ≈
+    today's 0.72) and `DIFFICULTY_RAMP = 0.06`.
+  - `cpuDifficulty(tier, roundsDecided)` = `min(1, base[tier] + roundsDecided ·
+    RAMP)` — a pure function so the ramp is exact under test.
+  - `cpuPickWeapon(ammo, range, targetHp, random)` — tactical: prefer **heavy**
+    when the target still has real armour and a heavy is stocked (the 72-radius/
+    85-dmg finisher earns its scarce ammo), prefer **MIRV** at long range where
+    the horizontal fan covers aim error, else the unlimited **missile**. Keeps a
+    little randomness so it isn't robotic, but the bias is range/HP driven.
+- `game.ts` (wiring only — **no draw-code change**, so Round 4's art pass stays
+  untouched and no screenshot pairs are needed):
+  - Replace the `CPU_DIFFICULTY` constant with a selected `difficulty: Difficulty`
+    (default `'gunner'`) and a `roundsDecided` counter reset in `startMatch`,
+    incremented in `finishRound`.
+  - The CPU turn passes `cpuDifficulty(difficulty, roundsDecided)` into
+    `chooseAiShot`, and `cpuPickWeapon(...)` chooses the shell using the live
+    range/HP.
+  - Wire three start-overlay difficulty buttons (segmented, middle active by
+    default); the pick only matters for `vs CPU`.
+- `tanks.astro`: add the difficulty selector markup to the start overlay + the
+  `data-t-*` label attributes; 2-player mode ignores it.
+- `translations.ts` (×3 locales): `fun.tanks.difficulty` label +
+  `difficultyRookie/Gunner/Veteran` names.
+
+**Verification (`tests/games/tanks.test.ts`):**
+- `cpuDifficulty`: gunner base ≈ 0.7; monotonic in `roundsDecided`; clamped at 1.
+- **Empirical tightness**: over N seeded shots on flat terrain, veteran's mean
+  |impact − target| and spread are strictly smaller than rookie's (the "tighter
+  shots" proof), and both stay within the legal slider ranges.
+- `cpuPickWeapon`: high-HP target + heavy stocked → heavy; long range + mirv
+  stocked → mirv; empty specials → missile; deterministic under a fake random.
+
+### Commit B — Cascade: chain-primed garbage at level-up
+
+**Intent.** The cascade-chain is the cabinet's signature and biggest multiplier,
+but `maxChain` never exceeds ×2 in natural play (audit's Cascade HIGH): cascade-
+gravity flattens the stack, so the overhang structures a ×3+ chain needs never
+occur. Chosen direction (of three considered — telegraph+payout, rising-garbage
+survival, and this): **seed a chain-primed garbage structure at each level-up.**
+On level-up, inject a small pre-authored block at the well floor that is already
+primed — near-full rows with a single **feeder column** and staggered **plugs**
+above the gaps — so that dropping one piece into the feeder detonates a **×3+
+cascade that clears the whole block**. This makes deep chains *reachable* (the
+structure is baked, one feed triggers it), *rewarding* (the existing
+`base×level×chain` finally pays, lamps light), and *not punishing* (it is
+self-clearing — detonating it lowers the stack), while adding the per-level
+variety the audit also flagged (Cascade's "speed-only ramp"). The only pressure
+is to feed the column before your own stacking buries it.
+
+**Why this is safe to seed:** the garbage is authored so `resolveClears` on
+"feeder filled" yields a chain of length ≥3 that consumes every seeded cell —
+proven headlessly, so a level-up can never wall the player in.
+
+**Changes (`src/games/cascade/`):**
+- `well.ts` or a new `garbage.ts` (pure): a `primedGarbage(level)` /
+  `seedGarbage(well, rows)` helper that returns/stamps the chain-primed layer
+  (rows chosen so the feeder-column fill cascades clean). Keep it a pure grid
+  transform so tests drive it exactly.
+- `run.ts` (pure state machine): on `levelUp`, if there is room, stamp the
+  primed garbage at the floor (shifting the existing stack up by the layer
+  height; if that would top the stack out, skip the seed rather than kill the
+  run). Emit a `garbage` event so the view can flash it. The scoring path is
+  unchanged — chains already pay `base×level×chain`.
+- `game.ts`: handle the `garbage` event (a rim flourish / toast); the chain
+  lamps and popups already exist and will finally fire. **This touches the draw
+  path** (a new flash + the seeded rows render), so per the methodology add a
+  Cascade scenario to `scripts/screenshot-games.js` and ship before/after
+  shots (the change is intentional-visual, not a byte-identical refactor).
+- `translations.ts` (×3 locales): a `fun.cascade.primed` / garbage toast string
+  if one is surfaced.
+
+**Verification (`tests/games/cascade.test.ts`):**
+- `primedGarbage`: deterministic; the layer is a legal grid; filling the feeder
+  column resolves to a chain of length ≥3 that clears every seeded cell.
+- Through `run.ts`: force a level-up, assert the garbage is seeded (and skipped
+  when it would top out), then drive the feeder drop and assert a ×3+ `clear`
+  chain fires and the score reflects the rising multiplier. Re-confirm the
+  headless greedy playthrough still reaches an illegal-state-free end and that
+  seeding never leaves an unresolved full row between pieces.
+
+### Sequencing & risk (Round 2)
+- Order: doc → Tank Duel → Cascade. One commit each, full verification after
+  each, single PR for the round.
+- Tank Duel is low risk: pure-parameter change through an already-plumbed AI,
+  DOM-only picker, no draw-code touched (keeps Round 4 clean).
+- Cascade is the real design risk: the seeded garbage must be provably self-
+  clearing (headless chain-length assertion is the guarantee) and must never
+  force a top-out — mitigated by skipping the seed when there's no room and by
+  authoring the layer against the `resolveClears` harness until it detonates
+  clean. It touches draw code, so it carries the screenshot obligation.

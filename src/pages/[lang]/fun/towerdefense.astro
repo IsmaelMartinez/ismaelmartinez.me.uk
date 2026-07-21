@@ -1,7 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
-import { useTranslations, locales } from '../../../i18n/translations';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
 export function getStaticPaths() {
@@ -15,6 +15,8 @@ const t = useTranslations(lang);
 <Layout title="Line Hold" lang={lang}>
   <section class="towerdefense-section">
     <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
       <div
         class="game-container"
         id="towerdefense-root"
@@ -148,6 +150,17 @@ const t = useTranslations(lang);
   .towerdefense-section {
     min-height: calc(100vh - var(--nav-height) - 200px);
     padding: var(--space-2xl) 0;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
   }
 
   .game-container {

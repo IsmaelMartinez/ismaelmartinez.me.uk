@@ -52,6 +52,12 @@ export interface LevelDef {
   exit: { x: number; y: number };
   spawnCount: number;
   needed: number;
+  /**
+   * Per-skill allowance the player gets to spend. The five terrain/hold skills
+   * are authored per level; `bomber` (the pick-one blast) is normally left out
+   * and granted a universal reserve at load — the single-critter counterpart to
+   * the always-available nuke — but a level may set its own count to override it.
+   */
   stock: Partial<Record<Skill, number>>;
   /**
    * Par time in simulation ticks (60/s) for the speed bonus: clearing the

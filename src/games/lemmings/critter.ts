@@ -8,12 +8,17 @@
  *
  * The base cycle is `walker → faller → splatter` (a fall longer than
  * `SPLAT_DIST` is fatal unless the critter is a floater); on top of that sit
- * the five assignable skills. All rules run against a `CritterWorld` — the
- * terrain bitmap plus a blocker lookup — so the FSM is unit-tested against a
- * fake world with no DOM.
+ * the six assignable skills. Five reshape terrain or hold ground; the sixth,
+ * `bomber`, lights a fuse on a single critter that blows it (and a crater in
+ * the terrain) after `BOMBER_FUSE` ticks — the pick-one counterpart to the
+ * mass nuke. The fuse countdown and the crater blast are owned by game.ts (it
+ * holds the bitmap's `eraseCircle` and the particles); this module only carries
+ * the `fuse` timer on the critter so `assignSkill` can light it. All rules run
+ * against a `CritterWorld` — the terrain bitmap plus a blocker lookup — so the
+ * FSM is unit-tested against a fake world with no DOM.
  */
 
-export type Skill = 'blocker' | 'digger' | 'basher' | 'builder' | 'floater';
+export type Skill = 'blocker' | 'digger' | 'basher' | 'builder' | 'floater' | 'bomber';
 
 export type CritterState =
   | 'walker'
@@ -42,6 +47,12 @@ export interface Critter {
   bricks: number;
   /** Basher steps taken with no wall ahead, so it gives up after a few. */
   stall: number;
+  /**
+   * Bomber countdown in ticks: -1 when unlit, otherwise ticks left before the
+   * critter detonates. game.ts counts it down and fires the blast; a lit fuse
+   * cannot be relit or cancelled.
+   */
+  fuse: number;
   alive: boolean;
   /** Reached the exit and was rescued. */
   saved: boolean;
@@ -78,6 +89,7 @@ export const BUILD_INTERVAL = 6; // ticks between builder treads
 export const BUILD_BRICKS = 12;
 export const BRICK_WIDTH = 6;
 export const BASH_PATIENCE = 6; // steps a basher walks toward a wall before giving up
+export const BOMBER_FUSE = 150; // ticks (2.5s @ 60Hz) from lighting the fuse to the blast
 
 export function createCritter(id: number, x: number, y: number, dir: 1 | -1 = 1): Critter {
   return {
@@ -92,6 +104,7 @@ export function createCritter(id: number, x: number, y: number, dir: 1 | -1 = 1)
     timer: 0,
     bricks: 0,
     stall: 0,
+    fuse: -1,
     alive: true,
     saved: false
   };
@@ -102,16 +115,21 @@ export function isActive(c: Critter): boolean {
 }
 
 /**
- * Applies the currently selected skill to a critter. Floater can be pinned on
- * a walker or a mid-air faller (the umbrella pops open); the terrain-shaping
- * skills need a grounded walker. Returns whether the skill took (so the caller
- * only spends stock on a real assignment).
+ * Applies the currently selected skill to a critter. Floater and bomber can be
+ * pinned on any active critter whatever its state (the umbrella pops open / the
+ * fuse lights); the terrain-shaping skills need a grounded walker. Returns
+ * whether the skill took (so the caller only spends stock on a real assignment).
  */
 export function assignSkill(c: Critter, skill: Skill): boolean {
   if (!isActive(c)) return false;
   if (skill === 'floater') {
     if (c.floater) return false;
     c.floater = true;
+    return true;
+  }
+  if (skill === 'bomber') {
+    if (c.fuse >= 0) return false; // fuse already lit — can't stack or reset it
+    c.fuse = BOMBER_FUSE;
     return true;
   }
   if (c.state !== 'walker') return false;

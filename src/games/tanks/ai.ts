@@ -5,10 +5,58 @@
  * more often.
  */
 import { simulateShot } from './physics';
+import type { WeaponId } from './weapons';
 
 export interface AiShot {
   angle: number;
   power: number;
+}
+
+/** The three start-screen difficulty tiers and their base accuracy. */
+export type Difficulty = 'rookie' | 'gunner' | 'veteran';
+
+/**
+ * Base `difficulty` fed to `chooseAiShot` per tier. Higher = tighter shots
+ * (less `(1 - difficulty)` scatter). `gunner` ≈ the old fixed 0.72.
+ */
+export const DIFFICULTY_BASE: Record<Difficulty, number> = {
+  rookie: 0.45,
+  gunner: 0.7,
+  veteran: 0.9
+};
+
+/** Per-decided-round tightening, so a best-of-5 escalates as it wears on. */
+export const DIFFICULTY_RAMP = 0.06;
+
+/**
+ * Effective aim accuracy for the CPU: the tier's base plus a ramp for every
+ * round already decided this match, capped at a perfect 1. A veteran late in a
+ * long match is a crack shot; a rookie's opening round is forgiving.
+ */
+export function cpuDifficulty(tier: Difficulty, roundsDecided: number): number {
+  // Fall back to gunner if an unknown tier ever reaches here — a bad DOM
+  // dataset must not turn the aim maths into NaN and freeze the CPU turn.
+  const base = DIFFICULTY_BASE[tier] ?? DIFFICULTY_BASE.gunner;
+  return Math.min(1, base + Math.max(0, roundsDecided) * DIFFICULTY_RAMP);
+}
+
+/**
+ * Tactical shell choice, replacing a coin-flip. The heavy is the finisher —
+ * its wide, hard blast is worth its scarce ammo while the target still has
+ * real armour to chew through; the MIRV's horizontal fan covers aim error, so
+ * it earns its single shot at long range where one missile is easiest to miss
+ * with; otherwise the unlimited missile. A little randomness keeps it from
+ * being robotically predictable.
+ */
+export function cpuPickWeapon(
+  ammo: { heavy: number; mirv: number },
+  range: number,
+  targetHp: number,
+  random: () => number = Math.random
+): WeaponId {
+  if (ammo.heavy > 0 && targetHp > 45 && random() < 0.6) return 'heavy';
+  if (ammo.mirv > 0 && range > 360 && random() < 0.5) return 'mirv';
+  return 'missile';
 }
 
 function clamp(value: number, min: number, max: number): number {

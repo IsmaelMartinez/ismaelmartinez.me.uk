@@ -25,7 +25,7 @@ import {
   matchScore,
   type Projectile
 } from './physics';
-import { chooseAiShot } from './ai';
+import { chooseAiShot, cpuDifficulty, cpuPickWeapon, type Difficulty } from './ai';
 import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster, type Ammo, type WeaponId } from './weapons';
 
 const WIDTH = 800;
@@ -37,7 +37,6 @@ const EXPLOSION_TIME = 0.55;
 const DIRECT_HIT_RADIUS = 14;
 const MAX_WIND = 50;
 const WINS_PER_MATCH = 3;
-const CPU_DIFFICULTY = 0.72;
 const CPU_THINK_TIME = 1.1;
 const SAFE_DROP = 30; // px a tank can fall without damage
 const SKY_MARGIN = 20; // backdrop overdraw so screen shake never shows an edge
@@ -112,6 +111,9 @@ export function initTanksGame(): void {
   const p2Wins = el('p2-wins');
   const victoriesEl = el('victories');
   const weaponButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.weapon-btn'));
+  const difficultyButtons = Array.from(
+    root.querySelectorAll<HTMLButtonElement>('.difficulty-btn')
+  );
 
   const strings = {
     player1: root.dataset.tPlayer1 || 'Player 1',
@@ -200,6 +202,10 @@ export function initTanksGame(): void {
   let current = 0;
   let wind = 0;
   let mode: 'cpu' | '2p' = 'cpu';
+  // Selected difficulty tier (start-screen picker); only matters vs the CPU.
+  let difficulty: Difficulty = 'gunner';
+  // Rounds decided so far this match, feeding the per-round accuracy ramp.
+  let roundsDecided = 0;
   let wins = [0, 0];
   let phase: Phase = 'idle';
   let shots: Shot[] = [];
@@ -333,6 +339,7 @@ export function initTanksGame(): void {
   function startMatch(selectedMode: 'cpu' | '2p') {
     mode = selectedMode;
     wins = [0, 0];
+    roundsDecided = 0;
     p1Label.textContent = strings.player1;
     p2Label.textContent = playerName(1);
     p1Wins.textContent = '0';
@@ -349,12 +356,6 @@ export function initTanksGame(): void {
       x: tank.x + Math.cos(rad) * BARREL_LEN,
       y: tank.y - TANK_H - Math.sin(rad) * BARREL_LEN
     };
-  }
-
-  function cpuPickWeapon(tank: Tank): WeaponId {
-    if (tank.ammo.heavy > 0 && Math.random() < 0.4) return 'heavy';
-    if (tank.ammo.mirv > 0 && Math.random() < 0.3) return 'mirv';
-    return 'missile';
   }
 
   function fire() {
@@ -428,6 +429,8 @@ export function initTanksGame(): void {
 
   function finishRound(winner: number | null) {
     phase = 'round-over';
+    // A decided round (win or mutual destruction) tightens the CPU next round.
+    roundsDecided++;
     syncControls();
     if (winner !== null) {
       wins[winner]++;
@@ -548,18 +551,19 @@ export function initTanksGame(): void {
       if (cpuTimer <= 0) {
         cpuShotPending = false;
         const cpu = tanks[1];
+        const foe = tanks[0];
         const shot = chooseAiShot(
           ground,
           WIDTH,
           HEIGHT,
           { x: cpu.x, y: cpu.y - TANK_H },
-          { x: tanks[0].x, y: tanks[0].y },
+          { x: foe.x, y: foe.y },
           wind,
-          CPU_DIFFICULTY
+          cpuDifficulty(difficulty, roundsDecided)
         );
         cpu.angle = shot.angle;
         cpu.power = shot.power;
-        cpu.weapon = cpuPickWeapon(cpu);
+        cpu.weapon = cpuPickWeapon(cpu.ammo, Math.abs(foe.x - cpu.x), foe.hp);
         syncControls();
         fire();
       }
@@ -861,6 +865,19 @@ export function initTanksGame(): void {
     () => document.removeEventListener('keydown', onKeydown),
     { once: true }
   );
+
+  const isDifficulty = (v: string | undefined): v is Difficulty =>
+    v === 'rookie' || v === 'gunner' || v === 'veteran';
+  difficultyButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const picked = btn.dataset.difficulty;
+      if (isDifficulty(picked)) difficulty = picked;
+      for (const other of difficultyButtons) {
+        other.classList.toggle('active', other === btn);
+        other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
+      }
+    });
+  });
 
   vsCpuBtn.addEventListener('click', () => startMatch('cpu'));
   twoPlayerBtn.addEventListener('click', () => startMatch('2p'));

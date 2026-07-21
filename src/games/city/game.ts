@@ -189,7 +189,6 @@ export function initCityGame(): void {
     expenses: root.dataset.tExpenses || 'Upkeep',
     cantAfford: root.dataset.tCantAfford || 'Not enough funds!',
     milestone: root.dataset.tMilestone || 'Population',
-    goal: root.dataset.tGoal || 'Goal',
     objPop: root.dataset.tObjPop || '{n} residents',
     established: root.dataset.tEstablished || 'Metropolis — endless!',
     fireAlert: root.dataset.tFireAlert || 'Fire has broken out!',

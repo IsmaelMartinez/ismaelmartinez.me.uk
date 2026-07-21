@@ -38,7 +38,6 @@ const tools = [
         data-t-expenses={t('fun.city.expenses')}
         data-t-cant-afford={t('fun.city.cantAfford')}
         data-t-milestone={t('fun.city.milestone')}
-        data-t-goal={t('fun.city.goal')}
         data-t-obj-pop={t('fun.city.objPop')}
         data-t-established={t('fun.city.established')}
         data-t-fire-alert={t('fun.city.fireAlert')}
@@ -87,7 +86,7 @@ const tools = [
 
         <div class="objective-bar">
           <span class="objective-label">🏙️ {t('fun.city.goal')}</span>
-          <span id="objective" class="objective-text"></span>
+          <span id="objective" class="objective-text" aria-live="polite"></span>
         </div>
 
         <div class="game-area">

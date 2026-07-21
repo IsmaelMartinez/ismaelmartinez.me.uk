@@ -79,7 +79,6 @@ const trackKinds = [
         data-t-surge={t('fun.park.surge')}
         data-t-coaster-stall={t('fun.park.coasterStall')}
         data-t-new-record={t('fun.park.newRecord')}
-        data-t-goal={t('fun.park.goal')}
         data-t-obj-welcome={t('fun.park.objWelcome')}
         data-t-obj-rating={t('fun.park.objRating')}
         data-t-obj-crowd={t('fun.park.objCrowd')}
@@ -121,7 +120,7 @@ const trackKinds = [
 
         <div class="objective-bar">
           <span class="objective-label">🎯 {t('fun.park.goal')}</span>
-          <span id="objective" class="objective-text"></span>
+          <span id="objective" class="objective-text" aria-live="polite"></span>
         </div>
 
         <div class="game-area">

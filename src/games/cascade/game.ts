@@ -593,7 +593,9 @@ export function initCascadeGame(): void {
     clock += dt;
     bannerTimer = Math.max(0, bannerTimer - dt);
     chainGlowTimer = Math.max(0, chainGlowTimer - dt);
-    if (chainGlowTimer === 0 && run.phase !== 'clearing') chainGlow = 0;
+    // Keep the lamps lit through the whole cascade — clearing *and* the
+    // settling between links — dropping them only once play resumes.
+    if (chainGlowTimer === 0 && run.phase === 'falling') chainGlow = 0;
     fx.update(dt);
     if (phase !== 'play') return;
 

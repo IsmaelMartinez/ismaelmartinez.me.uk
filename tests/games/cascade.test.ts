@@ -6,6 +6,7 @@ import {
   fullRows,
   clearRows,
   cascadeGravity,
+  settleStep,
   resolveClears,
   type Well
 } from '../../src/games/cascade/well';
@@ -47,6 +48,16 @@ function fill(well: Well, x: number, y: number, v = 1): void {
 
 function at(well: Well, x: number, y: number): number {
   return well[y * WELL_W + x];
+}
+
+/** Drive a run through its clearing+settling cascade until play resumes. */
+function drainCascade(run: CascadeRun): RunEvent[] {
+  const events: RunEvent[] = [];
+  let guard = 0;
+  while ((run.phase === 'clearing' || run.phase === 'settling') && guard++ < 500) {
+    events.push(...tickRun(run, CLEAR_TIME + 0.01));
+  }
+  return events;
 }
 
 function sortedCells(piece: ActivePiece): string {
@@ -206,7 +217,52 @@ describe('well: lines, cascade gravity, chains', () => {
     expect(at(well, 0, 19)).toBe(0);
     expect(at(well, 0, 17)).toBe(1);
   });
+
+  it('settleStep drops each floating cell exactly one row', () => {
+    const well = createWell();
+    fill(well, 3, 5); // floating high
+    fill(well, 3, 19); // grounded on the floor
+    expect(settleStep(well)).toBe(true);
+    expect(at(well, 3, 6)).toBe(1); // moved down one
+    expect(at(well, 3, 5)).toBe(0);
+    expect(at(well, 3, 19)).toBe(1); // already resting — unmoved
+    // Iterated to a fixpoint it equals the instant full compaction.
+    let guard = 0;
+    while (settleStep(well) && guard++ < 100) { /* settle to rest */ }
+    expect(at(well, 3, 18)).toBe(1);
+    expect(at(well, 3, 19)).toBe(1);
+    expect(settleStep(well)).toBe(false); // stable
+  });
+
+  it('resolves chains deeper than ×2 when the landslide completes rows mid-fall', () => {
+    // A hand-primed overhang across cols 0-8 with col 9 an open feeder well;
+    // the bottom row needs only col 9. Dropping a column into the feeder
+    // detonates a three-link cascade — the old instant-settle rule capped this
+    // at two links no matter the structure.
+    const well = createWell();
+    const top = WELL_H - PRIMED_OVERHANG.length;
+    PRIMED_OVERHANG.forEach((r, i) => {
+      for (let x = 0; x < WELL_W; x++) if (r[x] === '#') fill(well, x, top + i);
+    });
+    expect(fullRows(well)).toEqual([]); // inert until fed
+    for (let y = 16; y <= 19; y++) fill(well, 9, y); // plug the open feeder
+    expect(resolveClears(well).length).toBeGreaterThanOrEqual(3);
+  });
 });
+
+/**
+ * A hand-primed overhang used by the deep-chain tests: filled across cols 0-8
+ * with col 9 an open well a vertical I can drop into. Inert (no full row) until
+ * the feeder is plugged, at which point it detonates a ×3 cascade.
+ */
+const PRIMED_OVERHANG = [
+  '...#..#...',
+  '##.##.#.#.',
+  '######.#..',
+  '..#######.',
+  '###..#.##.',
+  '#########.'
+];
 
 describe('scoring math', () => {
   it('pays the classic line values scaled by level and chain link', () => {
@@ -331,8 +387,8 @@ describe('run: gravity, lock delay, drops', () => {
     const events: RunEvent[] = [];
     for (let drops = 0; drops < 60 && run.phase !== 'over'; drops++) {
       events.push(...hardDrop(run));
-      // Drain any (unlikely) clear phases so the next spawn happens.
-      for (let t = 0; t < 10 && run.phase === 'clearing'; t++) {
+      // Drain any (unlikely) clear/settle phases so the next spawn happens.
+      for (let t = 0; t < 200 && (run.phase === 'clearing' || run.phase === 'settling'); t++) {
         events.push(...tickRun(run, CLEAR_TIME + 0.01));
       }
     }
@@ -370,8 +426,10 @@ describe('run: clears, chains, and levels', () => {
     expect(tickRun(run, CLEAR_TIME * 0.5)).toEqual([]);
     expect(run.phase).toBe('clearing');
 
-    const after = tickRun(run, CLEAR_TIME);
-    expect(after).toEqual([]); // the I's leftovers complete nothing
+    // The flash ends, the landslide settles one row at a time, then a piece
+    // spawns. The I's leftovers complete nothing, so no further clears.
+    const after = drainCascade(run);
+    expect(after.some(e => e.type === 'clear')).toBe(false);
     expect(run.phase).toBe('falling');
     // The two leftover I cells slid to the floor of column 9.
     expect(at(run.well, 9, 19)).toBe(1);
@@ -389,11 +447,12 @@ describe('run: clears, chains, and levels', () => {
     const first = dropVerticalI(run, 9).find(e => e.type === 'clear');
     expect(first).toMatchObject({ rows: [19], chain: 1, points: 100 });
 
-    const second = tickRun(run, CLEAR_TIME + 0.01).find(e => e.type === 'clear');
+    // The flash ends and the landslide settles; row 19 completes again as a
+    // second, higher-paying chain link.
+    const rest = drainCascade(run);
+    const second = rest.find(e => e.type === 'clear');
     expect(second).toMatchObject({ rows: [19], chain: 2, points: 200 });
-
-    const rest = tickRun(run, CLEAR_TIME + 0.01);
-    expect(rest.find(e => e.type === 'clear')).toBeUndefined();
+    expect(rest.filter(e => e.type === 'clear')).toHaveLength(1);
     expect(run.score).toBe(300);
     expect(run.lines).toBe(2);
     expect(run.phase).toBe('falling');
@@ -425,6 +484,39 @@ describe('run: clears, chains, and levels', () => {
     expect(events.find(e => e.type === 'clear')).toMatchObject({ points: 100 });
     expect(events.find(e => e.type === 'levelUp')).toMatchObject({ level: 2 });
     expect(run.level).toBe(2);
+  });
+});
+
+describe('run: deep cascade chains fire and score by link', () => {
+  it('a primed overhang detonates a ×3 chain, scored per link with a rising multiplier', () => {
+    const run = createRun(seededRandom(31));
+    const top = WELL_H - PRIMED_OVERHANG.length;
+    PRIMED_OVERHANG.forEach((r, i) => {
+      for (let x = 0; x < WELL_W; x++) if (r[x] === '#') fill(run.well, x, top + i, (x % 6) + 1);
+    });
+    // A vertical I plugs the open col-9 feeder and completes the bottom row.
+    run.piece = { id: 0, rot: 1, x: 7, y: 0 };
+    expect(fits(run.well, run.piece)).toBe(true);
+
+    const events = [...hardDrop(run), ...drainCascade(run)];
+    const clears = events.filter(e => e.type === 'clear') as Extract<RunEvent, { type: 'clear' }>[];
+
+    // The signature cascade finally reaches past ×2 (was structurally capped
+    // at 2 links under the old instant-settle gravity).
+    const maxChain = clears.reduce((m, e) => Math.max(m, e.chain), 0);
+    expect(maxChain).toBeGreaterThanOrEqual(3);
+
+    // Score is exactly the sum of every link's points...
+    expect(run.score).toBe(clears.reduce((s, e) => s + e.points, 0));
+    // ...and a later link out-pays the first for the same row count — the
+    // base × level × chain multiplier is doing real work now.
+    const firstSingle = clears.find(e => e.rows.length === 1 && e.chain === 1);
+    const laterSingle = clears.find(e => e.rows.length === 1 && e.chain >= 3);
+    expect(firstSingle && laterSingle && laterSingle.points > firstSingle.points).toBe(true);
+
+    // The cascade resolves cleanly: no unfired full row is left behind.
+    expect(fullRows(run.well)).toEqual([]);
+    expect(run.phase === 'falling' || run.phase === 'over').toBe(true);
   });
 });
 
@@ -472,7 +564,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
       }
       if (best) run.piece = { ...run.piece!, rot: best.rot, x: best.x };
       log.push(...hardDrop(run));
-      for (let t = 0; t < 30 && phase() === 'clearing'; t++) {
+      for (let t = 0; t < 300 && (phase() === 'clearing' || phase() === 'settling'); t++) {
         log.push(...tickRun(run, CLEAR_TIME + 0.01));
       }
     }

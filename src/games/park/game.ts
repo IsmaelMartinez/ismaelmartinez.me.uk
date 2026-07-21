@@ -63,7 +63,7 @@ import {
   happiness,
   type Needs
 } from './guests';
-import { parkRating, spawnInterval, dailyUpkeep } from './economy';
+import { parkRating, spawnInterval, operatingCost, DAY_SECONDS } from './economy';
 import {
   isRide,
   breakdownChance,
@@ -77,6 +77,13 @@ import {
   type RideBreakdown,
   type Surge
 } from './mayhem';
+import {
+  PARK_OBJECTIVES,
+  objectiveMet,
+  objectiveProgress,
+  type ParkObjective,
+  type ParkProgress
+} from './objectives';
 import {
   MIN_TRACK_LENGTH,
   DIR_DELTA,
@@ -112,7 +119,7 @@ const ORIGIN_Y = 60 + MAX_TERRAIN_LIFT;
 const CANVAS_W = (GRID_W + GRID_H) * HALF_W;
 const CANVAS_H = (GRID_W + GRID_H) * HALF_H + ORIGIN_Y + 10;
 const START_MONEY = 1500;
-const DAY_LENGTH = 24; // seconds of game time per day
+const DAY_LENGTH = DAY_SECONDS; // seconds of game time per day (shared with the wage maths)
 const GUEST_SPEED = 2.4; // tiles per second
 /** Guests charged per coaster lap, taken at boarding — a premium ride, priced above the Big Wheel. */
 const TRACK_RIDE_PRICE = 7;
@@ -382,7 +389,9 @@ export function initParkGame(): void {
   const dayEl = el('day');
   const recordEl = el('record');
   const finalDaysEl = el('final-days');
+  const finalWelcomedEl = el('final-welcomed');
   const finalPeakEl = el('final-peak');
+  const objectiveEl = el('objective');
   const toastArea = el('toast-area');
   // Park's toasts linger slightly less than the arcade default (2.2s vs 2.4s).
   const { show: showToast } = createToaster(toastArea, { durationMs: 2200 });
@@ -429,7 +438,12 @@ export function initParkGame(): void {
     repaired: root.dataset.tRepaired || 'Ride repaired',
     surge: root.dataset.tSurge || 'A coach party pours through the gates!',
     coasterStall: root.dataset.tCoasterStall || 'The coaster has jammed mid-track!',
-    newRecord: root.dataset.tNewRecord || 'New record crowd!'
+    newRecord: root.dataset.tNewRecord || 'New record!',
+    objWelcome: root.dataset.tObjWelcome || 'Welcome {n} guests',
+    objRating: root.dataset.tObjRating || 'Reach a {n}% rating',
+    objCrowd: root.dataset.tObjCrowd || 'Draw a crowd of {n}',
+    goalReward: root.dataset.tGoalReward || 'Goal complete +£{n}',
+    established: root.dataset.tEstablished || 'Park established — endless!'
   };
 
   const TRACK_ERROR_MESSAGES: Record<TrackErrorCode, string> = {
@@ -482,6 +496,12 @@ export function initParkGame(): void {
   let guests: Guest[] = [];
   let spawnTimer = 3;
   let peakGuests = 0;
+  /** Lifetime guests admitted — the banked score (uncapped, unlike peakGuests). */
+  let guestsWelcomed = 0;
+  /** Index into PARK_OBJECTIVES; === length once the ladder is cleared. */
+  let objectiveIdx = 0;
+  /** Set once the final ("flagship") objective is met — play continues endless. */
+  let established = false;
   let rating = parkRating(null, 0);
   let selectedTool: Tool = 'path';
   let speedMult = 1;
@@ -526,6 +546,8 @@ export function initParkGame(): void {
 
   // The record readout shows the table's best, beaten live by the current run.
   recordEl.textContent = board.best().toString();
+  // Seed the goal strip with the first objective before the run starts.
+  renderObjective();
 
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
@@ -574,6 +596,48 @@ export function initParkGame(): void {
       color: GUEST_COLORS[Math.floor(Math.random() * GUEST_COLORS.length)],
       styleRoll: Math.random()
     });
+    // Lifetime admissions: the single gate-entry hook, and the banked score.
+    guestsWelcomed++;
+  }
+
+  /** The current live figures the objective ladder is checked against. */
+  function parkProgress(): ParkProgress {
+    return { welcomed: guestsWelcomed, peak: peakGuests, rating };
+  }
+
+  /** Paints the goal strip: the active objective and its progress, or the
+   *  "established" banner once the ladder is cleared. */
+  function renderObjective() {
+    if (established || objectiveIdx >= PARK_OBJECTIVES.length) {
+      if (objectiveEl.textContent !== strings.established) objectiveEl.textContent = strings.established;
+      return;
+    }
+    const obj = PARK_OBJECTIVES[objectiveIdx];
+    const label = strings[obj.labelKey].replace('{n}', obj.target.toString());
+    const text = `${label} (${objectiveProgress(obj, parkProgress())}/${obj.target})`;
+    if (objectiveEl.textContent !== text) objectiveEl.textContent = text;
+  }
+
+  /**
+   * Checks the active objective and, if met, banks its reward, celebrates, and
+   * advances. The final rung is the prestige win: it flips `established` and
+   * play continues (the run still ends only on bankruptcy).
+   */
+  function checkObjectives() {
+    if (established || objectiveIdx >= PARK_OBJECTIVES.length) return;
+    const obj: ParkObjective = PARK_OBJECTIVES[objectiveIdx];
+    if (!objectiveMet(obj, parkProgress())) return;
+    if (obj.reward > 0) {
+      money += obj.reward;
+      showToast(`🎯 ${strings.goalReward.replace('{n}', obj.reward.toString())}`);
+    }
+    objectiveIdx++;
+    if (obj.win) {
+      established = true;
+      showToast(`🏆 ${strings.established}`);
+    }
+    audio.playSfx('score');
+    renderObjective();
   }
 
   function startWalking(guest: Guest, path: number[], targetBuilding: number | null) {
@@ -1229,19 +1293,21 @@ export function initParkGame(): void {
     }
 
     peakGuests = Math.max(peakGuests, guests.length);
-    // Banking stashes a grown peak immediately, so a mid-run tab close
+    const avg = guests.length
+      ? guests.reduce((sum, g) => sum + happiness(g.needs), 0) / guests.length
+      : null;
+    rating = parkRating(avg, treeCount());
+
+    // Banking stashes lifetime admissions immediately, so a mid-run tab close
     // keeps the record; beating an established best is worth a fanfare.
-    const { best, newRecord } = board.bank(peakGuests);
+    const { best, newRecord } = board.bank(guestsWelcomed);
     if (recordEl.textContent !== best.toString()) recordEl.textContent = best.toString();
     if (newRecord) {
       showToast(`🏅 ${strings.newRecord}`);
       audio.playSfx('score');
     }
-
-    const avg = guests.length
-      ? guests.reduce((sum, g) => sum + happiness(g.needs), 0) / guests.length
-      : null;
-    rating = parkRating(avg, treeCount());
+    checkObjectives();
+    renderObjective();
 
     spawnTimer -= simDt;
     if (spawnTimer <= 0) {
@@ -1253,9 +1319,11 @@ export function initParkGame(): void {
     if (dayTimer >= DAY_LENGTH) {
       dayTimer -= DAY_LENGTH;
       day++;
-      const upkeep = dailyUpkeep(tiles);
-      money -= upkeep;
-      showToast(`${strings.day} ${day} · ${strings.upkeep} -£${upkeep}`);
+      // Operating cost = flat upkeep + the age-ramped staff wage bill, so a
+      // park that stops growing its takings eventually runs a deficit.
+      const cost = operatingCost(tiles, day);
+      money -= cost;
+      showToast(`${strings.day} ${day} · ${strings.upkeep} -£${cost}`);
       // Mayhem: some mornings a coach party floods the gates.
       const rolled = rollSurge(day, Math.random);
       if (rolled) {
@@ -1272,9 +1340,10 @@ export function initParkGame(): void {
     audio.playSfx('gameover');
     audio.stop();
     finalDaysEl.textContent = day.toString();
+    finalWelcomedEl.textContent = guestsWelcomed.toString();
     finalPeakEl.textContent = peakGuests.toString();
     overOverlay.style.display = 'flex';
-    board.show(peakGuests);
+    board.show(guestsWelcomed);
   }
 
   /**
@@ -1295,6 +1364,9 @@ export function initParkGame(): void {
     guests = [];
     spawnTimer = 3;
     peakGuests = 0;
+    guestsWelcomed = 0;
+    objectiveIdx = 0;
+    established = false;
     rating = parkRating(null, 0);
     speedMult = 1;
     fx.clear();
@@ -1304,6 +1376,7 @@ export function initParkGame(): void {
     surge = null;
     board.beginRun();
     cancelTrackDraft();
+    renderObjective();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     board.hide();
     phase = 'play';

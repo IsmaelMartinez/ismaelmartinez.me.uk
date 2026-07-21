@@ -38,8 +38,25 @@ import {
   DENSITY_UNLOCK_POP,
   DENSE_DEMAND_MIN
 } from '../../src/games/city/simulation';
-import { monthlyIncome, monthlyExpenses } from '../../src/games/city/budget';
-import { targetCarCount, spawnCar, stepCar } from '../../src/games/city/traffic';
+import {
+  monthlyIncome,
+  monthlyExpenses,
+  SERVICE_COST_PER_CAPITA,
+  SERVICE_FREE_ALLOWANCE
+} from '../../src/games/city/budget';
+import {
+  targetCarCount,
+  spawnCar,
+  stepCar,
+  computeCongestion,
+  isCongested,
+  CONGESTION_THRESHOLD
+} from '../../src/games/city/traffic';
+import {
+  POP_MILESTONES,
+  MILESTONE_GRANTS,
+  METROPOLIS_INDEX
+} from '../../src/games/city/milestones';
 import {
   isFlammable,
   ignitionChance,
@@ -823,5 +840,126 @@ describe('city density (level-4 zones)', () => {
     tiles[cityIdx(7, 6)].level = 3;
     growthStep(tiles, () => 0);
     expect(tiles[cityIdx(6, 5)].level).toBe(MAX_LEVEL);
+  });
+});
+
+describe('city per-capita running costs', () => {
+  it('bills population past the free allowance only when stats are supplied', () => {
+    const tiles = createCity();
+    build(tiles, 0, 0, 'road');
+    build(tiles, 1, 0, 'power');
+    const tileBill = 1 + 40;
+    // No stats → infrastructure upkeep only (the back-compat path).
+    expect(monthlyExpenses(tiles)).toBe(tileBill);
+    // Population past the allowance is billed per-capita.
+    const stats = { population: 300, comJobs: 60, indJobs: 90, jobs: 150 };
+    const billed = 300 + 150 - SERVICE_FREE_ALLOWANCE;
+    expect(monthlyExpenses(tiles, stats)).toBe(tileBill + Math.round(billed * SERVICE_COST_PER_CAPITA));
+    // A small city under the allowance pays no per-capita — the early game is safe.
+    const small = { population: 60, comJobs: 20, indJobs: 20, jobs: 40 };
+    expect(monthlyExpenses(tiles, small)).toBe(tileBill);
+  });
+
+  it('keeps a big city on a thin margin — the per-capita bill dwarfs flat upkeep', () => {
+    const tiles = createCity();
+    build(tiles, 0, 0, 'power');
+    build(tiles, 2, 0, 'power');
+    build(tiles, 4, 0, 'school');
+    build(tiles, 6, 0, 'firehouse');
+    const stats = { population: 1200, comJobs: 400, indJobs: 400, jobs: 800 };
+    const income = monthlyIncome(stats);
+    const flatBill = monthlyExpenses(tiles); // the old infrastructure-only model
+    const fullBill = monthlyExpenses(tiles, stats); // with the per-capita bill
+    // The per-capita term dominates the flat upkeep at scale...
+    expect(fullBill - flatBill).toBeGreaterThan(flatBill);
+    // ...cutting the surplus far below the old runaway (income − flat bill), so
+    // a disaster's lost income + rebuild spend can now drain the treasury.
+    expect(income - fullBill).toBeLessThan((income - flatBill) / 2);
+    // A lean big city still survives steady-state — bankruptcy is for shocks.
+    expect(income - fullBill).toBeGreaterThan(0);
+  });
+});
+
+describe('city traffic congestion', () => {
+  it('scores a road by the developed-zone levels it serves and flags it over threshold', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'road');
+    build(tiles, 4, 5, 'res');
+    tiles[cityIdx(4, 5)].level = 4;
+    build(tiles, 6, 5, 'com');
+    tiles[cityIdx(6, 5)].level = 4;
+    const load = computeCongestion(tiles);
+    expect(load[cityIdx(5, 5)]).toBe(8); // 4 + 4
+    expect(load[cityIdx(5, 5)]).toBeGreaterThan(CONGESTION_THRESHOLD);
+    expect(isCongested(load[cityIdx(5, 5)])).toBe(true);
+    expect(load[cityIdx(4, 5)]).toBe(0); // non-road tiles score 0
+
+    // A road serving a single small zone stays clear.
+    build(tiles, 5, 9, 'road');
+    build(tiles, 4, 9, 'res');
+    tiles[cityIdx(4, 9)].level = 2;
+    const clear = computeCongestion(tiles);
+    expect(clear[cityIdx(5, 9)]).toBe(2);
+    expect(isCongested(clear[cityIdx(5, 9)])).toBe(false);
+  });
+
+  it('bars a metropolis zone from densifying when its sole road is congested', () => {
+    // A serviced res tile at MAX_LEVEL in a big city with hot demand densifies
+    // to DENSE_LEVEL — unless the only road serving it is choked.
+    const clear = metropolis();
+    growthStep(clear, () => 0);
+    expect(clear[cityIdx(6, 5)].level).toBe(DENSE_LEVEL); // no congestion → densifies
+
+    const tiles = metropolis();
+    const congested = new Array(tiles.length).fill(false);
+    congested[cityIdx(6, 6)] = true; // the tile's only road neighbour
+    growthStep(tiles, () => 0, {}, congested);
+    expect(tiles[cityIdx(6, 5)].level).toBe(MAX_LEVEL); // choked → capped
+  });
+
+  it('still grows a choked low-level zone (slower) — only densification is barred', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'power');
+    build(tiles, 6, 6, 'road');
+    build(tiles, 6, 5, 'res');
+    build(tiles, 5, 4, 'park'); // nature so level 1 can form
+    build(tiles, 7, 6, 'ind');
+    tiles[cityIdx(7, 6)].level = 3; // job surplus → positive res demand
+    const congested = new Array(tiles.length).fill(false);
+    congested[cityIdx(6, 6)] = true;
+    // random()=0 < min(0.45, demand/70) × 0.4 → the choked zone still grows.
+    growthStep(tiles, () => 0, {}, congested);
+    expect(tiles[cityIdx(6, 5)].level).toBe(1);
+  });
+
+  /** A serviced res tile at MAX_LEVEL inside a metropolis with hot demand —
+   *  mirrors the density suite's fixture; its sole road neighbour is (6,6). */
+  function metropolis() {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'power');
+    build(tiles, 6, 6, 'road');
+    build(tiles, 6, 5, 'res');
+    build(tiles, 5, 4, 'park');
+    build(tiles, 3, 3, 'school');
+    tiles[cityIdx(6, 5)].level = MAX_LEVEL;
+    for (let x = 10; x < 22; x++) {
+      build(tiles, x, 2, 'res');
+      tiles[cityIdx(x, 2)].level = 8;
+      build(tiles, x, 10, 'ind');
+      tiles[cityIdx(x, 10)].level = 11;
+    }
+    return tiles;
+  }
+});
+
+describe('city milestones', () => {
+  it('pairs each population milestone with a rising cash grant', () => {
+    expect(MILESTONE_GRANTS).toHaveLength(POP_MILESTONES.length);
+    for (let i = 1; i < POP_MILESTONES.length; i++) {
+      expect(POP_MILESTONES[i]).toBeGreaterThan(POP_MILESTONES[i - 1]);
+      expect(MILESTONE_GRANTS[i]).toBeGreaterThan(MILESTONE_GRANTS[i - 1]);
+    }
+    expect(MILESTONE_GRANTS.every(g => g > 0)).toBe(true);
+    expect(METROPOLIS_INDEX).toBe(POP_MILESTONES.length - 1);
   });
 });

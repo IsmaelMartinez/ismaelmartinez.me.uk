@@ -38,6 +38,8 @@ const tools = [
         data-t-expenses={t('fun.city.expenses')}
         data-t-cant-afford={t('fun.city.cantAfford')}
         data-t-milestone={t('fun.city.milestone')}
+        data-t-obj-pop={t('fun.city.objPop')}
+        data-t-established={t('fun.city.established')}
         data-t-fire-alert={t('fun.city.fireAlert')}
         data-t-tornado-alert={t('fun.city.tornadoAlert')}
         data-t-quake-alert={t('fun.city.quakeAlert')}
@@ -80,6 +82,11 @@ const tools = [
               <span id="record" class="score-value">0</span>
             </div>
           </div>
+        </div>
+
+        <div class="objective-bar">
+          <span class="objective-label">🏙️ {t('fun.city.goal')}</span>
+          <span id="objective" class="objective-text" aria-live="polite"></span>
         </div>
 
         <div class="game-area">
@@ -230,6 +237,32 @@ const tools = [
 
   .score-value.money {
     color: #4ade80;
+  }
+
+  .objective-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    font-size: 0.9rem;
+  }
+
+  .objective-label {
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+
+  .objective-text {
+    font-weight: 700;
+    color: var(--color-accent);
   }
 
   .game-area {

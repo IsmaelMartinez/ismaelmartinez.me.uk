@@ -1,11 +1,10 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Rounds 1-3 planned; 1-2 shipped, 3 in progress.** Round 1 (**Refill
-the finite rosters**) and Round 2 (**Twitch-game gameplay & clarity**) are
-shipped and merged. Round 3 (**Sim stakes & goals** — Pixel Park + Microcity)
-is planned in full below and under construction. See "Execution notes" at the
-foot of each round. Rounds 4-5 remain queued sketches.
+Status: **Rounds 1-3 shipped.** Round 1 (**Refill the finite rosters**),
+Round 2 (**Twitch-game gameplay & clarity**), and Round 3 (**Sim stakes &
+goals** — Pixel Park + Microcity) are all planned and shipped. See "Execution
+notes" at the foot of each round. Rounds 4-5 remain queued sketches.
 
 ## Why this doc
 
@@ -614,16 +613,22 @@ late-game planning constraint.
 
 **1. Per-capita running costs (`budget.ts`, pure).** Services cost more the
 bigger the city they serve, so income no longer runs away from a flat upkeep.
-- `SERVICE_COST_PER_CAPITA = 0.9`.
-- `monthlyExpenses(tiles, stats?)` — adds `round((pop + jobs) ·
-  SERVICE_COST_PER_CAPITA)` **when `stats` is supplied**; the existing no-stats
-  signature (and its tests) stay valid. `game.ts` passes live `stats`.
-- Net per resident 1.5 − 0.9 = £0.6, per job 1 − 0.9 = £0.1, minus tile upkeep:
-  a lean city runs a **thin surplus**; sprawl, over-servicing, political fines,
-  or a quake razing a district (lost income while costs lag + rebuild spend) can
-  drain the treasury to `money<0`. (Weighed against power-load/brownouts — more
-  sim + draw; and time-based inflation — more arbitrary. Per-capita is a
-  one-line pure change that directly closes the runaway-income gap.)
+- `SERVICE_COST_PER_CAPITA = 0.9`, `SERVICE_FREE_ALLOWANCE = 150`.
+- `monthlyExpenses(tiles, stats?)` — adds `round(max(0, pop + jobs −
+  SERVICE_FREE_ALLOWANCE) · SERVICE_COST_PER_CAPITA)` **when `stats` is
+  supplied**; the existing no-stats signature (and its tests) stay valid.
+  `game.ts` passes live `stats`.
+- **The free allowance was a balance-iteration fix**, not in the first cut: a
+  flat per-capita bill from resident #1 death-spiralled *small* cities (a
+  browser probe bankrupted a stuck-at-72 city by month ~94, before it ever
+  reached the first grant). The allowance makes the squeeze a genuine
+  *late-game* one — a small/growing city pays nothing extra, but past ~150
+  people a developed city runs only a **thin surplus**, so sprawl,
+  over-servicing, political fines, or a quake razing a district (lost income
+  while costs lag + rebuild spend) can drain the treasury to `money<0`.
+  (Weighed against power-load/brownouts — more sim + draw; and time-based
+  inflation — more arbitrary. Per-capita is a one-line pure change that
+  directly closes the runaway-income gap.)
 
 **2. Milestone grants + metropolis win.** `MILESTONE_GRANTS = [400, 900, 1800,
 4000, 8000]` parallel to `MILESTONES = [100, 250, 500, 1000, 2000]`: crossing a
@@ -671,3 +676,50 @@ visual change, not a byte-identical refactor). Boot smoke against `dist`.
 - Congestion is the one mechanic with new gameplay coupling; it's gated to the
   late game and threaded as an *optional* growthStep input so every existing
   simulation test holds unchanged.
+
+## Round 3 execution notes (2026-07-21)
+
+Both commits landed and passed the full bar (lint, typecheck, build, tests,
+check-links) plus real-browser boot smokes. Test count 529 → 543 (+8 Park, +6
+Microcity). The design forks were resolved to the recommended spine: rising
+wages; lifetime-guests score; per-capita running costs; make traffic matter.
+
+- **Pixel Park** (commit "staff wages, objective ladder, lifetime-guests
+  score"). `operatingCost(tiles, day)` = flat upkeep + an unbounded per-head
+  wage bill (`wagePerAttraction`, grace of 5 days then `+1.4/attraction/day`),
+  charged at the day tick — so a park that stops growing its takings slides
+  back into `money<0`. The re-arm is proven, not hoped: `wagePerAttraction`
+  provably crosses `maxAttractionDailyRevenue()` (a stall's throughput-capped
+  daily ceiling), beyond which every attraction is net-negative regardless of
+  size. A five-rung `PARK_OBJECTIVES` ladder (welcomed/rating/peak) pays cash
+  rewards that offset the wage bill and ends in an "established" endless win;
+  the banked score switched from `peakGuests` (hard-capped at 120) to lifetime
+  `guestsWelcomed` (uncapped, still crowd-driven). Objective/score UI is DOM
+  (a goal strip), the economy is pure — **no canvas draw code changed**, so
+  the pixel-diff harness sees nothing. Boot smoke confirmed objectives fire and
+  pay out with no JS errors.
+
+- **Microcity** (commit "per-capita economy, milestone grants + win, live
+  traffic"). Three levers. (1) `monthlyExpenses(tiles, stats?)` gained a
+  per-capita service bill on population past a **free allowance** — the
+  allowance was a real balance-iteration fix (a browser probe showed a flat
+  per-capita bill death-spiralled small cities), moving the squeeze to the late
+  game: a small city pays nothing, a developed one runs a thin surplus that a
+  disaster can drain. (2) `MILESTONE_GRANTS` pay cash on each pop milestone,
+  the last being an endless "metropolis" win; a DOM goal strip shows progress.
+  (3) `computeCongestion` scores each road by the developed-zone level it serves
+  (**orthogonal neighbours** — matching `roadAdjacent` semantics, a small
+  refinement from the plan's Chebyshev sketch); `growthStep` gained an optional
+  `congested` input that throttles and dedensifies choked zones, and cars crawl
+  over congested tiles. The congestion mechanic is proven end-to-end by unit
+  tests (detection + the densify-choke); the car-slow rendering is inert until a
+  district actually congests, so the seeded starter screenshot scenarios came
+  out **byte-identical before/after** (verified with `screenshot-games.js` —
+  the required no-regression check), and a bespoke congesting capture was judged
+  not worth the deterministic-scenario engineering given the logic-level proof.
+
+Both games gained a DOM goal strip (goal + progress, or an "established"
+banner) between the header and the canvas — server-rendered label, runtime
+templates via `data-t-*`, invisible to the canvas screenshot harness. The
+candidates queue stays parked. Next up is Round 4 (flat-canvas art pass —
+Snake + Tank Duel) when the arcade is revisited.

@@ -1,10 +1,14 @@
 # Arcade Candidates, Round 3: After Line Hold and Cascade
 
 Date: 2026-07-18
-Status: Parked (2026-07-19) — the owner chose quality over quantity: the next
-arcade session is the consolidation round in
-`2026-07-19-arcade-consolidation-plan.md`, not a tenth cabinet. Revisit this
-queue after that round lands.
+Status: Parked indefinitely (updated 2026-07-21) — the owner chose quality
+over quantity, and after the two consolidation rounds landed confirmed the
+direction: **deepen the existing cabinets rather than build a tenth**. Arcade
+work now improves the nine shipped cabinets, tracked from
+`2026-07-21-arcade-improvement-round-1.md` (audit + ranked rounds). This
+queue stays parked until that deepening work is exhausted; the three
+candidates (Gem Caverns, Nova Patrol, Micro GP) remain designed-but-unbuilt
+for whenever a tenth cabinet is wanted.
 
 Originally: Proposed — design only, no code. This doc queues the arcade's
 next cabinet now that both games built from

@@ -122,8 +122,22 @@ export function initSyndicateGame(): void {
 
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
   const strings = {
-    missionNames: [s('tMission1Name', 'Hostile Takeover'), s('tMission2Name', 'Hearts & Minds'), s('tMission3Name', 'Regicide')],
-    missionBriefs: [s('tMission1Brief', ''), s('tMission2Brief', ''), s('tMission3Brief', '')],
+    missionNames: [
+      s('tMission1Name', 'Hostile Takeover'),
+      s('tMission2Name', 'Hearts & Minds'),
+      s('tMission3Name', 'Regicide'),
+      s('tMission4Name', 'Reinforcements'),
+      s('tMission5Name', 'Ground War'),
+      s('tMission6Name', 'Endgame')
+    ],
+    missionBriefs: [
+      s('tMission1Brief', ''),
+      s('tMission2Brief', ''),
+      s('tMission3Brief', ''),
+      s('tMission4Brief', ''),
+      s('tMission5Brief', ''),
+      s('tMission6Brief', '')
+    ],
     objectiveEliminate: s('tObjectiveEliminate', 'Eliminate the rival agents'),
     objectivePersuade: s('tObjectivePersuade', 'Persuade civilians'),
     objectiveExtract: s('tObjectiveExtract', 'Reach the extraction point'),

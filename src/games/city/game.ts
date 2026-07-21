@@ -269,8 +269,11 @@ export function initCityGame(): void {
   let fireCover = computeFireCover(tiles);
   let stats = cityStats(tiles);
   let demand = computeDemand(stats);
-  // Per-road traffic load; drives both the car slowdown and the growth choke.
-  let congestion = computeCongestion(tiles);
+  // Which road tiles are congested — congestion is a pure function of the
+  // slow-changing grid, so it's recomputed only in refreshDerivedState and the
+  // cached booleans are reused by both the growth choke and the per-frame car
+  // slowdown (no per-tick re-derivation).
+  let congested = computeCongestion(tiles).map(isCongested);
 
   // The record readout shows the table's best, beaten live by the current run.
   recordEl.textContent = board.best().toString();
@@ -311,7 +314,7 @@ export function initCityGame(): void {
     fireCover = computeFireCover(tiles);
     stats = cityStats(tiles);
     demand = computeDemand(stats, sumDemandModifiers(activeEvents));
-    congestion = computeCongestion(tiles);
+    congested = computeCongestion(tiles).map(isCongested);
   }
 
   /** Paints the goal strip: the next population milestone and progress, or the
@@ -393,7 +396,7 @@ export function initCityGame(): void {
     // Traffic scaled to the population; cars crawl over congested tiles, so
     // chokepoints visibly clot (the same congestion throttles growth below).
     cars = cars.filter(car => {
-      const slow = isCongested(congestion[car.to]) || isCongested(congestion[car.from]);
+      const slow = congested[car.to] || congested[car.from];
       return stepCar(tiles, car, simDt * (slow ? CONGESTED_CAR_SPEED : 1));
     });
     if (cars.length < targetCarCount(stats.population)) {
@@ -421,7 +424,6 @@ export function initCityGame(): void {
     growthTimer += simDt;
     if (growthTimer >= GROWTH_INTERVAL) {
       growthTimer -= GROWTH_INTERVAL;
-      const congested = congestion.map(isCongested);
       const result = growthStep(tiles, Math.random, sumDemandModifiers(activeEvents), congested);
       if (result.grown.length || result.decayed.length) refreshDerivedState();
       for (const i of result.grown) {

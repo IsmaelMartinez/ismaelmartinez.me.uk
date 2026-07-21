@@ -637,7 +637,8 @@ export function initParkGame(): void {
       showToast(`🏆 ${strings.established}`);
     }
     audio.playSfx('score');
-    renderObjective();
+    // The strip repaint is the caller's job (renderObjective runs every frame
+    // right after this), so there's no repaint here.
   }
 
   function startWalking(guest: Guest, path: number[], targetBuilding: number | null) {

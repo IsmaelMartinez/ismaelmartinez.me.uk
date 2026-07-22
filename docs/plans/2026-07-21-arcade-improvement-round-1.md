@@ -1,11 +1,17 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Rounds 1-4 shipped.** Round 1 (**Refill the finite rosters**),
-Round 2 (**Twitch-game gameplay & clarity**), Round 3 (**Sim stakes & goals** —
-Pixel Park + Microcity), and Round 4 (**Flat-canvas art pass** — Snake + Tank
-Duel) are all planned and shipped. See "Execution notes" at the foot of each
-round. Round 5 remains a queued sketch.
+Status: **Rounds 1-4 shipped; Round 5 planned + in progress below.** Round 1
+(**Refill the finite rosters**), Round 2 (**Twitch-game gameplay & clarity**),
+Round 3 (**Sim stakes & goals** — Pixel Park + Microcity), and Round 4
+(**Flat-canvas art pass** — Snake + Tank Duel) are all planned and shipped. See
+"Execution notes" at the foot of each round. Round 5 (**More authored content**)
+is scoped to **Critter Rescue levels + a new Syndicate objective kind** this
+session; **Pixel Park's attraction art is deferred** to the fresh audit that
+follows (it is the one Round 5 item that pulls in real iso draw code + a
+screenshot sub-pass, so it sits better as the first candidate of the next
+audit). **Round 5 closes the ranked plan** — after it, further arcade work needs
+a fresh audit.
 
 ## Why this doc
 
@@ -940,5 +946,169 @@ scaled-serpent snake, turret + road-wheels tank, distinct drawn shells.
   circle. Before/after crops confirmed the tank now reads as an armoured
   vehicle and the heavy shell as a bomb.
 
-The candidates queue stays parked. Round 5 (more authored content) remains the
-next queued sketch when the arcade is revisited.
+The candidates queue stays parked. Round 5 (more authored content) is planned
+in full below.
+
+---
+
+## Round 5 plan — More authored content
+
+Goal: refill the two remaining hand-authored rosters whose depth is a finite
+list, following the Critter Rescue content model — **every unit empirically
+proven by a headless completability suite**. This is a **content/data** round,
+not an art one: no economy or existing-render changes, so no screenshot pairs;
+the proof is passing headless tests. Each cabinet ships as **one commit** and
+passes the full bar after it (`npm run lint && npm run typecheck &&
+npm run build && npm test && npm run check-links`).
+
+### Scope decision — two of the three, Park deferred
+
+The ranked sketch listed three cabinets (Critter Rescue levels, a new Syndicate
+objective kind, Pixel Park attractions). Given a one-session budget with full
+verification after each commit, this round ships the **two that fit the
+content/data + headless-proof methodology cleanly**:
+
+- **Critter Rescue** — pure content (new levels), the model the round imitates.
+- **Syndicate** — the "expensive path" the sketch called out: one *new
+  objective kind*, wired into a new mission, proven winnable headlessly.
+
+**Pixel Park is deferred.** New attraction *types* need drawn iso art to the
+PR #176 bar (`grid.ts`'s `BUILDINGS` catalogue backs real `drawBuilding`
+geometry), which turns that item into a **draw-code art sub-pass with
+before/after screenshots** — the opposite of this round's "no draw code"
+framing, and the heaviest single item on the budget. Since Round 5 closes the
+ranked plan and the doc already says the next arcade work needs a fresh audit,
+**Park's attraction expansion is the natural first candidate of that fresh
+audit** rather than a rushed third commit here. (Flagged per the brief: yes, it
+pulls in real draw code, so it is a mini-art-pass, not a data-only change.)
+
+### Commit A — Critter Rescue: five new levels (21–25)
+
+**Intent.** Extend the hand-authored set from 20 → **25**, continuing the
+deliberate curve past the level-20 gauntlet with a **breather** and **fresh
+combinations of the back-half rule twists** (steel, timers, two hatches). The
+level *design* is the work; the headless `playLevel` harness
+(`lemmings.test.ts:543-611`) is the guarantee — each new level ships with a
+solvable playthrough test in the same style as levels 1–20, so "it's beatable"
+is a passing test, not a claim. No draw/logic change to the game itself — this
+is pure `levels.ts` data + i18n + tests.
+
+**The five (intents; exact layouts iterated against the harness):**
+- **21 — breather.** After the everything-at-once gauntlet, a calm
+  single-skill level (a build-ramp or dig-down) with generous stock and no
+  clock — deliberately resets tension, the same way 14 ("Double Trouble")
+  breathes after the 13-level grand tour.
+- **22 — steel twist.** A dig or bash level where **steel** gates the obvious
+  route, forcing the skill onto the one earth seam (reuses the proven L16/L18
+  steel-strip strategy windows so solvability transfers).
+- **23 — two-skill chain.** A **bash-then-build** (or build-then-bash) two-stage
+  route over a wall + step, reusing L8's proven windows.
+- **24 — timed combo.** A **float-into-a-pit-then-dig-out** route against a
+  hard `timeLimit`, combining L9/L12's umbrella-drop with a clock; par sits
+  strictly inside the limit (the levels-invariant test enforces this).
+- **25 — grand finale.** Beyond the gauntlet: **two hatches + timer + steel +
+  the full skill set** over a longer, multi-stage trek — the new capstone.
+
+**Fixed per-level overhead (the content model):**
+- Bump the length assertion `expect(LEVELS).toHaveLength(20)` → `25`
+  (`lemmings.test.ts:385`); the invariant loop and the ramp/hatch/exit bounds
+  checks already range over `LEVELS` so they cover the new entries for free.
+- Each new level (all ≥7) carries a `hint` key. The page auto-wires
+  `data-t-hint<index>` from `LEVELS` (`lemmings.astro:29-30`), so the only new
+  wiring is the translation keys: `fun.lemmings.hint21` … `hint25` **× 3
+  locales** (the locale-parity guard at `lemmings.test.ts:436-449` — which
+  ranges over `LEVELS.length` — enforces this).
+- Each new level gets a **solvable playthrough test** appended to the
+  `levels — solvable playthroughs` describe, asserting `saved ≥ needed` via a
+  `strategy` callback (and at interval 80 / `TRICKLE` for timed levels, so the
+  clock guarantee holds at the shipped release-slider default).
+
+**Verification.** Full bar; the new playthrough tests are the completability
+proofs. No render change (note byte-identical; no screenshot pair).
+
+### Commit B — Syndicate: a new "secure" objective kind (hold the LZ)
+
+**Intent.** Add the campaign's first **new objective mould** since launch — a
+*hold-an-area* contract — and wire it into a new **mission 7** finale, so the
+roster gains a genuinely new win condition rather than another reskin of
+eliminate/persuade/assassinate. Proven winnable headlessly through
+`missionStatus`, exactly like the other three.
+
+**Why hold-an-area (of the three sketched — sabotage / hold / escort).** It is
+the one new kind that needs **no new unit kind and no new sim AI**: the control
+point is the **existing extraction tile** (reused, not a new prop), ringed by
+guards with the same `spreadTargets` lair-ring the assassinate branch already
+uses, and the win is a **persuade-style scalar progress** counter. Escort would
+need a new VIP unit + follow behaviour + a new lose branch; sabotage is
+mechanically just assassinate-with-many-targets (low novelty). Hold reuses the
+most and tests the cleanest.
+
+**Changes (`src/games/syndicate/`, content/logic — no art):**
+- `units.ts`: no change (no new unit kind).
+- `missions.ts`:
+  - `Objective` gains `'secure'`; `MissionSpec` gains optional
+    `holdSeconds?: number` (seconds the squad must control the LZ; unset/0 for
+    the other moulds, so specs 1–6 are untouched).
+  - `spawnMission`: a `secure` branch that **rings the extraction tile with
+    guards** (mirroring the assassinate lair ring) so the LZ is contested;
+    enemies patrol as before. No `target` unit, no new setup field — the hold
+    zone *is* `setup.extraction`.
+  - `missionStatus` gains a 5th **optional** `holdProgress = 0` arg (back-
+    compatible with every existing 4-arg call) and a `case 'secure':` →
+    `holdProgress >= (spec.holdSeconds ?? 0) ? 'won' : 'ongoing'`.
+  - Append **mission 7**: `objective: 'secure'`, the deepest guard ring the
+    campaign fields, top-tier hostile chrome, `holdSeconds` ≈ 20, `reward`
+    6000 (> mission 6's 5000) — the new campaign closer.
+- `game.ts`:
+  - `holdProgress` state, reset per mission load; accumulated in `update` while
+    `agentAtExtraction()` is true for a `secure` mission (cumulative occupied-
+    time — clearly winnable, forgiving of a brief step-out). Passed as the new
+    `missionStatus` arg.
+  - `strings.objectiveSecure` (`s('tObjectiveSecure', 'Hold the landing
+    zone')`) and a 7th `missionNames`/`missionBriefs` entry.
+  - Objective HUD: a `secure` branch showing `Hold the LZ (⌊hold⌋/N s)`.
+  - The extraction-pad marker draw (today gated to `persuade`,
+    `game.ts:939`) is **generalized to also show for `secure`** — the one
+    small render touch, reusing the existing pad-draw rather than adding new
+    art (no screenshot pair; it is a functional objective marker, like
+    persuade's, not an art-bar change to existing pixels).
+- `syndicate.astro`: add `data-t-objective-secure` and
+  `data-t-mission7-name/-brief`.
+- `translations.ts` (× 3 locales): `fun.syndicate.objectiveSecure`,
+  `mission7Name`, `mission7Brief`.
+
+**Verification (`tests/games/syndicate.test.ts`):**
+- Update the roster test: `MISSIONS.length === 6` → `7`; the objective-set
+  assertion gains `'secure'`; mission 7 is `secure` with a reward above
+  mission 6; the `slice(3)` guard-weapon assertion still holds (mission 7's
+  guards carry uzis).
+- The winnability test (`for (const spec of MISSIONS.slice(3))`) gains a
+  `secure` branch: `missionStatus(spec, units, 0, false, 0)` is `'ongoing'` and
+  `missionStatus(spec, units, 0, false, spec.holdSeconds)` is `'won'` (mirrors
+  the persuade quota probe).
+- A spawn-integrity assertion that the `secure` mission rings the extraction
+  with its guards on walkable tiles (the existing `for (const spec of MISSIONS)`
+  spawn test already covers agent/civilian/enemy counts and walkability).
+- Confirm the new i18n keys resolve in all 3 locales.
+
+### Sequencing & risk (Round 5)
+- Order: this doc → Critter Rescue → Syndicate. One commit each, full bar after
+  each, single PR for the round.
+- **Critter Rescue's risk is the level layouts** — a hand-designed level that
+  the harness can't beat. Mitigated the same way the original 20 were: iterate
+  each layout against `playLevel` until its test passes (the test *is* the
+  completability proof). If a level proves stubborn, simplify it or drop to
+  four new levels and say so — the pure harness makes that a fast loop.
+- **Syndicate's risk is low**: the `secure` objective reuses the extraction
+  tile and the assassinate guard-ring, adds one optional `missionStatus` arg
+  (so every existing call and test stays valid), and its winnability is a
+  scalar-threshold check identical in shape to persuade's. The only render
+  touch is generalizing an existing marker.
+
+### Closing the ranked plan
+After Round 5, **the ranked plan (`2026-07-21` audit) is exhausted.** Further
+arcade work needs a **fresh audit** of the nine cabinets. The obvious first
+candidate for that audit is the item deferred here — **Pixel Park's attraction
+catalogue** (new ride/stall types with drawn iso art to the PR #176 bar) — plus
+anything the next inspection surfaces. The tenth-cabinet candidates queue
+(`2026-07-18-arcade-candidates-3.md`) stays **parked** throughout.

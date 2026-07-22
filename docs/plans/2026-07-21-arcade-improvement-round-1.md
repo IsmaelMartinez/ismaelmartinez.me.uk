@@ -1,17 +1,17 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Rounds 1-4 shipped; Round 5 planned + in progress below.** Round 1
+Status: **Rounds 1-5 all shipped — the ranked plan is closed.** Round 1
 (**Refill the finite rosters**), Round 2 (**Twitch-game gameplay & clarity**),
-Round 3 (**Sim stakes & goals** — Pixel Park + Microcity), and Round 4
-(**Flat-canvas art pass** — Snake + Tank Duel) are all planned and shipped. See
-"Execution notes" at the foot of each round. Round 5 (**More authored content**)
-is scoped to **Critter Rescue levels + a new Syndicate objective kind** this
-session; **Pixel Park's attraction art is deferred** to the fresh audit that
-follows (it is the one Round 5 item that pulls in real iso draw code + a
-screenshot sub-pass, so it sits better as the first candidate of the next
-audit). **Round 5 closes the ranked plan** — after it, further arcade work needs
-a fresh audit.
+Round 3 (**Sim stakes & goals** — Pixel Park + Microcity), Round 4
+(**Flat-canvas art pass** — Snake + Tank Duel), and Round 5 (**More authored
+content** — Critter Rescue levels + a new Syndicate objective kind) are all
+planned and shipped. See "Execution notes" at the foot of each round. Round 5
+held to two cabinets; **Pixel Park's attraction art was deferred** (the one item
+that pulls in real iso draw code + a screenshot sub-pass) and is the obvious
+first candidate of the **fresh audit** the arcade now needs — after Round 5,
+further arcade work starts from a new inspection of the nine cabinets, not this
+doc's ranking.
 
 ## Why this doc
 
@@ -1112,3 +1112,54 @@ candidate for that audit is the item deferred here — **Pixel Park's attraction
 catalogue** (new ride/stall types with drawn iso art to the PR #176 bar) — plus
 anything the next inspection surfaces. The tenth-cabinet candidates queue
 (`2026-07-18-arcade-candidates-3.md`) stays **parked** throughout.
+
+## Round 5 execution notes (2026-07-22)
+
+Both cabinet commits landed and passed the full bar (lint, typecheck, build,
+tests, check-links); Syndicate also cleared a real-browser boot smoke. Scope
+held to the recommended two cabinets — Pixel Park deferred to the fresh audit.
+Test count over the round: 543 (Round 4's close) → **550** (+6 Critter Rescue,
++1 Syndicate). No draw code changed on either cabinet beyond one small
+functional marker in Syndicate, so no screenshot pairs were needed.
+
+- **Critter Rescue** (commit "five new hand-authored levels (21-25)"). Pure
+  `levels.ts` data + hints + tests; no game logic or render change. The set grew
+  20 → 25, continuing the curve past the gauntlet: 21 a valley-crossing build
+  breather, 22 a steel-seam dig (with a counterfactual test proving the steel
+  half saves no one, echoing L16/L18), 23 a bash-then-build march, 24 a timed
+  umbrella-drop-into-dig, 25 a two-hatch timed steel finale. The one design
+  subtlety was the builder-overshoot rule — a build-onto-ledge climb must be
+  exactly 12 px (`BUILD_BRICKS`) so the builder exhausts its treads at the rim
+  rather than climbing past it — so 21/23's ledges were sized to a full
+  staircase and 25 reused level 20's proven bash/build strategy windows
+  verbatim. Every layout passed its headless `playLevel` proof on the first run
+  (the design is the work, the test is the guarantee). Five hint keys × 3
+  locales, auto-wired by the page from `LEVELS`; length assertion bumped to 25.
+  +6 tests.
+
+- **Syndicate** (commit "a new secure objective kind — hold the landing zone
+  (mission 7)"). The campaign's first new objective mould since launch, wired
+  into a mission-7 finale. It reuses the extraction tile as the hold zone (no
+  new prop), rings it with guards via the same `spreadTargets` lair-ring the
+  assassinate branch uses (the guards land ~3 tiles off the LZ — proven), and
+  threads win state through an **optional** `holdProgress` arg on
+  `missionStatus` (default 0, so every existing 4-arg call and test stayed
+  valid) plus a `secure` case. `game.ts` banks the seconds a living agent stands
+  on the LZ, shows a Hold-the-LZ HUD readout, and reuses the persuade
+  extraction-pad marker (lit green while held) — the one small render touch, a
+  functional objective marker rather than new art; no new unit kind and no new
+  sim AI. Mission 7 "Hold the Line" (20-s hold, deepest guard ring, top-tier
+  hostiles, reward 6000 > mission 6) + name/brief + objective label × 3 locales.
+  Tests: the seven-mission roster now spans all four objective moulds,
+  per-objective winnability gained a `secure` branch (ongoing below the hold,
+  won at it), the spawn test now checks guard counts, and a focused test proves
+  the guards ring the LZ and a squad wipe still loses. +1 test. The boot smoke
+  confirmed the mission counter reads **1/7** and the objective HUD updates with
+  no game JS errors (the only console noise was the offline preview failing to
+  fetch the external analytics script).
+
+**This closes the ranked plan.** Rounds 1–5 of the 2026-07-21 audit are all
+shipped. Further arcade work needs a **fresh audit** of the nine cabinets; its
+obvious first candidate is the item deferred here — **Pixel Park's attraction
+catalogue** (new ride/stall types with drawn iso art to the PR #176 bar, a
+screenshotted mini-art-pass). The tenth-cabinet candidates queue stays parked.

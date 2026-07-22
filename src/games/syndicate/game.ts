@@ -128,7 +128,8 @@ export function initSyndicateGame(): void {
       s('tMission3Name', 'Regicide'),
       s('tMission4Name', 'Reinforcements'),
       s('tMission5Name', 'Ground War'),
-      s('tMission6Name', 'Endgame')
+      s('tMission6Name', 'Endgame'),
+      s('tMission7Name', 'Hold the Line')
     ],
     missionBriefs: [
       s('tMission1Brief', ''),
@@ -136,12 +137,14 @@ export function initSyndicateGame(): void {
       s('tMission3Brief', ''),
       s('tMission4Brief', ''),
       s('tMission5Brief', ''),
-      s('tMission6Brief', '')
+      s('tMission6Brief', ''),
+      s('tMission7Brief', '')
     ],
     objectiveEliminate: s('tObjectiveEliminate', 'Eliminate the rival agents'),
     objectivePersuade: s('tObjectivePersuade', 'Persuade civilians'),
     objectiveExtract: s('tObjectiveExtract', 'Reach the extraction point'),
     objectiveAssassinate: s('tObjectiveAssassinate', 'Assassinate the rival executive'),
+    objectiveSecure: s('tObjectiveSecure', 'Hold the landing zone'),
     missionComplete: s('tMissionComplete', 'Mission complete'),
     nextMission: s('tNextMission', 'Next contract'),
     gameOver: s('tGameOver', 'Squad eliminated'),
@@ -231,6 +234,9 @@ export function initSyndicateGame(): void {
   let clock = 0;
   let moveMarker: { tile: number; t: number } | null = null;
   let extractionAnnounced = false;
+  // Seconds the squad has controlled the landing zone on a `secure` mission
+  // (cumulative occupied-time — one living agent at the LZ ticks it up).
+  let holdProgress = 0;
   const fx = createEffects({
     gravityScale: 120,
     launchKick: 20,
@@ -310,6 +316,7 @@ export function initSyndicateGame(): void {
     boostCooldown = 0;
     moveMarker = null;
     extractionAnnounced = false;
+    holdProgress = 0;
     fx.clear();
     decals = [];
     facing.clear();
@@ -453,7 +460,23 @@ export function initSyndicateGame(): void {
       showToast(`🚁 ${strings.objectiveExtract}`);
     }
 
-    const status = missionStatus(spec, world.units, persuadedCivilians(world), agentAtExtraction());
+    // A `secure` mission is won by holding the landing zone: bank the seconds a
+    // living agent stands on the LZ, and toast once the hold is complete.
+    if (spec.objective === 'secure' && agentAtExtraction()) {
+      const before = holdProgress;
+      holdProgress = Math.min(spec.holdSeconds ?? 0, holdProgress + dt);
+      if (before < (spec.holdSeconds ?? 0) && holdProgress >= (spec.holdSeconds ?? 0)) {
+        showToast(`🚁 ${strings.objectiveExtract}`);
+      }
+    }
+
+    const status = missionStatus(
+      spec,
+      world.units,
+      persuadedCivilians(world),
+      agentAtExtraction(),
+      holdProgress
+    );
     if (status === 'won') completeMission();
     else if (status === 'lost') endCampaign(false);
   }
@@ -936,10 +959,17 @@ export function initSyndicateGame(): void {
   }
 
   function drawExtraction() {
-    if (extraction < 0 || spec.objective !== 'persuade' || phase !== 'play') return;
+    // The pad marks the persuade escape route and doubles as the `secure`
+    // landing zone (same functional marker, no new art) — lit green while the
+    // squad actually controls it.
+    const marked = spec.objective === 'persuade' || spec.objective === 'secure';
+    if (extraction < 0 || !marked || phase !== 'play') return;
     const x = extraction % MAP_W;
     const y = Math.floor(extraction / MAP_W);
-    const open = persuadedCivilians(world) >= spec.persuadeQuota;
+    const open =
+      spec.objective === 'secure'
+        ? agentAtExtraction()
+        : persuadedCivilians(world) >= spec.persuadeQuota;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 4);
     const colour = open ? '#4ade80' : '#94a3b8';
 
@@ -1110,6 +1140,9 @@ export function initSyndicateGame(): void {
           count >= spec.persuadeQuota
             ? `🚁 ${strings.objectiveExtract}`
             : `🧠 ${strings.objectivePersuade} (${count}/${spec.persuadeQuota})`;
+      } else if (spec.objective === 'secure') {
+        const target = spec.holdSeconds ?? 0;
+        objectiveEl.textContent = `🚁 ${strings.objectiveSecure} (${Math.floor(holdProgress)}/${target}s)`;
       } else {
         objectiveEl.textContent = `🎯 ${strings.objectiveAssassinate}`;
       }

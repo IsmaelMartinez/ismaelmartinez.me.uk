@@ -139,6 +139,14 @@ export const translations = {
     'fun.lemmings.hint19': 'One hatch opens high, one low — umbrellas are only for the cliff crowd.',
     'fun.lemmings.hint20':
       'Bash the earth wall on the left, build over the steel on the right — and watch the clock.',
+    'fun.lemmings.hint21':
+      'The valley is too deep to climb out — build a staircase up the far bank and the crowd follows.',
+    'fun.lemmings.hint22': 'Spades bounce off steel. Dig the one earth seam on the left to drop through.',
+    'fun.lemmings.hint23': 'Bash through the wall, then build a staircase up to the ledge beyond it.',
+    'fun.lemmings.hint24':
+      'Umbrellas first so nobody splats, then dig through the pan — before the clock runs out.',
+    'fun.lemmings.hint25':
+      'Bash the earth wall on the left, ramp over the steel on the right — two crowds, one clock.',
     'fun.lemmings.score': 'Score',
     'fun.lemmings.timeBonus': 'Time bonus',
     'fun.lemmings.perfectBonus': 'Everyone home!',
@@ -621,6 +629,15 @@ export const translations = {
       'Una trampilla se abre en lo alto y otra abajo: los paraguas son solo para el grupo del precipicio.',
     'fun.lemmings.hint20':
       'Perfora el muro de tierra a la izquierda, construye sobre el acero a la derecha… y vigila el reloj.',
+    'fun.lemmings.hint21':
+      'El valle es demasiado hondo para salir andando: construye una escalera por la ladera opuesta y el grupo te sigue.',
+    'fun.lemmings.hint22':
+      'Las palas rebotan en el acero. Perfora la única veta de tierra a la izquierda para caer al otro lado.',
+    'fun.lemmings.hint23': 'Perfora el muro y luego construye una escalera hasta la cornisa que hay detrás.',
+    'fun.lemmings.hint24':
+      'Primero los paraguas para que nadie se estrelle, luego perfora la bandeja… antes de que acabe el reloj.',
+    'fun.lemmings.hint25':
+      'Perfora el muro de tierra a la izquierda, sube por una rampa sobre el acero a la derecha: dos grupos, un reloj.',
     'fun.lemmings.score': 'Puntos',
     'fun.lemmings.timeBonus': 'Bonus de tiempo',
     'fun.lemmings.perfectBonus': '¡Todos a casa!',
@@ -1104,6 +1121,15 @@ export const translations = {
       'Una trapa s\'obre a dalt i una a baix: els paraigües són només per al grup del penya-segat.',
     'fun.lemmings.hint20':
       'Perfora el mur de terra a l\'esquerra, construeix sobre l\'acer a la dreta… i vigila el rellotge.',
+    'fun.lemmings.hint21':
+      'La vall és massa fonda per sortir caminant: construeix una escala pel vessant oposat i el grup et segueix.',
+    'fun.lemmings.hint22':
+      'Les pales reboten a l\'acer. Perfora l\'única veta de terra a l\'esquerra per caure a l\'altre costat.',
+    'fun.lemmings.hint23': 'Perfora el mur i després construeix una escala fins a la cornisa que hi ha darrere.',
+    'fun.lemmings.hint24':
+      'Primer els paraigües perquè ningú s\'estavelli, després perfora la safata… abans que s\'acabi el rellotge.',
+    'fun.lemmings.hint25':
+      'Perfora el mur de terra a l\'esquerra, puja per una rampa sobre l\'acer a la dreta: dos grups, un rellotge.',
     'fun.lemmings.score': 'Punts',
     'fun.lemmings.timeBonus': 'Bonus de temps',
     'fun.lemmings.perfectBonus': 'Tothom a casa!',

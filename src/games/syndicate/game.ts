@@ -129,7 +129,9 @@ export function initSyndicateGame(): void {
       s('tMission4Name', 'Reinforcements'),
       s('tMission5Name', 'Ground War'),
       s('tMission6Name', 'Endgame'),
-      s('tMission7Name', 'Hold the Line')
+      s('tMission7Name', 'Hold the Line'),
+      s('tMission8Name', 'Scorched Earth'),
+      s('tMission9Name', 'Total Control')
     ],
     missionBriefs: [
       s('tMission1Brief', ''),
@@ -138,7 +140,9 @@ export function initSyndicateGame(): void {
       s('tMission4Brief', ''),
       s('tMission5Brief', ''),
       s('tMission6Brief', ''),
-      s('tMission7Brief', '')
+      s('tMission7Brief', ''),
+      s('tMission8Brief', ''),
+      s('tMission9Brief', '')
     ],
     objectiveEliminate: s('tObjectiveEliminate', 'Eliminate the rival agents'),
     objectivePersuade: s('tObjectivePersuade', 'Persuade civilians'),

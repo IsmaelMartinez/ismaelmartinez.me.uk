@@ -14,7 +14,8 @@ import {
   setupHiDpiCanvas,
   createGameAudio,
   wireSoundButton,
-  createEffects
+  createEffects,
+  shadeColor
 } from '../engine';
 import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
 import {
@@ -132,13 +133,24 @@ export function initTanksGame(): void {
     r: 0.5 + Math.random() * 1.2
   }));
 
-  // Sky, stars, moon, and mountain silhouettes never change during a match,
-  // so they're baked once per DPR change instead of re-filling gradients
-  // over the whole canvas every frame. The SKY_MARGIN overdraw that keeps
-  // screen shake from exposing a bare edge is filled live on the rare
-  // shaking frames, so the layer stays board-aligned (see createStaticLayer).
-  const backdrop = createStaticLayer(WIDTH, HEIGHT, paintBackdrop);
-  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, { onApply: backdrop.rebuild });
+  // The whole backdrop (sky, stars, moon, mountains) plus the terrain bakes
+  // into one static layer, rebuilt only when it actually changes — a DPR change
+  // or a crater reshaping the ground — instead of re-filling gradients and
+  // re-tessellating the terrain (~1,600 lineTo calls) every frame. The terrain
+  // is painted *onto* the opaque backdrop inside the layer, so blitting the
+  // finished opaque layer reproduces the old "backdrop blit + terrain draw"
+  // pixel-for-pixel (a transparent terrain-only layer would fringe the
+  // anti-aliased ground edge by a LSB and break the byte-identical bake). The
+  // SKY_MARGIN overdraw that keeps screen shake from exposing a bare edge is
+  // filled live on the rare shaking frames, so the layer stays board-aligned
+  // (see createStaticLayer). `ground` is declared before setupHiDpiCanvas so
+  // scene.rebuild can join it in onApply; paintTerrain guards the empty
+  // pre-round ground.
+  let ground: number[] = [];
+  const scene = createStaticLayer(WIDTH, HEIGHT, paintScene);
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
+    onApply: scene.rebuild
+  });
 
   function makeSky(target: CanvasRenderingContext2D): CanvasGradient {
     const sky = target.createLinearGradient(0, 0, 0, HEIGHT);
@@ -197,7 +209,36 @@ export function initTanksGame(): void {
     }
   }
 
-  let ground: number[] = [];
+  // Baked terrain: the dirt polygon + green surface line, identical to the old
+  // per-frame render. Repainted only when `ground` changes (crater / new round).
+  function paintTerrain(target: CanvasRenderingContext2D) {
+    if (!ground.length) return;
+    const dirt = target.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);
+    dirt.addColorStop(0, '#1e3a2f');
+    dirt.addColorStop(1, '#14241d');
+    target.fillStyle = dirt;
+    target.beginPath();
+    target.moveTo(0, HEIGHT);
+    for (let x = 0; x < WIDTH; x++) target.lineTo(x, ground[x]);
+    target.lineTo(WIDTH, HEIGHT);
+    target.closePath();
+    target.fill();
+
+    target.strokeStyle = '#34d399';
+    target.lineWidth = 2;
+    target.beginPath();
+    target.moveTo(0, ground[0]);
+    for (let x = 1; x < WIDTH; x++) target.lineTo(x, ground[x]);
+    target.stroke();
+  }
+
+  // The baked scene: backdrop first, then the terrain painted over it, so the
+  // layer is fully opaque and blits to an exact copy of the old draw order.
+  function paintScene(target: CanvasRenderingContext2D) {
+    paintBackdrop(target);
+    paintTerrain(target);
+  }
+
   let tanks: Tank[] = [];
   let current = 0;
   let wind = 0;
@@ -310,6 +351,7 @@ export function initTanksGame(): void {
 
   function newRound() {
     ground = generateTerrain(WIDTH, HEIGHT);
+    scene.rebuild();
     const p1x = 70 + Math.random() * 90;
     const p2x = WIDTH - 70 - Math.random() * 90;
     tanks = [makeTank(p1x, 60, '#38bdf8'), makeTank(p2x, 120, '#f87171')];
@@ -406,6 +448,7 @@ export function initTanksGame(): void {
     explosions.push({ x, y, t: 0, radius: weapon.radius });
     audio.playSfx('explosion');
     carveCrater(ground, HEIGHT, x, y, weapon.radius);
+    scene.rebuild(); // re-bake the reshaped terrain
     spawnDirt(x, y, weapon.radius);
     shake = Math.min(0.6, shake + weapon.radius / 160);
     for (const tank of tanks) {
@@ -591,24 +634,86 @@ export function initTanksGame(): void {
     ctx.save();
     ctx.translate(tank.x, tank.y);
 
-    if (!destroyed) {
-      const rad = (tank.angle * Math.PI) / 180;
-      ctx.strokeStyle = flashing ? '#fff' : tank.color;
-      ctx.lineWidth = 4;
+    // Value ramp off the team colour: a dark grounding edge and a lit top rim
+    // over the base fill (the drawBlock recipe), so the hull reads as armour.
+    const body = destroyed ? '#44403c' : flashing ? '#fff' : tank.color;
+    const dark = destroyed ? '#292524' : shadeColor(body, 0.45);
+    const lit = flashing ? '#fff' : shadeColor(body, 1.4);
+
+    // --- Tread band: a dark rounded track with road wheels showing through
+    // and a heftier drive sprocket at each end. ---
+    ctx.fillStyle = destroyed ? '#1c1917' : '#1f2937';
+    ctx.beginPath();
+    ctx.roundRect(-TANK_W / 2, -6, TANK_W, 6, 3);
+    ctx.fill();
+    ctx.fillStyle = destroyed ? '#0c0a09' : shadeColor(body, 0.5);
+    const wheels = 5;
+    for (let i = 0; i < wheels; i++) {
+      const wx = -TANK_W / 2 + 5 + (i * (TANK_W - 10)) / (wheels - 1);
+      const r = i === 0 || i === wheels - 1 ? 2.6 : 1.7;
       ctx.beginPath();
-      ctx.moveTo(0, -TANK_H);
-      ctx.lineTo(Math.cos(rad) * BARREL_LEN, -TANK_H - Math.sin(rad) * BARREL_LEN);
-      ctx.stroke();
+      ctx.arc(wx, -3, r, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    ctx.fillStyle = destroyed ? '#44403c' : flashing ? '#fff' : tank.color;
+    // --- Barrel (drawn before the turret so its root is capped) ---
+    if (!destroyed) {
+      const rad = (tank.angle * Math.PI) / 180;
+      const tipX = Math.cos(rad) * BARREL_LEN;
+      const tipY = -TANK_H - Math.sin(rad) * BARREL_LEN;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = flashing ? '#fff' : dark;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(0, -TANK_H);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+      ctx.strokeStyle = body;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -TANK_H);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      // Muzzle lip
+      ctx.fillStyle = flashing ? '#fff' : dark;
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- Hull: body + lit top rim + dark grounding outline ---
+    ctx.fillStyle = body;
     ctx.beginPath();
-    ctx.roundRect(-TANK_W / 2, -TANK_H, TANK_W, TANK_H, 5);
+    ctx.roundRect(-TANK_W / 2 + 1, -TANK_H, TANK_W - 2, TANK_H - 4, 4);
     ctx.fill();
-    ctx.fillStyle = destroyed ? '#292524' : 'rgba(0, 0, 0, 0.35)';
+    ctx.fillStyle = lit;
     ctx.beginPath();
-    ctx.roundRect(-TANK_W / 2, -5, TANK_W, 5, 2);
+    ctx.roundRect(-TANK_W / 2 + 3, -TANK_H + 1, TANK_W - 6, 2.5, 1.5);
     ctx.fill();
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(-TANK_W / 2 + 1, -TANK_H, TANK_W - 2, TANK_H - 4, 4);
+    ctx.stroke();
+
+    // --- Turret: a rounded mound the barrel springs from, seated on the hull
+    // top with its own rim + edge. ---
+    if (!destroyed) {
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.roundRect(-7, -TANK_H - 4, 14, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = lit;
+      ctx.beginPath();
+      ctx.roundRect(-5, -TANK_H - 3, 10, 1.8, 0.9);
+      ctx.fill();
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-7, -TANK_H - 4, 14, 7, 3.5);
+      ctx.stroke();
+    }
 
     // HP bar + name
     const barW = 44;
@@ -626,6 +731,81 @@ export function initTanksGame(): void {
       ctx.fillStyle = tank.color;
       ctx.font = '14px monospace';
       ctx.fillText('▼', 0, -TANK_H - 38);
+    }
+    ctx.restore();
+  }
+
+  /** A drawn shell per weapon, oriented to its velocity (replaces the emoji /
+   * plain-circle projectile): the missile a finned nose-cone, the heavy a dark
+   * finned bomb, the MIRV a segmented cluster shell. */
+  function drawShell(shot: Shot) {
+    const p = shot.p;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Math.atan2(p.vy, p.vx));
+    if (shot.weapon === 'heavy') {
+      ctx.fillStyle = '#3f3f46';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 6.5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#52525b'; // tail fins
+      ctx.beginPath();
+      ctx.moveTo(-5, -1);
+      ctx.lineTo(-8.5, -4);
+      ctx.lineTo(-6, 0);
+      ctx.lineTo(-8.5, 4);
+      ctx.lineTo(-5, 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fbbf24'; // hot nose cap
+      ctx.beginPath();
+      ctx.arc(4.6, 0, 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (shot.weapon === 'mirv') {
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 5.5, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(120, 53, 15, 0.6)'; // cluster banding bumps
+      for (const sx of [-2.2, 0, 2.2]) {
+        ctx.beginPath();
+        ctx.arc(sx, 0, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fef08a'; // pointed nose
+      ctx.beginPath();
+      ctx.moveTo(4.5, -2.2);
+      ctx.lineTo(8, 0);
+      ctx.lineTo(4.5, 2.2);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Missile: a finned nose-cone shell.
+      ctx.fillStyle = '#eab308'; // tail fins
+      ctx.beginPath();
+      ctx.moveTo(-4, -2.5);
+      ctx.lineTo(-6.5, -4);
+      ctx.lineTo(-4, -1);
+      ctx.moveTo(-4, 2.5);
+      ctx.lineTo(-6.5, 4);
+      ctx.lineTo(-4, 1);
+      ctx.fill();
+      ctx.fillStyle = '#fde047'; // body
+      ctx.beginPath();
+      ctx.moveTo(5.5, 0);
+      ctx.lineTo(1, -3);
+      ctx.lineTo(-4, -2.5);
+      ctx.lineTo(-4, 2.5);
+      ctx.lineTo(1, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#f87171'; // nose tip
+      ctx.beginPath();
+      ctx.moveTo(5.5, 0);
+      ctx.lineTo(2, -1.6);
+      ctx.lineTo(2, 1.6);
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.restore();
   }
@@ -648,27 +828,7 @@ export function initTanksGame(): void {
       ctx.fillRect(WIDTH, 0, SKY_MARGIN, HEIGHT);
     }
 
-    backdrop.draw(ctx);
-
-    if (ground.length) {
-      const dirt = ctx.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);
-      dirt.addColorStop(0, '#1e3a2f');
-      dirt.addColorStop(1, '#14241d');
-      ctx.fillStyle = dirt;
-      ctx.beginPath();
-      ctx.moveTo(0, HEIGHT);
-      for (let x = 0; x < WIDTH; x++) ctx.lineTo(x, ground[x]);
-      ctx.lineTo(WIDTH, HEIGHT);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = '#34d399';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, ground[0]);
-      for (let x = 1; x < WIDTH; x++) ctx.lineTo(x, ground[x]);
-      ctx.stroke();
-    }
+    scene.draw(ctx);
 
     // Wind indicator
     if (phase !== 'idle') {
@@ -712,10 +872,7 @@ export function initTanksGame(): void {
         ctx.arc(shot.trail[i].x, shot.trail[i].y, 2, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = '#fde047';
-      ctx.beginPath();
-      ctx.arc(shot.p.x, shot.p.y, shot.weapon === 'heavy' ? 5.5 : 4, 0, Math.PI * 2);
-      ctx.fill();
+      drawShell(shot);
     }
 
     for (const s of smoke) {
@@ -894,6 +1051,7 @@ export function initTanksGame(): void {
 
   // Idle backdrop so the canvas isn't empty behind the start overlay
   ground = generateTerrain(WIDTH, HEIGHT);
+  scene.rebuild();
   syncControls();
   createGameLoop(update, render).start();
 }

@@ -12,7 +12,9 @@ import {
   setupHiDpiCanvas,
   createGameAudio,
   wireSoundButton,
-  createEffects
+  createEffects,
+  hash01,
+  shadeColor
 } from '../engine';
 import {
   COLS,
@@ -261,27 +263,55 @@ export function initSnakeGame(): void {
     ctx.fill();
   }
 
-  function drawApple(cx: number, cy: number) {
+  // A short red palette so consecutive apples aren't stamped copies; the pick
+  // is hashed off the fruit's board cell, so it's stable while the apple sits.
+  const APPLE_REDS = ['#ef4444', '#e23a3a', '#f75555'];
+
+  // Precomputed scale-dot shades (0.40–0.72 alpha) so the hashed per-segment
+  // pick is an array index, not a per-frame string build.
+  const SCALE_SHADES = [
+    'rgba(6, 78, 59, 0.40)',
+    'rgba(6, 78, 59, 0.48)',
+    'rgba(6, 78, 59, 0.56)',
+    'rgba(6, 78, 59, 0.64)',
+    'rgba(6, 78, 59, 0.72)'
+  ];
+
+  function drawApple(cx: number, cy: number, seed: number) {
     const pulse = 1 + 0.07 * Math.sin(clock * 5);
     const r = (CELL / 2 - 3) * pulse;
     drawShadow(cx, cy, r + 2);
-    ctx.fillStyle = '#ef4444';
+    const body = APPLE_REDS[Math.floor(hash01(seed, 1) * APPLE_REDS.length)];
+    ctx.fillStyle = body;
     ctx.beginPath();
     ctx.arc(cx, cy + 1, r, 0, Math.PI * 2);
     ctx.fill();
-    // Leaf
+    // Dark grounding rim across the lower belly, for outline discipline.
+    ctx.strokeStyle = shadeColor(body, 0.55);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy + 1, r - 0.75, 0.16 * Math.PI, 0.84 * Math.PI);
+    ctx.stroke();
+    // Leaf — hashed side and angle.
+    const side = hash01(seed, 2) < 0.5 ? 1 : -1;
+    const leafAngle = -0.6 * side + (hash01(seed, 4) - 0.5) * 0.5;
     ctx.fillStyle = '#4ade80';
     ctx.beginPath();
-    ctx.ellipse(cx + 2.5, cy - r, 3.5, 1.8, -0.6, 0, Math.PI * 2);
+    ctx.ellipse(cx + 2.5 * side, cy - r, 3.5, 1.8, leafAngle, 0, Math.PI * 2);
     ctx.fill();
-    // Shine
+    // Shine — a main highlight plus a hashed second speck on some apples.
     ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
     ctx.beginPath();
     ctx.arc(cx - r * 0.35, cy - r * 0.3, r * 0.22, 0, Math.PI * 2);
     ctx.fill();
+    if (hash01(seed, 3) < 0.5) {
+      ctx.beginPath();
+      ctx.arc(cx + r * 0.22, cy - r * 0.42, r * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
-  function drawBonus(cx: number, cy: number, ticksLeft: number) {
+  function drawBonus(cx: number, cy: number, ticksLeft: number, seed: number) {
     const pulse = 1 + 0.12 * Math.sin(clock * 7);
     const r = (CELL / 2 - 2) * pulse;
     drawShadow(cx, cy, r + 1);
@@ -295,10 +325,24 @@ export function initSnakeGame(): void {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
+    // Dark grounding rim on the lower belly.
+    ctx.strokeStyle = shadeColor('#facc15', 0.6);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 0.75, 0.16 * Math.PI, 0.84 * Math.PI);
+    ctx.stroke();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.beginPath();
     ctx.arc(cx - r * 0.3, cy - r * 0.3, r * 0.25, 0, Math.PI * 2);
     ctx.fill();
+    // Hashed sparkle specks so each bonus twinkles differently.
+    const sparkles = 2 + Math.floor(hash01(seed, 5) * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    for (let k = 0; k < sparkles; k++) {
+      const a = hash01(seed, k + 6) * Math.PI * 2;
+      const rr = r * (0.35 + hash01(seed, k + 9) * 0.4);
+      ctx.fillRect(cx + Math.cos(a) * rr - 0.5, cy + Math.sin(a) * rr - 0.5, 1, 1);
+    }
   }
 
   /** Interpolated pixel centre of segment i between the last two steps. */
@@ -318,20 +362,36 @@ export function initSnakeGame(): void {
     if (points.length > 1) {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      // Build the tube centreline once, then re-stroke it at each width — the
+      // path persists across stroke() calls, so a long snake doesn't pay to
+      // rebuild the polyline per layer.
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-      ctx.strokeStyle = flash ? '#fca5a5' : '#15803d';
-      ctx.lineWidth = CELL - 3;
-      ctx.stroke();
-      ctx.strokeStyle = flash ? '#fee2e2' : '#22c55e';
-      ctx.lineWidth = CELL - 9;
-      ctx.stroke();
-      // Scale banding: a darker chevron dot on every other segment, so the
-      // body reads as a patterned snake rather than a smooth tube.
-      if (!flash) {
-        ctx.fillStyle = 'rgba(6, 78, 59, 0.55)';
+      if (flash) {
+        ctx.strokeStyle = '#fca5a5';
+        ctx.lineWidth = CELL - 3;
+        ctx.stroke();
+        ctx.strokeStyle = '#fee2e2';
+        ctx.lineWidth = CELL - 9;
+        ctx.stroke();
+      } else {
+        // A dark→mid→lit width ramp: a grounding outline edge, the body, and a
+        // lit core, so the tube reads with value contrast instead of two flats.
+        ctx.strokeStyle = '#052e16';
+        ctx.lineWidth = CELL - 1;
+        ctx.stroke();
+        ctx.strokeStyle = '#166534';
+        ctx.lineWidth = CELL - 3;
+        ctx.stroke();
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = CELL - 8;
+        ctx.stroke();
+        // Scale banding: a chevron dot on every other segment, its shade hashed
+        // off the head-distance index so the scales vary yet stay stable per
+        // body position (anchored to the head, not crawling).
         for (let i = 2; i < points.length; i += 2) {
+          ctx.fillStyle = SCALE_SHADES[Math.floor(hash01(i, 3) * SCALE_SHADES.length)];
           ctx.beginPath();
           ctx.arc(points[i].x, points[i].y, CELL / 2 - 7, 0, Math.PI * 2);
           ctx.fill();
@@ -346,6 +406,19 @@ export function initSnakeGame(): void {
     ctx.beginPath();
     ctx.arc(head.x, head.y, CELL / 2 - 1, 0, Math.PI * 2);
     ctx.fill();
+    if (!flash) {
+      // Dark grounding ring + a crown highlight so the head sits proud of the
+      // body instead of merging into the tube.
+      ctx.strokeStyle = '#052e16';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, CELL / 2 - 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+      ctx.beginPath();
+      ctx.arc(head.x - heading.x * 2, head.y - heading.y * 2 - 2, CELL / 2 - 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     const side = { x: -heading.y, y: heading.x };
     const eyeForward = 3.5;
@@ -376,8 +449,13 @@ export function initSnakeGame(): void {
     }
 
     boardLayer.draw(ctx);
-    if (state.food.x >= 0) drawApple(px(state.food.x), px(state.food.y));
-    if (state.bonus) drawBonus(px(state.bonus.pos.x), px(state.bonus.pos.y), state.bonus.ticksLeft);
+    if (state.food.x >= 0) {
+      drawApple(px(state.food.x), px(state.food.y), state.food.x * COLS + state.food.y);
+    }
+    if (state.bonus) {
+      const { pos, ticksLeft } = state.bonus;
+      drawBonus(px(pos.x), px(pos.y), ticksLeft, pos.x * COLS + pos.y);
+    }
 
     const interval = stepInterval(state.foodsEaten);
     const t = phase === 'play' && !paused ? Math.min(1, moveTimer / interval) : 1;

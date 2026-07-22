@@ -1,10 +1,11 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Rounds 1-3 shipped.** Round 1 (**Refill the finite rosters**),
-Round 2 (**Twitch-game gameplay & clarity**), and Round 3 (**Sim stakes &
-goals** — Pixel Park + Microcity) are all planned and shipped. See "Execution
-notes" at the foot of each round. Rounds 4-5 remain queued sketches.
+Status: **Rounds 1-4 shipped.** Round 1 (**Refill the finite rosters**),
+Round 2 (**Twitch-game gameplay & clarity**), Round 3 (**Sim stakes & goals** —
+Pixel Park + Microcity), and Round 4 (**Flat-canvas art pass** — Snake + Tank
+Duel) are all planned and shipped. See "Execution notes" at the foot of each
+round. Round 5 remains a queued sketch.
 
 ## Why this doc
 
@@ -723,3 +724,221 @@ banner) between the header and the canvas — server-rendered label, runtime
 templates via `data-t-*`, invisible to the canvas screenshot harness. The
 candidates queue stays parked. Next up is Round 4 (flat-canvas art pass —
 Snake + Tank Duel) when the arcade is revisited.
+
+---
+
+## Round 4 plan — Flat-canvas art pass
+
+Goal: the two flat-canvas cabinets — Snake and Tank Duel, the only playable
+ones **not** in the PR #176 art-definition round — reach the art bar the five
+iso sims already meet (finer drawing units, shading, outline discipline,
+hashed variety, baked static layers; see `2026-07-19-arcade-art-definition.md`
+"Ground rules"). This is a **draw-code** round: unlike Rounds 1–3 the render
+output changes on purpose, so **screenshots are the primary verification** and
+each commit ships **before/after pairs**. Neither game is in
+`scripts/screenshot-games.js` yet (it covers only the iso cabinets), so the
+round's first job is extending the harness. Each game ships as **one commit**
+and passes the full bar after it (`npm run lint && npm run typecheck &&
+npm run build && npm test && npm run check-links`).
+
+Non-goals (same as PR #176): no gameplay, scoring, or layout changes; no
+canvas resize; nothing touching pointer math (`toLogical`) or the headless
+pure-module tests. All work is in the games' closure draw helpers.
+
+### Harness extension (folded into the doc/first commit)
+
+`scripts/screenshot-games.js` gains two flat-canvas scenarios. Both games are
+DOM-input driven (buttons/keys), not iso tile-clicks, so they don't need the
+`VIEWS`/`clickTile` machinery — they drive the same seeded clock:
+
+- **Snake** (`/en/fun/snake/`): `#start-btn`, then feed a fixed key script
+  (`window`-dispatched `keydown`s) and step the clock so the snake grows to a
+  known length with an apple and — by eating to the 5th apple — a bonus apple
+  on the board. Two snaps: `snake-play` (mid-length body + apple) and
+  `snake-bonus` (bonus apple visible with its timer ring). The seeded
+  `Math.random` fixes apple/bonus placement, so captures are deterministic.
+- **Tank Duel** (`/en/fun/tanks/`): click `#vs-cpu-btn` (seeded terrain +
+  fixed start), snap `tanks-aim` (both tanks on the seeded terrain, wind
+  indicator, aim guide). Then script one human shot (set the angle/power
+  sliders, `#fire-btn`) and step until the shell lands and the dust settles,
+  snap `tanks-impact` (a crater in the terrain — exercises the bake-on-crater
+  path — plus a drawn shell mid-flight in a second snap `tanks-fly`). Snaps
+  are taken on **settled, shake==0** frames so the seeded `Math.random` shake
+  jitter can't leak in.
+
+The harness note (header comment + the `game` list in the usage line) is
+updated to list `snake` and `tanks`.
+
+### Commit A — Snake: shading, outline discipline, hashed variety
+
+**Intent.** Snake is the stronger flat cabinet but still short of the bar: the
+body is two flat greens with no grounding outline or lit rim, and nothing is
+hashed — every segment and every apple is byte-identical. The board already
+bakes (`createStaticLayer`/`paintBoard`) and the pieces are real vector
+primitives, so this is a **shading/outline/variety pass, not a rebuild**.
+
+**Changes (`src/games/snake/game.ts` draw helpers only):**
+- **Body outline + shading ramp (`drawSnake`).** The current two-stroke tube
+  (base `#15803d` + lit `#22c55e`) gains a **dark grounding outline** as the
+  widest stroke and a **lit top rim** so the body reads with value contrast:
+  outline `#052e16` (width `CELL-1`) → mid `#166534` (width `CELL-3`) → lit
+  core `#22c55e` (width `CELL-8`). The dying-flash palette keeps its existing
+  red ramp.
+- **Hashed scale variety (`drawSnake`).** The flat chevron dots become
+  **hashed-shade scale marks**: each dot's darkness keyed off `hash01(i, salt)`
+  (engine `canvas.ts`) on the segment's head-distance index `i`, so the scales
+  vary segment-to-segment but stay stable per body position (anchored to
+  head-distance, not crawling). Still `i += 2`, still skipped on the flash
+  frames.
+- **Head rim (`drawSnake`).** The head dome gets the same dark outline ring +
+  a small lit highlight so it grounds against the body; eyes unchanged.
+- **Apple variety (`drawApple`).** Keyed on the apple's board cell
+  (`hash01(food.x * COLS + food.y, salt)`): leaf angle/side, a hashed count of
+  1–2 shine specks, and a subtle body-tone pick from a 2–3 red palette — so
+  consecutive apples aren't identical. Pulse/shadow unchanged. A dark rim arc
+  grounds the fruit.
+- **Bonus variety (`drawBonus`).** Hashed sparkle-speck positions on the golden
+  body; timer ring + pulse unchanged.
+
+**Intended visual effect:** the snake reads as a rounded, outlined, scaled
+serpent instead of a flat two-tone tube; apples and the bonus each look
+slightly different rather than stamped copies — hashed, so stable across frames
+and DPR rebuilds. No motion, timing, or hitbox change.
+
+**Verification:** full bar (draw-only, so the headless `snake.test.ts` stays
+green untouched); **before/after** `snake-play` + `snake-bonus` pairs from the
+extended harness; browser boot smoke (run starts, console clean).
+
+### Commit B — Tank Duel: terrain bake + tank/weapon art
+
+Two changes in one game commit — a **byte-identical perf refactor** (terrain
+bake) plus the **intended art changes** (tanks + shells). The bake is verified
+first, in isolation, as byte-identical (`cmp`) before the art goes on top.
+
+**1. Terrain bake-on-crater (pure perf, byte-identical).** `render()`
+re-tessellates the dirt polygon every frame (~800 `lineTo` for the fill +
+~800 for the surface stroke) though `ground` only changes on `carveCrater`.
+Bake it:
+- A `terrainLayer = createStaticLayer(WIDTH, HEIGHT, paintTerrain)` where
+  `paintTerrain` draws the exact same dirt gradient fill + green surface
+  stroke from the current `ground` (guarded `if (!ground.length) return`).
+- Rebuild the layer only when `ground` changes: after `generateTerrain` in
+  `newRound` and the idle init, and after `carveCrater` in `impactAt`. Chain
+  `terrainLayer.rebuild` into `setupHiDpiCanvas`'s `onApply` beside
+  `backdrop.rebuild` so a DPR change re-bakes both.
+- `render()` blits `terrainLayer.draw(ctx)` in place of the per-frame
+  tessellation, at the same point in the draw order (after the backdrop blit,
+  before the tanks), so compositing is identical. Under screen shake it gets
+  the same whole-pixel translate as the backdrop.
+- **Proof:** capture the harness scenarios on the pre-bake render, apply the
+  bake **alone** (no art yet), re-capture, and `cmp` byte-for-byte. The bake
+  removes no `Math.random` calls, so the seeded shake sequence is preserved;
+  snaps are taken on settled frames regardless.
+
+**2. Tank art — turret, tread, shading ramp, outline (`drawTank`).** Today a
+`roundRect` hull + a flat 5px tread strip + a single stroked barrel line, no
+turret/wheels/shading/outline. Bring it to the bar with value contrast:
+- **Hull:** grounding dark outline (`shadeColor(color, low)`) + lit top rim
+  (`shadeColor(color, high)`) over the body fill — the same low/high recipe
+  `drawBlock` uses. (Engine `shadeColor` from `iso.ts`.)
+- **Tread:** a rounded track band with **road-wheel dots** showing through
+  (hashed nothing — fixed count, both tanks identical is fine; the variety
+  bar is per-*tile* construction, and there's one tank sprite), a drive
+  sprocket hint at each end.
+- **Turret:** a small rounded turret dome seated on the hull, the barrel
+  emerging from it (barrel keeps its live `angle`); a muzzle lip at the tip.
+- Destroyed/flash palettes preserved; HP bar, name, active marker unchanged.
+- The specific turret/tread silhouette is a **craft choice → confirm the
+  direction (2–3 variants) before building.**
+- **Cost:** the tank is drawn per frame today and stays per frame (it moves /
+  aims / flashes); the added detail is a handful of arcs/rects per tank, well
+  within the two-sprite budget. No new per-frame allocation (helpers at
+  closure scope, colours precomputed where animation-independent).
+- **Contract note:** `TANK_W`/`TANK_H`/`BARREL_LEN` and `barrelTip` (used by
+  `fire()` and the aim guide) are **unchanged**, so shot origin and pointer
+  aim math are untouched — the new art draws within the existing footprint.
+
+**3. Weapon projectile shapes (`render` shot loop).** Today every shell is an
+identical yellow circle (heavy just a larger radius). Give each `WeaponId` a
+distinct drawn shell, oriented to its velocity: **missile** a pointed
+nose-cone shell, **heavy** a bigger dark finned bomb, **mirv** a segmented
+cluster shell. Trail unchanged. (The DOM weapon-bar **emoji stay** — they're
+off-canvas UI chips, the arcade's accepted glyph channel, like Pixel Park's
+mount emoji; the screenshot harness captures canvas pixels only, so they never
+appear in a pair regardless.) Shell shapes are a **craft choice → confirm
+before building.**
+
+**Intended visual effect:** tanks read as armoured vehicles (turret, wheeled
+tread, shaded hull with a grounding edge) instead of a rounded bar with a
+line; in-flight shells are distinguishable by weapon. Terrain is pixel-for-
+pixel unchanged (the bake) except where a crater is carved by play.
+
+**Verification:** the byte-identical `cmp` on the bake (stage 1) reported
+explicitly; then full bar; **before/after** `tanks-aim` + `tanks-fly` +
+`tanks-impact` pairs (after-art differs by design; the crater in
+`tanks-impact` also demonstrates the bake-on-crater rebuild); browser boot
+smoke (match starts, a shot fires, console clean).
+
+### Sequencing & risk (Round 4)
+- Order: this doc + harness extension → Snake → Tank Duel. One commit per
+  game, full bar after each, single PR for the round.
+- **Screenshots are the deliverable-grade check** this round (draw code
+  changes), so the harness extension lands first and every commit carries its
+  pairs. The one hard invariant is the terrain bake: it must `cmp`
+  byte-identical before any art is layered — if it doesn't, the bake leaked a
+  render difference and gets fixed before proceeding.
+- Craft risk (does the finer tank/snake art actually look better at this
+  scale) is handled the PR #176 way: half/quarter-pixel alignment for 1px
+  detail, value-contrast outlines, and direction confirmed with the owner on
+  the non-obvious levers (turret/tread silhouette, shell shapes, snake
+  shading/variety scheme) before building.
+- No per-frame cost creep: the terrain bake *removes* ~1,600 path ops/frame;
+  the tank detail is a bounded addition to an already per-frame sprite. Frame
+  time is spot-checked in the browser if either game feels heavier.
+
+## Round 4 execution notes (2026-07-22)
+
+All three commits landed and passed the full bar (lint, typecheck, build, 543
+tests unchanged, check-links). The three non-obvious craft levers were
+confirmed with the owner up front and all built to the recommended option:
+scaled-serpent snake, turret + road-wheels tank, distinct drawn shells.
+
+- **Harness extension** (commit "plan the flat-canvas art pass + extend the
+  screenshot harness"). Both flat cabinets are now in
+  `scripts/screenshot-games.js`. The Tank Duel scenario was straightforward
+  (seeded terrain + a scripted heavy shot). Snake fought back: the game renders
+  with **interpolated** (sliding) motion, so a naive fixed-dt or green-pixel
+  poll drifts against the pixels, and the body's dark scale-dots defeat
+  eye-based head detection. The landing design is a small greedy bot that reads
+  only the apple/bonus (solid red/gold discs) off the canvas and tracks the
+  head/body logically through a **drift-free** move primitive — it steps
+  exactly the current (shrinking) move interval each call, carrying the
+  sub-step remainder, so cumulative stepped time tracks cumulative intervals
+  and exactly one move fires. It reliably grows the snake and reaches the timed
+  bonus. Output dirs (before/after/shots) are gitignored.
+
+- **Snake** (commit "outline discipline, shading ramp, and hashed variety").
+  Draw-only, headless tests untouched. The two-flat-green tube gained a
+  dark→mid→lit width ramp and a dark head ring + crown highlight; the flat
+  chevron scale dots took a shade hashed off the head-distance index; apples
+  gained a hashed red/leaf/shine + dark belly rim (keyed on board cell) and the
+  bonus a dark rim + hashed sparkles. Before/after crops confirmed the head now
+  sits proud of the body and the fruit reads with depth.
+
+- **Tank Duel** (commit "bake the terrain, and give tanks a turret/tread +
+  drawn shells"). The terrain bake was the round's one hard invariant. First
+  cut used a separate transparent terrain layer and `cmp` flagged **339 pixels,
+  max delta 1 LSB, confined to the 2 rightmost anti-aliased columns** — the
+  classic loss from compositing an AA edge through a transparent buffer.
+  Resolved by baking the terrain **onto the opaque backdrop** in one scene
+  layer, so the finished opaque blit reproduces the old draw order exactly:
+  `cmp` then reported **IDENTICAL** on all three scenarios. The art then went on
+  top: hull value ramp + rounded turret dome + wheeled tread band +
+  muzzle-lipped barrel (footprint/`barrelTip` unchanged, so aim math is
+  untouched), and per-weapon drawn shells oriented to velocity (missile
+  nose-cone, heavy finned bomb, MIRV cluster) replacing the identical yellow
+  circle. Before/after crops confirmed the tank now reads as an armoured
+  vehicle and the heavy shell as a bomb.
+
+The candidates queue stays parked. Round 5 (more authored content) remains the
+next queued sketch when the arcade is revisited.

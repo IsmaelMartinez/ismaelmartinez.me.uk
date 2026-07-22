@@ -460,11 +460,16 @@ export function initSyndicateGame(): void {
       showToast(`🚁 ${strings.objectiveExtract}`);
     }
 
+    // Computed once per tick and reused below — it scans living agents and does
+    // distance math, and both the secure hold and missionStatus want the same
+    // value for this frame.
+    const atExtraction = agentAtExtraction();
+
     // A `secure` mission is won by holding the landing zone: bank the seconds a
     // living agent stands on the LZ (clamped to the target). The completed hold
     // is the win itself — completeMission below signals it, and the HUD readout
     // already shows the count climbing — so there is no separate toast here.
-    if (spec.objective === 'secure' && agentAtExtraction()) {
+    if (spec.objective === 'secure' && atExtraction) {
       holdProgress = Math.min(spec.holdSeconds ?? 0, holdProgress + dt);
     }
 
@@ -472,7 +477,7 @@ export function initSyndicateGame(): void {
       spec,
       world.units,
       persuadedCivilians(world),
-      agentAtExtraction(),
+      atExtraction,
       holdProgress
     );
     if (status === 'won') completeMission();

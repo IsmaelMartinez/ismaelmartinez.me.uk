@@ -17,7 +17,7 @@
  *   for f in before/*.png; do cmp "$f" "after/$(basename "$f")"; done
  *
  * Usage: node scripts/screenshot-games.js <outDir> [game...]
- * (games: linehold syndicate city park; default all)
+ * (games: linehold syndicate city park snake tanks; default all)
  * Serves ./dist via a tiny static server on 4173. The Chromium path below
  * matches the Claude Code cloud environment; point CHROMIUM elsewhere
  * (e.g. a local Playwright install) as needed. The scripted click
@@ -225,6 +225,143 @@ if (run('park')) {
   await page.click('#rotate-right');
   await step(page, 20, 100);
   await snap(page, 'park-rotated');
+  await page.close();
+}
+
+// --- Snake (flat canvas) --------------------------------------------------
+// Driven by document-level keydown, not iso tile clicks. Early in a run
+// ~160ms of virtual time is one snake move (interval starts at 0.16s), so a
+// cell-at-a-time serpentine steers deterministically. The seeded Math.random
+// fixes apple/bonus placement, so the grown body and eaten count reproduce.
+if (run('snake')) {
+  const CELL = 20, COLS = 20, ROWS = 20;
+  const page = await openGame('/en/fun/snake/');
+  const STEP = 1000 / 60; // ms per fixed sim step (loop.ts STEP_MS)
+  const KEYS = { '1,0': 'ArrowRight', '-1,0': 'ArrowLeft', '0,1': 'ArrowDown', '0,-1': 'ArrowUp' };
+  const dispatch = k =>
+    page.evaluate(kk => document.dispatchEvent(new KeyboardEvent('keydown', { key: kk, bubbles: true })), k);
+  // The apple (red) and bonus (golden) read cleanly off the canvas — solid
+  // discs, unlike the snake's green which the dark scale-dots confuse. Require
+  // several red/gold sub-samples so stray eat-burst particles don't register.
+  // Score comes from the DOM. The snake head/body we track logically instead
+  // (exact, drift-free — see move()), sidestepping green-cell detection.
+  const readState = () =>
+    page.evaluate(({ CELL, COLS, ROWS }) => {
+      const c = document.getElementById('game-canvas');
+      const img = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      const w = c.width;
+      const dpr = w / (COLS * CELL);
+      const px = (cx, cy) => {
+        const i = (Math.round(cy * dpr) * w + Math.round(cx * dpr)) * 4;
+        return [img[i], img[i + 1], img[i + 2]];
+      };
+      let apple = null, aBest = 3, bonus = null, bBest = 3;
+      for (let y = 0; y < ROWS; y++)
+        for (let x = 0; x < COLS; x++) {
+          let red = 0, gold = 0;
+          for (let sy = 0; sy < 5; sy++)
+            for (let sx = 0; sx < 5; sx++) {
+              const [r, g, b] = px(x * CELL + (sx + 0.5) * CELL / 5, y * CELL + (sy + 0.5) * CELL / 5);
+              if (r > 170 && g < 90 && b < 90) red++;
+              if (r > 210 && g > 180 && b < 110) gold++;
+            }
+          if (red > aBest) { aBest = red; apple = { x, y }; }
+          if (gold > bBest) { bBest = gold; bonus = { x, y }; }
+        }
+      return { apple, bonus, score: parseInt(document.getElementById('score').textContent || '0', 10) };
+    }, { CELL, COLS, ROWS });
+
+  await page.click('#start-btn');
+  await step(page, 6, STEP);
+  // Exactly one logical move per call, drift-free. The interval shrinks as the
+  // snake eats (logic.ts: 0.16 − 0.004·apples), so a fixed dt would let the
+  // moveTimer leftover accumulate until a call sneaks in a second move and the
+  // tracked head diverges. Instead step exactly the current interval's worth,
+  // carrying the sub-step remainder as `debt`, so cumulative stepped time
+  // tracks cumulative intervals: precisely one move fires and tracking holds.
+  let snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+  let score = 0, debt = 0;
+  const move = async nd => {
+    await dispatch(KEYS[`${nd.x},${nd.y}`]);
+    const apples = Math.round(score / 10);
+    const interval = Math.max(0.07, 0.16 - apples * 0.004);
+    const want = (interval * 1000) / STEP + debt;
+    const n = Math.max(1, Math.round(want));
+    debt = want - n;
+    await step(page, n, STEP);
+    const st = await readState();
+    const head = { x: snake[0].x + nd.x, y: snake[0].y + nd.y };
+    snake.unshift(head);
+    if (st.score <= score) snake.pop(); // no growth unless the score rose
+    score = st.score;
+    return st;
+  };
+  // Greedy chase: of the in-bounds, body-free neighbours (the neck is in the
+  // body, so this never reverses), take the one nearest the apple; tie-break
+  // toward the cell that keeps the most exits so the snake doesn't box itself.
+  const pick = target => {
+    const body = snake.slice(0, -1);
+    const blocked = (x, y) => body.some(s => s.x === x && s.y === y);
+    const opts = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }]
+      .map(d => ({ d, x: snake[0].x + d.x, y: snake[0].y + d.y }))
+      .filter(o => o.x >= 0 && o.x < COLS && o.y >= 0 && o.y < ROWS && !blocked(o.x, o.y));
+    if (!opts.length) return { x: 1, y: 0 };
+    const free = o =>
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => {
+        const nx = o.x + dx, ny = o.y + dy;
+        return nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && !blocked(nx, ny);
+      }).length;
+    opts.sort((a, b) =>
+      (Math.abs(a.x - target.x) + Math.abs(a.y - target.y)) -
+      (Math.abs(b.x - target.x) + Math.abs(b.y - target.y)) || free(b) - free(a));
+    return opts[0].d;
+  };
+
+  let played = false;
+  let st = await readState();
+  for (let i = 0; i < 90; i++) {
+    if (st.bonus) { await snap(page, 'snake-bonus'); break; }
+    if (!played && snake.length >= 7) { await snap(page, 'snake-play'); played = true; }
+    st = await move(pick(st.bonus || st.apple || { x: 10, y: 10 }));
+  }
+  await page.close();
+}
+
+// --- Tank Duel (flat canvas) ----------------------------------------------
+// Seeded terrain + tank placement make the battlefield reproducible. Snaps
+// land on settled frames (shake==0) so the seeded shake jitter can't leak in.
+if (run('tanks')) {
+  const page = await openGame('/en/fun/tanks/');
+  await page.click('#vs-cpu-btn');
+  await step(page, 8, 16);
+  await snap(page, 'tanks-aim');
+  // Fire a lobbing shot: drive the sliders (their input handlers set the
+  // tank's angle/power) then the fire button. Whoever's turn it is, a shell
+  // flies — the human path is deterministic, so prefer it when enabled.
+  const setRange = async (id, v) => {
+    await page.evaluate(([i, val]) => {
+      const el = document.getElementById(i);
+      el.value = String(val);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, [id, v]);
+  };
+  const humanTurn = await page.evaluate(() => !document.getElementById('fire-btn').disabled);
+  if (humanTurn) {
+    // The heavy shell (radius 72) leaves an unmistakable crater, so the
+    // bake-on-crater rebuild is plainly visible in the after-pair.
+    await page.click('.weapon-btn[data-weapon="heavy"]');
+    await setRange('angle-slider', 62);
+    await setRange('power-slider', 72);
+    await page.click('#fire-btn');
+  }
+  // A few frames in: the shell is airborne over the terrain.
+  await step(page, 10, 16);
+  await snap(page, 'tanks-fly');
+  // Let the high lob complete, land, and the dust/shake fully settle: a fresh
+  // crater in the baked terrain (exercises the bake-on-crater rebuild),
+  // captured on a still frame.
+  await step(page, 250, 16);
+  await snap(page, 'tanks-impact');
   await page.close();
 }
 

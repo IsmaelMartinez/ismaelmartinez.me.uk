@@ -267,6 +267,16 @@ export function initSnakeGame(): void {
   // is hashed off the fruit's board cell, so it's stable while the apple sits.
   const APPLE_REDS = ['#ef4444', '#e23a3a', '#f75555'];
 
+  // Precomputed scale-dot shades (0.40–0.72 alpha) so the hashed per-segment
+  // pick is an array index, not a per-frame string build.
+  const SCALE_SHADES = [
+    'rgba(6, 78, 59, 0.40)',
+    'rgba(6, 78, 59, 0.48)',
+    'rgba(6, 78, 59, 0.56)',
+    'rgba(6, 78, 59, 0.64)',
+    'rgba(6, 78, 59, 0.72)'
+  ];
+
   function drawApple(cx: number, cy: number, seed: number) {
     const pulse = 1 + 0.07 * Math.sin(clock * 5);
     const r = (CELL / 2 - 3) * pulse;
@@ -352,28 +362,36 @@ export function initSnakeGame(): void {
     if (points.length > 1) {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      const stroke = (style: string, width: number) => {
-        ctx.strokeStyle = style;
-        ctx.lineWidth = width;
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-        ctx.stroke();
-      };
+      // Build the tube centreline once, then re-stroke it at each width — the
+      // path persists across stroke() calls, so a long snake doesn't pay to
+      // rebuild the polyline per layer.
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
       if (flash) {
-        stroke('#fca5a5', CELL - 3);
-        stroke('#fee2e2', CELL - 9);
+        ctx.strokeStyle = '#fca5a5';
+        ctx.lineWidth = CELL - 3;
+        ctx.stroke();
+        ctx.strokeStyle = '#fee2e2';
+        ctx.lineWidth = CELL - 9;
+        ctx.stroke();
       } else {
         // A dark→mid→lit width ramp: a grounding outline edge, the body, and a
         // lit core, so the tube reads with value contrast instead of two flats.
-        stroke('#052e16', CELL - 1);
-        stroke('#166534', CELL - 3);
-        stroke('#22c55e', CELL - 8);
+        ctx.strokeStyle = '#052e16';
+        ctx.lineWidth = CELL - 1;
+        ctx.stroke();
+        ctx.strokeStyle = '#166534';
+        ctx.lineWidth = CELL - 3;
+        ctx.stroke();
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = CELL - 8;
+        ctx.stroke();
         // Scale banding: a chevron dot on every other segment, its shade hashed
         // off the head-distance index so the scales vary yet stay stable per
         // body position (anchored to the head, not crawling).
         for (let i = 2; i < points.length; i += 2) {
-          ctx.fillStyle = `rgba(6, 78, 59, ${(0.4 + hash01(i, 3) * 0.35).toFixed(3)})`;
+          ctx.fillStyle = SCALE_SHADES[Math.floor(hash01(i, 3) * SCALE_SHADES.length)];
           ctx.beginPath();
           ctx.arc(points[i].x, points[i].y, CELL / 2 - 7, 0, Math.PI * 2);
           ctx.fill();

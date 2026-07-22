@@ -1163,3 +1163,9 @@ shipped. Further arcade work needs a **fresh audit** of the nine cabinets; its
 obvious first candidate is the item deferred here — **Pixel Park's attraction
 catalogue** (new ride/stall types with drawn iso art to the PR #176 bar, a
 screenshotted mini-art-pass). The tenth-cabinet candidates queue stays parked.
+
+*Follow-up (2026-07-22): the owner has set the next direction directly — see
+`2026-07-22-arcade-round-6-brief.md` (Syndicate Wars-style look + more
+missions, Critter Rescue curve resequencing, Line Hold tower art + a real
+difficulty ramp, and a focus-the-floor decision). That brief supersedes the
+generic fresh-audit call above as the entry point for Round 6.*

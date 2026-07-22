@@ -229,9 +229,14 @@ export function missionStatus(
       return persuadedCivilians >= spec.persuadeQuota && agentAtExtraction ? 'won' : 'ongoing';
     case 'assassinate':
       return units.every(u => u.kind !== 'target' || !u.alive) ? 'won' : 'ongoing';
-    case 'secure':
+    case 'secure': {
       // Won by controlling the landing zone long enough; game.ts banks the
-      // seconds a living agent stands on the LZ into `holdProgress`.
-      return holdProgress >= (spec.holdSeconds ?? 0) ? 'won' : 'ongoing';
+      // seconds a living agent stands on the LZ into `holdProgress`. The hold
+      // requirement defines the mould, so a missing/zero `holdSeconds` never
+      // auto-wins — it surfaces the misconfiguration as an unwon mission rather
+      // than silently skipping past it.
+      const target = spec.holdSeconds ?? 0;
+      return target > 0 && holdProgress >= target ? 'won' : 'ongoing';
+    }
   }
 }

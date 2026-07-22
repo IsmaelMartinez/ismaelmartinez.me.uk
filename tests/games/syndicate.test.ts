@@ -330,6 +330,17 @@ describe('missions', () => {
     expect(missionStatus(spec, setup.units, 0, false, spec.holdSeconds ?? 0)).toBe('lost');
   });
 
+  it('never auto-wins a secure mission that forgot to set a hold requirement', () => {
+    // A misconfigured secure mission (holdSeconds 0 or undefined) must not count
+    // as instantly won — the guard surfaces it as an unwon mission instead of
+    // silently skipping past it.
+    const tiles = generateCity(seededRandom(4));
+    const base = MISSIONS[6];
+    const { units } = spawnMission(base, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+    expect(missionStatus({ ...base, holdSeconds: 0 }, units, 0, false, 999)).toBe('ongoing');
+    expect(missionStatus({ ...base, holdSeconds: undefined }, units, 0, false, 999)).toBe('ongoing');
+  });
+
   it('leaves each new mission winnable through its objective', () => {
     const tiles = generateCity(seededRandom(9));
     for (const spec of MISSIONS.slice(3)) {

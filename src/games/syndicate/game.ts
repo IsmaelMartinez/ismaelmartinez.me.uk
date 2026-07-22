@@ -461,13 +461,11 @@ export function initSyndicateGame(): void {
     }
 
     // A `secure` mission is won by holding the landing zone: bank the seconds a
-    // living agent stands on the LZ, and toast once the hold is complete.
+    // living agent stands on the LZ (clamped to the target). The completed hold
+    // is the win itself — completeMission below signals it, and the HUD readout
+    // already shows the count climbing — so there is no separate toast here.
     if (spec.objective === 'secure' && agentAtExtraction()) {
-      const before = holdProgress;
       holdProgress = Math.min(spec.holdSeconds ?? 0, holdProgress + dt);
-      if (before < (spec.holdSeconds ?? 0) && holdProgress >= (spec.holdSeconds ?? 0)) {
-        showToast(`🚁 ${strings.objectiveExtract}`);
-      }
     }
 
     const status = missionStatus(

@@ -139,6 +139,14 @@ export const translations = {
     'fun.lemmings.hint19': 'One hatch opens high, one low — umbrellas are only for the cliff crowd.',
     'fun.lemmings.hint20':
       'Bash the earth wall on the left, build over the steel on the right — and watch the clock.',
+    'fun.lemmings.hint21':
+      'The valley is too deep to climb out — build a staircase up the far bank and the crowd follows.',
+    'fun.lemmings.hint22': 'Spades bounce off steel. Dig the one earth seam on the left to drop through.',
+    'fun.lemmings.hint23': 'Bash through the wall, then build a staircase up to the ledge beyond it.',
+    'fun.lemmings.hint24':
+      'Umbrellas first so nobody splats, then dig through the pan — before the clock runs out.',
+    'fun.lemmings.hint25':
+      'Bash the earth wall on the left, ramp over the steel on the right — two crowds, one clock.',
     'fun.lemmings.score': 'Score',
     'fun.lemmings.timeBonus': 'Time bonus',
     'fun.lemmings.perfectBonus': 'Everyone home!',
@@ -342,10 +350,13 @@ export const translations = {
     'fun.syndicate.mission5Brief': 'Win the district block by block: persuade 10 civilians with the Persuadertron while minigun-armed rivals work the crowd, then reach extraction.',
     'fun.syndicate.mission6Name': 'Endgame',
     'fun.syndicate.mission6Brief': 'The board itself, behind the deepest guard ring yet and every hostile on top-tier chrome. Cut through and assassinate the target. Finish it.',
+    'fun.syndicate.mission7Name': 'Hold the Line',
+    'fun.syndicate.mission7Brief': 'A new kind of contract: fight across the city to the extraction zone and hold it for twenty seconds against a dug-in guard ring, every rival on top-tier chrome. Keep the LZ under your boots until the count runs out.',
     'fun.syndicate.objectiveEliminate': 'Eliminate the rival agents',
     'fun.syndicate.objectivePersuade': 'Persuade civilians',
     'fun.syndicate.objectiveExtract': 'Reach the extraction point',
     'fun.syndicate.objectiveAssassinate': 'Assassinate the rival executive',
+    'fun.syndicate.objectiveSecure': 'Hold the landing zone',
     'fun.syndicate.missionComplete': 'Mission complete',
     'fun.syndicate.nextMission': 'Next Contract',
     'fun.syndicate.gameOver': 'Squad Eliminated',
@@ -621,6 +632,15 @@ export const translations = {
       'Una trampilla se abre en lo alto y otra abajo: los paraguas son solo para el grupo del precipicio.',
     'fun.lemmings.hint20':
       'Perfora el muro de tierra a la izquierda, construye sobre el acero a la derecha… y vigila el reloj.',
+    'fun.lemmings.hint21':
+      'El valle es demasiado hondo para salir andando: construye una escalera por la ladera opuesta y el grupo te sigue.',
+    'fun.lemmings.hint22':
+      'Las palas rebotan en el acero. Perfora la única veta de tierra a la izquierda para caer al otro lado.',
+    'fun.lemmings.hint23': 'Perfora el muro y luego construye una escalera hasta la cornisa que hay detrás.',
+    'fun.lemmings.hint24':
+      'Primero los paraguas para que nadie se estrelle, luego perfora la bandeja… antes de que acabe el reloj.',
+    'fun.lemmings.hint25':
+      'Perfora el muro de tierra a la izquierda, sube por una rampa sobre el acero a la derecha: dos grupos, un reloj.',
     'fun.lemmings.score': 'Puntos',
     'fun.lemmings.timeBonus': 'Bonus de tiempo',
     'fun.lemmings.perfectBonus': '¡Todos a casa!',
@@ -825,10 +845,13 @@ export const translations = {
     'fun.syndicate.mission5Brief': 'Gana el distrito manzana a manzana: persuade a 10 civiles con el Persuadertron mientras rivales con miniguns peinan la multitud, y llega a la extracción.',
     'fun.syndicate.mission6Name': 'Final de Partida',
     'fun.syndicate.mission6Brief': 'La propia junta, tras el anillo de guardias más profundo y con todos los hostiles a pleno cromo. Ábrete paso y asesina al objetivo. Termínalo.',
+    'fun.syndicate.mission7Name': 'Aguanta la Posición',
+    'fun.syndicate.mission7Brief': 'Un contrato de nuevo tipo: ábrete paso por la ciudad hasta la zona de extracción y aguántala veinte segundos frente a un anillo de guardias atrincherado, con todos los rivales a pleno cromo. Mantén la zona bajo tus botas hasta que acabe la cuenta.',
     'fun.syndicate.objectiveEliminate': 'Elimina a los agentes rivales',
     'fun.syndicate.objectivePersuade': 'Persuade a los civiles',
     'fun.syndicate.objectiveExtract': 'Llega al punto de extracción',
     'fun.syndicate.objectiveAssassinate': 'Asesina al ejecutivo rival',
+    'fun.syndicate.objectiveSecure': 'Aguanta la zona de extracción',
     'fun.syndicate.missionComplete': 'Misión cumplida',
     'fun.syndicate.nextMission': 'Siguiente Contrato',
     'fun.syndicate.gameOver': 'Escuadrón Eliminado',
@@ -1104,6 +1127,15 @@ export const translations = {
       'Una trapa s\'obre a dalt i una a baix: els paraigües són només per al grup del penya-segat.',
     'fun.lemmings.hint20':
       'Perfora el mur de terra a l\'esquerra, construeix sobre l\'acer a la dreta… i vigila el rellotge.',
+    'fun.lemmings.hint21':
+      'La vall és massa fonda per sortir caminant: construeix una escala pel vessant oposat i el grup et segueix.',
+    'fun.lemmings.hint22':
+      'Les pales reboten a l\'acer. Perfora l\'única veta de terra a l\'esquerra per caure a l\'altre costat.',
+    'fun.lemmings.hint23': 'Perfora el mur i després construeix una escala fins a la cornisa que hi ha darrere.',
+    'fun.lemmings.hint24':
+      'Primer els paraigües perquè ningú s\'estavelli, després perfora la safata… abans que s\'acabi el rellotge.',
+    'fun.lemmings.hint25':
+      'Perfora el mur de terra a l\'esquerra, puja per una rampa sobre l\'acer a la dreta: dos grups, un rellotge.',
     'fun.lemmings.score': 'Punts',
     'fun.lemmings.timeBonus': 'Bonus de temps',
     'fun.lemmings.perfectBonus': 'Tothom a casa!',
@@ -1308,10 +1340,13 @@ export const translations = {
     'fun.syndicate.mission5Brief': 'Guanya el districte illa a illa: persuadeix 10 civils amb el Persuadertron mentre rivals amb miniguns pentinen la multitud, i arriba a l\'extracció.',
     'fun.syndicate.mission6Name': 'Final de Partida',
     'fun.syndicate.mission6Brief': 'La mateixa junta, darrere l\'anell de guàrdies més profund i amb tots els hostils a ple crom. Obre\'t pas i assassina l\'objectiu. Acaba-ho.',
+    'fun.syndicate.mission7Name': 'Aguanta la Posició',
+    'fun.syndicate.mission7Brief': 'Un contracte de nou tipus: obre\'t pas per la ciutat fins a la zona d\'extracció i aguanta-la vint segons davant d\'un anell de guàrdies atrinxerat, amb tots els rivals a ple crom. Mantén la zona sota les teves botes fins que s\'acabi el compte.',
     'fun.syndicate.objectiveEliminate': 'Elimina els agents rivals',
     'fun.syndicate.objectivePersuade': 'Persuadeix els civils',
     'fun.syndicate.objectiveExtract': 'Arriba al punt d\'extracció',
     'fun.syndicate.objectiveAssassinate': 'Assassina l\'executiu rival',
+    'fun.syndicate.objectiveSecure': 'Aguanta la zona d\'extracció',
     'fun.syndicate.missionComplete': 'Missió complerta',
     'fun.syndicate.nextMission': 'Següent Contracte',
     'fun.syndicate.gameOver': 'Esquadró Eliminat',

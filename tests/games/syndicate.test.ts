@@ -237,6 +237,7 @@ describe('missions', () => {
       expect(agents).toHaveLength(SQUAD_SIZE);
       expect(setup.units.filter(u => u.kind === 'civilian')).toHaveLength(spec.civilians);
       expect(setup.units.filter(u => u.kind === 'enemy')).toHaveLength(spec.enemies);
+      expect(setup.units.filter(u => u.kind === 'guard')).toHaveLength(spec.guards);
       expect(setup.units.filter(u => u.kind === 'target')).toHaveLength(
         spec.objective === 'assassinate' ? 1 : 0
       );
@@ -282,13 +283,13 @@ describe('missions', () => {
     expect(missionStatus(spec, units, 0, false)).toBe('won');
   });
 
-  it('fields a six-mission campaign with escalating rewards and re-tiered weapons', () => {
-    expect(MISSIONS).toHaveLength(6);
+  it('fields a seven-mission campaign with escalating rewards and re-tiered weapons', () => {
+    expect(MISSIONS).toHaveLength(7);
     for (let m = 1; m < MISSIONS.length; m++) {
       expect(MISSIONS[m].reward).toBeGreaterThan(MISSIONS[m - 1].reward);
     }
     // The minigun / executive target land at the mid-campaign assassinate (3
-    // of 6), not the finale — no last-mission-only reveal.
+    // of 7), not the finale — no last-mission-only reveal.
     expect(MISSIONS[2].objective).toBe('assassinate');
     expect(MISSIONS[2].enemyWeapon).toBe('minigun');
     // The back half escalates: guards graduate to uzis, and minigun rivals
@@ -296,9 +297,48 @@ describe('missions', () => {
     expect(MISSIONS.slice(3).every(m => m.guardWeapon === 'uzi')).toBe(true);
     expect(MISSIONS[4].objective).toBe('persuade');
     expect(MISSIONS[4].enemyWeapon).toBe('minigun');
-    // Every objective mould is still represented across the longer campaign.
+    // Mission 7 is the new `secure` mould — a hold contract with a positive
+    // hold requirement, capping the campaign as its richest finale.
+    expect(MISSIONS[6].objective).toBe('secure');
+    expect(MISSIONS[6].holdSeconds).toBeGreaterThan(0);
+    // All four objective moulds are represented across the campaign.
     const objectives = new Set(MISSIONS.map(m => m.objective));
-    expect(objectives).toEqual(new Set(['eliminate', 'persuade', 'assassinate']));
+    expect(objectives).toEqual(new Set(['eliminate', 'persuade', 'assassinate', 'secure']));
+  });
+
+  it('contests the landing zone: the secure mission rings the LZ with its guards', () => {
+    const spec = MISSIONS[6];
+    expect(spec.objective).toBe('secure');
+    const tiles = generateCity(seededRandom(4));
+    const setup = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+    const guards = setup.units.filter(u => u.kind === 'guard');
+    expect(guards).toHaveLength(spec.guards);
+    // The guards dig in around the extraction pad (BFS-nearest tiles), not
+    // scattered across the map — so the squad must fight in and hold, not just
+    // reach the corner.
+    const ex = (setup.extraction % MAP_W) + 0.5;
+    const ey = Math.floor(setup.extraction / MAP_W) + 0.5;
+    for (const g of guards) {
+      expect(Math.hypot(g.x - ex, g.y - ey)).toBeLessThan(8);
+    }
+    // No `target` unit exists for a secure mission (the LZ is a tile, not a foe).
+    expect(setup.units.some(u => u.kind === 'target')).toBe(false);
+    // Losing the squad still ends it, whatever the hold count.
+    setup.units.forEach(u => {
+      if (u.kind === 'agent') u.alive = false;
+    });
+    expect(missionStatus(spec, setup.units, 0, false, spec.holdSeconds ?? 0)).toBe('lost');
+  });
+
+  it('never auto-wins a secure mission that forgot to set a hold requirement', () => {
+    // A misconfigured secure mission (holdSeconds 0 or undefined) must not count
+    // as instantly won — the guard surfaces it as an unwon mission instead of
+    // silently skipping past it.
+    const tiles = generateCity(seededRandom(4));
+    const base = MISSIONS[6];
+    const { units } = spawnMission(base, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+    expect(missionStatus({ ...base, holdSeconds: 0 }, units, 0, false, 999)).toBe('ongoing');
+    expect(missionStatus({ ...base, holdSeconds: undefined }, units, 0, false, 999)).toBe('ongoing');
   });
 
   it('leaves each new mission winnable through its objective', () => {
@@ -314,6 +354,12 @@ describe('missions', () => {
       } else if (spec.objective === 'persuade') {
         expect(missionStatus(spec, units, spec.persuadeQuota, false)).toBe('ongoing');
         expect(missionStatus(spec, units, spec.persuadeQuota, true)).toBe('won');
+      } else if (spec.objective === 'secure') {
+        // Won by holding the LZ: below the required seconds it stays ongoing,
+        // and reaching them wins regardless of the kill count (mirrors the
+        // persuade quota probe).
+        expect(missionStatus(spec, units, 0, false, (spec.holdSeconds ?? 0) - 1)).toBe('ongoing');
+        expect(missionStatus(spec, units, 0, false, spec.holdSeconds ?? 0)).toBe('won');
       } else {
         units.forEach(u => {
           if (u.kind === 'target') u.alive = false;

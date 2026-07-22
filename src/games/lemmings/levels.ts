@@ -6,17 +6,22 @@
  * are no image assets. Each level also carries its spawn count, rescue quota,
  * and the per-skill stock the player gets to spend.
  *
- * The twenty levels are hand-tuned so each of the five skills is the natural
- * (and roughly necessary) tool on at least one of them: walk-only, basher,
- * builder, digger, floater, a mid-game finale that chains several together,
- * then three that chain skills in fresh ways — a blocker-gated dig, a
+ * The twenty-five levels are hand-tuned so each of the five skills is the
+ * natural (and roughly necessary) tool on at least one of them: walk-only,
+ * basher, builder, digger, floater, a mid-game finale that chains several
+ * together, then three that chain skills in fresh ways — a blocker-gated dig, a
  * builder-then-basher climb, and a floater-drop-into-dig route — a
  * four-level gauntlet (a two-builder bridge over a gorge, a dig-then-build
  * descent, an umbrella drop into a walled pit, and a grand tour that chains
  * float, bash, and build in one trek), and a closing seven that twist the
  * rules themselves: a second hatch (`hatch2`, spawns alternate between the
  * two), a level timer (`timeLimit` ticks — the level ends when it runs out),
- * and steel terrain (`material: 'steel'` rects that no skill can cut).
+ * and steel terrain (`material: 'steel'` rects that no skill can cut). A final
+ * five (21–25) extend the curve past the gauntlet with fresh arrangements of
+ * those same twists: a valley-crossing build breather, a steel-seam dig, a
+ * bash-then-build march, a timed umbrella-drop-into-dig, and a two-hatch timed
+ * steel finale. Every level — including these five — is proven solvable by the
+ * headless playthrough suite in tests/games/lemmings.test.ts.
  */
 import { TerrainBitmap, EARTH, STEEL } from './bitmap';
 import type { Skill, Critter } from './critter';
@@ -484,5 +489,107 @@ export const LEVELS: LevelDef[] = [
     par: 4500,
     timeLimit: 5400,
     hint: 'fun.lemmings.hint20'
+  },
+  // 21 — Second Wind: after the everything-at-once gauntlet, a calm valley to
+  // catch your breath. The crowd strolls down into the dip; one builder ramps
+  // the far bank a full staircase high and the whole crowd climbs out to the
+  // door. A single-skill breather, no clock.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 148, w: 110, h: 52 }, // left plateau (feet 147)
+      { kind: 'rect', x: 110, y: 160, w: 100, h: 40 }, // valley floor (feet 159)
+      { kind: 'rect', x: 210, y: 148, w: 110, h: 52 }, // right plateau (exit side)
+      { kind: 'rect', x: 0, y: 118, w: 6, h: 30 } // left wall so spawns land on the plateau
+    ],
+    hatch: { x: 30, y: 118, dir: 1 },
+    exit: { x: 292, y: 147 },
+    spawnCount: 10,
+    needed: 4,
+    stock: { builder: 5, blocker: 2, floater: 2 },
+    par: 3300,
+    hint: 'fun.lemmings.hint21'
+  },
+  // 22 — Steel Seam: the hall floor is riveted steel bar one earth seam on the
+  // left. Spades bounce off the plate, so the only way down is to dig the seam
+  // and drop through into the exit chamber below — steel gating the route.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 124, w: 90, h: 14 }, // earth seam (diggable)
+      { kind: 'rect', x: 90, y: 124, w: 230, h: 14, material: 'steel' }, // steel floor
+      { kind: 'rect', x: 0, y: 92, w: 6, h: 32 }, // upper-left wall
+      { kind: 'rect', x: 314, y: 92, w: 6, h: 32 }, // upper-right wall
+      { kind: 'rect', x: 0, y: 184, w: 320, h: 16 }, // lower floor (exit chamber)
+      { kind: 'rect', x: 0, y: 154, w: 6, h: 30 }, // lower-left wall
+      { kind: 'rect', x: 314, y: 154, w: 6, h: 30 } // lower-right wall
+    ],
+    hatch: { x: 200, y: 84, dir: -1 }, // drop onto the steel, march toward the seam
+    exit: { x: 260, y: 183 },
+    spawnCount: 10,
+    needed: 5,
+    stock: { digger: 3, blocker: 2 },
+    par: 4200,
+    hint: 'fun.lemmings.hint22'
+  },
+  // 23 — Wall and Step: an earth wall bars the road, and just past it the exit
+  // waits on a ledge. Bash straight through the wall, then build a staircase up
+  // to the door — the fist and the ramp back to back.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 168, w: 320, h: 32 }, // floor (feet 167)
+      { kind: 'rect', x: 0, y: 138, w: 6, h: 30 }, // left wall
+      { kind: 'rect', x: 150, y: 138, w: 14, h: 30 }, // earth wall (bash)
+      { kind: 'rect', x: 250, y: 156, w: 70, h: 44 } // exit ledge (feet 155, a full staircase up)
+    ],
+    hatch: { x: 30, y: 138, dir: 1 },
+    exit: { x: 292, y: 155 },
+    spawnCount: 10,
+    needed: 5,
+    stock: { basher: 3, builder: 3, blocker: 2 },
+    par: 3900,
+    hint: 'fun.lemmings.hint23'
+  },
+  // 24 — Beat the Drop: the hatch hangs high over a shallow earth pan. Pop
+  // umbrellas so nobody splats, then dig through the pan to the exit chamber
+  // below — and hustle, because a hard clock is running.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 150, w: 320, h: 10 }, // earth pan (feet 149)
+      { kind: 'rect', x: 0, y: 120, w: 6, h: 30 }, // pan-left wall
+      { kind: 'rect', x: 314, y: 120, w: 6, h: 30 }, // pan-right wall
+      { kind: 'rect', x: 0, y: 188, w: 320, h: 12 }, // lower floor (exit chamber)
+      { kind: 'rect', x: 0, y: 158, w: 6, h: 30 }, // lower-left wall
+      { kind: 'rect', x: 314, y: 158, w: 6, h: 30 } // lower-right wall
+    ],
+    hatch: { x: 160, y: 50, dir: 1 }, // high enough that the drop splats without an umbrella
+    exit: { x: 160, y: 187 },
+    spawnCount: 10,
+    needed: 5,
+    stock: { floater: 14, digger: 3, blocker: 2 },
+    par: 4200,
+    timeLimit: 6000,
+    hint: 'fun.lemmings.hint24'
+  },
+  // 25 — Last Stand: the campaign's hardest. Two crowds pour in under a hard
+  // clock, and each side meets its own barrier — the left an earth wall to bash
+  // through, the right a steel stub no fist can dent, so it must be ramped over
+  // — before both converge on the middle door. Everything, at once, on the
+  // clock: the gauntlet's harder twin.
+  {
+    shapes: [
+      { kind: 'rect', x: 0, y: 180, w: 320, h: 20 }, // main floor (feet 179)
+      { kind: 'rect', x: 0, y: 140, w: 6, h: 40 }, // left outer wall
+      { kind: 'rect', x: 314, y: 140, w: 6, h: 40 }, // right outer wall
+      { kind: 'rect', x: 110, y: 150, w: 12, h: 30 }, // left earth wall (bash)
+      { kind: 'rect', x: 200, y: 172, w: 10, h: 8, material: 'steel' } // right steel stub (ramp over)
+    ],
+    hatch: { x: 30, y: 140, dir: 1 },
+    hatch2: { x: 290, y: 140, dir: -1 },
+    exit: { x: 160, y: 179 },
+    spawnCount: 14,
+    needed: 8,
+    stock: { basher: 2, builder: 3, blocker: 2, floater: 2, digger: 1 },
+    par: 4800,
+    timeLimit: 6000,
+    hint: 'fun.lemmings.hint25'
   }
 ];

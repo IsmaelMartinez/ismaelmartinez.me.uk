@@ -382,8 +382,8 @@ describe('critter — skills', () => {
 });
 
 describe('levels', () => {
-  it('provides twenty solvable-shaped levels', () => {
-    expect(LEVELS).toHaveLength(20);
+  it('provides twenty-five solvable-shaped levels', () => {
+    expect(LEVELS).toHaveLength(25);
     for (const level of LEVELS) {
       expect(level.needed).toBeGreaterThan(0);
       expect(level.needed).toBeLessThanOrEqual(level.spawnCount);
@@ -965,6 +965,112 @@ describe('levels — solvable playthroughs', () => {
       TRICKLE
     );
     expect(saved).toBeGreaterThanOrEqual(LEVELS[19].needed);
+  });
+
+  it('21: one builder ramps the far bank of the valley and the crowd climbs out', () => {
+    let built = false;
+    const saved = playLevel(LEVELS[20], ({ critters, assign }) => {
+      if (built) return;
+      // The valley floor sits a full staircase below the far plateau; start the
+      // ramp a staircase-width before the plateau edge so its top meets the rim.
+      const w = critters.find(
+        c => c.state === 'walker' && c.dir === 1 && c.y === 159 && c.x >= 198 && c.x <= 202
+      );
+      if (w && assign(w, 'builder')) built = true;
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[20].needed);
+  });
+
+  it('22: a digger opens the earth seam that the steel floor denies', () => {
+    let dug = false;
+    const saved = playLevel(LEVELS[21], ({ critters, assign }) => {
+      if (dug) return;
+      // Only the strip left of x=90 is earth; a dig there opens the way down,
+      // and the swathe stays clear of the steel seam at x=90.
+      const w = critters.find(c => c.state === 'walker' && c.y === 123 && c.x >= 30 && c.x <= 80);
+      if (w && assign(w, 'digger')) dug = true;
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[21].needed);
+  });
+
+  it('22: proves the steel floor is a real wall — digging it saves no one', () => {
+    // The counterfactual behind the hint: a digger on the steel half gives up on
+    // the spot, so nobody ever reaches the exit chamber below.
+    let dug = false;
+    const saved = playLevel(LEVELS[21], ({ critters, assign }) => {
+      if (dug) return;
+      const w = critters.find(c => c.state === 'walker' && c.y === 123 && c.x >= 120 && c.x <= 220);
+      if (w && assign(w, 'digger')) dug = true;
+    });
+    expect(saved).toBe(0);
+  });
+
+  it('23: bash through the wall, then build up to the ledge beyond', () => {
+    let bashed = false;
+    let built = false;
+    const saved = playLevel(LEVELS[22], ({ critters, assign }) => {
+      if (!bashed) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 167 && c.x >= 143 && c.x <= 148
+        );
+        if (w && assign(w, 'basher')) bashed = true;
+      }
+      if (bashed && !built) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 167 && c.x >= 237 && c.x <= 241
+        );
+        if (w && assign(w, 'builder')) built = true;
+      }
+    });
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[22].needed);
+  });
+
+  it('24: umbrellas into the pan, then a digger drops the crowd home on the clock', () => {
+    let dug = false;
+    const saved = playLevel(
+      LEVELS[23],
+      ({ critters, assign }) => {
+        // Pop an umbrella on everything still high so the long drop never splats.
+        for (const c of critters) {
+          if (!c.floater && c.y < 130 && (c.state === 'walker' || c.state === 'faller')) {
+            assign(c, 'floater');
+          }
+        }
+        // Once they land on the pan, dig a central shaft down to the exit.
+        if (!dug) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.y === 149 && c.x >= 150 && c.x <= 170
+          );
+          if (w && assign(w, 'digger')) dug = true;
+        }
+      },
+      TRICKLE
+    );
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[23].needed);
+  });
+
+  it('25: the harder gauntlet — bash left, ramp over the steel right, beat the clock', () => {
+    let bashed = false;
+    let built = false;
+    const saved = playLevel(
+      LEVELS[24],
+      ({ critters, assign }) => {
+        if (!bashed) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 104 && c.x <= 108
+          );
+          if (w && assign(w, 'basher')) bashed = true;
+        }
+        if (!built) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 217 && c.x <= 221
+          );
+          if (w && assign(w, 'builder')) built = true;
+        }
+      },
+      TRICKLE
+    );
+    expect(saved).toBeGreaterThanOrEqual(LEVELS[24].needed);
   });
 });
 

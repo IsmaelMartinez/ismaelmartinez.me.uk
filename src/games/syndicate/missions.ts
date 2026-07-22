@@ -1,16 +1,18 @@
 /**
- * Syndicate — campaign missions. Six contracts across the three classic
- * objective moulds, escalating the roster and weapon tiers: wipe out the
- * rival agents, persuade a crowd and reach extraction, assassinate the rival
- * executive, then a reinforced wipe, a recruitment under heavy fire, and the
- * decapitation finale. The mid-campaign assassinate keeps the minigun and the
- * executive `target` from being a last-mission-only reveal.
+ * Syndicate — campaign missions. Seven contracts, escalating the roster and
+ * weapon tiers: wipe out the rival agents, persuade a crowd and reach
+ * extraction, assassinate the rival executive, then a reinforced wipe, a
+ * recruitment under heavy fire, the decapitation finale, and finally a `secure`
+ * contract — a new objective mould — that has the squad fight to the extraction
+ * zone and *hold* it for a spell against a dug-in guard ring. The mid-campaign
+ * assassinate keeps the minigun and the executive `target` from being a
+ * last-mission-only reveal.
  */
 import { MAP_W, MAP_H, nearestWalkable, type MapTile } from './map';
 import { spreadTargets, walkableTiles } from './pathfind';
 import { createUnit, type Unit, type WeaponId } from './units';
 
-export type Objective = 'eliminate' | 'persuade' | 'assassinate';
+export type Objective = 'eliminate' | 'persuade' | 'assassinate' | 'secure';
 
 export interface MissionSpec {
   id: number;
@@ -22,6 +24,11 @@ export interface MissionSpec {
   enemyWeapon: WeaponId;
   /** Civilians to recruit before extraction opens (persuade missions). */
   persuadeQuota: number;
+  /**
+   * Seconds a living agent must control the landing zone to win (`secure`
+   * missions). Unset/0 on the other objective moulds.
+   */
+  holdSeconds?: number;
   /** Cash bonus on completion. */
   reward: number;
 }
@@ -98,6 +105,22 @@ export const MISSIONS: MissionSpec[] = [
     enemyWeapon: 'minigun',
     persuadeQuota: 0,
     reward: 5000
+  },
+  {
+    // Hold the Line — the campaign's new mould. Fight across the city to the
+    // extraction zone and hold it for twenty seconds against the deepest guard
+    // ring, every rival on top-tier chrome. Winning is not a kill count — it is
+    // keeping the LZ under your boots while it counts down.
+    id: 7,
+    objective: 'secure',
+    civilians: 12,
+    guards: 6,
+    enemies: 5,
+    guardWeapon: 'uzi',
+    enemyWeapon: 'minigun',
+    persuadeQuota: 0,
+    holdSeconds: 20,
+    reward: 6000
   }
 ];
 
@@ -166,6 +189,14 @@ export function spawnMission(
     for (let n = 0; n < spec.guards; n++) {
       units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? lair, MAP_W, spec.guardWeapon));
     }
+  } else if (spec.objective === 'secure') {
+    // The landing zone is contested — guards dig in around the extraction pad
+    // (the same ring the executive's lair uses), so the squad has to fight in
+    // and hold it rather than just sprint to the corner.
+    const ring = spreadTargets(tiles, extraction, spec.guards + 1);
+    for (let n = 0; n < spec.guards; n++) {
+      units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? extraction, MAP_W, spec.guardWeapon));
+    }
   } else {
     for (let n = 0; n < spec.guards; n++) {
       units.push(createUnit(nextId++, 'guard', remoteTile(walkable, spawnX, spawnY, 10, random), MAP_W, spec.guardWeapon));
@@ -184,7 +215,8 @@ export function missionStatus(
   spec: MissionSpec,
   units: Unit[],
   persuadedCivilians: number,
-  agentAtExtraction: boolean
+  agentAtExtraction: boolean,
+  holdProgress = 0
 ): MissionState {
   if (!units.some(u => u.alive && u.kind === 'agent')) return 'lost';
   switch (spec.objective) {
@@ -197,5 +229,14 @@ export function missionStatus(
       return persuadedCivilians >= spec.persuadeQuota && agentAtExtraction ? 'won' : 'ongoing';
     case 'assassinate':
       return units.every(u => u.kind !== 'target' || !u.alive) ? 'won' : 'ongoing';
+    case 'secure': {
+      // Won by controlling the landing zone long enough; game.ts banks the
+      // seconds a living agent stands on the LZ into `holdProgress`. The hold
+      // requirement defines the mould, so a missing/zero `holdSeconds` never
+      // auto-wins — it surfaces the misconfiguration as an unwon mission rather
+      // than silently skipping past it.
+      const target = spec.holdSeconds ?? 0;
+      return target > 0 && holdProgress >= target ? 'won' : 'ongoing';
+    }
   }
 }

@@ -120,31 +120,38 @@ export const translations = {
     'fun.lemmings.skillBomber': 'Bomber',
     'fun.lemmings.hint': 'Tap or click a critter to apply the selected skill.',
     'fun.lemmings.hint7': 'Block the crowd before the cliff, then dig a shaft down to the exit.',
-    'fun.lemmings.hint8': 'Build a staircase up onto the shelf, then bash through the wall to the exit.',
-    'fun.lemmings.hint9': 'Give every critter an umbrella before the drop, then dig down to the exit.',
-    'fun.lemmings.hint10':
-      'One bridge cannot span the gorge — a second builder must take over at the tip of the first.',
-    'fun.lemmings.hint11': 'Dig through the floor, then build a ramp up to the exit platform.',
+    'fun.lemmings.hint8':
+      'Build a staircase up onto the shelf, then bash through the wall to the exit.',
+    'fun.lemmings.hint9':
+      'Give every critter an umbrella before the drop, then dig down to the exit.',
+    'fun.lemmings.hint10': 'Dig through the floor, then build a ramp up to the exit platform.',
+    'fun.lemmings.hint11':
+      'Bash through the wall, then build a staircase up to the ledge beyond it.',
     'fun.lemmings.hint12': 'Umbrellas for the drop into the pit, then bash through the right wall.',
-    'fun.lemmings.hint13': 'Float down to the shelf, bash through the wall, then build up to the door.',
-    'fun.lemmings.hint14':
+    'fun.lemmings.hint13':
       'Two hatches, one door — both crowds walk straight home, just from opposite sides.',
-    'fun.lemmings.hint15':
+    'fun.lemmings.hint14':
       'The clock is ticking: raise the release rate, bash through the wall, and hustle everyone home.',
-    'fun.lemmings.hint16':
+    'fun.lemmings.hint15':
       'Grey steel resists every spade — dig where the floor is still brown earth.',
+    'fun.lemmings.hint16':
+      'Bashers bounce off steel. Build a ramp and send the crowd over the top.',
     'fun.lemmings.hint17':
+      'One hatch opens high, one low — umbrellas are only for the cliff crowd.',
+    'fun.lemmings.hint18':
+      'Spades bounce off steel. Dig the one earth seam on the left to drop through.',
+    'fun.lemmings.hint19':
       'The right crowd is safe; bridge the left crowd over the gap before the clock runs out.',
-    'fun.lemmings.hint18': 'Bashers bounce off steel. Build a ramp and send the crowd over the top.',
-    'fun.lemmings.hint19': 'One hatch opens high, one low — umbrellas are only for the cliff crowd.',
     'fun.lemmings.hint20':
-      'Bash the earth wall on the left, build over the steel on the right — and watch the clock.',
+      'Float down to the shelf, bash through the wall, then build up to the door.',
     'fun.lemmings.hint21':
-      'The valley is too deep to climb out — build a staircase up the far bank and the crowd follows.',
-    'fun.lemmings.hint22': 'Spades bounce off steel. Dig the one earth seam on the left to drop through.',
-    'fun.lemmings.hint23': 'Bash through the wall, then build a staircase up to the ledge beyond it.',
-    'fun.lemmings.hint24':
       'Umbrellas first so nobody splats, then dig through the pan — before the clock runs out.',
+    'fun.lemmings.hint22':
+      'The valley is too deep to climb out — build a staircase up the far bank and the crowd follows.',
+    'fun.lemmings.hint23':
+      'One bridge cannot span the gorge — a second builder must take over at the tip of the first.',
+    'fun.lemmings.hint24':
+      'Bash the earth wall on the left, build over the steel on the right — and watch the clock.',
     'fun.lemmings.hint25':
       'Bash the earth wall on the left, ramp over the steel on the right — two crowds, one clock.',
     'fun.lemmings.score': 'Score',
@@ -615,34 +622,41 @@ export const translations = {
     'fun.lemmings.skillFloater': 'Flotador',
     'fun.lemmings.skillBomber': 'Explosivo',
     'fun.lemmings.hint': 'Toca un bicho para aplicar la habilidad seleccionada.',
-    'fun.lemmings.hint7': 'Bloquea a la multitud antes del precipicio y luego excava un pozo hasta la salida.',
-    'fun.lemmings.hint8': 'Construye una escalera hasta la repisa y luego perfora el muro hacia la salida.',
-    'fun.lemmings.hint9': 'Dale un paraguas a cada bicho antes de la caída y luego excava hasta la salida.',
+    'fun.lemmings.hint7':
+      'Bloquea a la multitud antes del precipicio y luego excava un pozo hasta la salida.',
+    'fun.lemmings.hint8':
+      'Construye una escalera hasta la repisa y luego perfora el muro hacia la salida.',
+    'fun.lemmings.hint9':
+      'Dale un paraguas a cada bicho antes de la caída y luego excava hasta la salida.',
     'fun.lemmings.hint10':
-      'Un solo puente no cruza el barranco: un segundo constructor debe continuar desde la punta del primero.',
-    'fun.lemmings.hint11': 'Excava el suelo y luego construye una rampa hasta la plataforma de salida.',
+      'Excava el suelo y luego construye una rampa hasta la plataforma de salida.',
+    'fun.lemmings.hint11':
+      'Perfora el muro y luego construye una escalera hasta la cornisa que hay detrás.',
     'fun.lemmings.hint12': 'Paraguas para caer al foso y luego perfora el muro derecho.',
-    'fun.lemmings.hint13': 'Flota hasta la repisa, perfora el muro y luego construye hasta la puerta.',
-    'fun.lemmings.hint14':
+    'fun.lemmings.hint13':
       'Dos trampillas, una puerta: ambos grupos caminan directos a casa, solo que desde lados opuestos.',
-    'fun.lemmings.hint15':
+    'fun.lemmings.hint14':
       'El reloj corre: sube el ritmo de salida, perfora el muro y llévalos a casa deprisa.',
-    'fun.lemmings.hint16':
+    'fun.lemmings.hint15':
       'El acero gris resiste cualquier pala: excava donde el suelo aún es tierra marrón.',
+    'fun.lemmings.hint16':
+      'Los perforadores rebotan en el acero. Construye una rampa y pasa por encima.',
     'fun.lemmings.hint17':
-      'El grupo derecho está a salvo; tiende un puente sobre el hueco para el izquierdo antes de que acabe el tiempo.',
-    'fun.lemmings.hint18': 'Los perforadores rebotan en el acero. Construye una rampa y pasa por encima.',
-    'fun.lemmings.hint19':
       'Una trampilla se abre en lo alto y otra abajo: los paraguas son solo para el grupo del precipicio.',
-    'fun.lemmings.hint20':
-      'Perfora el muro de tierra a la izquierda, construye sobre el acero a la derecha… y vigila el reloj.',
-    'fun.lemmings.hint21':
-      'El valle es demasiado hondo para salir andando: construye una escalera por la ladera opuesta y el grupo te sigue.',
-    'fun.lemmings.hint22':
+    'fun.lemmings.hint18':
       'Las palas rebotan en el acero. Perfora la única veta de tierra a la izquierda para caer al otro lado.',
-    'fun.lemmings.hint23': 'Perfora el muro y luego construye una escalera hasta la cornisa que hay detrás.',
-    'fun.lemmings.hint24':
+    'fun.lemmings.hint19':
+      'El grupo derecho está a salvo; tiende un puente sobre el hueco para el izquierdo antes de que acabe el tiempo.',
+    'fun.lemmings.hint20':
+      'Flota hasta la repisa, perfora el muro y luego construye hasta la puerta.',
+    'fun.lemmings.hint21':
       'Primero los paraguas para que nadie se estrelle, luego perfora la bandeja… antes de que acabe el reloj.',
+    'fun.lemmings.hint22':
+      'El valle es demasiado hondo para salir andando: construye una escalera por la ladera opuesta y el grupo te sigue.',
+    'fun.lemmings.hint23':
+      'Un solo puente no cruza el barranco: un segundo constructor debe continuar desde la punta del primero.',
+    'fun.lemmings.hint24':
+      'Perfora el muro de tierra a la izquierda, construye sobre el acero a la derecha… y vigila el reloj.',
     'fun.lemmings.hint25':
       'Perfora el muro de tierra a la izquierda, sube por una rampa sobre el acero a la derecha: dos grupos, un reloj.',
     'fun.lemmings.score': 'Puntos',
@@ -1114,34 +1128,41 @@ export const translations = {
     'fun.lemmings.skillFloater': 'Flotador',
     'fun.lemmings.skillBomber': 'Explosiu',
     'fun.lemmings.hint': 'Toca una bestiola per aplicar l\'habilitat seleccionada.',
-    'fun.lemmings.hint7': 'Bloqueja la munió abans del precipici i després cava un pou fins a la sortida.',
-    'fun.lemmings.hint8': 'Construeix una escala fins a la lleixa i després perfora el mur cap a la sortida.',
-    'fun.lemmings.hint9': 'Dona un paraigua a cada bestiola abans de la caiguda i després cava fins a la sortida.',
+    'fun.lemmings.hint7':
+      'Bloqueja la munió abans del precipici i després cava un pou fins a la sortida.',
+    'fun.lemmings.hint8':
+      'Construeix una escala fins a la lleixa i després perfora el mur cap a la sortida.',
+    'fun.lemmings.hint9':
+      'Dona un paraigua a cada bestiola abans de la caiguda i després cava fins a la sortida.',
     'fun.lemmings.hint10':
-      'Un sol pont no creua el barranc: un segon constructor ha de continuar des de la punta del primer.',
-    'fun.lemmings.hint11': 'Cava el terra i després construeix una rampa fins a la plataforma de sortida.',
+      'Cava el terra i després construeix una rampa fins a la plataforma de sortida.',
+    'fun.lemmings.hint11':
+      'Perfora el mur i després construeix una escala fins a la cornisa que hi ha darrere.',
     'fun.lemmings.hint12': 'Paraigües per caure al pou i després perfora el mur dret.',
-    'fun.lemmings.hint13': 'Flota fins a la lleixa, perfora el mur i després construeix fins a la porta.',
-    'fun.lemmings.hint14':
+    'fun.lemmings.hint13':
       'Dues trapes, una porta: tots dos grups caminen directes a casa, només que des de costats oposats.',
-    'fun.lemmings.hint15':
+    'fun.lemmings.hint14':
       'El rellotge corre: apuja el ritme de sortida, perfora el mur i porta\'ls a casa de pressa.',
-    'fun.lemmings.hint16':
+    'fun.lemmings.hint15':
       'L\'acer gris resisteix qualsevol pala: cava on el terra encara és terra marró.',
+    'fun.lemmings.hint16':
+      'Els perforadors reboten a l\'acer. Construeix una rampa i passa per sobre.',
     'fun.lemmings.hint17':
-      'El grup dret està fora de perill; fes un pont sobre el buit per al grup esquerre abans que s\'acabi el temps.',
-    'fun.lemmings.hint18': 'Els perforadors reboten a l\'acer. Construeix una rampa i passa per sobre.',
-    'fun.lemmings.hint19':
       'Una trapa s\'obre a dalt i una a baix: els paraigües són només per al grup del penya-segat.',
-    'fun.lemmings.hint20':
-      'Perfora el mur de terra a l\'esquerra, construeix sobre l\'acer a la dreta… i vigila el rellotge.',
-    'fun.lemmings.hint21':
-      'La vall és massa fonda per sortir caminant: construeix una escala pel vessant oposat i el grup et segueix.',
-    'fun.lemmings.hint22':
+    'fun.lemmings.hint18':
       'Les pales reboten a l\'acer. Perfora l\'única veta de terra a l\'esquerra per caure a l\'altre costat.',
-    'fun.lemmings.hint23': 'Perfora el mur i després construeix una escala fins a la cornisa que hi ha darrere.',
-    'fun.lemmings.hint24':
+    'fun.lemmings.hint19':
+      'El grup dret està fora de perill; fes un pont sobre el buit per al grup esquerre abans que s\'acabi el temps.',
+    'fun.lemmings.hint20':
+      'Flota fins a la lleixa, perfora el mur i després construeix fins a la porta.',
+    'fun.lemmings.hint21':
       'Primer els paraigües perquè ningú s\'estavelli, després perfora la safata… abans que s\'acabi el rellotge.',
+    'fun.lemmings.hint22':
+      'La vall és massa fonda per sortir caminant: construeix una escala pel vessant oposat i el grup et segueix.',
+    'fun.lemmings.hint23':
+      'Un sol pont no creua el barranc: un segon constructor ha de continuar des de la punta del primer.',
+    'fun.lemmings.hint24':
+      'Perfora el mur de terra a l\'esquerra, construeix sobre l\'acer a la dreta… i vigila el rellotge.',
     'fun.lemmings.hint25':
       'Perfora el mur de terra a l\'esquerra, puja per una rampa sobre l\'acer a la dreta: dos grups, un rellotge.',
     'fun.lemmings.score': 'Punts',

@@ -1,12 +1,11 @@
 # Arcade Improvement, Round 1 — Audit, Ranking, and the First Round
 
 Date: 2026-07-21
-Status: **Rounds 1-3 shipped; Round 4 planned & in progress.** Round 1
-(**Refill the finite rosters**), Round 2 (**Twitch-game gameplay & clarity**),
-and Round 3 (**Sim stakes & goals** — Pixel Park + Microcity) are all planned
-and shipped. Round 4 (**Flat-canvas art pass** — Snake + Tank Duel) is planned
-below and executing. See "Execution notes" at the foot of each shipped round.
-Round 5 remains a queued sketch.
+Status: **Rounds 1-4 shipped.** Round 1 (**Refill the finite rosters**),
+Round 2 (**Twitch-game gameplay & clarity**), Round 3 (**Sim stakes & goals** —
+Pixel Park + Microcity), and Round 4 (**Flat-canvas art pass** — Snake + Tank
+Duel) are all planned and shipped. See "Execution notes" at the foot of each
+round. Round 5 remains a queued sketch.
 
 ## Why this doc
 
@@ -896,3 +895,50 @@ smoke (match starts, a shot fires, console clean).
 - No per-frame cost creep: the terrain bake *removes* ~1,600 path ops/frame;
   the tank detail is a bounded addition to an already per-frame sprite. Frame
   time is spot-checked in the browser if either game feels heavier.
+
+## Round 4 execution notes (2026-07-22)
+
+All three commits landed and passed the full bar (lint, typecheck, build, 543
+tests unchanged, check-links). The three non-obvious craft levers were
+confirmed with the owner up front and all built to the recommended option:
+scaled-serpent snake, turret + road-wheels tank, distinct drawn shells.
+
+- **Harness extension** (commit "plan the flat-canvas art pass + extend the
+  screenshot harness"). Both flat cabinets are now in
+  `scripts/screenshot-games.js`. The Tank Duel scenario was straightforward
+  (seeded terrain + a scripted heavy shot). Snake fought back: the game renders
+  with **interpolated** (sliding) motion, so a naive fixed-dt or green-pixel
+  poll drifts against the pixels, and the body's dark scale-dots defeat
+  eye-based head detection. The landing design is a small greedy bot that reads
+  only the apple/bonus (solid red/gold discs) off the canvas and tracks the
+  head/body logically through a **drift-free** move primitive — it steps
+  exactly the current (shrinking) move interval each call, carrying the
+  sub-step remainder, so cumulative stepped time tracks cumulative intervals
+  and exactly one move fires. It reliably grows the snake and reaches the timed
+  bonus. Output dirs (before/after/shots) are gitignored.
+
+- **Snake** (commit "outline discipline, shading ramp, and hashed variety").
+  Draw-only, headless tests untouched. The two-flat-green tube gained a
+  dark→mid→lit width ramp and a dark head ring + crown highlight; the flat
+  chevron scale dots took a shade hashed off the head-distance index; apples
+  gained a hashed red/leaf/shine + dark belly rim (keyed on board cell) and the
+  bonus a dark rim + hashed sparkles. Before/after crops confirmed the head now
+  sits proud of the body and the fruit reads with depth.
+
+- **Tank Duel** (commit "bake the terrain, and give tanks a turret/tread +
+  drawn shells"). The terrain bake was the round's one hard invariant. First
+  cut used a separate transparent terrain layer and `cmp` flagged **339 pixels,
+  max delta 1 LSB, confined to the 2 rightmost anti-aliased columns** — the
+  classic loss from compositing an AA edge through a transparent buffer.
+  Resolved by baking the terrain **onto the opaque backdrop** in one scene
+  layer, so the finished opaque blit reproduces the old draw order exactly:
+  `cmp` then reported **IDENTICAL** on all three scenarios. The art then went on
+  top: hull value ramp + rounded turret dome + wheeled tread band +
+  muzzle-lipped barrel (footprint/`barrelTip` unchanged, so aim math is
+  untouched), and per-weapon drawn shells oriented to velocity (missile
+  nose-cone, heavy finned bomb, MIRV cluster) replacing the identical yellow
+  circle. Before/after crops confirmed the tank now reads as an armoured
+  vehicle and the heavy shell as a bomb.
+
+The candidates queue stays parked. Round 5 (more authored content) remains the
+next queued sketch when the arcade is revisited.

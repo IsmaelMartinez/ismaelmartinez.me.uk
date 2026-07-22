@@ -110,13 +110,22 @@ export function maxZoneLevel(stats: CityStats): number {
  * Residential needs nature (park, forest, or riverfront) nearby to pass
  * level 1 and a school nearby to reach the top levels. Densifying beyond
  * MAX_LEVEL additionally needs a big city (maxZoneLevel) and hot demand.
+ *
+ * `congested` (per-tile, from traffic.ts) throttles the late game: a zone
+ * *all* of whose adjacent roads are congested grows slower and is barred from
+ * densifying past MAX_LEVEL — one uncongested road frontage relieves it, so a
+ * dense district needs a road grid, not a single choked spine. Omitted (the
+ * default empty array) means no congestion, i.e. every existing caller's
+ * behaviour is unchanged.
+ *
  * Returns the tile indices that changed so the UI can celebrate (or mourn)
  * them.
  */
 export function growthStep(
   tiles: CityTile[],
   random: () => number = Math.random,
-  demandModifier: Partial<Demand> = {}
+  demandModifier: Partial<Demand> = {},
+  congested: boolean[] = []
 ): { grown: number[]; decayed: number[] } {
   const powered = computePowered(tiles);
   const stats = cityStats(tiles);
@@ -135,13 +144,18 @@ export function growthStep(
       }
       return;
     }
+    // Traffic-choked: every road serving this zone is congested, with no
+    // relief route. Throttles growth and caps development at MAX_LEVEL.
+    const roads = gridNeighbours(i, CITY_W, CITY_H).filter(n => isRoad(tiles[n].type));
+    const choked = roads.length > 0 && roads.every(n => congested[n] === true);
     if (tile.level >= cap || demand[tile.type] <= 0) return;
     if (tile.level >= MAX_LEVEL && demand[tile.type] < DENSE_DEMAND_MIN) return;
+    if (choked && tile.level >= MAX_LEVEL) return;
     if (tile.type === 'res') {
       if (tile.level === 1 && !hasNatureNearby(tiles, i)) return;
       if (tile.level >= MAX_LEVEL - 1 && !hasSchoolNearby(tiles, i)) return;
     }
-    if (random() < Math.min(0.45, demand[tile.type] / 70)) {
+    if (random() < Math.min(0.45, demand[tile.type] / 70) * (choked ? 0.4 : 1)) {
       tile.level++;
       grown.push(i);
     }

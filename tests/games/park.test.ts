@@ -31,7 +31,22 @@ import {
   happiness,
   NEED_KEYS
 } from '../../src/games/park/guests';
-import { parkRating, spawnInterval, dailyUpkeep } from '../../src/games/park/economy';
+import {
+  parkRating,
+  spawnInterval,
+  dailyUpkeep,
+  wagePerAttraction,
+  attractionCount,
+  operatingCost,
+  maxAttractionDailyRevenue,
+  WAGE_GRACE_DAYS,
+  WAGE_RAMP
+} from '../../src/games/park/economy';
+import {
+  PARK_OBJECTIVES,
+  objectiveMet,
+  objectiveProgress
+} from '../../src/games/park/objectives';
 import {
   mayhemIntensity,
   MAYHEM_GRACE_DAYS,
@@ -921,5 +936,91 @@ describe('park mayhem', () => {
     expect(maxGuests(MAYHEM_GRACE_DAYS + 7)).toBe(90);
     expect(maxGuests(999)).toBe(120);
     for (let d = 1; d < 40; d++) expect(maxGuests(d + 1)).toBeGreaterThanOrEqual(maxGuests(d));
+  });
+});
+
+describe('park staff wages & operating cost', () => {
+  it('charges no wages through the grace window, then a linear unbounded climb', () => {
+    expect(wagePerAttraction(1)).toBe(0);
+    expect(wagePerAttraction(WAGE_GRACE_DAYS)).toBe(0);
+    const early = wagePerAttraction(WAGE_GRACE_DAYS + 2);
+    const later = wagePerAttraction(WAGE_GRACE_DAYS + 20);
+    expect(early).toBeGreaterThan(0);
+    expect(later).toBeGreaterThan(early);
+    // Each extra day past grace adds exactly WAGE_RAMP.
+    expect(
+      wagePerAttraction(WAGE_GRACE_DAYS + 11) - wagePerAttraction(WAGE_GRACE_DAYS + 10)
+    ).toBeCloseTo(WAGE_RAMP);
+  });
+
+  it('counts placed rides and stalls as wage-bearing attractions, not décor or paths', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    expect(attractionCount(tiles)).toBe(0);
+    applyTool(tiles, heights, tunnels, 0, 0, 'carousel');
+    applyTool(tiles, heights, tunnels, 1, 0, 'food');
+    applyTool(tiles, heights, tunnels, 2, 0, 'tree'); // décor
+    applyTool(tiles, heights, tunnels, 3, 0, 'path'); // path
+    expect(attractionCount(tiles)).toBe(2);
+  });
+
+  it('equals upkeep during grace, then adds a wage bill that scales with attractions', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 0, 0, 'carousel');
+    applyTool(tiles, heights, tunnels, 1, 0, 'food');
+    const upkeep = dailyUpkeep(tiles);
+    expect(operatingCost(tiles, WAGE_GRACE_DAYS)).toBe(upkeep);
+    const day = WAGE_GRACE_DAYS + 10;
+    expect(operatingCost(tiles, day)).toBe(upkeep + Math.round(2 * wagePerAttraction(day)));
+    expect(operatingCost(tiles, day)).toBeGreaterThan(upkeep);
+  });
+
+  it('is monotonic non-decreasing in day for a fixed park', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 0, 0, 'ferris');
+    applyTool(tiles, heights, tunnels, 1, 0, 'drink');
+    for (let d = 1; d < 80; d++) {
+      expect(operatingCost(tiles, d + 1)).toBeGreaterThanOrEqual(operatingCost(tiles, d));
+    }
+  });
+
+  it('re-arms bankruptcy: wages eventually exceed any single attraction\'s daily takings', () => {
+    // Beyond the crossover day every attraction is net-negative regardless of
+    // park size — the crowd (hence revenue) is capped, the wage bill is not,
+    // so the run is guaranteed to end. Early on the wage sits under the ceiling.
+    const ceiling = maxAttractionDailyRevenue();
+    expect(ceiling).toBeGreaterThan(0);
+    expect(wagePerAttraction(WAGE_GRACE_DAYS + 1)).toBeLessThan(ceiling);
+    expect(wagePerAttraction(500)).toBeGreaterThan(ceiling);
+  });
+});
+
+describe('park objectives', () => {
+  it('is an ordered ladder ending in exactly one prestige win', () => {
+    expect(PARK_OBJECTIVES.length).toBeGreaterThanOrEqual(4);
+    const wins = PARK_OBJECTIVES.filter(o => o.win);
+    expect(wins).toHaveLength(1);
+    expect(PARK_OBJECTIVES[PARK_OBJECTIVES.length - 1].win).toBe(true);
+    // Every rung but the finish pays a positive reward; the finish pays none.
+    for (const o of PARK_OBJECTIVES) {
+      if (o.win) expect(o.reward).toBe(0);
+      else expect(o.reward).toBeGreaterThan(0);
+    }
+  });
+
+  it('rises within each metric', () => {
+    for (const metric of ['welcomed', 'rating', 'peak'] as const) {
+      const targets = PARK_OBJECTIVES.filter(o => o.metric === metric).map(o => o.target);
+      for (let i = 1; i < targets.length; i++) {
+        expect(targets[i]).toBeGreaterThan(targets[i - 1]);
+      }
+    }
+  });
+
+  it('meets an objective at its target (>=) and clamps the readout progress', () => {
+    const obj = PARK_OBJECTIVES[0]; // welcomed >= 10
+    expect(objectiveMet(obj, { welcomed: 9, peak: 0, rating: 0 })).toBe(false);
+    expect(objectiveMet(obj, { welcomed: 10, peak: 0, rating: 0 })).toBe(true);
+    expect(objectiveProgress(obj, { welcomed: 4, peak: 0, rating: 0 })).toBe(4);
+    expect(objectiveProgress(obj, { welcomed: 999, peak: 0, rating: 0 })).toBe(obj.target);
   });
 });

@@ -1,7 +1,12 @@
 # Arcade Round 7 — Plan
 
 Date: 2026-07-23
-Status: **Planned — gates pending.** Round 6 (PR #194) is merged; this round
+Status: **Gates decided 2026-07-23 — executing.** Owner sign-off, one pass:
+G1 builds **all four** ride candidates (Pirate Ship, Haunted Manor, Bumper
+Cars, Helter Skelter; the ice-cream stall stays unbuilt), the pirate-zone
+native **swaps to the Pirate Ship**, and the round scope is **core only**
+(G1 + G2 — the stretch candidates stay listed for a future round).
+Round 6 (PR #194) is merged; this round
 follows the owner's standing direction — deepen the shipped cabinets, tenth-
 cabinet queue parked — seeded with the two carried-over candidates named at
 Round 6's close: Pixel Park's attraction catalogue (the Round 5 audit's first

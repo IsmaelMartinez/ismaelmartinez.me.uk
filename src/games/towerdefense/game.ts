@@ -1021,8 +1021,14 @@ export function initTowerDefenseGame(): void {
       ctx.ellipse(p.x, p.y - 5 - bob * 0.4, 4.4, 5, 0, 0, Math.PI * 2);
       ctx.fill();
       // Grounding outline so the shell reads against the road.
-      ctx.strokeStyle = 'rgba(10, 16, 28, 0.5)';
-      ctx.lineWidth = 0.75;
+      ctx.strokeStyle = 'rgba(8, 12, 22, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Lit crescent on the shell's sun side.
+      ctx.strokeStyle = shadeColor(color, 1.55);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 5 - bob * 0.4, 3.5, 4.1, 0, Math.PI * 1.05, Math.PI * 1.45);
       ctx.stroke();
       // Segmented carapace lines across the shell.
       ctx.strokeStyle = shadeColor(color, 0.6);
@@ -1043,6 +1049,10 @@ export function initTowerDefenseGame(): void {
       ctx.moveTo(p.x + 2, p.y - 9 - bob * 0.4);
       ctx.lineTo(p.x + 3.5 + stride * 0.5, p.y - 12.5 - bob * 0.4);
       ctx.stroke();
+      // Bright antenna tips catch the light.
+      ctx.fillStyle = shadeColor(color, 1.55);
+      ctx.fillRect(p.x - 3.5 - stride * 0.5 - 0.6, p.y - 13.1 - bob * 0.4, 1.2, 1.2);
+      ctx.fillRect(p.x + 3.5 + stride * 0.5 - 0.6, p.y - 13.1 - bob * 0.4, 1.2, 1.2);
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(p.x + dir * 2.4 - 1.8, p.y - 6.6 - bob * 0.4, 1.8, 1.8);
       ctx.fillRect(p.x + dir * 0.2 - 0.9, p.y - 6.6 - bob * 0.4, 1.8, 1.8);
@@ -1071,12 +1081,26 @@ export function initTowerDefenseGame(): void {
       ctx.closePath();
       ctx.fill();
       // Grounding outline along the belly edge.
-      ctx.strokeStyle = 'rgba(10, 16, 28, 0.5)';
-      ctx.lineWidth = 0.75;
+      ctx.strokeStyle = 'rgba(8, 12, 22, 0.8)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(p.x + dir * 7, p.y - 5.5 - bob * 0.3);
       ctx.lineTo(p.x - dir * 3.2, p.y - 1.5);
       ctx.stroke();
+      // Edge-light along the spine, brightest at the nose.
+      ctx.strokeStyle = shadeColor(color, 1.6);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p.x + dir * 6.6, p.y - 5.7 - bob * 0.3);
+      ctx.lineTo(p.x - dir * 3.4, p.y - 9.2 + stride * 0.4);
+      ctx.stroke();
+      // The dust its run kicks up (the heels the comment promises).
+      const kick = 0.16 + Math.abs(stride) * 0.1;
+      ctx.fillStyle = `rgba(148, 163, 184, ${kick.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(p.x - dir * (6.5 + Math.abs(stride) * 0.8), p.y - 0.5, 1.3, 0, Math.PI * 2);
+      ctx.arc(p.x - dir * (8.6 + Math.abs(stride) * 1.2), p.y + 0.3, 0.9, 0, Math.PI * 2);
+      ctx.fill();
       ctx.strokeStyle = shadeColor(color, 0.55);
       ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -1099,6 +1123,9 @@ export function initTowerDefenseGame(): void {
       ctx.stroke();
       ctx.fillStyle = shadeColor(color, 0.7);
       ctx.fillRect(p.x - 6.5, p.y - 5 - bob * 0.3, 13, 5);
+      // Hem shadow grounds the armoured mass.
+      ctx.fillStyle = shadeColor(color, 0.4);
+      ctx.fillRect(p.x - 6.5, p.y - 1.2 - bob * 0.3, 13, 1.2);
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.ellipse(p.x, p.y - 8 - bob * 0.3, 7.5, 6.4, 0, Math.PI, 0);
@@ -1120,11 +1147,21 @@ export function initTowerDefenseGame(): void {
         ctx.fill();
       }
       // Grounding outline over the shell dome.
-      ctx.strokeStyle = 'rgba(10, 16, 28, 0.5)';
-      ctx.lineWidth = 0.75;
+      ctx.strokeStyle = 'rgba(8, 12, 22, 0.8)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.ellipse(p.x, p.y - 8 - bob * 0.3, 7.5, 6.4, 0, Math.PI, 0);
       ctx.stroke();
+      // Lit rim along the dome's sun side, glints at each plate top.
+      ctx.strokeStyle = shadeColor(color, 1.45);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 8 - bob * 0.3, 6.6, 5.5, 0, Math.PI * 1.08, Math.PI * 1.42);
+      ctx.stroke();
+      ctx.fillStyle = shadeColor(color, 1.6);
+      for (let plate = -1; plate <= 1; plate++) {
+        ctx.fillRect(p.x + plate * 4.4 - 0.8, p.y - 14.2 - bob * 0.3, 1.6, 1.2);
+      }
       // Horn stubs and sullen eyes.
       ctx.fillStyle = shadeColor(color, 1.35);
       ctx.beginPath();
@@ -1141,28 +1178,51 @@ export function initTowerDefenseGame(): void {
       ctx.fillRect(p.x + dir * 3 - 2.6, p.y - 8.5, 2, 2);
       ctx.fillRect(p.x + dir * 3 + 1, p.y - 8.5, 2, 2);
     } else {
-      // The warlord: a hulking crowned mass, lit from within.
-      ctx.save();
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 10;
+      // The warlord: a hulking crowned mass, lit from within. The glow is
+      // layered low-alpha fills, not shadowBlur (the Round 6 frame-cost
+      // lesson: blur measured +50% on the sweep; bands cost ~nothing).
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.1;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 9 - bob * 0.3, 14.5, 13.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.14;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 9 - bob * 0.3, 12, 11.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.fillStyle = shadeColor(color, 0.7);
       ctx.beginPath();
       ctx.ellipse(p.x, p.y - 9 - bob * 0.3, 10, 9.5, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.restore();
+      // Grounding edge and a molten rim seam on the sun side.
+      ctx.strokeStyle = 'rgba(8, 12, 22, 0.8)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.strokeStyle = shadeColor(color, 1.35);
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - 9 - bob * 0.3, 8.6, 8.1, 0, Math.PI * 1.06, Math.PI * 1.44);
+      ctx.stroke();
       ctx.fillStyle = shadeColor(color, 0.5);
       ctx.beginPath();
       ctx.ellipse(p.x, p.y - 5, 10, 5, 0, 0, Math.PI);
       ctx.fill();
-      // Iron crown of spikes.
-      ctx.fillStyle = '#3f3f46';
+      // Iron crown of spikes, each catching an edge of light.
       for (let spike = -2; spike <= 2; spike++) {
+        ctx.fillStyle = '#3f3f46';
         ctx.beginPath();
         ctx.moveTo(p.x + spike * 4.2 - 1.4, p.y - 16.5);
         ctx.lineTo(p.x + spike * 4.6, p.y - 22 - Math.abs(stride) * 0.8);
         ctx.lineTo(p.x + spike * 4.2 + 1.6, p.y - 16);
         ctx.closePath();
         ctx.fill();
+        ctx.strokeStyle = '#71717a';
+        ctx.lineWidth = 0.75;
+        ctx.beginPath();
+        ctx.moveTo(p.x + spike * 4.2 - 1.4, p.y - 16.5);
+        ctx.lineTo(p.x + spike * 4.6, p.y - 22 - Math.abs(stride) * 0.8);
+        ctx.stroke();
       }
       ctx.strokeStyle = '#52525b';
       ctx.lineWidth = 2;

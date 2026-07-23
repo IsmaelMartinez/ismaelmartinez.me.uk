@@ -29,6 +29,7 @@ import {
   mostUrgentNeed,
   satisfyNeed,
   happiness,
+  URGENT_THRESHOLD,
   NEED_KEYS
 } from '../../src/games/park/guests';
 import {
@@ -453,7 +454,73 @@ describe('park theme zones', () => {
     expect(toolCost('gatePirate')).toBeGreaterThan(0);
     expect(ZONES.fairytale.native).toBe('carousel');
     expect(ZONES.adventure.native).toBe('flume');
-    expect(ZONES.pirate.native).toBe('ferris');
+    expect(ZONES.pirate.native).toBe('pirateship');
+  });
+
+  it('discounts the Pirate Ship inside pirate-zone influence (its new native)', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 5, 5, 'gatePirate');
+    expect(zoneDiscountFactor(tiles, idx(6, 5), 'pirateship')).toBe(0.9);
+    // The ferris lost its native discount when the ship took the slot.
+    expect(zoneDiscountFactor(tiles, idx(6, 5), 'ferris')).toBe(1);
+  });
+});
+
+describe('park attraction catalogue (Round 7)', () => {
+  it('prices, charges and staffs every new attraction like the rest', () => {
+    for (const tile of ['pirateship', 'manor', 'bumper', 'helter'] as const) {
+      const def = BUILDINGS[tile];
+      expect(def, tile).toBeDefined();
+      expect(def!.cost).toBeGreaterThan(0);
+      expect(def!.price).toBeGreaterThan(0);
+      expect(def!.upkeep).toBeGreaterThan(0);
+      expect(def!.boost).toBeGreaterThan(0);
+      expect(def!.useTime).toBeGreaterThan(0);
+      expect(toolCost(tile)).toBe(def!.cost);
+    }
+  });
+
+  it('makes the Pirate Ship the only single-tile thrill satisfier, and treats it as a ride', () => {
+    const thrill = (Object.keys(BUILDINGS) as (keyof typeof BUILDINGS)[]).filter(
+      t => BUILDINGS[t]!.satisfies === 'thrill'
+    );
+    expect(thrill).toEqual(['pirateship']);
+    // Rides (fun or thrill) break down; stalls/toilets do not.
+    expect(isRide('pirateship')).toBe(true);
+    expect(isRide('manor')).toBe(true);
+    expect(isRide('bumper')).toBe(true);
+    expect(isRide('helter')).toBe(true);
+    expect(isRide('food')).toBe(false);
+    expect(isRide('toilet')).toBe(false);
+  });
+
+  it('lets a thrill-starved guest in a coasterless park reach and be satisfied by a Pirate Ship', () => {
+    // The gap this closes: before the ship, a park with no built coaster had
+    // no thrill source, so thrill-urgent guests could never be served.
+    const { tiles, entrance } = createFlatPark();
+    for (let n = 3; n <= 6; n++) tiles[entrance - n * GRID_W] = 'path';
+    const ship = entrance - 5 * GRID_W + 1;
+    tiles[ship] = 'pirateship';
+
+    // A guest whose lowest need is thrill picks thrill as its want.
+    const needs = createNeeds(() => 0.5);
+    needs.thrill = 12;
+    expect(mostUrgentNeed(needs)).toBe('thrill');
+
+    // The candidate scan chooseAction runs for thrill: coaster stations plus
+    // any thrill-satisfying building. With no coaster, the ship is reachable.
+    const candidates: number[] = [];
+    tiles.forEach((t, i) => {
+      if (BUILDINGS[t]?.satisfies === 'thrill') candidates.push(i);
+    });
+    const found = nearestReachable(tiles, entrance, candidates);
+    expect(found).not.toBeNull();
+    expect(found!.building).toBe(ship);
+
+    // Using it restores the need above the urgent line (the generic
+    // using-handler applies def.satisfies/def.boost).
+    satisfyNeed(needs, BUILDINGS.pirateship!.satisfies, BUILDINGS.pirateship!.boost);
+    expect(needs.thrill).toBeGreaterThan(URGENT_THRESHOLD);
   });
 });
 

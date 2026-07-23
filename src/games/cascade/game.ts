@@ -833,7 +833,10 @@ export function initCascadeGame(): void {
 
   // Mode picker on the start screen. The blurbs are server-rendered siblings
   // rather than runtime strings, so they stay on the `useTranslations` path.
-  const modeButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.mode-btn'));
+  // Scoped to the picker group on purpose: the game-over screen's "change
+  // mode" button borrows `.mode-btn` for its look, and an unscoped query
+  // would wire it as a third mode and reset the run's mode on click.
+  const modeButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.modes .mode-btn'));
   const blurbs: Record<Mode, HTMLElement> = {
     marathon: el('blurb-marathon'),
     countdown: el('blurb-countdown')
@@ -861,6 +864,14 @@ export function initCascadeGame(): void {
     overOverlay.style.display = 'none';
     board().hide();
     startRun();
+  });
+
+  // Back to the picker. Without this the start screen is gone for the rest of
+  // the visit and whichever mode you opened with is the only one you can play.
+  el('change-mode-btn').addEventListener('click', () => {
+    overOverlay.style.display = 'none';
+    board().hide();
+    startOverlay.style.display = '';
   });
 
   // Cheat-mode handle, only when the page is opened with #dev: exposes the

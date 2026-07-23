@@ -445,6 +445,27 @@ untouched.
   0.2 s `transition: all` — the state was correct all along, the probe was
   sampling mid-transition.
 
+Review pass on PR #196 turned up two real defects in this round's own code,
+both applied:
+
+- **The escort leg could collapse to two steps.** `spawnMission` pinned the
+  asset with the assassinate branch's rule, ≥18 tiles from the squad spawn
+  and nothing else. On a 26×26 map that includes tiles right beside the
+  extraction pad, so the half of the mission the mould exists for could be a
+  two-tile walk. The asset now also has to clear the pad by
+  `ESCORT_MIN_FROM_PAD` (12), re-rolled up to 40 times. The test checks five
+  seeds and fails without the re-roll: one of them had the asset 1.4 tiles
+  from the pad.
+- **Cascade's mode picker was unreachable after the first run**, since the
+  start overlay hides on start and "Play Again" restarts in the same mode.
+  A "change mode" button on the game-over screen brings the picker back. The
+  first attempt at that button introduced a second defect worth recording:
+  it borrowed the `.mode-btn` class for its look, and the picker's
+  `querySelectorAll('.mode-btn')` swept it up as a third mode, so clicking it
+  silently reset the run to marathon. The query is now scoped to the picker
+  group. Neither the unit tests nor the type checker could have caught this —
+  it took driving the whole mode round-trip in a browser.
+
 Round-wide regression proof: all fourteen harness captures across the six
 cabinets the script drives (Line Hold, Syndicate, Microcity, Pixel Park,
 Snake, Tank Duel) are byte-identical (`cmp`) between the round's base commit

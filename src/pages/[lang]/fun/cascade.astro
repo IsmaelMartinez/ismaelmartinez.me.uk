@@ -117,6 +117,9 @@ const t = useTranslations(lang);
               <button id="again-btn" class="btn btn-primary btn-large">
                 {t('fun.cascade.playAgain')}
               </button>
+              <button id="change-mode-btn" class="mode-btn change-mode">
+                {t('fun.cascade.changeMode')}
+              </button>
             </div>
           </div>
         </div>
@@ -262,6 +265,11 @@ const t = useTranslations(lang);
     font-size: 0.8rem;
     color: var(--color-text-muted);
     min-height: 1.2em;
+  }
+
+  .change-mode {
+    display: block;
+    margin: var(--space-md) auto 0;
   }
 
   .game-area {

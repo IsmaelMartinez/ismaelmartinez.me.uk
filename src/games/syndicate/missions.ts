@@ -172,6 +172,9 @@ export const MISSIONS: MissionSpec[] = [
 
 export const SQUAD_SIZE = 4;
 
+/** Tiles the escort asset must sit clear of the extraction pad. */
+export const ESCORT_MIN_FROM_PAD = 12;
+
 export interface MissionSetup {
   units: Unit[];
   /** Tile indices where the squad starts (north-west corner). */
@@ -238,8 +241,19 @@ export function spawnMission(
   } else if (spec.objective === 'escort') {
     // The asset is pinned deep in the city behind the same guard ring the
     // executive's lair uses, so the squad has to fight in for it and then
-    // fight the whole way back out with it in tow.
-    const holding = remoteTile(walkable, spawnX, spawnY, 18, random);
+    // fight the whole way back out with it in tow. Unlike the executive —
+    // who can be holed up anywhere, because killing him ends it on the spot —
+    // the asset has to be a real walk from *both* ends, or the escort leg
+    // that defines the mould collapses to a couple of steps next to the pad.
+    const exX = (extraction % MAP_W) + 0.5;
+    const exY = Math.floor(extraction / MAP_W) + 0.5;
+    let holding = remoteTile(walkable, spawnX, spawnY, 18, random);
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const dx = (holding % MAP_W) + 0.5 - exX;
+      const dy = Math.floor(holding / MAP_W) + 0.5 - exY;
+      if (Math.hypot(dx, dy) >= ESCORT_MIN_FROM_PAD) break;
+      holding = remoteTile(walkable, spawnX, spawnY, 18, random);
+    }
     units.push(createUnit(nextId++, 'vip', holding, MAP_W));
     const ring = spreadTargets(tiles, holding, spec.guards + 1);
     for (let n = 0; n < spec.guards; n++) {

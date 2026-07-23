@@ -23,7 +23,13 @@ import {
   followerCount,
   persuadedCivilians
 } from '../../src/games/syndicate/sim';
-import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus } from '../../src/games/syndicate/missions';
+import {
+  MISSIONS,
+  SQUAD_SIZE,
+  ESCORT_MIN_FROM_PAD,
+  spawnMission,
+  missionStatus
+} from '../../src/games/syndicate/missions';
 import { seededRandom } from './seeded-random';
 
 /** An all-walkable map for hand-built combat scenarios. */
@@ -409,9 +415,12 @@ describe('missions', () => {
   it('pins the escort asset behind its own guard ring, far from the squad', () => {
     const escorts = MISSIONS.filter(m => m.objective === 'escort');
     expect(escorts.length).toBeGreaterThan(0);
-    for (const spec of escorts) {
-      const tiles = generateCity(seededRandom(4));
-      const setup = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+    // Several seeds, because the holding tile is rolled and re-rolled until it
+    // clears both ends — one seed would not prove the constraint holds.
+    const cases = escorts.flatMap(spec => [2, 4, 7, 11, 19].map(seed => ({ spec, seed })));
+    for (const { spec, seed } of cases) {
+      const tiles = generateCity(seededRandom(seed));
+      const setup = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom(seed));
       const vips = setup.units.filter(u => u.kind === 'vip');
       expect(vips).toHaveLength(1);
       const vip = vips[0];
@@ -423,6 +432,12 @@ describe('missions', () => {
       const sx = (spawn % MAP_W) + 0.5;
       const sy = Math.floor(spawn / MAP_W) + 0.5;
       expect(Math.hypot(vip.x - sx, vip.y - sy)).toBeGreaterThanOrEqual(18);
+      // And clear of the pad, so the escort leg is a leg. Without this the
+      // asset can be pinned next to extraction and the half of the mission
+      // the mould exists for collapses to a couple of steps.
+      const ex = (setup.extraction % MAP_W) + 0.5;
+      const ey = Math.floor(setup.extraction / MAP_W) + 0.5;
+      expect(Math.hypot(vip.x - ex, vip.y - ey)).toBeGreaterThanOrEqual(ESCORT_MIN_FROM_PAD);
       // Ringed by the spec's guards, the way the executive's lair is.
       const guards = setup.units.filter(u => u.kind === 'guard');
       expect(guards).toHaveLength(spec.guards);

@@ -506,11 +506,10 @@ export function initTowerDefenseGame(): void {
           seed: Math.random() * 1000,
           from: event.from
         });
+        const impact = isoProject(VIEW, event.tx, event.ty);
         // The bombard's tub traverses to face its last target (render-side
         // aim memory; bounded by the number of standing towers).
-        const impact0 = isoProject(VIEW, event.tx, event.ty);
-        towerAim.set(event.from, Math.atan2(impact0.y - from.y, impact0.x - from.x));
-        const impact = isoProject(VIEW, event.tx, event.ty);
+        towerAim.set(event.from, Math.atan2(impact.y - from.y, impact.x - from.x));
         if (event.kind === 'blast') {
           rings.push({ x: impact.x, y: impact.y - 6, r: 0, maxR: TOWERS.blast.splash * VIEW.halfW, life: 0.3 });
           spawnBurst(impact.x, impact.y - 8, 8, '#fdba74', { speed: 85, life: 0.35, size: 1.8, gravity: 1, glow: true });

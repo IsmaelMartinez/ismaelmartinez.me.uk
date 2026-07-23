@@ -11,7 +11,7 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
-type Shelf = 'action' | 'puzzle' | 'simulation';
+type Shelf = 'featured' | 'backCatalogue';
 
 interface ArcadeGame {
   id: string;
@@ -28,52 +28,8 @@ interface ArcadeGame {
 
 const arcadeGames: ArcadeGame[] = [
   {
-    id: 'snake',
-    shelf: 'action',
-    title: 'SNAKE',
-    taglineKey: 'fun.snake.description',
-    genreKey: 'fun.arcade.genre.snake',
-    twoPlayer: false,
-    icon: '🐍',
-    color: '#14b8a6',
-    path: '/fun/snake'
-  },
-  {
-    id: 'tanks',
-    shelf: 'action',
-    title: 'TANK DUEL',
-    taglineKey: 'fun.tanks.description',
-    genreKey: 'fun.arcade.genre.tanks',
-    twoPlayer: true,
-    icon: '🎯',
-    color: '#3b82f6',
-    path: '/fun/tanks'
-  },
-  {
-    id: 'park',
-    shelf: 'simulation',
-    title: 'PIXEL PARK',
-    taglineKey: 'fun.park.description',
-    genreKey: 'fun.arcade.genre.park',
-    twoPlayer: false,
-    icon: '🎢',
-    color: '#818cf8',
-    path: '/fun/park'
-  },
-  {
-    id: 'city',
-    shelf: 'simulation',
-    title: 'MICROCITY',
-    taglineKey: 'fun.city.description',
-    genreKey: 'fun.arcade.genre.city',
-    twoPlayer: false,
-    icon: '🏙️',
-    color: '#38bdf8',
-    path: '/fun/city'
-  },
-  {
     id: 'syndicate',
-    shelf: 'simulation',
+    shelf: 'featured',
     title: 'SYNDICATE',
     taglineKey: 'fun.syndicate.description',
     genreKey: 'fun.arcade.genre.syndicate',
@@ -83,19 +39,8 @@ const arcadeGames: ArcadeGame[] = [
     path: '/fun/syndicate'
   },
   {
-    id: 'lemmings',
-    shelf: 'puzzle',
-    title: 'CRITTER RESCUE',
-    taglineKey: 'fun.lemmings.description',
-    genreKey: 'fun.arcade.genre.lemmings',
-    twoPlayer: false,
-    icon: '🐛',
-    color: '#84cc16',
-    path: '/fun/lemmings'
-  },
-  {
     id: 'towerdefense',
-    shelf: 'action',
+    shelf: 'featured',
     title: 'LINE HOLD',
     taglineKey: 'fun.towerdefense.description',
     genreKey: 'fun.arcade.genre.towerdefense',
@@ -105,8 +50,30 @@ const arcadeGames: ArcadeGame[] = [
     path: '/fun/towerdefense'
   },
   {
+    id: 'lemmings',
+    shelf: 'featured',
+    title: 'CRITTER RESCUE',
+    taglineKey: 'fun.lemmings.description',
+    genreKey: 'fun.arcade.genre.lemmings',
+    twoPlayer: false,
+    icon: '🐛',
+    color: '#84cc16',
+    path: '/fun/lemmings'
+  },
+  {
+    id: 'park',
+    shelf: 'featured',
+    title: 'PIXEL PARK',
+    taglineKey: 'fun.park.description',
+    genreKey: 'fun.arcade.genre.park',
+    twoPlayer: false,
+    icon: '🎢',
+    color: '#818cf8',
+    path: '/fun/park'
+  },
+  {
     id: 'cascade',
-    shelf: 'puzzle',
+    shelf: 'featured',
     title: 'CASCADE',
     taglineKey: 'fun.cascade.description',
     genreKey: 'fun.arcade.genre.cascade',
@@ -115,14 +82,49 @@ const arcadeGames: ArcadeGame[] = [
     color: '#a855f7',
     path: '/fun/cascade',
     isNew: true
+  },
+  {
+    id: 'city',
+    shelf: 'backCatalogue',
+    title: 'MICROCITY',
+    taglineKey: 'fun.city.description',
+    genreKey: 'fun.arcade.genre.city',
+    twoPlayer: false,
+    icon: '🏙️',
+    color: '#38bdf8',
+    path: '/fun/city'
+  },
+  {
+    id: 'tanks',
+    shelf: 'backCatalogue',
+    title: 'TANK DUEL',
+    taglineKey: 'fun.tanks.description',
+    genreKey: 'fun.arcade.genre.tanks',
+    twoPlayer: true,
+    icon: '🎯',
+    color: '#3b82f6',
+    path: '/fun/tanks'
+  },
+  {
+    id: 'snake',
+    shelf: 'backCatalogue',
+    title: 'SNAKE',
+    taglineKey: 'fun.snake.description',
+    genreKey: 'fun.arcade.genre.snake',
+    twoPlayer: false,
+    icon: '🐍',
+    color: '#14b8a6',
+    path: '/fun/snake'
   }
 ];
 
-// Aisle order on the floor; each shelf renders its own labelled row.
+// Aisle order on the floor; each shelf renders its own labelled row. The
+// Round 6 focus decision (owner-approved list): the five deepest, most
+// distinctive cabinets stand on the front shelf, the rest keep playing from
+// the back catalogue — nothing retired.
 const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
-  { id: 'action', labelKey: 'fun.arcade.shelf.action' },
-  { id: 'puzzle', labelKey: 'fun.arcade.shelf.puzzle' },
-  { id: 'simulation', labelKey: 'fun.arcade.shelf.simulation' }
+  { id: 'featured', labelKey: 'fun.arcade.shelf.featured' },
+  { id: 'backCatalogue', labelKey: 'fun.arcade.shelf.backCatalogue' }
 ];
 ---
 

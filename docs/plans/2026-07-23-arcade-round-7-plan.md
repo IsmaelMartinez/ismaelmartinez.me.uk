@@ -195,6 +195,45 @@ one-line art direction above, and the picked set gets its close-up crops in
 the PR. If the owner wants mock crops before committing to a pick, that is a
 fine answer and the mocks get built first.
 
-## Execution notes
+## Execution notes (2026-07-23)
 
-*(accumulated as goals land)*
+Both core goals landed, one commit each, full bar after each (lint, typecheck,
+build, test, check-links; 555 → 559 tests over the round). G2 ran first
+(ungated) while the G1 gate was answered in one pass: G1 builds all four ride
+candidates, the pirate-zone native swaps to the Pirate Ship, scope stays core
+(the S1/S2 stretch goals were declined and stay listed for a later round).
+
+- **G2 — Line Hold marcher contrast.** A touch-up, not a redraw: the four
+  Phase-4 silhouettes kept their geometry and gained the arcane batteries'
+  value recipe — a darker `rgba(8,12,22,0.8)` grounding edge and a sun-side
+  lit rim per kind (scout shell crescent + bright antenna tips, sprinter
+  spine edge-light + heel dust, brute plate glints + hem shadow, warlord
+  molten rim + edge-lit crown spikes). The warlord's `shadowBlur` glow was
+  replaced with two layered low-alpha halos — the Round 6 frame-cost lesson
+  applied pre-emptively; the headless CPU sweep measured 0.07 → 0.08 ms/frame
+  (within noise). `linehold-build` stayed byte-identical (towers only, no
+  enemies on the field); `linehold-wave` differs as intended. Enemy sheet
+  captured via a temporary `startRun` spawn patch (committed code untouched —
+  the patch was applied on a scratch copy, per the Round 6 process note).
+- **G1 — Pixel Park attraction catalogue.** Four attractions drawn to the
+  PR #176 bar: the Pirate Ship (swinging galleon on an A-frame gantry, riders
+  and jolly-roger when busy), Haunted Manor (crooked gabled house, a
+  blink-gated lit window, a drifting ghost wisp), Bumper Cars (striped
+  pavilion over a checker rink with three hashed-colour cars on offset
+  phases), and Helter Skelter (striped cone with a sampled-helix spiral
+  slide and a mat rider). The load-bearing one is the Pirate Ship: it is the
+  first single-tile `thrill` satisfier, closing the audit's real gap
+  (coasterless parks had no thrill source and bled guests), and it took the
+  pirate zone's native slot from the ferris. The guest AI's thrill branch was
+  generalised to route to any thrill-satisfying building (mirroring the
+  existing fun-branch scan), and `isRide` widened to fun-or-thrill so the new
+  rides break down. Headless park tests (+4, 90 → 94): a thrill-starved guest
+  in a coasterless park reaches and is satisfied by a placed Pirate Ship; the
+  ship is the only single-tile thrill source; the native swap discounts it in
+  pirate influence. The existing park screenshots (`park-built`,
+  `park-coaster`, `park-rotated`) stayed byte-identical — only new tile types
+  and their draw functions were added, no existing draw code touched.
+
+Process note confirmed useful: START_MONEY (1500) can't buy all four rides in
+one capture (1600 for the rides alone), so the new-attraction screenshots were
+taken across two placements — a real budget constraint, not a bug.

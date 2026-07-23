@@ -17,7 +17,11 @@ const t = useTranslations(lang);
     <div class="container">
       <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
 
-      <div id="snake-root" class="game-container">
+      <div
+        id="snake-root"
+        class="game-container"
+        data-t-arena-advance={t('fun.snake.arenaAdvance')}
+      >
         <div class="game-header">
           <h1><span class="snake-emoji">🐍</span> {t('fun.snake.title')}</h1>
           <button
@@ -35,6 +39,10 @@ const t = useTranslations(lang);
             <div class="score-item">
               <span class="score-label">{t('fun.snake.highScore')}</span>
               <span id="high-score" class="score-value">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.snake.arena')}</span>
+              <span id="arena" class="score-value">1/5</span>
             </div>
           </div>
         </div>

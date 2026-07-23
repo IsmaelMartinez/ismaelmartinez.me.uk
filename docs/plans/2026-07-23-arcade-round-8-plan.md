@@ -1,7 +1,11 @@
 # Arcade Round 8 — Plan
 
 Date: 2026-07-23
-Status: **Awaiting the gate answers.** Round 7 (PR #195) is merged. This round
+Status: **Gates decided 2026-07-23 — executing.** Owner sign-off, one pass,
+all three recommendations taken: G1's escort lands as mission 10 with the asset
+shootable only once collected, G2 builds the 120-second countdown (no engine
+change), and G3 ships the five-arena ladder every 8 apples with the closing-in
+pending rule. Round 7 (PR #195) is merged. This round
 follows the owner's standing direction: deepen the shipped cabinets, tenth-
 cabinet queue parked. It is seeded with the two candidates Round 7 listed and
 declined (Syndicate's escort mould, a second way to play Cascade) plus one
@@ -361,6 +365,29 @@ each has its art direction written above, and the built result gets close-up
 crops in the PR. If the owner wants crops before committing, the mocks get
 built first.
 
-## Execution notes
+## Execution notes (2026-07-23)
 
-(To be filled in as each goal lands.)
+Order run: G3, G1, G2, one commit each, full bar after each
+(`lint + typecheck + build + test + check-links`). Baseline 559 tests.
+
+- **G3 — Snake arena ladder.** Five rungs as planned, cumulative, arriving
+  every 8 apples with the last at 32. The closing-in rule works as designed:
+  `advanceArena` splits each rung into cells that are free (solid at once) and
+  cells something is standing on (`pendingWalls`), and `settleWalls` promotes
+  them as they are vacated, so a wall never lands under the snake. The claim
+  runs *before* the apple respawns inside the same step, which is what keeps a
+  fresh apple or bonus off a cell that is about to be wall. Tests 559 → 565:
+  connectivity over every rung via the engine's `bfsFrom` (no rung strands a
+  cell), death on a wall, the pending-cell sequence proved step by step, the
+  ladder's rung counts and its stop at the top, and a 15-apple driven run on
+  the full 44-wall board asserting nothing ever spawns on a claimed cell.
+  One trap: `paintBoard` now reads `state.walls`, and `setupHiDpiCanvas`
+  paints the bake during setup, so the `state` declaration had to move above
+  the board layer — otherwise the built bundle throws a temporal-dead-zone
+  error on load (caught by the screenshot harness, not by any test).
+  `snake-play` and `snake-bonus` are byte-identical to `68fe503` (`cmp`),
+  which is the proof that rung 0 is the game that shipped. The full-arena
+  crop needed two scratch patches, committed code untouched: a start-arena
+  seed in `createSnakeState` and one extra `snap()` in the harness, because
+  the harness's autopilot knows nothing about walls and dies before either of
+  its own snap conditions fires.

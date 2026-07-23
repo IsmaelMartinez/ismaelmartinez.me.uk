@@ -367,8 +367,11 @@ built first.
 
 ## Execution notes (2026-07-23)
 
-Order run: G3, G1, G2, one commit each, full bar after each
-(`lint + typecheck + build + test + check-links`). Baseline 559 tests.
+All three goals landed, order G3, G1, G2, one commit each, full bar after each
+(`lint + typecheck + build + test + check-links`; 559 → 575 tests over the
+round). The owner answered all three gates in one pass and took every
+recommendation. No cabinet's standing changed, so the two-shelf floor is
+untouched.
 
 - **G3 — Snake arena ladder.** Five rungs as planned, cumulative, arriving
   every 8 apples with the last at 32. The closing-in rule works as designed:
@@ -441,3 +444,10 @@ Order run: G3, G1, G2, one commit each, full bar after each
   mode button reports the *old* background, because `.mode-btn` carries a
   0.2 s `transition: all` — the state was correct all along, the probe was
   sampling mid-transition.
+
+Round-wide regression proof: all fourteen harness captures across the six
+cabinets the script drives (Line Hold, Syndicate, Microcity, Pixel Park,
+Snake, Tank Duel) are byte-identical (`cmp`) between the round's base commit
+`68fe503` and its head. Every change this round is additive — a new mission
+behind an untouched mission 1, a new mode behind the default one, and a new
+ladder rung behind the empty board a run still opens on.

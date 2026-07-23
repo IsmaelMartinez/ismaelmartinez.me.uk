@@ -1,7 +1,13 @@
 # Arcade Round 6 — Plan
 
 Date: 2026-07-22
-Status: **Planned — gates pending owner sign-off.** Expands the owner's brief
+Status: **Gates decided 2026-07-23 — executing.** Owner sign-off (from the
+mock-comparison artifact + question pass): **G1 = V3** (2× units, camera
+unchanged), **G2 = B** (dark-but-lit + ad-screens), **G5 = V2** (arcane
+battery — the fantasy language, built to the C&C *detail* bar), **G4 = acts
+order** (as tabled below), **G7 = B** (Featured: Syndicate, Line Hold,
+Critter Rescue, Pixel Park, Cascade; back catalogue: Microcity, Tank Duel,
+Snake; nothing retired). Expands the owner's brief
 (`2026-07-22-arcade-round-6-brief.md`) into executable goals. Each goal is
 independently executable, ships as one commit, and carries its own eval; the
 repo bar (`npm run lint && npm run typecheck && npm run build && npm test &&
@@ -390,6 +396,65 @@ owner's.
 4. Execute in the order above, revisiting this doc's execution notes after
    each commit.
 
-## Execution notes
+## Execution notes (2026-07-23)
 
-(filled in as goals land)
+All seven goals landed, one commit each, full bar after each
+(`lint + typecheck + build + test + check-links`; 551 → 555 tests over the
+round). The owner answered every gate in one pass from the mock-comparison
+artifact (real seeded-harness captures of each variant): G1 = V3, G2 = B,
+G5 = V2, G4 = acts order, G7 = option B.
+
+- **G3 — Syndicate missions 8–9.** Pure data + i18n as planned: mission 8
+  "Scorched Earth" (the heaviest eliminate, 7 minigun rivals) and the
+  mission-9 finale "Total Control" (secure, 30-s hold behind an 8-guard LZ
+  ring), rewards 7000/8000. The LZ-ring test generalised to every `secure`
+  spec; the roster/winnability loops absorbed the new entries untouched.
+- **G4 — Critter Rescue acts resequence.** The permutation was applied by
+  script to `LEVELS`, the position-named hint keys (values permuted across
+  fixed keys, ×3 locales, formatting preserved), and the playthrough tests
+  (strategies travelled verbatim with their layouts — the whole suite passed
+  at the new indices on the first run, proving no strategy/layout mispair).
+  A new authored-tier test pins the arc (non-decreasing within acts,
+  breathers 13/17/22 exempt; the endgame strictly harder than acts I–III).
+  One trap found: the page wires hints by **0-based index**
+  (`data-t-hint${i}`), so built-output spot-checks must read slot N−1.
+- **G6 — Line Hold no-perfect-runs.** hp scaling alone — even ×7 at wave
+  18 — could not break the reference corridor (its DPS annihilates a
+  sequential stream mid-route; max route progress ~50%). The lever that bit
+  was **concentration**: densified waves 15–18 plus `hpScale`'s quadratic
+  term (`+0.05·max(0, w−8)²`, waves 1–9 identical to the old curve). The
+  finale's warlord quartet is sized so the corridor kills three, never
+  four: the reference plan **and** an adversarial reinforced plan (every
+  affordable extra, purse emptied to 12) both finish 18 at 15/20 lives.
+  Static-build death moved to wave 17, naive to wave 10, endless holdout
+  intact — all encoded as playRun proofs. Line Hold captures byte-identical
+  (`cmp`) — the retune is invisible until wave 10.
+- **G1 — Syndicate 2× characters.** `drawUnit` redrawn at ~26 px (not a
+  transform hack): flared trench + collar + belt (agents), armoured bulk +
+  spikes (rivals), cross-strap + cap + baton (guards), pinstripes +
+  briefcase (target), hashed hem lengths (civilians); per-weapon hardware;
+  dark grounding outline + lit rim throughout. Tracers/bursts/decals/
+  pickups rescaled to the new muzzle height. Pointer math untouched.
+- **G2 — dark-but-lit mood.** Palette dropped one shade (facades, ground
+  bake, sky), windows dimmed ~20%, half the tall band gained animated
+  ad-screens with a blink-gated scan-line. **The blur lesson:** the
+  shadowBlur glow variant measured +50% on the sweep's headless CPU cost
+  (0.86 → 1.32 ms/frame local); replaced by a second low-alpha band —
+  final cost 0.89 ms/frame, +3% over the pre-round baseline with both art
+  passes included.
+- **G5 — arcane batteries.** Owner picked V2 over the recommended military
+  sheet — the C&C reference applies to *detail level*, not theme. Coursed
+  stone bodies grow per level (lancet windows per tier), crowned by storm
+  spire / traversing bombard / ice obelisk. Aim + recoil are render-side:
+  shots carry their tower tile, `towerAim` remembers the last bearing, the
+  tub sinks and the orb flares while a shot lives. `towerTop` now fires
+  from each crown. Nine-form sheet captured via a temporary startRun patch.
+- **G7 — the floor.** Option B: Featured shelf (Syndicate, Line Hold,
+  Critter Rescue, Pixel Park, Cascade — owner order) over a Back-catalogue
+  shelf (Microcity, Tank Duel, Snake). Genre shelves retired with their
+  keys; nothing retired, no link fallout.
+
+Process note for future rounds: uncommitted work and `git checkout <rev> --
+<file>` don't mix — the G2 palette pass was briefly lost to the frame-time
+probe's checkout dance and re-applied from its script. Commit before
+measuring across revisions.

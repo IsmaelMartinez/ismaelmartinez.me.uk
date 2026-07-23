@@ -48,6 +48,10 @@ const t = useTranslations(lang);
               <span class="score-label">{t('fun.cascade.level')}</span>
               <span id="level" class="score-value level">1</span>
             </div>
+            <div class="score-item" id="clock-item" hidden>
+              <span class="score-label">{t('fun.cascade.time')}</span>
+              <span id="clock" class="score-value clock">2:00</span>
+            </div>
             <div class="score-item">
               <span class="score-label">{t('fun.cascade.record')}</span>
               <span id="record" class="score-value">0</span>
@@ -64,6 +68,24 @@ const t = useTranslations(lang);
               <span class="play-icon">🧱</span>
               <h2>{t('fun.cascade.title')}</h2>
               <p class="instructions">{t('fun.cascade.instructions')}</p>
+              <div class="modes" role="group" aria-label={t('fun.cascade.mode')}>
+                <button
+                  id="mode-marathon"
+                  class="mode-btn is-active"
+                  data-mode="marathon"
+                  aria-pressed="true"
+                >{t('fun.cascade.modeMarathon')}</button>
+                <button
+                  id="mode-countdown"
+                  class="mode-btn"
+                  data-mode="countdown"
+                  aria-pressed="false"
+                >{t('fun.cascade.modeCountdown')}</button>
+              </div>
+              <p class="mode-blurb">
+                <span id="blurb-marathon">{t('fun.cascade.modeMarathonDesc')}</span>
+                <span id="blurb-countdown" hidden>{t('fun.cascade.modeCountdownDesc')}</span>
+              </p>
               <button id="start-btn" class="btn btn-primary btn-large">
                 {t('fun.cascade.start')}
               </button>
@@ -72,13 +94,26 @@ const t = useTranslations(lang);
 
           <div id="over-overlay" class="game-overlay" style="display: none;">
             <div class="overlay-content">
-              <span class="play-icon">🌋</span>
-              <h2>{t('fun.cascade.gameOver')}</h2>
-              <p>{t('fun.cascade.gameOverDesc')}</p>
+              <div id="over-topout">
+                <span class="play-icon">🌋</span>
+                <h2>{t('fun.cascade.gameOver')}</h2>
+                <p>{t('fun.cascade.gameOverDesc')}</p>
+              </div>
+              <div id="over-timeup" hidden>
+                <span class="play-icon">⏳</span>
+                <h2>{t('fun.cascade.timeUp')}</h2>
+                <p>{t('fun.cascade.timeUpDesc')}</p>
+              </div>
               <p class="final-stats">
                 {t('fun.cascade.finalScore')}: <strong id="final-score">0</strong>
               </p>
               <HighScoreTable gameId="cascade" lang={lang} accent="#a855f7" />
+              <HighScoreTable
+                gameId="cascade-countdown"
+                panelId="highscores-countdown"
+                lang={lang}
+                accent="#f59e0b"
+              />
               <button id="again-btn" class="btn btn-primary btn-large">
                 {t('fun.cascade.playAgain')}
               </button>
@@ -186,6 +221,47 @@ const t = useTranslations(lang);
 
   .score-value.level {
     color: #facc15;
+  }
+
+  .score-value.clock {
+    color: #f59e0b;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .modes {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+
+  .mode-btn {
+    padding: var(--space-xs) var(--space-md);
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mode-btn:hover {
+    color: var(--color-text);
+    border-color: #a855f7;
+  }
+
+  .mode-btn.is-active {
+    color: #0c1018;
+    background: #a855f7;
+    border-color: #a855f7;
+  }
+
+  .mode-blurb {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    min-height: 1.2em;
   }
 
   .game-area {

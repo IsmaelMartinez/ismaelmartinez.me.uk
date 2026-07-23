@@ -110,6 +110,10 @@ export function initCascadeGame(): void {
   const linesEl = el('lines');
   const levelEl = el('level');
   const recordEl = el('record');
+  const clockEl = el('clock');
+  const clockItem = el('clock-item');
+  const overTopOut = el('over-topout');
+  const overTimeUp = el('over-timeup');
   const toastArea = el('toast-area');
   const { show: showToast } = createToaster(toastArea);
 
@@ -274,6 +278,16 @@ export function initCascadeGame(): void {
 
   // --- Game state ----------------------------------------------------------
   let phase: Phase = 'idle';
+  /**
+   * The two ways to play. Marathon is the open-ended stack the cabinet
+   * shipped with; countdown is the same rules against a two-minute clock,
+   * which keeps the score higher-is-better and so needs a second table
+   * rather than a second kind of table.
+   */
+  type Mode = 'marathon' | 'countdown';
+  const COUNTDOWN_SECONDS = 120;
+  let mode: Mode = 'marathon';
+
   let run: CascadeRun = createRun(Math.random);
   let clock = 0;
   const fx = createEffects({
@@ -295,8 +309,14 @@ export function initCascadeGame(): void {
   /** Last values written to the HUD, so render skips redundant DOM writes. */
   const hud = { score: -1, lines: -1, level: -1 };
 
-  const board = initScoreboard(document.getElementById('highscores'));
-  recordEl.textContent = `${board.best()}`;
+  // One table per mode. Both are wired up front and only the finished run's
+  // own board is ever shown, so the page never presents two rankings at once.
+  const boards: Record<Mode, ReturnType<typeof initScoreboard>> = {
+    marathon: initScoreboard(document.getElementById('highscores')),
+    countdown: initScoreboard(document.getElementById('highscores-countdown'))
+  };
+  const board = () => boards[mode];
+  recordEl.textContent = `${board().best()}`;
 
   // A driving minor-key loop that setTempo() winds up level by level.
   const audio = createGameAudio({
@@ -338,9 +358,15 @@ export function initCascadeGame(): void {
 
   /** Banks the run's score; announces (once per run) a beaten table best. */
   function bankScore() {
-    const { best, newRecord } = board.bank(run.score);
+    const { best, newRecord } = board().bank(run.score);
     if (newRecord) showToast(`🏅 ${strings.newRecord}`);
     recordEl.textContent = `${best}`;
+  }
+
+  /** m:ss for the countdown readout; rounds up so it lands on 0:00 at zero. */
+  function formatClock(seconds: number): string {
+    const total = Math.max(0, Math.ceil(seconds));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
   }
 
   function applyTempo() {
@@ -348,12 +374,15 @@ export function initCascadeGame(): void {
   }
 
   function startRun() {
-    run = createRun(Math.random);
+    run = createRun(Math.random, mode === 'countdown' ? COUNTDOWN_SECONDS : 0);
     fx.clear();
     bannerTimer = 0;
     chainGlow = 0;
     chainGlowTimer = 0;
-    board.beginRun();
+    clockItem.hidden = mode !== 'countdown';
+    clockEl.textContent = formatClock(run.timeLeft);
+    recordEl.textContent = `${board().best()}`;
+    board().beginRun();
     held.left = held.right = false;
     dasDir = 0;
     phase = 'play';
@@ -361,16 +390,20 @@ export function initCascadeGame(): void {
     audio.start();
   }
 
-  function endRun() {
+  function endRun(reason: 'topOut' | 'timeUp') {
     phase = 'over';
     setSoftDrop(run, false);
     audio.playSfx('gameover');
     audio.stop();
     bankScore();
     finalScoreEl.textContent = `${run.score}`;
+    // The two endings get their own server-rendered headline; a clock running
+    // out is not the same defeat as the well filling up.
+    overTopOut.hidden = reason !== 'topOut';
+    overTimeUp.hidden = reason !== 'timeUp';
     overOverlay.style.display = 'flex';
     // After the overlay is visible, so the initials input can take focus.
-    board.show(run.score);
+    board().show(run.score);
   }
 
   function handleEvents(events: RunEvent[]) {
@@ -421,7 +454,9 @@ export function initCascadeGame(): void {
           );
         }
       } else if (event.type === 'topOut') {
-        endRun();
+        endRun('topOut');
+      } else if (event.type === 'timeUp') {
+        endRun('timeUp');
       }
     }
   }
@@ -615,6 +650,7 @@ export function initCascadeGame(): void {
     }
 
     handleEvents(tickRun(run, dt));
+    if (run.timeLimit > 0) clockEl.textContent = formatClock(run.timeLeft);
   }
 
   // --- Rendering ---------------------------------------------------------------
@@ -795,6 +831,27 @@ export function initCascadeGame(): void {
     }
   }
 
+  // Mode picker on the start screen. The blurbs are server-rendered siblings
+  // rather than runtime strings, so they stay on the `useTranslations` path.
+  const modeButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.mode-btn'));
+  const blurbs: Record<Mode, HTMLElement> = {
+    marathon: el('blurb-marathon'),
+    countdown: el('blurb-countdown')
+  };
+  for (const btn of modeButtons) {
+    btn.addEventListener('click', () => {
+      mode = btn.dataset.mode === 'countdown' ? 'countdown' : 'marathon';
+      for (const other of modeButtons) {
+        const on = other === btn;
+        other.classList.toggle('is-active', on);
+        other.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+      blurbs.marathon.hidden = mode !== 'marathon';
+      blurbs.countdown.hidden = mode !== 'countdown';
+      recordEl.textContent = `${board().best()}`;
+    });
+  }
+
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';
     startRun();
@@ -802,7 +859,7 @@ export function initCascadeGame(): void {
 
   againBtn.addEventListener('click', () => {
     overOverlay.style.display = 'none';
-    board.hide();
+    board().hide();
     startRun();
   });
 

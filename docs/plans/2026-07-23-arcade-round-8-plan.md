@@ -415,3 +415,29 @@ Order run: G3, G1, G2, one commit each, full bar after each
   byte-identical to `b387b35` (`cmp`) — missions 1 to 9 are untouched — and
   the escort board was captured through a scratch mission-index patch plus a
   temporary crop snap in the harness, committed code untouched.
+- **G2 — Cascade countdown mode.** The recommended shape, and the audit's
+  cost read was exact: `run.ts` gained one number (`timeLimit`), one derived
+  field (`timeLeft`) and one event (`timeUp`), and `highscores.ts` was not
+  touched at all. The clock is decremented at the very top of `tickRun`,
+  before the phase branches, so it burns through `clearing` and `settling`
+  too — a long cascade is worth points, never extra seconds. `timeLimit === 0`
+  is the marathon and every existing Cascade test passed untouched, which is
+  the proof. One component change was needed: `HighScoreTable.astro`
+  hard-coded `id="highscores"`, so it gained an optional `panelId` for the
+  only cabinet that fields two tables; the game keys a `Record<Mode,
+  Scoreboard>` off it and only the finished run's own board is ever shown.
+  Both endings get their own server-rendered headline block toggled by
+  `hidden`, rather than runtime strings, keeping the copy on the
+  `useTranslations` path. Tests 570 → 575: the marathon emits no `timeUp`
+  over 200 seconds of ticks; a countdown ends `over` with exactly one
+  `timeUp` and nothing after it; the clock provably burns during a cascade
+  (the first version of this test passed trivially because it never entered
+  `clearing` — it now hard-drops onto two full rows first); a well that fills
+  before the deadline reports `topOut` with time still on the clock; and the
+  two table ids are proved independent in `highscores.test.ts`. Browser smoke
+  confirmed both modes end to end, including the time-up overlay and that
+  only the countdown table appears after a countdown run. One false alarm
+  worth recording: reading `getComputedStyle` immediately after clicking a
+  mode button reports the *old* background, because `.mode-btn` carries a
+  0.2 s `transition: all` — the state was correct all along, the probe was
+  sampling mid-transition.

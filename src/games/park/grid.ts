@@ -20,6 +20,10 @@ export type TileType =
   | 'entrance'
   | 'carousel'
   | 'ferris'
+  | 'pirateship'
+  | 'manor'
+  | 'bumper'
+  | 'helter'
   | 'food'
   | 'drink'
   | 'toilet'
@@ -61,6 +65,13 @@ export interface BuildingDef {
 export const BUILDINGS: Partial<Record<TileType, BuildingDef>> = {
   carousel: { cost: 250, price: 4, upkeep: 18, satisfies: 'fun', useTime: 3.5, boost: 65 },
   ferris: { cost: 400, price: 6, upkeep: 28, satisfies: 'fun', useTime: 5, boost: 95 },
+  // The Pirate Ship is the first thrill satisfier a player can place as a
+  // single tile — before it, only a built coaster served the `thrill` need,
+  // so coasterless parks bled guests. A good coaster still out-thrills it.
+  pirateship: { cost: 500, price: 7, upkeep: 26, satisfies: 'thrill', useTime: 4.5, boost: 70 },
+  manor: { cost: 450, price: 6, upkeep: 24, satisfies: 'fun', useTime: 4, boost: 90 },
+  bumper: { cost: 300, price: 4, upkeep: 16, satisfies: 'fun', useTime: 3, boost: 60 },
+  helter: { cost: 350, price: 5, upkeep: 18, satisfies: 'fun', useTime: 3.5, boost: 75 },
   food: { cost: 150, price: 5, upkeep: 12, satisfies: 'hunger', useTime: 2.5, boost: 85 },
   drink: { cost: 100, price: 3, upkeep: 8, satisfies: 'thirst', useTime: 2, boost: 85 },
   toilet: { cost: 120, price: 1, upkeep: 6, satisfies: 'bladder', useTime: 2, boost: 100 },
@@ -118,7 +129,7 @@ export const ZONES: Record<ZoneId, ZoneDef> = {
   },
   pirate: {
     gate: 'gatePirate',
-    native: 'ferris',
+    native: 'pirateship',
     unlockRating: 75,
     unlockCash: 6000,
     groundColor: '#c2a26a'

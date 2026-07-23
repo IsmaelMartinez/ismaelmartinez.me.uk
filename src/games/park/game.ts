@@ -18,6 +18,7 @@ import {
   drawBlock,
   shadeColor,
   blink,
+  hash01,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,
@@ -139,7 +140,13 @@ const TILE_EMOJI: Partial<Record<TileType, string>> = {
   drink: '🥤',
   toilet: '🚻',
   tree: '🌳',
-  skytower: '🗼'
+  skytower: '🗼',
+  // The Pirate Ship, Haunted Manor, Bumper Cars and Helter Skelter are all
+  // custom-drawn (see their draw* functions); no emoji sits on their block.
+  pirateship: '🏴‍☠️',
+  manor: '👻',
+  bumper: '🚗',
+  helter: '🎪'
 };
 
 /** Zone Gate decorations: flat ground emoji, drawn like a tree (see `render`). */
@@ -180,6 +187,8 @@ const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji?: str
   pirate: {
     carousel: { emoji: '🎯', color: '#7a3a2a' },
     ferris: { color: '#6a4a2a' },
+    // The Pirate Ship is this zone's native ride — deep sea-timber tone.
+    pirateship: { color: '#6b4a2f' },
     food: { emoji: '🍖', color: '#6a5a3a' },
     drink: { emoji: '🍺', color: '#5a4a2a' },
     toilet: { emoji: '⚓', color: '#3a5a6a' },
@@ -198,6 +207,10 @@ const ZONE_BUILDING_STYLE: Record<ZoneId, Partial<Record<TileType, { emoji?: str
 const BUILDING_STYLE: Partial<Record<TileType, { color: string; height: number }>> = {
   carousel: { color: '#b34a8f', height: 30 },
   ferris: { color: '#5a67c0', height: 36 },
+  pirateship: { color: '#8a5a34', height: 34 },
+  manor: { color: '#4a4668', height: 30 },
+  bumper: { color: '#c05a4a', height: 16 },
+  helter: { color: '#c94f7a', height: 40 },
   food: { color: '#a8632c', height: 18 },
   drink: { color: '#2f7fb0', height: 18 },
   toilet: { color: '#5e6a72', height: 9 },
@@ -669,19 +682,25 @@ export function initParkGame(): void {
     // Urgent need first; otherwise guests still gravitate to rides
     const want = mostUrgentNeed(guest.needs) ?? (guest.needs.fun < 80 ? 'fun' : null);
     if (want === 'thrill') {
+      // Thrill is served by a built coaster OR a thrill ride (the Pirate
+      // Ship). Before the ship existed this scanned coasters only, so a
+      // coasterless park could never satisfy the need and bled guests.
       const candidates = coasters.filter(c => c.queue.length < QUEUE_CAP).map(c => c.segments[0].tile);
+      tiles.forEach((tile, i) => {
+        if (BUILDINGS[tile]?.satisfies === 'thrill' && !isBroken(i)) candidates.push(i);
+      });
       const found = nearestReachable(tiles, guest.tile, candidates);
       if (found && found.path.length >= 2) {
         startWalking(guest, found.path, found.building);
         return;
       }
       if (found) {
-        // Already standing next to the station
+        // Already standing next to it: a coaster station queues, a thrill
+        // ride is used directly (like any other building).
         const coaster = coasters.find(c => c.segments[0].tile === found.building);
-        if (coaster) {
-          joinQueue(guest, coaster);
-          return;
-        }
+        if (coaster) joinQueue(guest, coaster);
+        else beginUsing(guest, found.building);
+        return;
       }
     } else if (want) {
       const candidates: number[] = [];
@@ -1860,6 +1879,458 @@ export function initParkGame(): void {
   }
 
   /**
+   * The Pirate Ship: a swinging galleon on an A-frame gantry. The hull is a
+   * pendulum hanging from a high pivot — a lazy sway when idle, a big arc
+   * with riders aboard and a jolly-roger snapping while it's busy.
+   */
+  function drawPirateShip(
+    vx: number,
+    vy: number,
+    liftPx: number,
+    color: string,
+    busy: boolean,
+    broken: boolean
+  ) {
+    const plinthH = 5;
+    drawBlock(ctx, VIEW, vx, vy, plinthH, color, 0.16, liftPx);
+    const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    const baseY = c.y - liftPx - plinthH;
+    const pivotY = baseY - 26;
+    const armLen = 17;
+    // Pendulum: eased amplitude, faster and wider while loaded.
+    const amp = broken ? 0.18 : busy ? 0.85 : 0.32;
+    const rate = busy ? 2.2 : 1.1;
+    const swing = broken ? 0.2 : amp * Math.sin(clock * rate);
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.45;
+
+    // Back gantry leg first, so the hull swings in front of it.
+    ctx.strokeStyle = shadeColor(color, 0.4);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 5, baseY - 1.5);
+    ctx.lineTo(c.x + 2.5, pivotY - 1);
+    ctx.lineTo(c.x + 11, baseY - 1.5);
+    ctx.stroke();
+
+    // The hull hangs from the pivot at the end of the swing arm.
+    const hx = c.x + Math.sin(swing) * armLen;
+    const hy = pivotY + Math.cos(swing) * armLen;
+    // Suspension arms from pivot to the hull's two ends.
+    ctx.strokeStyle = shadeColor(color, 1.2);
+    ctx.lineWidth = 1;
+    for (const end of [-1, 1]) {
+      const ex = hx + Math.cos(swing) * end * 7;
+      const ey = hy - Math.sin(swing) * end * 7;
+      ctx.beginPath();
+      ctx.moveTo(c.x, pivotY);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    }
+    // Hull: an upturned boat with bow and stern lifted, drawn in the swing
+    // frame so bow/stern tip with the arc.
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.rotate(swing);
+    ctx.fillStyle = shadeColor(color, 0.55);
+    ctx.beginPath();
+    ctx.moveTo(-8.5, -1);
+    ctx.quadraticCurveTo(-9.5, -6, -6, -6.5);
+    ctx.lineTo(6, -6.5);
+    ctx.quadraticCurveTo(9.5, -6, 8.5, -1);
+    ctx.quadraticCurveTo(0, 4, -8.5, -1);
+    ctx.closePath();
+    ctx.fill();
+    // Lit gunwale strake and a hull rib line.
+    ctx.strokeStyle = shadeColor(color, 1.4);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-8.2, -1.4);
+    ctx.quadraticCurveTo(0, 3, 8.2, -1.4);
+    ctx.stroke();
+    ctx.strokeStyle = shadeColor(color, 0.35);
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(-6, -3.5);
+    ctx.lineTo(6, -3.5);
+    ctx.stroke();
+    // Rider heads bob above the gunwale while it's busy.
+    if (busy && !broken) {
+      for (let k = 0; k < 4; k++) {
+        ctx.fillStyle = GUEST_COLORS[k % GUEST_COLORS.length];
+        ctx.beginPath();
+        ctx.arc(-4.5 + k * 3, -6.6, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // Bowsprit mast with the jolly roger.
+    ctx.strokeStyle = shadeColor(color, 0.3);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(0, -13);
+    ctx.stroke();
+    const fla = broken ? 0 : Math.sin(clock * 6) * 0.8;
+    ctx.fillStyle = '#1c1c22';
+    ctx.beginPath();
+    ctx.moveTo(0, -13);
+    ctx.lineTo(6 + fla, -11.6);
+    ctx.lineTo(0, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e8e4da';
+    ctx.beginPath();
+    ctx.arc(2.4, -11.5, 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Front gantry leg, cross-brace, pivot cap and footings.
+    ctx.strokeStyle = shadeColor(color, 0.6);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 11, baseY + 1.5);
+    ctx.lineTo(c.x - 2.5, pivotY + 1);
+    ctx.lineTo(c.x + 5, baseY + 1.5);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 7, baseY - 10);
+    ctx.lineTo(c.x + 1.5, baseY - 10);
+    ctx.stroke();
+    ctx.fillStyle = shadeColor(color, 0.45);
+    ctx.fillRect(c.x - 12.5, baseY, 3.5, 2);
+    ctx.fillRect(c.x + 3.5, baseY, 3.5, 2);
+    ctx.fillStyle = shadeColor(color, 1.5);
+    ctx.beginPath();
+    ctx.arc(c.x, pivotY, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * The Haunted Manor dark ride: a crooked gabled house with a lopsided
+   * turret, a window that flickers on the blink cadence, and a pale wisp
+   * that drifts out of the eaves — livelier while a car is inside.
+   */
+  function drawManor(
+    vx: number,
+    vy: number,
+    liftPx: number,
+    color: string,
+    busy: boolean,
+    broken: boolean
+  ) {
+    const bodyH = 15;
+    const inset = 0.16;
+    drawBlock(ctx, VIEW, vx, vy, bodyH, color, inset, liftPx);
+    const fc = blockFaceCorners(VIEW, vx, vy, inset);
+    const { w, s, e } = fc;
+    const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.45;
+
+    // Sagging eave line and clapboard seams on the two visible faces.
+    ctx.strokeStyle = 'rgba(15, 20, 34, 0.3)';
+    ctx.lineWidth = 0.75;
+    for (let r = 1; r <= 2; r++) {
+      ctx.beginPath();
+      blockSeamPath(ctx, fc, liftPx + (bodyH * r) / 3);
+      ctx.stroke();
+    }
+    // Boarded windows: one per face, the near one flickering with the blink.
+    for (let f = 0; f < 2; f++) {
+      const a = f === 0 ? w : s;
+      const b = f === 0 ? s : e;
+      const wx = a.x + (b.x - a.x) * 0.5;
+      const wy = a.y + (b.y - a.y) * 0.5 - liftPx - bodyH * 0.55;
+      const lit = !broken && f === 1 && blink(clock, vx + vy);
+      ctx.fillStyle = lit ? 'rgba(180, 255, 170, 0.85)' : 'rgba(12, 16, 26, 0.7)';
+      ctx.fillRect(wx - 1.5, wy - 2.6, 3, 3.2);
+      ctx.strokeStyle = shadeColor(color, 1.3);
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(wx - 1.5, wy - 2.6, 3, 3.2);
+    }
+
+    // Steep gable roof over the body, ridge tipped off-centre so it reads
+    // crooked; a lit rim on the near slope.
+    const roofBaseY = c.y - liftPx - bodyH;
+    const ridgeX = c.x + 3;
+    const ridgeY = roofBaseY - 12;
+    ctx.fillStyle = shadeColor(color, 0.5);
+    ctx.beginPath();
+    ctx.moveTo(w.x, w.y - liftPx - bodyH);
+    ctx.lineTo(ridgeX, ridgeY);
+    ctx.lineTo(s.x, s.y - liftPx - bodyH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = shadeColor(color, 0.7);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y - liftPx - bodyH);
+    ctx.lineTo(ridgeX, ridgeY);
+    ctx.lineTo(e.x, e.y - liftPx - bodyH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = shadeColor(color, 1.35);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y - liftPx - bodyH);
+    ctx.lineTo(ridgeX, ridgeY);
+    ctx.stroke();
+
+    // Lopsided turret rising off the far corner, with its own cone cap.
+    const tx = w.x + (ridgeX - w.x) * 0.32;
+    const tBaseY = w.y - liftPx - bodyH - 2;
+    ctx.fillStyle = shadeColor(color, 0.62);
+    ctx.fillRect(tx - 2.4, tBaseY - 10, 4.8, 11);
+    ctx.strokeStyle = shadeColor(color, 1.25);
+    ctx.lineWidth = 0.75;
+    ctx.strokeRect(tx - 2.4, tBaseY - 10, 4.8, 11);
+    ctx.fillStyle = shadeColor(color, 0.42);
+    ctx.beginPath();
+    ctx.moveTo(tx - 3.2, tBaseY - 10);
+    ctx.lineTo(tx + 0.5, tBaseY - 17);
+    ctx.lineTo(tx + 3.2, tBaseY - 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ghost wisp drifting from the eaves, a hair more active while busy.
+    if (!broken) {
+      const drift = clock * (busy ? 1.6 : 0.7);
+      const gx = c.x + Math.sin(drift) * 8;
+      const gy = roofBaseY - 4 - (0.5 + 0.5 * Math.sin(drift * 1.3)) * (busy ? 12 : 6);
+      const galpha = (busy ? 0.5 : 0.28) * (0.6 + 0.4 * Math.sin(drift * 2));
+      ctx.fillStyle = `rgba(214, 236, 248, ${galpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, 2.4, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(20, 26, 40, ${(galpha * 0.9).toFixed(3)})`;
+      ctx.fillRect(gx - 1, gy - 0.6, 0.7, 0.7);
+      ctx.fillRect(gx + 0.3, gy - 0.6, 0.7, 0.7);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Bumper Cars: an open pavilion — a striped roof on corner posts over a
+   * checker-floor rink, with three hashed-colour cars sliding on offset
+   * phases and sparks jumping off the ceiling grid while it's busy.
+   */
+  function drawBumper(
+    vx: number,
+    vy: number,
+    liftPx: number,
+    color: string,
+    i: number,
+    busy: boolean,
+    broken: boolean
+  ) {
+    const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    const floorY = c.y - liftPx;
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.45;
+
+    // Checker-floor rink: an inset diamond pad, two tones.
+    const rink = 11;
+    for (let q = 0; q < 4; q++) {
+      const a = (q * Math.PI) / 2;
+      ctx.fillStyle = q % 2 === 0 ? shadeColor(color, 0.9) : shadeColor(color, 0.62);
+      ctx.beginPath();
+      ctx.moveTo(c.x, floorY);
+      ctx.lineTo(c.x + Math.cos(a) * rink, floorY + Math.sin(a) * rink * 0.5);
+      ctx.lineTo(
+        c.x + Math.cos(a + Math.PI / 2) * rink,
+        floorY + Math.sin(a + Math.PI / 2) * rink * 0.5
+      );
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = shadeColor(color, 1.35);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x - rink, floorY);
+    ctx.lineTo(c.x, floorY - rink * 0.5);
+    ctx.lineTo(c.x + rink, floorY);
+    ctx.lineTo(c.x, floorY + rink * 0.5);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Three cars sliding round the rink on offset phases; each bumps at its
+    // own hashed radius so they read as jostling, not orbiting in lockstep.
+    const spin = broken ? 0 : clock * (busy ? 1.8 : 0.7);
+    for (let k = 0; k < 3; k++) {
+      const a = spin + (k * Math.PI * 2) / 3;
+      const rr = 5.5 + hash01(i, k + 1) * 3;
+      const cx = c.x + Math.cos(a) * rr;
+      const cy = floorY + Math.sin(a) * rr * 0.5;
+      const carCol = GUEST_COLORS[(i + k) % GUEST_COLORS.length];
+      ctx.fillStyle = shadeColor(carCol, 0.6);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 2.8, 1.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = carCol;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - 0.8, 2.4, 1.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (busy && !broken) {
+        ctx.fillStyle = GUEST_SKINS[(i + k) % GUEST_SKINS.length];
+        ctx.beginPath();
+        ctx.arc(cx, cy - 2, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Contact pole up to the ceiling grid.
+      ctx.strokeStyle = 'rgba(203, 213, 225, 0.6)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 2);
+      ctx.lineTo(cx, cy - 11);
+      ctx.stroke();
+    }
+
+    // Four corner posts and a scalloped striped roof over the rink.
+    const roofY = floorY - 13;
+    ctx.strokeStyle = shadeColor(color, 0.5);
+    ctx.lineWidth = 1.5;
+    for (let q = 0; q < 4; q++) {
+      const a = (q * Math.PI) / 2 + Math.PI / 4;
+      const px = c.x + Math.cos(a) * rink * 0.9;
+      const py = floorY + Math.sin(a) * rink * 0.45;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, py - 13);
+      ctx.stroke();
+    }
+    // Roof: a shallow striped canopy, apex lifted.
+    for (let q = 0; q < 4; q++) {
+      const a0 = (q * Math.PI) / 2 - Math.PI / 4;
+      const a1 = a0 + Math.PI / 2;
+      ctx.fillStyle = q % 2 === 0 ? shadeColor(color, 1.3) : '#e8e4da';
+      ctx.beginPath();
+      ctx.moveTo(c.x, roofY - 4);
+      ctx.lineTo(c.x + Math.cos(a0) * rink, roofY + Math.sin(a0) * rink * 0.5);
+      ctx.lineTo(c.x + Math.cos(a1) * rink, roofY + Math.sin(a1) * rink * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = '#c9a227';
+    ctx.beginPath();
+    ctx.arc(c.x, roofY - 4.5, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    // Sparks jumping off the ceiling grid while cars run.
+    if (busy && !broken && blink(clock, i)) {
+      ctx.fillStyle = '#fef9c3';
+      const sa = clock * 3 + i;
+      ctx.beginPath();
+      ctx.arc(c.x + Math.cos(sa) * 5, roofY - 1 + Math.sin(sa) * 2, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Helter Skelter: a tall striped cone with a spiral slide ribbon winding
+   * down its outside, a mat rider on the lowest turn while busy, and a
+   * pennant at the peak.
+   */
+  function drawHelter(
+    vx: number,
+    vy: number,
+    liftPx: number,
+    color: string,
+    busy: boolean,
+    broken: boolean
+  ) {
+    const baseH = 5;
+    drawBlock(ctx, VIEW, vx, vy, baseH, color, 0.2, liftPx);
+    const c = isoProject(VIEW, vx + 0.5, vy + 0.5);
+    const baseY = c.y - liftPx - baseH;
+    const towerH = 32;
+    const apexY = baseY - towerH;
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.45;
+
+    // Cone body: alternating vertical stripes from a base ellipse to the apex.
+    const rBase = 9;
+    const segs = 10;
+    for (let k = 0; k < segs; k++) {
+      const a0 = Math.PI + (k * Math.PI) / segs; // front half, left to right
+      const a1 = Math.PI + ((k + 1) * Math.PI) / segs;
+      ctx.fillStyle = k % 2 === 0 ? shadeColor(color, 1.15) : '#efe9dc';
+      ctx.beginPath();
+      ctx.moveTo(c.x, apexY);
+      ctx.lineTo(c.x + Math.cos(a0) * rBase, baseY + Math.sin(a0) * 3.5);
+      ctx.lineTo(c.x + Math.cos(a1) * rBase, baseY + Math.sin(a1) * 3.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Grounding edge down the cone's near silhouette.
+    ctx.strokeStyle = shadeColor(color, 0.4);
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(c.x - rBase, baseY);
+    ctx.lineTo(c.x, apexY);
+    ctx.lineTo(c.x + rBase, baseY);
+    ctx.stroke();
+
+    // Spiral slide ribbon: sampled helix, radius shrinking toward the apex,
+    // drawn as a lit band with a shadow edge under it.
+    const turns = 2.6;
+    const steps = 40;
+    const slideRot = broken ? 0.6 : clock * 0.25;
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.strokeStyle = pass === 0 ? shadeColor(color, 0.4) : '#f4d06a';
+      ctx.lineWidth = pass === 0 ? 2.4 : 1.6;
+      ctx.beginPath();
+      for (let stp = 0; stp <= steps; stp++) {
+        const t = stp / steps; // 0 at apex, 1 at base
+        const a = slideRot + turns * Math.PI * 2 * t;
+        const rr = 2 + rBase * t;
+        const px = c.x + Math.cos(a) * rr;
+        const py = apexY + (towerH - 3) * t + Math.sin(a) * rr * 0.38 + pass * 0.8;
+        if (stp === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+
+    // Mat rider on the lowest visible turn while busy.
+    if (busy && !broken) {
+      const t = 0.9;
+      const a = slideRot + turns * Math.PI * 2 * t;
+      const rr = 2 + rBase * t;
+      const px = c.x + Math.cos(a) * rr;
+      const py = apexY + (towerH - 3) * t + Math.sin(a) * rr * 0.38;
+      ctx.fillStyle = GUEST_COLORS[(vx + vy) % GUEST_COLORS.length];
+      ctx.beginPath();
+      ctx.ellipse(px, py - 1.5, 1.8, 1.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = GUEST_SKINS[(vx + vy) % GUEST_SKINS.length];
+      ctx.beginPath();
+      ctx.arc(px, py - 3, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Cap and a fluttering pennant at the peak.
+    ctx.fillStyle = shadeColor(color, 0.7);
+    ctx.beginPath();
+    ctx.arc(c.x, apexY, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = shadeColor(color, 0.35);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x, apexY);
+    ctx.lineTo(c.x, apexY - 6);
+    ctx.stroke();
+    ctx.fillStyle = '#e05a6b';
+    ctx.beginPath();
+    ctx.moveTo(c.x, apexY - 6);
+    ctx.lineTo(c.x + 5 + Math.sin(clock * 5) * 0.8, apexY - 4.8);
+    ctx.lineTo(c.x, apexY - 3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
    * The Log Flume drawn as an actual ride: a low platform holding an oval
    * water channel around a raised island, with a log running the circuit —
    * fast with spray off the front drop while guests ride, a gentle drift
@@ -2601,6 +3072,14 @@ export function initParkGame(): void {
           drawCarousel(vx, vy, liftPx, color, reskin?.emoji ?? TILE_EMOJI.carousel!, busy, broken);
         } else if (tile === 'ferris') {
           drawFerris(vx, vy, liftPx, color, busy, broken);
+        } else if (tile === 'pirateship') {
+          drawPirateShip(vx, vy, liftPx, color, busy, broken);
+        } else if (tile === 'manor') {
+          drawManor(vx, vy, liftPx, color, busy, broken);
+        } else if (tile === 'bumper') {
+          drawBumper(vx, vy, liftPx, color, i, busy, broken);
+        } else if (tile === 'helter') {
+          drawHelter(vx, vy, liftPx, color, busy, broken);
         } else if (tile === 'flume') {
           drawFlume(vx, vy, liftPx, color, reskin?.emoji, busy, broken);
         } else if (tile === 'food' || tile === 'drink') {

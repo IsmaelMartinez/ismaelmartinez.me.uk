@@ -30,9 +30,10 @@ export const BREAKDOWN_SECONDS = 14;
 /** Per-ride chance per second that it breaks, at full intensity. */
 export const BREAKDOWN_CHANCE_PER_RIDE = 0.003;
 
-/** The buildings that can break down: the ones guests ride for fun. */
+/** The buildings that can break down: the ones guests ride for fun or thrills. */
 export function isRide(tile: TileType): boolean {
-  return BUILDINGS[tile]?.satisfies === 'fun';
+  const need = BUILDINGS[tile]?.satisfies;
+  return need === 'fun' || need === 'thrill';
 }
 
 /** Chance per second that some ride in the park breaks down. */

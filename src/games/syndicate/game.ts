@@ -48,7 +48,7 @@ const BOOST_DURATION = 4;
 const BOOST_COOLDOWN = 14;
 const EXTRACTION_RADIUS = 1.5;
 
-const FACADES = ['#3c4566', '#46395c', '#35495c', '#4a3f55'];
+const FACADES = ['#313853', '#3a2e4c', '#2b3c4c', '#3d3446'];
 const NEON = ['#22d3ee', '#38bdf8', '#818cf8', '#2dd4bf'];
 const CIVILIAN_TINTS = ['#d8b4fe', '#86efac', '#fca5a5', '#fde68a', '#93c5fd', '#f9a8d4'];
 const KILL_BOUNTY: Partial<Record<Unit['kind'], number>> = {
@@ -208,11 +208,11 @@ export function initSyndicateGame(): void {
         drawRoad(g, i, x, y);
         if (hash(i, 7) < 0.05) drawLampPool(g, x, y);
       } else if (tile.kind === 'pavement') {
-        fillTile(g, VIEW, x, y, (x + y) % 2 === 0 ? '#30374a' : '#343b4d');
+        fillTile(g, VIEW, x, y, (x + y) % 2 === 0 ? '#272d3c' : '#2a303e');
       } else if (tile.kind === 'plaza') {
-        fillTile(g, VIEW, x, y, '#283148');
+        fillTile(g, VIEW, x, y, '#212939');
       } else {
-        fillTile(g, VIEW, x, y, '#10141f');
+        fillTile(g, VIEW, x, y, '#0b0e17');
       }
     }
   });
@@ -491,7 +491,7 @@ export function initSyndicateGame(): void {
   // --- Rendering ---
 
   function drawRoad(g: CanvasRenderingContext2D, i: number, x: number, y: number) {
-    fillTile(g, VIEW, x, y, '#262c3a');
+    fillTile(g, VIEW, x, y, '#1f242f');
     g.strokeStyle = 'rgba(250, 204, 21, 0.22)';
     g.lineWidth = 1.5;
     g.setLineDash([3, 5]);
@@ -547,7 +547,7 @@ export function initSyndicateGame(): void {
     // Panes: lit glass as two half-panes (the gap reads as a mullion
     // without a third pass), unlit as a single dark pane.
     for (let pass = 0; pass < 2; pass++) {
-      ctx.fillStyle = pass === 0 ? 'rgba(165, 243, 252, 0.55)' : 'rgba(28, 38, 58, 0.65)';
+      ctx.fillStyle = pass === 0 ? 'rgba(165, 243, 252, 0.45)' : 'rgba(24, 33, 51, 0.65)';
       ctx.beginPath();
       faces.forEach(([a, b], f) => {
         for (let r = 0; r < rows; r++) {
@@ -571,7 +571,7 @@ export function initSyndicateGame(): void {
     }
 
     // Late-shift floors: one wide lit office strip instead of panes.
-    ctx.fillStyle = 'rgba(165, 243, 252, 0.32)';
+    ctx.fillStyle = 'rgba(165, 243, 252, 0.28)';
     ctx.beginPath();
     faces.forEach(([a, b], f) => {
       for (let r = 0; r < rows; r++) {
@@ -611,6 +611,42 @@ export function initSyndicateGame(): void {
       ctx.fillRect(dx - 1, dy - 4.2, 2, 4.2);
       ctx.fillStyle = NEON[palette];
       ctx.fillRect(dx + 2.2, dy - 5.2, 1, 1);
+    }
+  }
+
+  /**
+   * Huge glowing ad-screen high on the SE face of tall towers — the
+   * Syndicate-Wars signage read (Round 6 mood pass). Hashed so only half the
+   * tall band advertises; a slow shimmer plus a blink-gated scan strip make
+   * the screens read animated without strobing. The glow is a second, wider
+   * low-alpha band rather than shadowBlur — the blur variant measured +50%
+   * on the whole sweep's CPU cost, the band is noise. Drawn in the sweep
+   * with its building so occlusion holds.
+   */
+  function drawAdScreen(x: number, y: number, i: number, height: number) {
+    if (height < 30 || hash(i, 9) >= 0.5) return;
+    const { s: sCorner, e } = blockFaceCorners(VIEW, x, y);
+    const palette = Math.floor(hash(i, 10) * NEON.length);
+    const shimmer = 0.4 + 0.18 * Math.sin(clock * 1.3 + i);
+    ctx.fillStyle = NEON[palette];
+    ctx.globalAlpha = shimmer * 0.35;
+    ctx.beginPath();
+    faceBandPath(ctx, sCorner, e, 0.1, 0.9, height - 25, height - 3);
+    ctx.fill();
+    ctx.globalAlpha = shimmer;
+    ctx.beginPath();
+    faceBandPath(ctx, sCorner, e, 0.18, 0.82, height - 22, height - 6);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // A pale scan-line drifts up the screen while the beacon cadence blinks.
+    if (blink(clock, i)) {
+      const sy = height - 21 + ((clock * 5 + i * 0.7) % 1) * 13;
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      faceBandPath(ctx, sCorner, e, 0.18, 0.82, sy, sy + 1.4);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -959,13 +995,16 @@ export function initSyndicateGame(): void {
       ctx.fillStyle = shadeColor(FACADES[palette], 0.5);
       ctx.fillRect(c.x - 3, ty - 3, 6, 3);
     } else {
-      // Glowing holo-billboard
+      // Glowing holo-billboard — a size step on the tall band so the skyline
+      // carries light where the ad-screens live.
+      const big = height >= 30;
       ctx.save();
       ctx.shadowColor = NEON[palette];
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = big ? 8 : 6;
       ctx.fillStyle = NEON[palette];
       ctx.globalAlpha = 0.55 + 0.2 * Math.sin(clock * 2 + i);
-      ctx.fillRect(c.x - 2.5, ty - 8, 5, 6);
+      if (big) ctx.fillRect(c.x - 4, ty - 11, 8, 8.5);
+      else ctx.fillRect(c.x - 2.5, ty - 8, 5, 6);
       ctx.restore();
       ctx.globalAlpha = 1;
     }
@@ -1042,8 +1081,8 @@ export function initSyndicateGame(): void {
   // The sky fill doubles as the frame clear; the gradient itself never
   // changes, so build it once instead of once per frame.
   const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-  sky.addColorStop(0, '#070a14');
-  sky.addColorStop(1, '#0b0f1c');
+  sky.addColorStop(0, '#04060d');
+  sky.addColorStop(1, '#070a14');
 
   function render() {
     ctx.fillStyle = sky;
@@ -1102,6 +1141,7 @@ export function initSyndicateGame(): void {
         drawWindows(x, y, i, tile.height);
         drawStorefront(x, y, i, tile.height, tile.palette);
         drawNeonTrim(x, y, tile.height, tile.palette);
+        drawAdScreen(x, y, i, tile.height);
         drawRooftop(x, y, i, tile.height, tile.palette);
       }
       // Ground decals (blood/scorch) sit on the tile they fell on. The

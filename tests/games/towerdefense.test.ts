@@ -272,17 +272,25 @@ describe('waves', () => {
         expect(entry.gap).toBeGreaterThan(0);
       }
     }
-    // The warlord arrives before the finale now, and the last wave fields two.
+    // The warlord arrives before the finale now, and the last wave fields a
+    // quartet — sized so even a maxed corridor cannot blank it (see the
+    // no-perfect-runs playthrough proofs below).
     expect(WAVES.slice(0, AUTHORED_WAVES - 1).some(w => w.some(e => e.kind === 'warlord'))).toBe(true);
     const finale = WAVES[AUTHORED_WAVES - 1];
-    expect(finale.filter(e => e.kind === 'warlord').reduce((n, e) => n + e.count, 0)).toBe(2);
+    expect(finale.filter(e => e.kind === 'warlord').reduce((n, e) => n + e.count, 0)).toBe(4);
   });
 
-  it('scales enemy hp up wave over wave', () => {
+  it('scales enemy hp up wave over wave, ramping harder past the teaching arc', () => {
     for (let w = 1; w < WAVES.length; w++) {
       expect(hpScale(w)).toBeGreaterThan(hpScale(w - 1));
     }
     expect(hpScale(0)).toBe(1);
+    // Identical to the old linear curve through wave 9 (the teaching arc keeps
+    // its feel), then the quadratic term takes over.
+    for (let w = 0; w <= 8; w++) expect(hpScale(w)).toBeCloseTo(1 + w * 0.14);
+    expect(hpScale(17)).toBeGreaterThan(1 + 17 * 0.14 + 2);
+    // Still steepening in the endless tail.
+    expect(hpScale(30) - hpScale(29)).toBeGreaterThan(hpScale(20) - hpScale(19));
   });
 
   describe('endless assault', () => {
@@ -523,13 +531,37 @@ describe('headless playthrough', () => {
     { kind: 'blast', x: 9, y: 8, upgrade: true }
   ];
 
-  it('survives all 18 authored waves with a known layout', () => {
+  it('survives all 18 authored waves with a known layout — but never 20/20', () => {
     const result = playRun(CAMPAIGN_PLAN);
     expect(result.survived).toBe(true);
     expect(result.eco.wavesCleared).toBe(AUTHORED_WAVES);
+    // The Round 6 no-perfect-runs contract: the campaign is winnable, and even
+    // the best layout we can author against this harness finishes bleeding.
+    expect(result.eco.lives).toBeGreaterThan(0);
+    expect(result.eco.lives).toBeLessThan(START_LIVES);
     // The score follows the design formula: waves × base + kill bounties.
     expect(score(result.eco)).toBe(AUTHORED_WAVES * WAVE_BASE + result.eco.killScore);
     expect(result.eco.killScore).toBeGreaterThan(0);
+  });
+
+  it('even the reference plan plus every affordable reinforcement still bleeds', () => {
+    // Adversarial probe on the contract: max out frost against the warlords
+    // and add every blast the purse can carry — the finale quartet still
+    // cannot be blanked, so a perfect run is out of reach of the economy.
+    const result = playRun([
+      ...CAMPAIGN_PLAN,
+      { kind: 'frost', x: 15, y: 4, upgrade: true },
+      { kind: 'frost', x: 15, y: 8, upgrade: true },
+      { kind: 'frost', x: 15, y: 4, upgrade: true },
+      { kind: 'frost', x: 15, y: 8, upgrade: true },
+      { kind: 'blast', x: 18, y: 8 },
+      { kind: 'blast', x: 18, y: 8, upgrade: true },
+      { kind: 'blast', x: 18, y: 8, upgrade: true },
+      { kind: 'blast', x: 6, y: 4 },
+      { kind: 'blast', x: 6, y: 4, upgrade: true }
+    ]);
+    expect(result.survived).toBe(true);
+    expect(result.eco.lives).toBeLessThan(START_LIVES);
   });
 
   it('holds into the endless assault past the campaign', () => {
@@ -538,6 +570,37 @@ describe('headless playthrough', () => {
     const result = playRun(CAMPAIGN_PLAN, AUTHORED_WAVES + 3);
     expect(result.survived).toBe(true);
     expect(result.eco.wavesCleared).toBe(AUTHORED_WAVES + 3);
+  });
+
+  it('a decent build-once layout falls in the late script, not before wave 12', () => {
+    // Build a sensible spread early and never adapt: the escalation must
+    // punish complacency (death before wave 18) without feeling unfair
+    // (survives well into the back half first).
+    const result = playRun([
+      { kind: 'bolt', x: 10, y: 4 },
+      { kind: 'bolt', x: 10, y: 8 },
+      { kind: 'bolt', x: 13, y: 4 },
+      { kind: 'bolt', x: 13, y: 8 },
+      { kind: 'blast', x: 12, y: 4 },
+      { kind: 'blast', x: 12, y: 8 },
+      { kind: 'frost', x: 15, y: 8 },
+      { kind: 'bolt', x: 7, y: 4 },
+      { kind: 'bolt', x: 7, y: 8 },
+      { kind: 'bolt', x: 16, y: 8 }
+    ]);
+    expect(result.survived).toBe(false);
+    expect(result.waveIdx).toBeGreaterThanOrEqual(11);
+  });
+
+  it('a naive handful of towers dies by mid-campaign', () => {
+    const result = playRun([
+      { kind: 'bolt', x: 10, y: 4 },
+      { kind: 'bolt', x: 10, y: 8 },
+      { kind: 'bolt', x: 13, y: 4 }
+    ]);
+    expect(result.survived).toBe(false);
+    expect(result.waveIdx).toBeGreaterThan(3);
+    expect(result.waveIdx).toBeLessThanOrEqual(10);
   });
 
   it('a thin defence clears the opening waves but falls to the late script', () => {

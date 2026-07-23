@@ -83,6 +83,8 @@ interface Shot {
   life: number;
   /** Stable jitter seed so a bolt's zigzag doesn't reroll every frame. */
   seed: number;
+  /** Firing tower's tile — drives that tower's recoil animation. */
+  from: number;
 }
 
 interface Ring {
@@ -324,6 +326,8 @@ export function initTowerDefenseGame(): void {
     floaterRise: 16,
     floaterLife: 1.1
   });
+  /** Last firing direction per tower tile (screen-space angle, radians). */
+  const towerAim = new Map<number, number>();
   /** Seconds left on the "WAVE N" banner splash. */
   let bannerTimer = 0;
   let bannerText = '';
@@ -386,6 +390,7 @@ export function initTowerDefenseGame(): void {
     selectedTool = 'bolt';
     shots = [];
     rings = [];
+    towerAim.clear();
     fx.clear();
     bannerTimer = 0;
     keepFlash = 0;
@@ -498,9 +503,13 @@ export function initTowerDefenseGame(): void {
           ty: event.ty,
           kind: event.kind,
           life: SHOT_LIFE,
-          seed: Math.random() * 1000
+          seed: Math.random() * 1000,
+          from: event.from
         });
         const impact = isoProject(VIEW, event.tx, event.ty);
+        // The bombard's tub traverses to face its last target (render-side
+        // aim memory; bounded by the number of standing towers).
+        towerAim.set(event.from, Math.atan2(impact.y - from.y, impact.x - from.x));
         if (event.kind === 'blast') {
           rings.push({ x: impact.x, y: impact.y - 6, r: 0, maxR: TOWERS.blast.splash * VIEW.halfW, life: 0.3 });
           spawnBurst(impact.x, impact.y - 8, 8, '#fdba74', { speed: 85, life: 0.35, size: 1.8, gravity: 1, glow: true });
@@ -538,142 +547,217 @@ export function initTowerDefenseGame(): void {
   // --- Rendering ----------------------------------------------------------
 
   function blockHeight(tower: Tower): number {
-    return 12 + tower.level * 7;
+    return 10 + tower.level * 6;
   }
 
-  /** Screen point of a tower's muzzle (top of its block). */
+  /** Screen point of a tower's muzzle — per kind, the spot the art fires from. */
   function towerTop(tower: Tower): { x: number; y: number } {
     const x = tower.tile % GRID_W;
     const y = Math.floor(tower.tile / GRID_W);
     const p = isoProject(VIEW, x + 0.5, y + 0.5);
-    return { x: p.x, y: p.y - blockHeight(tower) - 7 };
+    const lift =
+      tower.kind === 'bolt'
+        ? blockHeight(tower) + 16 + tower.level * 2 // the storm orb
+        : tower.kind === 'blast'
+          ? blockHeight(tower) + 8 // the bombard tub
+          : blockHeight(tower) + 10; // the obelisk's heart
+    return { x: p.x, y: p.y - lift };
   }
 
+  /**
+   * Towers as arcane batteries — the Round 6 art pass (owner's direction V2):
+   * coursed stone bodies whose structure grows with level, crowned per kind
+   * by a storm spire, a traversing bombard, or an ice obelisk. Aim and recoil
+   * are render-side only: the bombard's tub faces `towerAim`, and any live
+   * shot from this tile drives a recoil kick.
+   */
   function drawTower(tower: Tower, x: number, y: number) {
-    const color = TOWER_COLORS[tower.kind];
+    const accent = TOWER_COLORS[tower.kind];
+    const lvl = tower.level;
     const height = blockHeight(tower);
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
-    // Stone plinth under every tower, then the coloured body on top of it.
+    const charging = tower.cooldown <= 0.08;
+    const pulse = 0.5 + 0.5 * Math.sin(clock * 4 + tower.tile);
+    // Recoil: strongest the instant a shot leaves, decaying with its tracer.
+    let recoil = 0;
+    for (const shot of shots) {
+      if (shot.from === tower.tile) recoil = Math.max(recoil, shot.life / SHOT_LIFE);
+    }
+
+    // Stone plinth, then the coursed stone body.
     drawBlock(ctx, VIEW, x, y, 4, '#57534e', 0.1);
-    // Mortar coursing on the plinth faces.
     const pc = blockFaceCorners(VIEW, x, y, 0.1);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
     ctx.lineWidth = 0.75;
     ctx.beginPath();
     blockSeamPath(ctx, pc, 2);
-    ctx.moveTo((pc.w.x + pc.s.x) / 2, (pc.w.y + pc.s.y) / 2 - 2);
-    ctx.lineTo((pc.w.x + pc.s.x) / 2, (pc.w.y + pc.s.y) / 2);
-    ctx.moveTo((pc.s.x + pc.e.x) / 2, (pc.s.y + pc.e.y) / 2 - 4);
-    ctx.lineTo((pc.s.x + pc.e.x) / 2, (pc.s.y + pc.e.y) / 2 - 2);
     ctx.stroke();
-    drawBlock(ctx, VIEW, x, y, height, color, 0.2, 4);
+    drawBlock(ctx, VIEW, x, y, height, '#6d675f', 0.16, 4);
+    const sc = blockFaceCorners(VIEW, x, y, 0.16);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    for (let course = 6; course < height; course += 6) blockSeamPath(ctx, sc, 4 + course);
+    // Staggered vertical joints between the courses (the keep's recipe).
+    for (let j = 0; j < 2; j++) {
+      const t = 0.33 + j * 0.34;
+      const jx = sc.w.x + (sc.s.x - sc.w.x) * t;
+      const jy = sc.w.y + (sc.s.y - sc.w.y) * t;
+      ctx.moveTo(jx, jy - 4 - (j % 2 === 0 ? 6 : 12));
+      ctx.lineTo(jx, jy - 4 - (j % 2 === 0 ? 0 : 6));
+    }
+    ctx.stroke();
+    // Accent-lit lancet windows on the near faces — one per level, so the
+    // tier reads from the body as well as the pips.
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.7 + pulse * 0.2;
+    for (let w = 0; w < lvl; w++) {
+      const t = 0.5 - (lvl - 1) * 0.14 + w * 0.28;
+      const wx = sc.s.x + (sc.e.x - sc.s.x) * t;
+      const wy = sc.s.y + (sc.e.y - sc.s.y) * t;
+      ctx.fillRect(wx - 0.8, wy - (4 + height) + 3, 1.6, 4);
+    }
+    ctx.globalAlpha = 1;
     const topY = c.y - height - 4;
-    const charging = tower.cooldown <= 0.08;
-    const pulse = 0.5 + 0.5 * Math.sin(clock * 4 + tower.tile);
 
     if (tower.kind === 'bolt') {
-      // Mast, crossbars, and a crackling coil orb.
-      ctx.strokeStyle = shadeColor(color, 0.45);
-      ctx.lineWidth = 1.8;
+      // Storm spire: a tapering stone needle, orb rings per level, and the
+      // caged storm orb that flares as it charges and kicks on fire.
+      ctx.fillStyle = '#59544c';
       ctx.beginPath();
-      ctx.moveTo(c.x, topY);
-      ctx.lineTo(c.x, topY - 9);
-      ctx.moveTo(c.x - 3.5, topY - 4);
-      ctx.lineTo(c.x + 3.5, topY - 4);
+      ctx.moveTo(c.x - 3.4, topY);
+      ctx.lineTo(c.x + 3.4, topY);
+      ctx.lineTo(c.x + 0.8, topY - 9 - lvl * 2);
+      ctx.lineTo(c.x - 0.8, topY - 9 - lvl * 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.lineWidth = 0.75;
       ctx.stroke();
-      // Ceramic insulator rings up the mast.
-      ctx.fillStyle = '#e7e5e4';
-      ctx.fillRect(c.x - 1.5, topY - 6.4, 3, 1);
-      ctx.fillRect(c.x - 1.2, topY - 8, 2.4, 1);
+      const orbY = topY - 12 - lvl * 2;
       ctx.save();
       ctx.shadowColor = '#fde68a';
       ctx.shadowBlur = charging ? 10 : 5 + pulse * 3;
-      ctx.fillStyle = charging ? '#fef3c7' : '#fbbf24';
+      ctx.fillStyle = charging || recoil > 0 ? '#fef3c7' : '#fbbf24';
       ctx.beginPath();
-      ctx.arc(c.x, topY - 10, 3, 0, Math.PI * 2);
+      ctx.arc(c.x, orbY, 2.2 + lvl * 0.5 + recoil * 1.4, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+      ctx.strokeStyle = `rgba(253, 230, 138, ${0.5 + recoil * 0.4})`;
+      ctx.lineWidth = 1;
+      for (let ring = 0; ring < lvl; ring++) {
+        ctx.beginPath();
+        ctx.ellipse(
+          c.x,
+          orbY,
+          3.6 + ring * 1.8 + recoil,
+          1.4 + ring * 0.7 + recoil * 0.4,
+          0,
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+      }
       // Static sparks that flicker around the orb between shots.
       if (hash(Math.floor(clock * 10), tower.tile) < 0.4) {
         ctx.strokeStyle = '#fef9c3';
         ctx.lineWidth = 1;
         ctx.beginPath();
         const a = hash(Math.floor(clock * 10), tower.tile + 1) * Math.PI * 2;
-        ctx.moveTo(c.x + Math.cos(a) * 3.5, topY - 10 + Math.sin(a) * 3.5);
-        ctx.lineTo(c.x + Math.cos(a) * 6.5, topY - 10 + Math.sin(a) * 6.5);
+        ctx.moveTo(c.x + Math.cos(a) * 3.5, orbY + Math.sin(a) * 3.5);
+        ctx.lineTo(c.x + Math.cos(a) * 6.5, orbY + Math.sin(a) * 6.5);
         ctx.stroke();
       }
     } else if (tower.kind === 'blast') {
-      // Mortar tub: rim ring, dark muzzle, side rivets.
-      ctx.fillStyle = shadeColor(color, 0.45);
-      ctx.beginPath();
-      ctx.ellipse(c.x, topY, 6.5, 3.4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = shadeColor(color, 1.3);
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = charging ? '#451a03' : '#1c1917';
-      ctx.beginPath();
-      ctx.ellipse(c.x, topY - 0.6, 3.8, 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      if (charging) {
-        ctx.fillStyle = '#fdba74';
+      // Bombard tower: crenellated crown; the tub traverses to face its last
+      // target and sinks with recoil. The top tier mounts twin tubs.
+      ctx.fillStyle = shadeColor('#6d675f', 1.15);
+      for (let m = -2; m <= 2; m++) ctx.fillRect(c.x + m * 4 - 1.4, topY - 3.2, 2.8, 3.2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      for (let m = -2; m < 2; m++) ctx.fillRect(c.x + m * 4 + 1.6, topY - 1.2, 2.4, 1.2);
+      const aim = towerAim.get(tower.tile) ?? Math.PI / 4;
+      const ax = Math.cos(aim);
+      const ay = Math.sin(aim) * 0.5;
+      const tubs = lvl >= 3 ? 2 : 1;
+      const sink = recoil * 1.6;
+      for (let tb = 0; tb < tubs; tb++) {
+        const off = tubs === 2 ? (tb === 0 ? -3.4 : 3.4) : 0;
+        const ty2 = topY - 4.4 + sink;
+        ctx.fillStyle = shadeColor(accent, 0.5);
         ctx.beginPath();
-        ctx.ellipse(c.x, topY - 0.6, 1.6 + pulse, 0.9 + pulse * 0.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(c.x + off, ty2, 4.6 - tubs * 0.8, 2.8 - tubs * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = shadeColor(accent, 1.25);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Dark muzzle offset toward the aim; warm while charged or firing.
+        ctx.fillStyle = charging || recoil > 0 ? '#451a03' : '#1c1917';
+        ctx.beginPath();
+        ctx.ellipse(
+          c.x + off + ax * 1.8,
+          ty2 + ay * 1.8 - 0.4,
+          2.4 - tubs * 0.4,
+          1.4 - tubs * 0.2,
+          0,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+        if (recoil > 0.5) {
+          ctx.fillStyle = `rgba(253, 186, 116, ${(recoil - 0.5) * 1.6})`;
+          ctx.beginPath();
+          ctx.ellipse(c.x + off + ax * 3.2, ty2 + ay * 3.2 - 0.4, 2, 1.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // Shell stack ready on the parapet from tier 2.
+      if (lvl >= 2) {
+        ctx.fillStyle = '#292524';
+        ctx.beginPath();
+        ctx.arc(c.x - 6.4, topY - 0.6, 1.1, 0, Math.PI * 2);
+        ctx.arc(c.x - 4.2, topY - 0.2, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#44403c';
+        ctx.beginPath();
+        ctx.arc(c.x - 5.3, topY - 1.8, 1.1, 0, Math.PI * 2);
         ctx.fill();
       }
-      // Reinforcing band round the tub and a shell stack ready beside it.
-      ctx.strokeStyle = shadeColor(color, 0.8);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(c.x, topY + 1.2, 6.1, 3.1, 0, 0.2, Math.PI - 0.2);
-      ctx.stroke();
-      ctx.fillStyle = '#292524';
-      ctx.beginPath();
-      ctx.arc(c.x - 5.5, topY + 3.4, 1.1, 0, Math.PI * 2);
-      ctx.arc(c.x - 3.3, topY + 3.8, 1.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#44403c';
-      ctx.beginPath();
-      ctx.arc(c.x - 4.4, topY + 2, 1.1, 0, Math.PI * 2);
-      ctx.fill();
     } else {
-      // Frost crystal cluster catching the light.
+      // Ice obelisk: a tall crystal whose satellite shards grow with level,
+      // over a frost mist that breathes with the chill.
       ctx.save();
       ctx.shadowColor = '#bae6fd';
-      ctx.shadowBlur = 5 + pulse * 3;
-      ctx.fillStyle = '#e0f2fe';
+      ctx.shadowBlur = 5 + pulse * 3 + recoil * 4;
+      ctx.fillStyle = charging || recoil > 0 ? '#f0f9ff' : '#e0f2fe';
       ctx.beginPath();
-      ctx.moveTo(c.x, topY - 13);
-      ctx.lineTo(c.x + 3.6, topY - 4);
-      ctx.lineTo(c.x, topY);
-      ctx.lineTo(c.x - 3.6, topY - 4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#7dd3fc';
-      ctx.beginPath();
-      ctx.moveTo(c.x - 4.5, topY - 7);
-      ctx.lineTo(c.x - 2.2, topY - 2);
-      ctx.lineTo(c.x - 5.5, topY - 1);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(c.x + 4.8, topY - 6);
-      ctx.lineTo(c.x + 2.5, topY - 2);
-      ctx.lineTo(c.x + 5.8, topY - 1);
+      ctx.moveTo(c.x, topY - 12 - lvl * 2.5);
+      ctx.lineTo(c.x + 3.4, topY - 4);
+      ctx.lineTo(c.x, topY + 0.5);
+      ctx.lineTo(c.x - 3.4, topY - 4);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
-      // Ice fringe skirting the crystal's base.
-      ctx.fillStyle = 'rgba(186, 230, 253, 0.8)';
-      for (let ice = -2; ice <= 2; ice++) {
+      // Facet line down the crystal.
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.7)';
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(c.x, topY - 12 - lvl * 2.5);
+      ctx.lineTo(c.x, topY + 0.5);
+      ctx.stroke();
+      ctx.fillStyle = '#7dd3fc';
+      for (let sh = 0; sh < lvl - 1; sh++) {
+        const sx2 = sh === 0 ? -5 : 5;
         ctx.beginPath();
-        ctx.moveTo(c.x + ice * 2.4 - 0.9, topY + 0.6);
-        ctx.lineTo(c.x + ice * 2.4, topY + 2.6 + (ice % 2 === 0 ? 1 : 0));
-        ctx.lineTo(c.x + ice * 2.4 + 0.9, topY + 0.6);
+        ctx.moveTo(c.x + sx2, topY - 6 - sh * 1.5);
+        ctx.lineTo(c.x + sx2 + 1.8, topY - 0.5);
+        ctx.lineTo(c.x + sx2 - 1.8, topY - 0.5);
         ctx.closePath();
         ctx.fill();
       }
+      ctx.fillStyle = `rgba(186, 230, 253, ${0.25 + pulse * 0.12})`;
+      ctx.beginPath();
+      ctx.ellipse(c.x, topY + 1.8, 6 + lvl, 2 + lvl * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
     // Level pips on the near face.
     ctx.fillStyle = '#fef9c3';
@@ -1250,9 +1334,9 @@ export function initTowerDefenseGame(): void {
       if (i === hoverTile && (phase === 'build' || phase === 'wave')) {
         const ok = selectedTool && map.buildable[i] && !tower;
         if (ok && selectedTool) {
-          // Ghost preview of the tower about to be raised.
+          // Ghost preview of the tower about to be raised (L1 body height).
           ctx.globalAlpha = 0.45;
-          drawBlock(ctx, VIEW, x, y, 12 + 7, TOWER_COLORS[selectedTool], 0.2);
+          drawBlock(ctx, VIEW, x, y, 16, TOWER_COLORS[selectedTool], 0.16);
           ctx.globalAlpha = 1;
         }
         strokeTile(ctx, VIEW, x, y, ok ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.7)', 1.5);

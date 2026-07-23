@@ -1,10 +1,12 @@
 /**
- * Syndicate — campaign missions. Seven contracts, escalating the roster and
+ * Syndicate — campaign missions. Nine contracts, escalating the roster and
  * weapon tiers: wipe out the rival agents, persuade a crowd and reach
  * extraction, assassinate the rival executive, then a reinforced wipe, a
- * recruitment under heavy fire, the decapitation finale, and finally a `secure`
- * contract — a new objective mould — that has the squad fight to the extraction
- * zone and *hold* it for a spell against a dug-in guard ring. The mid-campaign
+ * recruitment under heavy fire, the decapitation strike, the first `secure`
+ * contract — a new objective mould that has the squad fight to the extraction
+ * zone and *hold* it for a spell against a dug-in guard ring — a
+ * scorched-earth wipe against the rivals' last reserves, and a `secure`
+ * finale with the longest hold behind the deepest ring. The mid-campaign
  * assassinate keeps the minigun and the executive `target` from being a
  * last-mission-only reveal.
  */
@@ -121,6 +123,33 @@ export const MISSIONS: MissionSpec[] = [
     persuadeQuota: 0,
     holdSeconds: 20,
     reward: 6000
+  },
+  {
+    // Scorched earth — the rivals pour their last reserves onto the streets:
+    // the heaviest kill-count contract the campaign fields.
+    id: 8,
+    objective: 'eliminate',
+    civilians: 10,
+    guards: 7,
+    enemies: 7,
+    guardWeapon: 'uzi',
+    enemyWeapon: 'minigun',
+    persuadeQuota: 0,
+    reward: 7000
+  },
+  {
+    // Total control — the finale returns to the secure mould, escalated: the
+    // longest hold in the campaign behind its deepest LZ ring.
+    id: 9,
+    objective: 'secure',
+    civilians: 12,
+    guards: 8,
+    enemies: 6,
+    guardWeapon: 'uzi',
+    enemyWeapon: 'minigun',
+    persuadeQuota: 0,
+    holdSeconds: 30,
+    reward: 8000
   }
 ];
 

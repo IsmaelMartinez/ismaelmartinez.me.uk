@@ -3,9 +3,12 @@
  * campaign that escalates in *kind* (earlier and multiple warlords, armoured
  * brute packs, denser mixes) rather than HP alone, then hands off to a
  * deterministic endless assault (`endlessWave`) so a strong defence has an
- * unbounded score tail instead of a victory wall. Enemy hp climbs a gentle
- * linear ramp per wave so early towers stay relevant without trivialising the
- * late game.
+ * unbounded score tail instead of a victory wall. Enemy hp climbs linearly
+ * through the teaching arc, then a quadratic term ramps the back half — the
+ * Round 6 no-perfect-runs retune: the headless proofs pin that even the
+ * best-known layout finishes the campaign bleeding (never 20/20), a
+ * build-once layout falls in the late script, and a thin one dies
+ * mid-campaign, while the campaign stays winnable.
  */
 import type { EnemyKind } from './enemies';
 
@@ -52,7 +55,9 @@ export const WAVES: WaveEntry[][] = [
     { kind: 'warlord', count: 1, gap: 1 },
     { kind: 'sprinter', count: 8, gap: 0.6, pause: 3 }
   ],
-  // 13-18: the escalation — armoured floods, escorted and twin warlords.
+  // 13-18: the escalation — armoured floods, escorted warlords, and a finale
+  // whose warlord quartet is tuned so even a maxed-out kill corridor cannot
+  // stop every crown: the last wave is survived, not blanked.
   [
     { kind: 'brute', count: 8, gap: 0.9 },
     { kind: 'sprinter', count: 10, gap: 0.4, pause: 2 }
@@ -63,21 +68,23 @@ export const WAVES: WaveEntry[][] = [
   ],
   [
     { kind: 'warlord', count: 1, gap: 1 },
-    { kind: 'brute', count: 6, gap: 1.0, pause: 2.5 }
+    { kind: 'brute', count: 8, gap: 0.7, pause: 2 },
+    { kind: 'sprinter', count: 8, gap: 0.3, pause: 1 }
   ],
   [
-    { kind: 'sprinter', count: 16, gap: 0.3 },
-    { kind: 'brute', count: 6, gap: 0.9, pause: 2 }
+    { kind: 'sprinter', count: 20, gap: 0.2 },
+    { kind: 'brute', count: 8, gap: 0.7, pause: 1.5 }
   ],
   [
-    { kind: 'warlord', count: 2, gap: 4 },
-    { kind: 'sprinter', count: 10, gap: 0.4, pause: 2 }
+    { kind: 'warlord', count: 2, gap: 2 },
+    { kind: 'sprinter', count: 18, gap: 0.2, pause: 1.5 },
+    { kind: 'scout', count: 12, gap: 0.25, pause: 0.5 }
   ],
-  // Finale: twin warlords behind a brute wall, chased home by a sprinter pack.
+  // Finale: a warlord quartet behind a brute wall, chased home by a sprinter flood.
   [
-    { kind: 'warlord', count: 2, gap: 3 },
-    { kind: 'brute', count: 8, gap: 0.8, pause: 2 },
-    { kind: 'sprinter', count: 10, gap: 0.35, pause: 1.5 }
+    { kind: 'warlord', count: 4, gap: 1.1 },
+    { kind: 'brute', count: 16, gap: 0.3, pause: 1 },
+    { kind: 'sprinter', count: 26, gap: 0.1, pause: 0.5 }
   ]
 ];
 
@@ -126,9 +133,16 @@ export function waveDef(waveIndex: number): WaveEntry[] {
   return i < AUTHORED_WAVES ? WAVES[i] : endlessWave(i);
 }
 
-/** Enemy hp multiplier on wave `waveIndex` (0-based). */
+/**
+ * Enemy hp multiplier on wave `waveIndex` (0-based). Linear through the
+ * teaching arc (identical to the old curve up to wave 9), then a quadratic
+ * term ramps the back half so a solved layout keeps feeling the escalation —
+ * the Round 6 no-perfect-runs retune. The endless assault inherits the same
+ * ever-steepening curve.
+ */
 export function hpScale(waveIndex: number): number {
-  return 1 + waveIndex * 0.14;
+  const late = Math.max(0, waveIndex - 8);
+  return 1 + waveIndex * 0.14 + late * late * 0.05;
 }
 
 export interface Spawner {

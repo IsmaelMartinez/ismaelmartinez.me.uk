@@ -283,13 +283,13 @@ describe('missions', () => {
     expect(missionStatus(spec, units, 0, false)).toBe('won');
   });
 
-  it('fields a seven-mission campaign with escalating rewards and re-tiered weapons', () => {
-    expect(MISSIONS).toHaveLength(7);
+  it('fields a nine-mission campaign with escalating rewards and re-tiered weapons', () => {
+    expect(MISSIONS).toHaveLength(9);
     for (let m = 1; m < MISSIONS.length; m++) {
       expect(MISSIONS[m].reward).toBeGreaterThan(MISSIONS[m - 1].reward);
     }
     // The minigun / executive target land at the mid-campaign assassinate (3
-    // of 7), not the finale — no last-mission-only reveal.
+    // of 9), not the finale — no last-mission-only reveal.
     expect(MISSIONS[2].objective).toBe('assassinate');
     expect(MISSIONS[2].enemyWeapon).toBe('minigun');
     // The back half escalates: guards graduate to uzis, and minigun rivals
@@ -297,37 +297,47 @@ describe('missions', () => {
     expect(MISSIONS.slice(3).every(m => m.guardWeapon === 'uzi')).toBe(true);
     expect(MISSIONS[4].objective).toBe('persuade');
     expect(MISSIONS[4].enemyWeapon).toBe('minigun');
-    // Mission 7 is the new `secure` mould — a hold contract with a positive
-    // hold requirement, capping the campaign as its richest finale.
+    // Mission 7 introduces the `secure` mould — a hold contract with a
+    // positive hold requirement.
     expect(MISSIONS[6].objective).toBe('secure');
     expect(MISSIONS[6].holdSeconds).toBeGreaterThan(0);
+    // Mission 8 is the heaviest kill-count contract of the campaign, and the
+    // mission-9 finale escalates the secure mould: a longer hold behind a
+    // deeper LZ ring than mission 7 fielded.
+    expect(MISSIONS[7].objective).toBe('eliminate');
+    expect(MISSIONS[7].enemies).toBe(Math.max(...MISSIONS.map(m => m.enemies)));
+    expect(MISSIONS[8].objective).toBe('secure');
+    expect(MISSIONS[8].holdSeconds!).toBeGreaterThan(MISSIONS[6].holdSeconds!);
+    expect(MISSIONS[8].guards).toBeGreaterThan(MISSIONS[6].guards);
     // All four objective moulds are represented across the campaign.
     const objectives = new Set(MISSIONS.map(m => m.objective));
     expect(objectives).toEqual(new Set(['eliminate', 'persuade', 'assassinate', 'secure']));
   });
 
-  it('contests the landing zone: the secure mission rings the LZ with its guards', () => {
-    const spec = MISSIONS[6];
-    expect(spec.objective).toBe('secure');
-    const tiles = generateCity(seededRandom(4));
-    const setup = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
-    const guards = setup.units.filter(u => u.kind === 'guard');
-    expect(guards).toHaveLength(spec.guards);
-    // The guards dig in around the extraction pad (BFS-nearest tiles), not
-    // scattered across the map — so the squad must fight in and hold, not just
-    // reach the corner.
-    const ex = (setup.extraction % MAP_W) + 0.5;
-    const ey = Math.floor(setup.extraction / MAP_W) + 0.5;
-    for (const g of guards) {
-      expect(Math.hypot(g.x - ex, g.y - ey)).toBeLessThan(8);
+  it('contests the landing zone: every secure mission rings the LZ with its guards', () => {
+    const secures = MISSIONS.filter(m => m.objective === 'secure');
+    expect(secures.length).toBeGreaterThan(0);
+    for (const spec of secures) {
+      const tiles = generateCity(seededRandom(4));
+      const setup = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+      const guards = setup.units.filter(u => u.kind === 'guard');
+      expect(guards).toHaveLength(spec.guards);
+      // The guards dig in around the extraction pad (BFS-nearest tiles), not
+      // scattered across the map — so the squad must fight in and hold, not
+      // just reach the corner.
+      const ex = (setup.extraction % MAP_W) + 0.5;
+      const ey = Math.floor(setup.extraction / MAP_W) + 0.5;
+      for (const g of guards) {
+        expect(Math.hypot(g.x - ex, g.y - ey)).toBeLessThan(8);
+      }
+      // No `target` unit exists for a secure mission (the LZ is a tile, not a foe).
+      expect(setup.units.some(u => u.kind === 'target')).toBe(false);
+      // Losing the squad still ends it, whatever the hold count.
+      setup.units.forEach(u => {
+        if (u.kind === 'agent') u.alive = false;
+      });
+      expect(missionStatus(spec, setup.units, 0, false, spec.holdSeconds ?? 0)).toBe('lost');
     }
-    // No `target` unit exists for a secure mission (the LZ is a tile, not a foe).
-    expect(setup.units.some(u => u.kind === 'target')).toBe(false);
-    // Losing the squad still ends it, whatever the hold count.
-    setup.units.forEach(u => {
-      if (u.kind === 'agent') u.alive = false;
-    });
-    expect(missionStatus(spec, setup.units, 0, false, spec.holdSeconds ?? 0)).toBe('lost');
   });
 
   it('never auto-wins a secure mission that forgot to set a hold requirement', () => {

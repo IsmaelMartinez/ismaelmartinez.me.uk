@@ -391,3 +391,27 @@ Order run: G3, G1, G2, one commit each, full bar after each
   seed in `createSnakeState` and one extra `snap()` in the harness, because
   the harness's autopilot knows nothing about walls and dies before either of
   its own snap conditions fires.
+- **G1 — Syndicate escort mould.** Mission 10 "Safe Passage" fields the
+  campaign's fifth objective and its only lose condition that is not the
+  squad dying. The audit's read held up: `follow` carried the escort
+  behaviour with no new AI, and the whole cost was vulnerability. Hostiles
+  used to pick marks from armed player units only, so an unarmed asset was
+  literally unshootable; the filter now also admits a collected VIP, scoped
+  on `kind === 'vip'` so no mission without one changes at all. Two rules
+  fell out of that and both earned their keep: a pinned asset stays neutral
+  and is ignored (reaching it is what turns the contract dangerous), and
+  adrenaline is excluded for the asset, so a boosted squad outruns the thing
+  it is escorting. Tests 565 → 570: the vulnerability proof runs the same
+  scenario twice and asserts a pinned asset takes no damage while a collected
+  one does (this test fails outright on the old prey filter, which is what
+  makes it load-bearing); collection fires `vipSecured`, does not count as a
+  persuasion, and the asset then closes on a walked-away agent; an
+  uncollected asset never wanders; the spawn test pins the ring and the
+  18-tile distance; and the win/lose shape is proved through `missionStatus`,
+  including that an agent alone on the pad does *not* win and that an
+  assetless roster never auto-wins. `missionStatus` now takes six positional
+  parameters, which is the ugliest part of the change and the point at which
+  a seventh should become an options object. Syndicate captures are
+  byte-identical to `b387b35` (`cmp`) — missions 1 to 9 are untouched — and
+  the escort board was captured through a scratch mission-index patch plus a
+  temporary crop snap in the harness, committed code untouched.

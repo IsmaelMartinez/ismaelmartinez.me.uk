@@ -292,14 +292,14 @@ export function initSyndicateGame(): void {
   function spawnDeath(wx: number, wy: number, kind: Unit['kind']) {
     const p = isoProject(VIEW, wx, wy);
     const blood = kind === 'agent' ? '#67e8f9' : kind === 'civilian' ? '#fca5a5' : '#f87171';
-    spawnBurst(p.x, p.y - 7, 14, blood, { speed: 90, life: 0.6, size: 1.8, gravity: 1, glow: true });
-    spawnBurst(p.x, p.y - 7, 6, '#fde68a', { speed: 50, life: 0.35, size: 1.2, glow: true });
-    decals.push({ x: wx, y: wy, r: 3.5 + Math.random() * 1.5, color: blood, life: 9, maxLife: 9 });
+    spawnBurst(p.x, p.y - 12, 14, blood, { speed: 90, life: 0.6, size: 1.8, gravity: 1, glow: true });
+    spawnBurst(p.x, p.y - 12, 6, '#fde68a', { speed: 50, life: 0.35, size: 1.2, glow: true });
+    decals.push({ x: wx, y: wy, r: 5 + Math.random() * 2, color: blood, life: 9, maxLife: 9 });
   }
 
   function spawnSparkle(wx: number, wy: number, color = '#67e8f9') {
     const p = isoProject(VIEW, wx, wy);
-    spawnBurst(p.x, p.y - 10, 10, color, { speed: 40, life: 0.7, size: 1.4, glow: true });
+    spawnBurst(p.x, p.y - 15, 10, color, { speed: 40, life: 0.7, size: 1.4, glow: true });
   }
 
   function addFloater(x: number, y: number, text: string, color: string) {
@@ -448,8 +448,8 @@ export function initSyndicateGame(): void {
       const from = isoProject(VIEW, shot.fx, shot.fy);
       const to = isoProject(VIEW, shot.tx, shot.ty);
       const flash = shot.faction === 'player' ? '#a5f3fc' : '#fecaca';
-      spawnBurst(from.x, from.y - 8, 4, flash, { speed: 70, life: 0.1, size: 1.4, glow: true });
-      spawnBurst(to.x, to.y - 8, 5, '#fde68a', { speed: 80, life: 0.18, size: 1.3, glow: true });
+      spawnBurst(from.x, from.y - 13, 4, flash, { speed: 70, life: 0.1, size: 1.4, glow: true });
+      spawnBurst(to.x, to.y - 13, 5, '#fde68a', { speed: 80, life: 0.18, size: 1.3, glow: true });
       if (shot.faction === 'player') firedThisStep = true;
     }
     // One blip per step keeps rapid-fire weapons from machine-gunning the mixer.
@@ -641,23 +641,29 @@ export function initSyndicateGame(): void {
     return dir;
   }
 
+  /**
+   * Units at Syndicate-Wars scale — the Round 6 art pass. Figures stand
+   * ~26 px (2× the original skeleton) so coat swing, stance, and carried
+   * hardware read at a glance; pointer math is untouched (selection is
+   * tile-based through toLogical), only the drawing grew.
+   */
   function drawUnit(u: Unit) {
     const p = isoProject(VIEW, u.x, u.y);
     const dir = headingOf(u, p.x, p.y);
     const moving = u.path.length > 0;
-    const stride = moving ? Math.sin(clock * 11 + u.id) * 1.4 : 0;
+    const stride = moving ? Math.sin(clock * 11 + u.id) * 2.8 : 0;
 
     // Contact shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y + 1, 4.5, 2.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y + 1, 8, 3.8, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (u.kind === 'agent' && selected.has(squad().indexOf(u))) {
       ctx.strokeStyle = `rgba(103, 232, 249, ${0.65 + 0.25 * Math.sin(clock * 6)})`;
-      ctx.lineWidth = 1.3;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y + 1, 7, 3.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y + 1, 11.5, 5.4, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -693,156 +699,191 @@ export function initSyndicateGame(): void {
 
     // Legs (stride animates when walking)
     ctx.strokeStyle = shadeColor(coat, 0.55);
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 2.6;
     ctx.beginPath();
-    ctx.moveTo(p.x - 1.3, p.y - 3);
-    ctx.lineTo(p.x - 1.3 + stride * 0.4, p.y);
-    ctx.moveTo(p.x + 1.3, p.y - 3);
-    ctx.lineTo(p.x + 1.3 - stride * 0.4, p.y);
+    ctx.moveTo(p.x - 2.4, p.y - 6);
+    ctx.lineTo(p.x - 2.4 + stride * 0.5, p.y);
+    ctx.moveTo(p.x + 2.4, p.y - 6);
+    ctx.lineTo(p.x + 2.4 - stride * 0.5, p.y);
     ctx.stroke();
 
-    // Torso — each kind cuts a distinct silhouette on the shared skeleton.
+    // Torso — each kind cuts a distinct silhouette on the shared skeleton,
+    // grounded by a dark outline stroke around the fill.
     ctx.fillStyle = coat;
     ctx.beginPath();
     if (u.kind === 'agent') {
-      // Long trench coat flaring past the hip, with a belt line.
-      ctx.moveTo(p.x - 3.4, p.y - 2.2);
-      ctx.lineTo(p.x + 3.4, p.y - 2.2);
-      ctx.lineTo(p.x + 2.3, p.y - 9.5);
-      ctx.lineTo(p.x - 2.3, p.y - 9.5);
+      // Long trench coat: shoulders in, hem flaring wide past the knee, and a
+      // walk-swing kick at the hem's facing corner.
+      ctx.moveTo(p.x - 6 - Math.max(0, -dir * stride) * 0.4, p.y - 3.6);
+      ctx.lineTo(p.x + 6 + Math.max(0, dir * stride) * 0.4, p.y - 3.6);
+      ctx.lineTo(p.x + 4.4, p.y - 19);
+      ctx.lineTo(p.x - 4.4, p.y - 19);
     } else if (u.kind === 'enemy') {
       // Broader rival build with armoured shoulders.
-      ctx.moveTo(p.x - 3.4, p.y - 3.5);
-      ctx.lineTo(p.x + 3.4, p.y - 3.5);
-      ctx.lineTo(p.x + 3, p.y - 9.2);
-      ctx.lineTo(p.x - 3, p.y - 9.2);
+      ctx.moveTo(p.x - 6.6, p.y - 6.4);
+      ctx.lineTo(p.x + 6.6, p.y - 6.4);
+      ctx.lineTo(p.x + 5.8, p.y - 18.4);
+      ctx.lineTo(p.x - 5.8, p.y - 18.4);
     } else if (u.kind === 'civilian') {
       // Slighter frame; coat length varies with the tint roll.
-      const hem = p.y - 3.2 - (u.tint % 3) * 0.5;
-      ctx.moveTo(p.x - 2.6, hem);
-      ctx.lineTo(p.x + 2.6, hem);
-      ctx.lineTo(p.x + 2.1, p.y - 9.3);
-      ctx.lineTo(p.x - 2.1, p.y - 9.3);
+      const hem = p.y - 5.8 - (u.tint % 3) * 1;
+      ctx.moveTo(p.x - 5, hem);
+      ctx.lineTo(p.x + 5, hem);
+      ctx.lineTo(p.x + 4, p.y - 18.6);
+      ctx.lineTo(p.x - 4, p.y - 18.6);
     } else {
-      ctx.moveTo(p.x - 3, p.y - 3.5);
-      ctx.lineTo(p.x + 3, p.y - 3.5);
-      ctx.lineTo(p.x + 2.4, p.y - 9.5);
-      ctx.lineTo(p.x - 2.4, p.y - 9.5);
+      ctx.moveTo(p.x - 5.8, p.y - 6.4);
+      ctx.lineTo(p.x + 5.8, p.y - 6.4);
+      ctx.lineTo(p.x + 4.6, p.y - 19);
+      ctx.lineTo(p.x - 4.6, p.y - 19);
     }
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = shadeColor(coat, 0.35);
+    ctx.lineWidth = 1;
+    ctx.stroke();
     // Lit edge down the facing side
     ctx.fillStyle = trim;
-    ctx.fillRect(p.x + dir * 2 - 0.5, p.y - 9.5, 1, 6);
+    ctx.fillRect(p.x + dir * 4 - 0.8, p.y - 19, 1.6, 12);
     if (u.kind === 'agent') {
-      // Belt over the trench coat.
+      // Belt and a raised collar over the trench coat.
       ctx.fillStyle = shadeColor(coat, 0.45);
-      ctx.fillRect(p.x - 2.7, p.y - 5.6, 5.4, 1);
+      ctx.fillRect(p.x - 5, p.y - 11.2, 10, 1.8);
+      ctx.fillStyle = shadeColor(coat, 1.35);
+      ctx.fillRect(p.x - 4.6, p.y - 19.8, 9.2, 1.6);
     } else if (u.kind === 'enemy') {
       // Shoulder spikes silhouette the rivals even at a glance.
       ctx.fillStyle = shadeColor(coat, 1.5);
       ctx.beginPath();
-      ctx.moveTo(p.x - 3.6, p.y - 9);
-      ctx.lineTo(p.x - 1.9, p.y - 9);
-      ctx.lineTo(p.x - 3.2, p.y - 11.4);
+      ctx.moveTo(p.x - 7.2, p.y - 18);
+      ctx.lineTo(p.x - 3.8, p.y - 18);
+      ctx.lineTo(p.x - 6.4, p.y - 22.8);
       ctx.closePath();
-      ctx.moveTo(p.x + 3.6, p.y - 9);
-      ctx.lineTo(p.x + 1.9, p.y - 9);
-      ctx.lineTo(p.x + 3.2, p.y - 11.4);
+      ctx.moveTo(p.x + 7.2, p.y - 18);
+      ctx.lineTo(p.x + 3.8, p.y - 18);
+      ctx.lineTo(p.x + 6.4, p.y - 22.8);
       ctx.closePath();
       ctx.fill();
-    } else if (u.kind === 'guard') {
-      // Baton on the off-hand hip.
-      ctx.strokeStyle = '#1b2230';
-      ctx.lineWidth = 1.2;
+      // Chest plate seam
+      ctx.strokeStyle = shadeColor(coat, 0.5);
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(p.x - dir * 2.5, p.y - 4.2);
-      ctx.lineTo(p.x - dir * 3.5, p.y - 1.6);
+      ctx.moveTo(p.x, p.y - 18);
+      ctx.lineTo(p.x, p.y - 10);
+      ctx.stroke();
+    } else if (u.kind === 'guard') {
+      // Cross-strap and a baton on the off-hand hip.
+      ctx.strokeStyle = shadeColor(coat, 0.5);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 4.2, p.y - 18);
+      ctx.lineTo(p.x + dir * 3.4, p.y - 10.4);
+      ctx.stroke();
+      ctx.strokeStyle = '#1b2230';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 4.8, p.y - 8.4);
+      ctx.lineTo(p.x - dir * 6.8, p.y - 3.2);
       ctx.stroke();
     } else if (u.kind === 'target') {
-      // Pinstripe suit: shirt wedge and a briefcase in hand.
+      // Pinstripe suit: shirt wedge, jacket stripes, a briefcase in hand.
       ctx.fillStyle = '#e8e4da';
       ctx.beginPath();
-      ctx.moveTo(p.x + dir * 0.2, p.y - 9);
-      ctx.lineTo(p.x + dir * 1.6, p.y - 8.6);
-      ctx.lineTo(p.x + dir * 0.4, p.y - 6.2);
+      ctx.moveTo(p.x + dir * 0.4, p.y - 18);
+      ctx.lineTo(p.x + dir * 3.2, p.y - 17.2);
+      ctx.lineTo(p.x + dir * 0.8, p.y - 12.4);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = shadeColor(coat, 1.3);
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      for (const sx of [-3.4, -1.8, 1.8, 3.4]) {
+        ctx.moveTo(p.x + sx, p.y - 17.6);
+        ctx.lineTo(p.x + sx * 1.2, p.y - 7);
+      }
+      ctx.stroke();
       ctx.fillStyle = '#3a2c18';
-      ctx.fillRect(p.x + dir * 2.6 - 1.3, p.y - 3.6, 2.6, 2);
+      ctx.fillRect(p.x + dir * 5.2 - 2.6, p.y - 7.2, 5.2, 4);
       ctx.fillStyle = '#c9a227';
-      ctx.fillRect(p.x + dir * 2.6 - 0.25, p.y - 3.2, 0.5, 0.5);
+      ctx.fillRect(p.x + dir * 5.2 - 0.5, p.y - 6.4, 1, 1);
     }
 
     // Weapon arm — armed units level their actual hardware in their heading.
     if (u.weapon) {
       ctx.strokeStyle = '#1b2230';
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 2.6;
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - 7);
-      ctx.lineTo(p.x + dir * 4, p.y - 6.6);
+      ctx.moveTo(p.x, p.y - 14);
+      ctx.lineTo(p.x + dir * 8, p.y - 13.2);
       ctx.stroke();
       if (u.weapon === 'pistol') {
         ctx.fillStyle = '#11161f';
-        ctx.fillRect(dir > 0 ? p.x + 3.6 : p.x - 5.8, p.y - 7.4, 2.2, 1.4);
+        ctx.fillRect(dir > 0 ? p.x + 7.2 : p.x - 11.6, p.y - 14.8, 4.4, 2.4);
+        // Grip drop
+        ctx.fillRect(dir > 0 ? p.x + 7.4 : p.x - 9.2, p.y - 13, 1.8, 2.6);
       } else if (u.weapon === 'uzi') {
         ctx.fillStyle = '#11161f';
-        ctx.fillRect(dir > 0 ? p.x + 3.2 : p.x - 6.6, p.y - 7.6, 3.4, 1.6);
+        ctx.fillRect(dir > 0 ? p.x + 6.4 : p.x - 13.2, p.y - 15.2, 6.8, 3);
         // Hanging magazine
-        ctx.fillRect(dir > 0 ? p.x + 4.4 : p.x - 5.2, p.y - 6, 1.2, 2);
+        ctx.fillRect(dir > 0 ? p.x + 8.8 : p.x - 10.4, p.y - 12.2, 2.4, 4);
       } else {
-        // Minigun: heavy receiver and twin barrels
+        // Minigun: heavy receiver, twin barrels, and a muzzle block
         ctx.fillStyle = '#0d1119';
-        ctx.fillRect(dir > 0 ? p.x + 2.6 : p.x - 5.4, p.y - 8.4, 2.8, 2.8);
+        ctx.fillRect(dir > 0 ? p.x + 5.2 : p.x - 10.8, p.y - 16.8, 5.6, 5.6);
         ctx.fillStyle = '#2a3242';
-        ctx.fillRect(dir > 0 ? p.x + 5.2 : p.x - 9.4, p.y - 8.2, 4.2, 1);
-        ctx.fillRect(dir > 0 ? p.x + 5.2 : p.x - 9.4, p.y - 6.8, 4.2, 1);
+        ctx.fillRect(dir > 0 ? p.x + 10.4 : p.x - 18.8, p.y - 16.4, 8.4, 1.8);
+        ctx.fillRect(dir > 0 ? p.x + 10.4 : p.x - 18.8, p.y - 13.6, 8.4, 1.8);
+        ctx.fillStyle = '#3a4456';
+        ctx.fillRect(dir > 0 ? p.x + 17.6 : p.x - 19.8, p.y - 16.8, 2.2, 5.4);
       }
     }
 
     // Head
     ctx.fillStyle = head;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 11, 2.3, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y - 22, 4.2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = shadeColor(head, 0.5);
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
     if (cap) {
       ctx.fillStyle = cap;
-      ctx.fillRect(p.x - 2.3, p.y - 12.6, 4.6, 1.6);
+      ctx.fillRect(p.x - 4.4, p.y - 25.4, 8.8, 2.8);
       // Cap brim on the facing side
-      ctx.fillRect(dir > 0 ? p.x + 2.3 : p.x - 3.5, p.y - 12.2, 1.2, 0.8);
+      ctx.fillRect(dir > 0 ? p.x + 4.4 : p.x - 6.8, p.y - 24.6, 2.4, 1.4);
     }
     if (visor) {
       ctx.save();
       ctx.shadowColor = visor;
-      ctx.shadowBlur = 5;
+      ctx.shadowBlur = 6;
       ctx.fillStyle = visor;
-      ctx.fillRect(p.x - 1.6, p.y - 11.6, 3.2, 1.3);
+      ctx.fillRect(p.x - 3.2, p.y - 23.4, 6.4, 2.2);
       ctx.restore();
     }
 
     if (u.persuaded) {
-      const bob = Math.sin(clock * 5 + u.id) * 1.1;
+      const bob = Math.sin(clock * 5 + u.id) * 1.6;
       ctx.save();
       ctx.shadowColor = '#67e8f9';
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = 7;
       ctx.fillStyle = '#a5f3fc';
       ctx.beginPath();
-      ctx.arc(p.x, p.y - 16 + bob, 1.5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y - 30 + bob, 2.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
 
     if (u.kind === 'target') {
-      ctx.font = '8px serif';
-      ctx.fillText('👑', p.x, p.y - 16 + Math.sin(clock * 3) * 1);
+      ctx.font = '13px serif';
+      ctx.fillText('👑', p.x, p.y - 30 + Math.sin(clock * 3) * 1.4);
     }
 
     if (u.hp < u.maxHp && u.alive) {
       const frac = Math.max(0, u.hp / u.maxHp);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(p.x - 5, p.y - 17, 10, 1.8);
+      ctx.fillRect(p.x - 8, p.y - 31, 16, 2.4);
       ctx.fillStyle = frac > 0.5 ? '#4ade80' : frac > 0.25 ? '#fbbf24' : '#f87171';
-      ctx.fillRect(p.x - 5, p.y - 17, 10 * frac, 1.8);
+      ctx.fillRect(p.x - 8, p.y - 31, 16 * frac, 2.4);
     }
   }
 
@@ -850,15 +891,15 @@ export function initSyndicateGame(): void {
     const p = isoProject(VIEW, pickup.x, pickup.y);
     const bob = Math.sin(clock * 4 + pickup.x * 3) * 1.3;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 5 + pickup.y);
-    const halo = ctx.createRadialGradient(p.x, p.y - 3, 0, p.x, p.y - 3, 9);
+    const halo = ctx.createRadialGradient(p.x, p.y - 4, 0, p.x, p.y - 4, 11);
     halo.addColorStop(0, `rgba(253, 230, 138, ${0.35 + pulse * 0.25})`);
     halo.addColorStop(1, 'rgba(253, 230, 138, 0)');
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 3, 9, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y - 4, 11, 0, Math.PI * 2);
     ctx.fill();
-    ctx.font = '10px serif';
-    ctx.fillText('🔫', p.x, p.y - 6 + bob);
+    ctx.font = '13px serif';
+    ctx.fillText('🔫', p.x, p.y - 7 + bob);
   }
 
   function drawRooftop(x: number, y: number, i: number, height: number, palette: number) {
@@ -1099,12 +1140,12 @@ export function initSyndicateGame(): void {
       ctx.strokeStyle = shot.faction === 'player' ? '#67e8f9' : '#f87171';
       ctx.lineWidth = shot.weapon === 'minigun' ? 2 : 1.4;
       ctx.beginPath();
-      ctx.moveTo(from.x, from.y - 8);
-      ctx.lineTo(to.x, to.y - 8);
+      ctx.moveTo(from.x, from.y - 13);
+      ctx.lineTo(to.x, to.y - 13);
       ctx.stroke();
       ctx.fillStyle = '#fef9c3';
       ctx.beginPath();
-      ctx.arc(from.x, from.y - 8, 1.6, 0, Math.PI * 2);
+      ctx.arc(from.x, from.y - 13, 2, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;

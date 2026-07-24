@@ -11,7 +11,7 @@ import {
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
-  wireSoundButton,
+  wireChannelButton,
   createEffects,
   hash01,
   shadeColor
@@ -124,22 +124,49 @@ export function initSnakeGame(): void {
   });
   syncHighScore();
 
-  // Upbeat, slithery chiptune loop in C major.
+  // Lean, Nokia-era chiptune loop in C major: a fast square bleep lead over a
+  // sparse triangle bass ticking the chord roots. Two voices, no pad, no echo.
   const audio = createGameAudio({
-    tempo: 132,
-    wave: 'square',
-    melody: [
-      { freq: 523.25, beats: 0.5 },
-      { freq: 659.25, beats: 0.5 },
-      { freq: 783.99, beats: 0.5 },
-      { freq: 659.25, beats: 0.5 },
-      { freq: 587.33, beats: 0.5 },
-      { freq: 698.46, beats: 0.5 },
-      { freq: 880.0, beats: 0.5 },
-      { freq: 0, beats: 0.5 }
+    tempo: 134,
+    volume: 0.14,
+    tracks: [
+      {
+        // Bright arpeggio-driven lead — a catchy 16-note phrase over two bars.
+        wave: 'square',
+        melody: [
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 783.99, beats: 0.5 }, // G5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 440.0, beats: 0.5 }, // A4
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 493.88, beats: 0.5 }, // B4
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 783.99, beats: 0.5 }, // G5
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 0, beats: 0.5 } // rest
+        ]
+      },
+      {
+        // Sparse bass: one chord root every two beats (C, Am, G, C).
+        wave: 'triangle',
+        volume: 0.9,
+        melody: [
+          { freq: 130.81, beats: 2 }, // C3
+          { freq: 110.0, beats: 2 }, // A2
+          { freq: 98.0, beats: 2 }, // G2
+          { freq: 130.81, beats: 2 } // C3
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   function burst(x: number, y: number, color: string, count: number) {
     // Snake's pops predate the shared radial burst: uniform 40–150 px/s

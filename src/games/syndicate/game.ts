@@ -21,7 +21,7 @@ import {
   forEachTileBackToFront,
   shadeColor,
   createGameAudio,
-  wireSoundButton,
+  wireChannelButton,
   createToaster,
   createEffects,
   blink,
@@ -273,24 +273,61 @@ export function initSyndicateGame(): void {
   // The record readout shows the table's best, beaten live by the current campaign.
   recordEl.textContent = `£${board.best()}`;
 
-  // Dark, brooding cyber-noir bassline in E minor.
+  // Blade-Runner dread in E minor: a brooding low pad bed under a sparse,
+  // menacing lead, pricked by an occasional ad-screen bleep, all trailing
+  // through a feedback delay. Slow and cinematic.
   const audio = createGameAudio({
-    tempo: 96,
-    wave: 'sawtooth',
+    tempo: 88,
     volume: 0.1,
-    melody: [
-      { freq: 164.81, beats: 1 },
-      { freq: 196.0, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 246.94, beats: 1 },
-      { freq: 196.0, beats: 1 },
-      { freq: 130.81, beats: 1 },
-      { freq: 146.83, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 123.47, beats: 1 }
+    echo: { time: 0.33, feedback: 0.38, mix: 0.32 },
+    tracks: [
+      {
+        // Sustained sawtooth drone: E minor tonic, its fifth, then sixth.
+        wave: 'sawtooth',
+        envelope: 'pad',
+        detune: 10,
+        volume: 0.4,
+        melody: [
+          { freq: 82.41, beats: 4 }, // E2
+          { freq: 123.47, beats: 4 }, // B2
+          { freq: 130.81, beats: 4 }, // C3
+          { freq: 123.47, beats: 4 } // B2
+        ]
+      },
+      {
+        // Sparse, spacious lead — a few minor notes with rests between.
+        wave: 'sawtooth',
+        detune: 6,
+        volume: 0.9,
+        melody: [
+          { freq: 329.63, beats: 2 }, // E4
+          { freq: 0, beats: 2 },
+          { freq: 392.0, beats: 1 }, // G4
+          { freq: 329.63, beats: 1 }, // E4
+          { freq: 0, beats: 2 },
+          { freq: 493.88, beats: 2 }, // B4
+          { freq: 0, beats: 2 },
+          { freq: 440.0, beats: 1 }, // A4
+          { freq: 392.0, beats: 1 }, // G4
+          { freq: 0, beats: 2 }
+        ]
+      },
+      {
+        // Ad-screen flicker: mostly silence, an occasional high square blip.
+        wave: 'square',
+        volume: 0.5,
+        melody: [
+          { freq: 0, beats: 5 },
+          { freq: 1046.5, beats: 0.5 }, // C6
+          { freq: 0, beats: 7 },
+          { freq: 783.99, beats: 0.5 }, // G5
+          { freq: 0, beats: 3 }
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const squad = (): Unit[] => world.units.filter(u => u.kind === 'agent');
 

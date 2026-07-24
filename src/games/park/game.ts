@@ -26,7 +26,7 @@ import {
   rotatePoint,
   createViewRotator,
   createGameAudio,
-  wireSoundButton,
+  wireChannelButton,
   createToaster,
   createEffects,
   type IsoView,
@@ -475,22 +475,82 @@ export function initParkGame(): void {
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
-  // Bright, bouncy fairground waltz in G major.
+  // Fairground carousel waltz in G major, 3/4 — a lilting square-wave lead
+  // over a classic oom-pah-pah bass, with a warm sustained organ bed.
   const audio = createGameAudio({
-    tempo: 150,
-    wave: 'square',
-    melody: [
-      { freq: 392.0, beats: 0.5 },
-      { freq: 587.33, beats: 0.5 },
-      { freq: 783.99, beats: 0.5 },
-      { freq: 587.33, beats: 0.5 },
-      { freq: 493.88, beats: 0.5 },
-      { freq: 659.25, beats: 0.5 },
-      { freq: 987.77, beats: 0.5 },
-      { freq: 0, beats: 0.5 }
+    tempo: 156,
+    volume: 0.12,
+    echo: { time: 0.26, feedback: 0.25, mix: 0.22 },
+    tracks: [
+      {
+        // Lead: bright, lilting major melody, A (bars 1-4) then B (bars 5-8).
+        wave: 'square',
+        envelope: 'pluck',
+        detune: 7,
+        volume: 1.0,
+        melody: [
+          // Bar 1 (G)
+          { freq: 783.99, beats: 1 }, { freq: 987.77, beats: 1 }, { freq: 880.0, beats: 1 },
+          // Bar 2 (D)
+          { freq: 880.0, beats: 1 }, { freq: 739.99, beats: 1 }, { freq: 587.33, beats: 1 },
+          // Bar 3 (C)
+          { freq: 659.25, beats: 1 }, { freq: 783.99, beats: 1 }, { freq: 1046.5, beats: 1 },
+          // Bar 4 (D) — little flourish
+          { freq: 987.77, beats: 1 }, { freq: 880.0, beats: 0.5 }, { freq: 739.99, beats: 0.5 }, { freq: 880.0, beats: 1 },
+          // Bar 5 (G)
+          { freq: 783.99, beats: 1 }, { freq: 987.77, beats: 1 }, { freq: 880.0, beats: 1 },
+          // Bar 6 (D)
+          { freq: 880.0, beats: 1 }, { freq: 739.99, beats: 1 }, { freq: 587.33, beats: 1 },
+          // Bar 7 (C)
+          { freq: 659.25, beats: 1 }, { freq: 523.25, beats: 1 }, { freq: 783.99, beats: 1 },
+          // Bar 8 (D → G resolve)
+          { freq: 739.99, beats: 1 }, { freq: 880.0, beats: 1 }, { freq: 783.99, beats: 1 }
+        ]
+      },
+      {
+        // Bass: oom-pah-pah — low root on beat 1, two lighter mid tones after.
+        wave: 'triangle',
+        envelope: 'pluck',
+        volume: 0.75,
+        melody: [
+          // Bar 1 (G)
+          { freq: 98.0, beats: 1 }, { freq: 123.47, beats: 1 }, { freq: 146.83, beats: 1 },
+          // Bar 2 (D)
+          { freq: 73.42, beats: 1 }, { freq: 110.0, beats: 1 }, { freq: 146.83, beats: 1 },
+          // Bar 3 (C)
+          { freq: 65.41, beats: 1 }, { freq: 82.41, beats: 1 }, { freq: 98.0, beats: 1 },
+          // Bar 4 (D)
+          { freq: 73.42, beats: 1 }, { freq: 110.0, beats: 1 }, { freq: 146.83, beats: 1 },
+          // Bar 5 (G)
+          { freq: 98.0, beats: 1 }, { freq: 123.47, beats: 1 }, { freq: 146.83, beats: 1 },
+          // Bar 6 (D)
+          { freq: 73.42, beats: 1 }, { freq: 110.0, beats: 1 }, { freq: 146.83, beats: 1 },
+          // Bar 7 (C)
+          { freq: 65.41, beats: 1 }, { freq: 82.41, beats: 1 }, { freq: 98.0, beats: 1 },
+          // Bar 8 (D)
+          { freq: 73.42, beats: 1 }, { freq: 110.0, beats: 1 }, { freq: 185.0, beats: 1 }
+        ]
+      },
+      {
+        // Bed: sustained organ pad holding each bar's chord root.
+        wave: 'sine',
+        envelope: 'pad',
+        volume: 0.4,
+        melody: [
+          { freq: 392.0, beats: 3 }, // G
+          { freq: 293.66, beats: 3 }, // D
+          { freq: 261.63, beats: 3 }, // C
+          { freq: 293.66, beats: 3 }, // D
+          { freq: 392.0, beats: 3 }, // G
+          { freq: 293.66, beats: 3 }, // D
+          { freq: 261.63, beats: 3 }, // C
+          { freq: 293.66, beats: 3 } // D
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const makeView = (rot: Rotation): IsoView => ({
     halfW: HALF_W,

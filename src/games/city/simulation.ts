@@ -4,6 +4,7 @@
  * decay.
  */
 import { gridNeighbours, chebyshev } from '../engine/grid2d';
+import { clamp } from '../engine/math';
 import { CITY_W, CITY_H, MAX_LEVEL, DENSE_LEVEL, isZone, isRoad, type CityTile, type ZoneType } from './tiles';
 
 export const POWER_RADIUS = 7;
@@ -23,10 +24,6 @@ export const IND_JOBS_PER_LEVEL = 8;
 export const DENSITY_UNLOCK_POP = 600;
 /** Densifying needs genuinely hot demand, not a merely positive bar. */
 export const DENSE_DEMAND_MIN = 20;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 function coverage(tiles: CityTile[], sourceType: CityTile['type'], radius: number): boolean[] {
   const sources: number[] = [];

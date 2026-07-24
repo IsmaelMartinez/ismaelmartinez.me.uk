@@ -9,8 +9,7 @@
  * Music is multi-voice: a game supplies parallel `tracks` (a lead, a bass, a
  * pad, an arpeggio…) that share one tempo, each advancing on its own note
  * lengths, with its own wave, envelope, octave and optional detuned twin for
- * warmth, and the whole mix can run through a feedback-delay echo send. A bare
- * `melody` is still accepted and wrapped as a single track.
+ * warmth, and the whole mix can run through a feedback-delay echo send.
  *
  * Music and sound effects mute independently, each under its own global
  * localStorage key, so a preference set in one cabinet carries to the rest.
@@ -60,14 +59,10 @@ export interface EchoOptions {
 }
 
 export interface GameAudioOptions {
-  /** Parallel voices; all share `tempo`. Preferred over `melody`. */
-  tracks?: Track[];
-  /** Legacy single voice; wrapped into one track when `tracks` is absent. */
-  melody?: Note[];
+  /** Parallel voices; all share `tempo`. */
+  tracks: Track[];
   /** Tempo in beats per minute. Defaults to 120. */
   tempo?: number;
-  /** Oscillator type used for the `melody` shim. Defaults to 'square'. */
-  wave?: OscillatorType;
   /** Master music volume 0–1. Defaults to 0.14 (chiptune sits politely under play). */
   volume?: number;
   /** Optional echo send on the whole music mix. */
@@ -170,11 +165,9 @@ interface NormTrack {
   detune: number;
 }
 
-/** Fills in per-track defaults and folds a bare `melody` into one track. */
+/** Fills in per-track defaults. */
 function normalizeTracks(options: GameAudioOptions): NormTrack[] {
-  const raw: Track[] =
-    options.tracks ?? (options.melody ? [{ melody: options.melody, wave: options.wave }] : []);
-  return raw.map(t => ({
+  return options.tracks.map(t => ({
     melody: t.melody,
     wave: t.wave ?? 'square',
     volume: t.volume ?? 1,
@@ -307,6 +300,14 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       while (v.next < horizon) {
         const note = track.melody[v.idx];
         const dur = note.beats * secondsPerBeat;
+        // A non-positive beat length would never advance the cursor past the
+        // horizon, spinning this loop forever; skip the note but still step the
+        // cursor by a beat so a bad authoring value can't freeze the tab.
+        if (dur <= 0) {
+          v.next += secondsPerBeat;
+          v.idx = (v.idx + 1) % track.melody.length;
+          continue;
+        }
         // When muted, keep each cursor advancing but skip oscillator creation so
         // we don't burn CPU synthesising silent tones; timing stays in sync on unmute.
         if (!musicMuted) {

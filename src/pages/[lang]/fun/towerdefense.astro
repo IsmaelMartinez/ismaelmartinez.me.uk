@@ -1,6 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -38,24 +39,7 @@ const t = useTranslations(lang);
       >
         <div class="game-header">
           <h1><span class="td-emoji">🏰</span> {t('fun.towerdefense.title')}</h1>
-          <button
-            id="music-btn"
-            class="btn sound-btn"
-            data-glyph-on="🎵"
-            data-glyph-off="🎵"
-            aria-label={t('fun.arcade.musicOn')}
-            data-music-on={t('fun.arcade.musicOn')}
-            data-music-off={t('fun.arcade.musicOff')}
-          >🎵</button>
-          <button
-            id="sfx-btn"
-            class="btn sound-btn"
-            data-glyph-on="🔊"
-            data-glyph-off="🔇"
-            aria-label={t('fun.arcade.sfxOn')}
-            data-sfx-on={t('fun.arcade.sfxOn')}
-            data-sfx-off={t('fun.arcade.sfxOff')}
-          >🔊</button>
+          <SoundToggles lang={lang} />
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.towerdefense.funds')}</span>

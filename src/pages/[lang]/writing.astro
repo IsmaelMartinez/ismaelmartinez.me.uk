@@ -22,7 +22,7 @@ const sortedArticles = articles.sort((a, b) =>
 );
 ---
 
-<Layout title="Writing" lang={lang}>
+<Layout title={t('nav.writing')} description={t('section.writing.description')} lang={lang}>
   <section class="section">
     <div class="container">
       <header class="page-header">
@@ -59,7 +59,7 @@ const sortedArticles = articles.sort((a, b) =>
               Medium
             </h3>
             <p class="platform-description">
-              In-depth articles about software development, architecture, and technology.
+              {t('article.mediumBlurb')}
             </p>
             <a href="https://medium.com/@ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
               {t('common.viewOnMedium')} →
@@ -72,7 +72,7 @@ const sortedArticles = articles.sort((a, b) =>
               Dev.to
             </h3>
             <p class="platform-description">
-              Technical tutorials, tips, and community discussions.
+              {t('article.devtoBlurb')}
             </p>
             <a href="https://dev.to/ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
               {t('common.viewOnDevto')} →

@@ -27,7 +27,7 @@ const latestArticles = [...articles]
   .slice(0, 3);
 ---
 
-<Layout title="Home" lang={lang}>
+<Layout title={t('nav.home')} description={t('hero.description')} lang={lang}>
   <script slot="head" type="application/ld+json" set:html={toJsonLd(personJsonLd)} />
   <Hero lang={lang} />
 

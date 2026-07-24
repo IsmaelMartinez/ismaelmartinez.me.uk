@@ -5,9 +5,7 @@
  * the terrain surface at column x. Solid ground occupies y >= ground[x].
  */
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+import { clamp } from '../engine/math';
 
 /**
  * The selectable battlefield silhouettes. `hills` is the original rolling

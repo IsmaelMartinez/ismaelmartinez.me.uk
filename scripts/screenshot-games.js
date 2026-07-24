@@ -23,6 +23,10 @@
  * (e.g. a local Playwright install) as needed. The scripted click
  * coordinates assume the seeded procedural terrain — if a game's
  * generation code changes, re-derive them from a fresh baseline capture.
+ *
+ * Excluded from Snyk Code (SAST) via `.snyk`: this is a dev-only tool, already
+ * loopback-bound (127.0.0.1) and path-contained to ./dist. See `.snyk` for the
+ * per-finding rationale.
  */
 import { chromium } from 'playwright-core';
 import http from 'node:http';

@@ -17,10 +17,11 @@ import {
   createEffects,
   shadeColor
 } from '../engine';
-import { generateTerrain, surfaceYAt, carveCrater, type ArenaType } from './terrain';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, isSolidColumn, type ArenaType } from './terrain';
 import {
   launchProjectile,
   stepProjectile,
+  bounceOffSurface,
   stepFall,
   explosionDamage,
   matchScore,
@@ -37,6 +38,8 @@ const BARREL_LEN = 24;
 const EXPLOSION_TIME = 0.55;
 const DIRECT_HIT_RADIUS = 14;
 const MAX_WIND = 50;
+/** Speed a Skipper shell keeps after each ground bounce (0..1). */
+const BOUNCE_RESTITUTION = 0.62;
 const WINS_PER_MATCH = 3;
 const CPU_THINK_TIME = 1.1;
 const SAFE_DROP = 30; // px a tank can fall without damage
@@ -62,6 +65,8 @@ interface Tank {
 interface Shot {
   p: Projectile;
   weapon: WeaponId;
+  /** Ground bounces left before this shell detonates (Skipper only). */
+  bounces: number;
   canSplit: boolean;
   flightTime: number;
   trail: { x: number; y: number }[];
@@ -150,6 +155,9 @@ export function initTanksGame(): void {
   // scene.rebuild can join it in onApply; paintTerrain guards the empty
   // pre-round ground.
   let ground: number[] = [];
+  // Uncarveable columns for the current arena (the bunker pillar); empty
+  // everywhere else. Rolled together with `ground` so they never disagree.
+  let solid: boolean[] = [];
   const scene = createStaticLayer(WIDTH, HEIGHT, paintScene);
   const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
     onApply: scene.rebuild
@@ -233,6 +241,31 @@ export function initTanksGame(): void {
     target.moveTo(0, ground[0]);
     for (let x = 1; x < WIDTH; x++) target.lineTo(x, ground[x]);
     target.stroke();
+
+    // Indestructible cover: overlay each contiguous run of solid columns in
+    // stone, so the bunker pillar reads as rock the crater can't touch rather
+    // than the carveable dirt around it.
+    if (solid.some(Boolean)) {
+      let x = 0;
+      while (x < WIDTH) {
+        if (!solid[x]) { x++; continue; }
+        let end = x;
+        let topY = ground[x];
+        while (end < WIDTH && solid[end]) { topY = Math.min(topY, ground[end]); end++; }
+        const stone = target.createLinearGradient(0, topY, 0, HEIGHT);
+        stone.addColorStop(0, '#6b7280');
+        stone.addColorStop(1, '#3b414b');
+        target.fillStyle = stone;
+        target.fillRect(x, topY, end - x, HEIGHT - topY);
+        target.strokeStyle = '#9aa3af';
+        target.lineWidth = 2;
+        target.beginPath();
+        target.moveTo(x, topY);
+        target.lineTo(end, topY);
+        target.stroke();
+        x = end;
+      }
+    }
   }
 
   // The baked scene: backdrop first, then the terrain painted over it, so the
@@ -354,8 +387,14 @@ export function initTanksGame(): void {
     };
   }
 
-  function newRound() {
+  // Roll a fresh heightmap and its uncarveable mask for the current arena.
+  function rollTerrain() {
     ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+    solid = arenaSolid(arena, WIDTH);
+  }
+
+  function newRound() {
+    rollTerrain();
     scene.rebuild();
     const p1x = 70 + Math.random() * 90;
     const p2x = WIDTH - 70 - Math.random() * 90;
@@ -415,6 +454,7 @@ export function initTanksGame(): void {
       {
         p: launchProjectile(tip.x, tip.y, tank.angle, tank.power),
         weapon: tank.weapon,
+        bounces: weapon.bounces ?? 0,
         canSplit: weapon.cluster > 1,
         flightTime: 0,
         trail: []
@@ -452,7 +492,7 @@ export function initTanksGame(): void {
     const weapon = WEAPONS[weaponId];
     explosions.push({ x, y, t: 0, radius: weapon.radius });
     audio.playSfx('explosion');
-    carveCrater(ground, HEIGHT, x, y, weapon.radius);
+    carveCrater(ground, HEIGHT, x, y, weapon.radius, solid);
     scene.rebuild(); // re-bake the reshaped terrain
     spawnDirt(x, y, weapon.radius);
     shake = Math.min(0.6, shake + weapon.radius / 160);
@@ -536,6 +576,7 @@ export function initTanksGame(): void {
         ...parts.map(part => ({
           p: part,
           weapon: shot.weapon,
+          bounces: 0,
           canSplit: false,
           flightTime: shot.flightTime,
           trail: [] as { x: number; y: number }[]
@@ -557,6 +598,15 @@ export function initTanksGame(): void {
       return false;
     }
     if (p.x >= 0 && p.x < WIDTH && p.y >= surfaceYAt(ground, p.x)) {
+      if (shot.bounces > 0 && !isSolidColumn(solid, p.x, WIDTH)) {
+        // Skip off the dirt: reflect upward, bleed speed, keep flying. A solid
+        // column (the bunker pillar) is not skippable, so the shot detonates
+        // against it instead — that is what makes the cover matter.
+        shot.bounces--;
+        bounceOffSurface(p, surfaceYAt(ground, p.x), BOUNCE_RESTITUTION);
+        audio.playSfx('blip');
+        return true;
+      }
       impactAt(p.x, p.y, shot.weapon);
       return false;
     }
@@ -784,6 +834,21 @@ export function initTanksGame(): void {
       ctx.lineTo(4.5, 2.2);
       ctx.closePath();
       ctx.fill();
+    } else if (shot.weapon === 'bounce') {
+      // Skipper: a round rubberised ball that skips off the ground.
+      ctx.fillStyle = '#65a30d';
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#bef264'; // highlight
+      ctx.beginPath();
+      ctx.arc(-1.5, -1.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#365314'; // seam
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(2.5, 0, 4.5, 2.3, 4, false);
+      ctx.stroke();
     } else {
       // Missile: a finned nose-cone shell.
       ctx.fillStyle = '#eab308'; // tail fins
@@ -989,7 +1054,7 @@ export function initTanksGame(): void {
     if (!isHumanTurn() || isTextEntry(e.target)) return;
     if (gameKeys.has(e.key)) e.preventDefault();
     const tank = tanks[current];
-    const weaponIdx = ['1', '2', '3'].indexOf(e.key);
+    const weaponIdx = ['1', '2', '3', '4'].indexOf(e.key);
     if (weaponIdx >= 0) {
       const id = WEAPON_IDS[weaponIdx];
       if (tank.ammo[id] > 0) {
@@ -1042,7 +1107,7 @@ export function initTanksGame(): void {
   });
 
   const isArena = (v: string | undefined): v is ArenaType =>
-    v === 'hills' || v === 'canyon' || v === 'mesa' || v === 'ridges';
+    v === 'hills' || v === 'canyon' || v === 'mesa' || v === 'ridges' || v === 'bunker';
   arenaButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const picked = btn.dataset.arena;
@@ -1052,7 +1117,7 @@ export function initTanksGame(): void {
         other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
       }
       // Repaint the idle backdrop so the picked arena previews immediately.
-      ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+      rollTerrain();
       scene.rebuild();
     });
   });
@@ -1071,7 +1136,7 @@ export function initTanksGame(): void {
   });
 
   // Idle backdrop so the canvas isn't empty behind the start overlay
-  ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+  rollTerrain();
   scene.rebuild();
   syncControls();
   createGameLoop(update, render).start();

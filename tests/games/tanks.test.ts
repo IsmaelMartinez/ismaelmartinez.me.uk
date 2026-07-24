@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { generateTerrain, surfaceYAt, carveCrater } from '../../src/games/tanks/terrain';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, bunkerColumns, isSolidColumn } from '../../src/games/tanks/terrain';
 import {
   launchProjectile,
   stepProjectile,
+  bounceOffSurface,
   simulateShot,
   explosionDamage,
   stepFall,
@@ -68,7 +69,7 @@ describe('terrain', () => {
 });
 
 describe('arenas', () => {
-  const ARENAS = ['hills', 'canyon', 'mesa', 'ridges'] as const;
+  const ARENAS = ['hills', 'canyon', 'mesa', 'ridges', 'bunker'] as const;
 
   it('leaves the default hills arena identical to the original three-wave generator', () => {
     // A standalone copy of the pre-arena generator. hills must match it byte for
@@ -162,9 +163,77 @@ describe('arenas', () => {
       }
     }
   });
+
+  it('marks the bunker pillar solid and every other arena fully carveable', () => {
+    const { x0, x1 } = bunkerColumns(WIDTH);
+    const bunkerSolid = arenaSolid('bunker', WIDTH);
+    expect(bunkerSolid).toHaveLength(WIDTH);
+    for (let x = 0; x < WIDTH; x++) {
+      expect(bunkerSolid[x], `col ${x}`).toBe(x >= x0 && x <= x1);
+    }
+    expect(bunkerSolid[0]).toBe(false);
+    expect(bunkerSolid[WIDTH - 1]).toBe(false);
+    for (const arena of ['hills', 'canyon', 'mesa', 'ridges'] as const) {
+      expect(arenaSolid(arena, WIDTH).some(Boolean), arena).toBe(false);
+    }
+  });
+
+  it('raises a flat tall pillar in the bunker arena, base terrain unchanged', () => {
+    const { x0, x1 } = bunkerColumns(WIDTH);
+    const hills = generateTerrain(WIDTH, HEIGHT, seededRandom(5), 'hills');
+    const bunker = generateTerrain(WIDTH, HEIGHT, seededRandom(5), 'bunker');
+    // Every pillar column is a flat top near the ceiling.
+    for (let x = x0; x <= x1; x++) {
+      expect(bunker[x], `pillar col ${x}`).toBeCloseTo(HEIGHT * 0.34, 5);
+    }
+    // The pillar top sits high (small y); the base outside it is untouched.
+    expect(bunker[x0]).toBeLessThan(HEIGHT * 0.5);
+    expect(bunker[0]).toBe(hills[0]);
+    expect(bunker[x0 - 5]).toBe(hills[x0 - 5]);
+    expect(bunker[x1 + 5]).toBe(hills[x1 + 5]);
+  });
+
+  it('never carves a solid column, only its carveable neighbours', () => {
+    const width = 60;
+    const ground = new Array<number>(width).fill(300);
+    const solid = new Array<boolean>(width).fill(false);
+    solid[30] = true; // one indestructible column
+    const before = [...ground];
+    carveCrater(ground, 450, 30, 300, 8, solid);
+    // The solid column rides out a direct hit...
+    expect(ground[30]).toBe(before[30]);
+    // ...while its carveable neighbours inside the blast are dug down.
+    expect(ground[28]).toBeGreaterThan(before[28]);
+    expect(ground[32]).toBeGreaterThan(before[32]);
+  });
+
+  it('reports the bunker pillar as cover for the Skipper interlock', () => {
+    // isSolidColumn is the load-bearing half of the bounce interlock: a skip is
+    // denied on a solid column (the pillar) and allowed on open dirt.
+    const solid = arenaSolid('bunker', WIDTH);
+    const { x0, x1 } = bunkerColumns(WIDTH);
+    const mid = Math.round((x0 + x1) / 2);
+    expect(isSolidColumn(solid, mid, WIDTH)).toBe(true); // pillar stops the skip
+    expect(isSolidColumn(solid, mid + 0.4, WIDTH)).toBe(true); // rounds into the pillar
+    expect(isSolidColumn(solid, 40, WIDTH)).toBe(false); // open dirt, the shot skips
+    // Out-of-range x clamps into the field rather than reading undefined.
+    expect(isSolidColumn(solid, -10, WIDTH)).toBe(false);
+    expect(isSolidColumn(solid, WIDTH + 50, WIDTH)).toBe(false);
+    // Every open arena is cover-free everywhere.
+    expect(isSolidColumn(arenaSolid('hills', WIDTH), 400, WIDTH)).toBe(false);
+  });
 });
 
 describe('physics', () => {
+  it('bounces a shell off the surface: reflects upward and bleeds speed', () => {
+    const p = { x: 100, y: 305, vx: 40, vy: 60 }; // falling into the ground
+    bounceOffSurface(p, 300, 0.6);
+    expect(p.y).toBe(299); // lifted just clear of the surface
+    expect(p.vy).toBeCloseTo(-36, 5); // -|60| * 0.6, now heading up
+    expect(p.vx).toBeCloseTo(24, 5); // 40 * 0.6
+    expect(p.vy).toBeLessThan(0);
+  });
+
   it('launches straight up at 90 degrees', () => {
     const p = launchProjectile(100, 100, 90, 50);
     expect(p.vx).toBeCloseTo(0, 5);
@@ -412,6 +481,14 @@ describe('weapons', () => {
       expect(WEAPONS[id].maxDamage).toBeGreaterThan(0);
       expect(WEAPONS[id].cluster).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('stocks the Skipper as a scarce bouncing special', () => {
+    expect(WEAPON_IDS).toContain('bounce');
+    expect(freshAmmo().bounce).toBeGreaterThan(0);
+    expect(WEAPONS.bounce.bounces).toBeGreaterThan(0);
+    // Lighter than the plain missile, to pay for its reach.
+    expect(WEAPONS.bounce.maxDamage).toBeLessThan(WEAPONS.missile.maxDamage);
   });
 
   it('splits a cluster into a symmetric horizontal fan', () => {

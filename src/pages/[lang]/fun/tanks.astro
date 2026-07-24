@@ -14,7 +14,8 @@ const t = useTranslations(lang);
 const weapons = [
   { id: 'missile', emoji: '🚀', label: t('fun.tanks.weaponMissile') },
   { id: 'heavy', emoji: '💣', label: t('fun.tanks.weaponHeavy') },
-  { id: 'mirv', emoji: '🎇', label: t('fun.tanks.weaponMirv') }
+  { id: 'mirv', emoji: '🎇', label: t('fun.tanks.weaponMirv') },
+  { id: 'bounce', emoji: '🎾', label: t('fun.tanks.weaponBounce') }
 ];
 ---
 
@@ -81,6 +82,7 @@ const weapons = [
                   <button type="button" class="arena-btn" data-arena="canyon" aria-pressed="false">{t('fun.tanks.arenaCanyon')}</button>
                   <button type="button" class="arena-btn" data-arena="mesa" aria-pressed="false">{t('fun.tanks.arenaMesa')}</button>
                   <button type="button" class="arena-btn" data-arena="ridges" aria-pressed="false">{t('fun.tanks.arenaRidges')}</button>
+                  <button type="button" class="arena-btn" data-arena="bunker" aria-pressed="false">{t('fun.tanks.arenaBunker')}</button>
                 </div>
               </div>
               <div class="mode-buttons">

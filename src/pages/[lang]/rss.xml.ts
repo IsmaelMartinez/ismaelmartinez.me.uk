@@ -28,6 +28,7 @@ export async function GET(context: APIContext) {
       link: `/${lang}/articles/${article.id.replace(`${lang}/`, '')}/`,
       categories: article.data.tags,
     })),
-    customData: `<language>${lang}</language>`,
+    // ISO 639-1 for the feed language; the Catalan route segment is `cat`.
+    customData: `<language>${lang === 'cat' ? 'ca' : lang}</language>`,
   });
 }

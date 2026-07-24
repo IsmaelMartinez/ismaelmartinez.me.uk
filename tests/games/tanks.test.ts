@@ -67,6 +67,67 @@ describe('terrain', () => {
   });
 });
 
+describe('arenas', () => {
+  const ARENAS = ['hills', 'canyon', 'mesa', 'ridges'] as const;
+
+  it('leaves the default hills arena byte-identical to the unparameterised generator', () => {
+    for (const seed of [1, 7, 42, 99]) {
+      const withArena = generateTerrain(WIDTH, HEIGHT, seededRandom(seed), 'hills');
+      const without = generateTerrain(WIDTH, HEIGHT, seededRandom(seed));
+      expect(withArena).toEqual(without);
+    }
+  });
+
+  it('keeps every arena within the field bounds', () => {
+    for (const arena of ARENAS) {
+      for (let seed = 0; seed < 30; seed++) {
+        const ground = generateTerrain(WIDTH, HEIGHT, seededRandom(seed), arena);
+        expect(ground).toHaveLength(WIDTH);
+        for (const y of ground) {
+          expect(y).toBeGreaterThanOrEqual(HEIGHT * 0.3);
+          expect(y).toBeLessThanOrEqual(HEIGHT * 0.92);
+        }
+      }
+    }
+  });
+
+  it('reshapes each non-hills arena into a distinct silhouette', () => {
+    for (const arena of ['canyon', 'mesa', 'ridges'] as const) {
+      const hills = generateTerrain(WIDTH, HEIGHT, seededRandom(3), 'hills');
+      const shaped = generateTerrain(WIDTH, HEIGHT, seededRandom(3), arena);
+      let differing = 0;
+      for (let x = 0; x < WIDTH; x++) {
+        if (Math.abs(shaped[x] - hills[x]) > 1) differing++;
+      }
+      // A real reshape moves a large fraction of the columns.
+      expect(differing).toBeGreaterThan(WIDTH * 0.3);
+    }
+  });
+
+  it('leaves every arena winnable: the CPU can land a shot on the far tank', () => {
+    // Tanks spawn near opposite edges (see newRound); the widest separation is
+    // the stress case, the longest arc over any central obstacle. If the CPU's
+    // grid search can find a landing shot here, closer spawns are only easier.
+    const leftX = 70;
+    const rightX = WIDTH - 70;
+    for (const arena of ARENAS) {
+      for (let seed = 0; seed < 24; seed++) {
+        const ground = generateTerrain(WIDTH, HEIGHT, seededRandom(seed), arena);
+        const left = { x: leftX, y: surfaceYAt(ground, leftX) };
+        const right = { x: rightX, y: surfaceYAt(ground, rightX) };
+        for (const [from, target] of [[left, right], [right, left]] as const) {
+          // difficulty 1 => zero wobble, so this is the CPU's best grid shot.
+          const shot = chooseAiShot(ground, WIDTH, HEIGHT, from, target, 0, 1, seededRandom(seed));
+          const impact = simulateShot(ground, WIDTH, HEIGHT, from.x, from.y, shot.angle, shot.power, 0);
+          expect(impact).toBeTruthy();
+          const dist = Math.hypot(impact!.x - target.x, impact!.y - target.y);
+          expect(dist).toBeLessThanOrEqual(80);
+        }
+      }
+    }
+  });
+});
+
 describe('physics', () => {
   it('launches straight up at 90 degrees', () => {
     const p = launchProjectile(100, 100, 90, 50);

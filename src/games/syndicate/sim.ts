@@ -245,6 +245,15 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
   );
   const hostiles = world.units.filter(u => u.alive && u.faction === 'hostile');
 
+  // Armed player units (agents and armed followers) shoot the nearest visible
+  // hostile the moment their weapon comes off cooldown.
+  const autoFire = (unit: Unit): void => {
+    if (unit.weapon && unit.cooldown <= 0) {
+      const target = visibleTarget(world, unit, hostiles, WEAPONS[unit.weapon].range);
+      if (target) fire(world, unit, target, events);
+    }
+  };
+
   for (const unit of world.units) {
     if (!unit.alive) continue;
     unit.cooldown = Math.max(0, unit.cooldown - dt);
@@ -263,10 +272,7 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
 
     if (unit.kind === 'agent') {
       // Movement is the player's; agents only auto-fire.
-      if (unit.weapon && unit.cooldown <= 0) {
-        const target = visibleTarget(world, unit, hostiles, WEAPONS[unit.weapon].range);
-        if (target) fire(world, unit, target, events);
-      }
+      autoFire(unit);
     } else if (unit.persuaded) {
       // Unarmed followers peel off to loot a nearby weapon; armed ones stick
       // with the squad and lay down fire — just like the original's mobs.
@@ -280,10 +286,7 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
       } else {
         follow(world, unit, agents);
       }
-      if (unit.weapon && unit.cooldown <= 0) {
-        const target = visibleTarget(world, unit, hostiles, WEAPONS[unit.weapon].range);
-        if (target) fire(world, unit, target, events);
-      }
+      autoFire(unit);
     } else if (unit.kind === 'vip') {
       // Pinned where the contract left it until an agent arrives; from then
       // on it trails the squad on the same routine persuaded minds use.

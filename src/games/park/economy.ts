@@ -3,14 +3,11 @@
  * staff wage bill that reintroduces late-game failure pressure.
  */
 import { BUILDINGS, zoneDiscountFactor, type TileType } from './grid';
+import { clamp } from '../engine/math';
 
 /** Seconds of game time per day — the canonical clock the wage/revenue maths
  *  share with game.ts's day loop (imported there as DAY_LENGTH). */
 export const DAY_SECONDS = 24;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 /**
  * Park rating 0–100: mostly average guest happiness, with a small bonus for

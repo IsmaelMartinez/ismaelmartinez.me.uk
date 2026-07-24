@@ -6,6 +6,7 @@
  */
 import { simulateShot } from './physics';
 import type { WeaponId } from './weapons';
+import { clamp } from '../engine/math';
 
 export interface AiShot {
   angle: number;
@@ -57,10 +58,6 @@ export function cpuPickWeapon(
   if (ammo.heavy > 0 && targetHp > 45 && random() < 0.6) return 'heavy';
   if (ammo.mirv > 0 && range > 360 && random() < 0.5) return 'mirv';
   return 'missile';
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 export function chooseAiShot(

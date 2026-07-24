@@ -15,7 +15,8 @@ import {
   createGameAudio,
   wireChannelButton,
   createEffects,
-  shadeColor
+  shadeColor,
+  clamp
 } from '../engine';
 import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, isSolidColumn, type ArenaType } from './terrain';
 import {
@@ -1022,9 +1023,6 @@ export function initTanksGame(): void {
   }
 
   // --- Input wiring ---
-
-  const clamp = (value: number, min: number, max: number) =>
-    Math.min(max, Math.max(min, value));
 
   // Drag anywhere on the battlefield to aim: the vector from the turret to
   // the pointer sets angle and power. Touch-friendly; sliders fine-tune.

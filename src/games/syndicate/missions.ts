@@ -230,14 +230,19 @@ export function spawnMission(
     civilian.tint = Math.floor(random() * 6);
     units.push(civilian);
   }
+  // Guards dug in around an anchor tile: the same ring used by the executive's
+  // lair, the escort asset's holding spot, and the contested extraction pad.
+  const placeGuardRing = (anchor: number): void => {
+    const ring = spreadTargets(tiles, anchor, spec.guards + 1);
+    for (let n = 0; n < spec.guards; n++) {
+      units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? anchor, MAP_W, spec.guardWeapon));
+    }
+  };
   if (spec.objective === 'assassinate') {
     // The executive holes up far from the insertion point, ringed by guards.
     const lair = remoteTile(walkable, spawnX, spawnY, 18, random);
     units.push(createUnit(nextId++, 'target', lair, MAP_W, 'pistol'));
-    const ring = spreadTargets(tiles, lair, spec.guards + 1);
-    for (let n = 0; n < spec.guards; n++) {
-      units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? lair, MAP_W, spec.guardWeapon));
-    }
+    placeGuardRing(lair);
   } else if (spec.objective === 'escort') {
     // The asset is pinned deep in the city behind the same guard ring the
     // executive's lair uses, so the squad has to fight in for it and then
@@ -255,18 +260,12 @@ export function spawnMission(
       holding = remoteTile(walkable, spawnX, spawnY, 18, random);
     }
     units.push(createUnit(nextId++, 'vip', holding, MAP_W));
-    const ring = spreadTargets(tiles, holding, spec.guards + 1);
-    for (let n = 0; n < spec.guards; n++) {
-      units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? holding, MAP_W, spec.guardWeapon));
-    }
+    placeGuardRing(holding);
   } else if (spec.objective === 'secure') {
     // The landing zone is contested — guards dig in around the extraction pad
     // (the same ring the executive's lair uses), so the squad has to fight in
     // and hold it rather than just sprint to the corner.
-    const ring = spreadTargets(tiles, extraction, spec.guards + 1);
-    for (let n = 0; n < spec.guards; n++) {
-      units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? extraction, MAP_W, spec.guardWeapon));
-    }
+    placeGuardRing(extraction);
   } else {
     for (let n = 0; n < spec.guards; n++) {
       units.push(createUnit(nextId++, 'guard', remoteTile(walkable, spawnX, spawnY, 10, random), MAP_W, spec.guardWeapon));

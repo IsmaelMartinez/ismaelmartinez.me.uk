@@ -70,11 +70,41 @@ describe('terrain', () => {
 describe('arenas', () => {
   const ARENAS = ['hills', 'canyon', 'mesa', 'ridges'] as const;
 
-  it('leaves the default hills arena byte-identical to the unparameterised generator', () => {
+  it('leaves the default hills arena identical to the original three-wave generator', () => {
+    // A standalone copy of the pre-arena generator. hills must match it byte for
+    // byte: same random() draws in the same order, no reshape. This guards the
+    // shipped terrain against a future edit accidentally routing hills through a
+    // reshape (a plain `generateTerrain(...,'hills') === generateTerrain(...)`
+    // check can't, since 'hills' is the default arg — it would compare hills to
+    // itself).
+    function reference(width: number, height: number, random: () => number): number[] {
+      const ground = new Array<number>(width);
+      const base = height * 0.65;
+      const waves = [
+        { amp: height * (0.08 + random() * 0.1), freq: 0.5 + random(), phase: random() * Math.PI * 2 },
+        { amp: height * (0.04 + random() * 0.06), freq: 2 + random() * 2, phase: random() * Math.PI * 2 },
+        { amp: height * (0.02 + random() * 0.03), freq: 5 + random() * 4, phase: random() * Math.PI * 2 }
+      ];
+      for (let x = 0; x < width; x++) {
+        const tx = (x / width) * Math.PI * 2;
+        let y = base;
+        for (const wave of waves) y += wave.amp * Math.sin(tx * wave.freq + wave.phase);
+        ground[x] = Math.min(height * 0.92, Math.max(height * 0.3, y));
+      }
+      return ground;
+    }
     for (const seed of [1, 7, 42, 99]) {
-      const withArena = generateTerrain(WIDTH, HEIGHT, seededRandom(seed), 'hills');
-      const without = generateTerrain(WIDTH, HEIGHT, seededRandom(seed));
-      expect(withArena).toEqual(without);
+      expect(generateTerrain(WIDTH, HEIGHT, seededRandom(seed), 'hills')).toEqual(
+        reference(WIDTH, HEIGHT, seededRandom(seed))
+      );
+    }
+  });
+
+  it('draws the same nine-wave random sequence for every arena (reshape adds no draws)', () => {
+    for (const arena of ARENAS) {
+      let draws = 0;
+      generateTerrain(WIDTH, HEIGHT, () => { draws++; return 0.5; }, arena);
+      expect(draws, arena).toBe(9);
     }
   });
 
@@ -105,23 +135,29 @@ describe('arenas', () => {
   });
 
   it('leaves every arena winnable: the CPU can land a shot on the far tank', () => {
-    // Tanks spawn near opposite edges (see newRound); the widest separation is
-    // the stress case, the longest arc over any central obstacle. If the CPU's
-    // grid search can find a landing shot here, closer spawns are only easier.
-    const leftX = 70;
-    const rightX = WIDTH - 70;
+    // newRound spawns tanks at 70 + random()*90 and WIDTH-70-random()*90, so the
+    // real range runs from the widest separation (70 / WIDTH-70) to the closest
+    // (160 / WIDTH-160). Test both extremes across every arena: if the CPU's
+    // grid search finds a landing shot at both ends of the envelope, every spawn
+    // in between is covered.
+    const SPAWN_PAIRS = [
+      [70, WIDTH - 70],
+      [160, WIDTH - 160]
+    ];
     for (const arena of ARENAS) {
-      for (let seed = 0; seed < 24; seed++) {
-        const ground = generateTerrain(WIDTH, HEIGHT, seededRandom(seed), arena);
-        const left = { x: leftX, y: surfaceYAt(ground, leftX) };
-        const right = { x: rightX, y: surfaceYAt(ground, rightX) };
-        for (const [from, target] of [[left, right], [right, left]] as const) {
-          // difficulty 1 => zero wobble, so this is the CPU's best grid shot.
-          const shot = chooseAiShot(ground, WIDTH, HEIGHT, from, target, 0, 1, seededRandom(seed));
-          const impact = simulateShot(ground, WIDTH, HEIGHT, from.x, from.y, shot.angle, shot.power, 0);
-          expect(impact).toBeTruthy();
-          const dist = Math.hypot(impact!.x - target.x, impact!.y - target.y);
-          expect(dist).toBeLessThanOrEqual(80);
+      for (const [leftX, rightX] of SPAWN_PAIRS) {
+        for (let seed = 0; seed < 24; seed++) {
+          const ground = generateTerrain(WIDTH, HEIGHT, seededRandom(seed), arena);
+          const left = { x: leftX, y: surfaceYAt(ground, leftX) };
+          const right = { x: rightX, y: surfaceYAt(ground, rightX) };
+          for (const [from, target] of [[left, right], [right, left]] as const) {
+            // difficulty 1 => zero wobble, so this is the CPU's best grid shot.
+            const shot = chooseAiShot(ground, WIDTH, HEIGHT, from, target, 0, 1, seededRandom(seed));
+            const impact = simulateShot(ground, WIDTH, HEIGHT, from.x, from.y, shot.angle, shot.power, 0);
+            expect(impact).toBeTruthy();
+            const dist = Math.hypot(impact!.x - target.x, impact!.y - target.y);
+            expect(dist).toBeLessThanOrEqual(80);
+          }
         }
       }
     }

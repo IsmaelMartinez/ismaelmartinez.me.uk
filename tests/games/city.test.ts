@@ -717,9 +717,11 @@ describe('city chaos — tornado', () => {
   });
 
   it('flattens civic buildings, tears out trees, and spares power/roads/water', () => {
-    const school = { type: 'school' as const, level: 0 };
-    expect(wreckTile(school)).toBe(true);
-    expect(school.type).toBe('rubble');
+    for (const type of ['school', 'firehouse', 'police', 'park'] as const) {
+      const civic = { type, level: 0 };
+      expect(wreckTile(civic), type).toBe(true);
+      expect(civic.type).toBe('rubble');
+    }
     const tree = { type: 'tree' as const, level: 0 };
     expect(wreckTile(tree)).toBe(true);
     expect(tree.type).toBe('empty');

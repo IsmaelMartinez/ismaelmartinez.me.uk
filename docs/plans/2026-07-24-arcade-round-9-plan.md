@@ -227,4 +227,93 @@ before the city is genuinely large, raise `CRIME_ONSET_POP` or lower
 
 ## Execution notes (2026-07-24)
 
-_(filled in as goals land)_
+Both goals landed, order G1 then G2, one commit each, full bar after each
+(`lint + typecheck + build + test + check-links`; 575 to 584 tests over the
+round). This round was run autonomously by the delegate: subagents did the two
+cold-cabinet audits and the final review, but the G1 implementation subagent
+stalled on a watchdog timeout with a clean tree, so both goals were implemented
+directly rather than retrying a hung agent. The gates were decided on the
+recommended option in the plan above, not held for an owner pass. No cabinet's
+standing changed, so the two-shelf floor is untouched; both targets stay in the
+Back catalogue.
+
+- **G1 — Tank Duel arenas.** `generateTerrain` gained an `ArenaType` parameter
+  and three reshape profiles (canyon, mesa, ridges) alongside the original
+  hills. The byte-identical contract held exactly as designed: hills consumes
+  the same nine `random()` draws in the same order and returns before any
+  reshape, so the shipped game is unchanged behind the default (proven by a unit
+  test that deep-equals hills against the unparameterised generator). The
+  reshapes bend the built heightmap toward a target silhouette (a gaussian gorge
+  for canyon, a smoothstep plateau for mesa, twin gaussian peaks for ridges) and
+  keep 35% of the original relief as texture, all inside the existing
+  `[0.3h, 0.92h]` clamp, so the physics and the static bake are untouched and
+  the CPU's grid-search plays every arena with no AI change. Tests 575 to 579:
+  hills byte-identity, per-arena bounds, distinct silhouettes, and the
+  load-bearing winnability proof (`chooseAiShot` at difficulty 1 lands within
+  80px of the far tank at the widest spawn separation, across 24 seeds per
+  arena in both directions). One trap: `Math.exp(-((...) ) ** 2)` is a JS syntax
+  error (unary minus directly before `**`); the square needs its own parens
+  before negation. A browser smoke confirmed the picker wires, the pick previews
+  on the idle backdrop, and a canyon match starts with no runtime error, only
+  the pre-existing umami analytics SRI console warning that every page shows.
+  The picker sits on the start overlay, so the six-cabinet screenshot harness
+  (which clicks overlay buttons by coordinate) was not used for a byte-identical
+  proof here: the terrain data identity is unit-proven and no game-canvas draw
+  code changed, so a hills round renders identically by construction.
+- **G2 — Microcity police.** The audit's read held up: the coverage-and-gate
+  architecture is proven twice (power, fire), so a third `police` source type is
+  one more call to the same `coverage()` helper, and the whole new surface was
+  what absent coverage does. Crime is a late-game decay, not a fourth growth
+  gate: a developed (level 2+), serviced, unpoliced zone past `CRIME_ONSET_POP`
+  (250) has a `CRIME_DECAY_CHANCE` (0.05) per tick to lose a level, which is a
+  hold-what-you-built pressure distinct from school's build-near-everything gate.
+  The random-sequence risk was real and is the reason the crime roll is the last
+  term of a short-circuited `&&`: a small city (pop < 250) never reaches
+  `random()`, so every existing small-city growth test consumes the identical
+  draw sequence and passes untouched. The one place that did need updating was
+  the `metropolis()` test helper, which builds a big unpoliced city, and there
+  turned out to be two copies of it (one per describe block); both got a police
+  station, which is the honest fix rather than a mask, since a thriving
+  late-game city genuinely needs police now, and because a policed tile
+  short-circuits before `random()` the densify assertions pass with the exact
+  original draw sequence. `growthStep` returns a new `crimeDecayed` subset of
+  `decayed` so the game fires a one-time explainer toast the first time crime
+  bites. `drawPolice` reuses the school/firehouse block idiom with a blue palette
+  and a `blink(clock, i)` rooftop beacon; police is flammable and 20px tall like
+  the other civic buildings. Tests 579 to 584: cost and upkeep, coverage by
+  radius, and a three-way crime proof (an exposed big city bleeds, a policed one
+  holds, a small one is untouched). A browser smoke placed eight stations,
+  confirmed they render (blue block, beacon, marker) distinct from the other
+  civic buildings, and that the cost is enforced (the treasury drained to the
+  cant-afford toast).
+
+A subagent review of both commits turned up one real defect and two fair test
+notes, all addressed:
+
+- **Police stations were immune to tornadoes and earthquakes.** `wreckTile` in
+  `disasters.ts` flattens park, school and firehouse to rubble but the `police`
+  case was never added, so a funnel or quake landing on a police tile returned
+  `false` and left it standing, even though a quake could still *ignite* it
+  (police is flammable). Every other place treated police as a full civic peer,
+  so this was a genuine inconsistency, not a design choice. Fixed by adding
+  `police` to the civic-flatten branch, and the `wreckTile` test now loops over
+  school, firehouse, police and park rather than checking school alone (the gap
+  that let it through).
+- **The byte-identity test was tautological.** Comparing
+  `generateTerrain(...,'hills')` to `generateTerrain(...)` compares hills to
+  itself, since hills is the default argument, so it could never fail. Replaced
+  with a comparison against a standalone reference copy of the original
+  three-wave generator, which does lock the hills math against a future edit,
+  plus a draw-count test proving every arena consumes exactly the nine wave
+  draws and the reshapes add none.
+- **Winnability tested only the widest spawn.** Extended to both ends of the
+  real spawn envelope (the widest `70 / WIDTH-70` and the closest
+  `160 / WIDTH-160`); every arena, including ridges, still lands the CPU within
+  80px at both, closing the one arena the reviewer could not rule out by reading
+  alone.
+
+Tests 584 to 585 over the review pass. Full bar green after the fixes
+(`lint + typecheck + build + test + check-links`). A Snyk code scan reported no
+newly introduced issues: its four findings are all pre-existing in
+`scripts/screenshot-games.js`, the local loopback-only screenshot harness, which
+this round does not touch.

@@ -125,17 +125,6 @@ describe('split mute: toggles, independence, and shared persistence', () => {
     const audio = createGameAudio({ melody: MELODY });
     expect(audio.isMusicMuted()).toBe(false);
   });
-
-  it('the deprecated combined mute drives both channels together', () => {
-    const audio = createGameAudio({ melody: MELODY });
-    expect(audio.isMuted()).toBe(false);
-    expect(audio.toggleMute()).toBe(true);
-    expect(audio.isMusicMuted()).toBe(true);
-    expect(audio.isSfxMuted()).toBe(true);
-    expect(audio.toggleMute()).toBe(false);
-    expect(audio.isMusicMuted()).toBe(false);
-    expect(audio.isSfxMuted()).toBe(false);
-  });
 });
 
 describe('createGameAudio with a stubbed AudioContext', () => {

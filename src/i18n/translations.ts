@@ -75,8 +75,6 @@ export const translations = {
     // Fun Section
     'fun.title': 'Fun Stuff',
     'fun.subtitle': 'Because life is too short to be serious all the time',
-    'fun.arcade.soundOn': 'Sound on',
-    'fun.arcade.soundOff': 'Sound off',
     'fun.arcade.musicOn': 'Music on',
     'fun.arcade.musicOff': 'Music off',
     'fun.arcade.sfxOn': 'Sound effects on',
@@ -610,8 +608,6 @@ export const translations = {
     // Fun Section
     'fun.title': 'Diversión',
     'fun.subtitle': 'Porque la vida es demasiado corta para ser serio todo el tiempo',
-    'fun.arcade.soundOn': 'Sonido activado',
-    'fun.arcade.soundOff': 'Sonido desactivado',
     'fun.arcade.musicOn': 'Música activada',
     'fun.arcade.musicOff': 'Música desactivada',
     'fun.arcade.sfxOn': 'Efectos de sonido activados',
@@ -1148,8 +1144,6 @@ export const translations = {
     // Fun Section
     'fun.title': 'Diversió',
     'fun.subtitle': 'Perquè la vida és massa curta per ser seriós tot el temps',
-    'fun.arcade.soundOn': 'So activat',
-    'fun.arcade.soundOff': 'So desactivat',
     'fun.arcade.musicOn': 'Música activada',
     'fun.arcade.musicOff': 'Música desactivada',
     'fun.arcade.sfxOn': 'Efectes de so activats',

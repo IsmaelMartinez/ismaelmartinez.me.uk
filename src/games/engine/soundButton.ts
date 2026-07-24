@@ -50,29 +50,3 @@ export function wireChannelButton(
 
   render();
 }
-
-/**
- * @deprecated Migration scaffold: wires a single 🔊/🔇 button that mutes music
- * and effects together (the pre-split behaviour). Cabinets move to two
- * wireChannelButton toggles; removed once all have.
- */
-export function wireSoundButton(button: HTMLElement | null, audio: GameAudio): void {
-  if (!button) return;
-  const onLabel = button.dataset.soundOn || 'Sound on';
-  const offLabel = button.dataset.soundOff || 'Sound off';
-
-  function render(): void {
-    if (!button) return;
-    const muted = audio.isMuted();
-    button.textContent = muted ? '🔇' : '🔊';
-    button.setAttribute('aria-label', muted ? offLabel : onLabel);
-    button.setAttribute('aria-pressed', String(!muted));
-  }
-
-  button.addEventListener('click', () => {
-    audio.toggleMute();
-    render();
-  });
-
-  render();
-}

@@ -104,10 +104,6 @@ export interface GameAudio {
    * the music would otherwise keep playing). Safe to call manually; idempotent.
    */
   dispose(): void;
-  /** @deprecated Combined controls kept during the split-mute migration; toggle both channels together. */
-  isMuted(): boolean;
-  setMuted(muted: boolean): void;
-  toggleMute(): boolean;
 }
 
 function rawHasKey(key: string): boolean {
@@ -142,11 +138,6 @@ export function loadMusicMuted(): boolean {
 /** Reads the shared effects-mute flag (1 = muted). Defaults to enabled (not muted). */
 export function loadSfxMuted(): boolean {
   return loadScore(SFX_MUTED_KEY) === 1;
-}
-
-/** @deprecated Combined read kept during the split-mute migration (both channels muted). */
-export function loadMuted(): boolean {
-  return loadMusicMuted() && loadSfxMuted();
 }
 
 type AudioCtor = typeof AudioContext;
@@ -501,19 +492,6 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       // a huge finite bpm would flood it with near-zero-length notes.
       if (Number.isFinite(bpm) && bpm > 0) secondsPerBeat = 60 / Math.min(bpm, MAX_BPM);
     },
-    dispose,
-    // Deprecated combined controls: drive both channels together so the legacy
-    // single 🔊 button keeps working until every cabinet moves to two buttons.
-    isMuted: () => musicMuted && sfxMuted,
-    setMuted(value: boolean) {
-      setMusicMuted(value);
-      setSfxMuted(value);
-    },
-    toggleMute() {
-      const next = !(musicMuted && sfxMuted);
-      setMusicMuted(next);
-      setSfxMuted(next);
-      return next;
-    }
+    dispose
   };
 }

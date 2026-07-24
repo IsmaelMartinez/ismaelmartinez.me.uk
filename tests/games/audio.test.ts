@@ -40,7 +40,7 @@ describe('createGameAudio without AudioContext', () => {
   });
 
   it('exposes the full API and never throws when audio is unavailable', () => {
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     expect(typeof audio.start).toBe('function');
     expect(typeof audio.stop).toBe('function');
     expect(typeof audio.toggleMusicMute).toBe('function');
@@ -65,7 +65,7 @@ describe('createGameAudio without AudioContext', () => {
   });
 
   it('defaults to unmuted on both channels (music and effects enabled)', () => {
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     expect(audio.isMusicMuted()).toBe(false);
     expect(audio.isSfxMuted()).toBe(false);
   });
@@ -77,7 +77,7 @@ describe('split mute: toggles, independence, and shared persistence', () => {
   });
 
   it('toggles each channel independently and returns the new value', () => {
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     expect(audio.toggleMusicMute()).toBe(true);
     expect(audio.isMusicMuted()).toBe(true);
     // Muting music must not touch effects.
@@ -93,13 +93,13 @@ describe('split mute: toggles, independence, and shared persistence', () => {
   });
 
   it('persists each channel under its own global key so a fresh game inherits it', () => {
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     audio.setMusicMuted(true);
     expect(loadMusicMuted()).toBe(true);
     expect(loadSfxMuted()).toBe(false);
 
     // A fresh instance (a different cabinet) picks up the shared choice.
-    const other = createGameAudio({ melody: MELODY });
+    const other = createGameAudio({ tracks: [{ melody: MELODY }] });
     expect(other.isMusicMuted()).toBe(true);
     expect(other.isSfxMuted()).toBe(false);
 
@@ -111,7 +111,7 @@ describe('split mute: toggles, independence, and shared persistence', () => {
 
   it('migrates the pre-split single mute into both channels', () => {
     localStorage.setItem('arcade-muted', '1');
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     expect(audio.isMusicMuted()).toBe(true);
     expect(audio.isSfxMuted()).toBe(true);
     // Sticky under the new keys, so later reads don't depend on the legacy key.
@@ -122,7 +122,7 @@ describe('split mute: toggles, independence, and shared persistence', () => {
   it('does not re-mute from the legacy key once a channel was set post-split', () => {
     localStorage.setItem('arcade-muted', '1');
     localStorage.setItem('arcade-music-muted', '0');
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     expect(audio.isMusicMuted()).toBe(false);
   });
 });
@@ -136,7 +136,7 @@ describe('createGameAudio with a stubbed AudioContext', () => {
     const ctor = vi.fn(() => makeFakeContext());
     vi.stubGlobal('window', { AudioContext: ctor });
 
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     // Creating the controller must not touch the AudioContext yet.
     expect(ctor).not.toHaveBeenCalled();
 
@@ -201,12 +201,33 @@ describe('createGameAudio with a stubbed AudioContext', () => {
     });
 
     const audio = createGameAudio({
-      melody: [{ freq: 440, beats: 1 }],
+      tracks: [{ melody: [{ freq: 440, beats: 1 }] }],
       tempo: 120,
       echo: { time: 0.25, feedback: 0.3, mix: 0.4 }
     });
     audio.start();
     expect(ctx.createDelay).toHaveBeenCalledTimes(1);
+    audio.stop();
+  });
+
+  it('skips a zero-length note instead of spinning the scheduler forever', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    // A bad authoring value (beats: 0) would never advance the cursor past the
+    // lookahead horizon; the guard skips the note so start() must return.
+    const audio = createGameAudio({
+      tracks: [{ melody: [{ freq: 440, beats: 0 }] }],
+      tempo: 120
+    });
+    audio.start();
+    expect(ctx.createOscillator).not.toHaveBeenCalled();
     audio.stop();
   });
 
@@ -220,7 +241,7 @@ describe('createGameAudio with a stubbed AudioContext', () => {
       }
     });
 
-    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 120 });
+    const audio = createGameAudio({ tracks: [{ melody: [{ freq: 440, beats: 1 }] }], tempo: 120 });
     audio.start();
     // The first gain created is the music master (before musicBus / per-note gains).
     const master = ctx.createGain.mock.results[0].value;
@@ -245,7 +266,7 @@ describe('createGameAudio with a stubbed AudioContext', () => {
       }
     });
 
-    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 120 });
+    const audio = createGameAudio({ tracks: [{ melody: [{ freq: 440, beats: 1 }] }], tempo: 120 });
     audio.start();
     audio.setSfxMuted(true);
     const gainsBefore = ctx.createGain.mock.calls.length;
@@ -272,7 +293,7 @@ describe('createGameAudio with a stubbed AudioContext', () => {
       }
     });
 
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     audio.start();
     expect(constructed).toBe(1);
     expect(ctx.close).not.toHaveBeenCalled();
@@ -315,7 +336,7 @@ describe('setTempo', () => {
     });
 
     // One whole-beat note at 60 bpm = 1s; playTone trims to 0.9 + 0.02 stop pad.
-    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 60 });
+    const audio = createGameAudio({ tracks: [{ melody: [{ freq: 440, beats: 1 }] }], tempo: 60 });
     audio.start();
     expect(noteLength(ctx, 0)).toBeCloseTo(0.92);
 
@@ -349,7 +370,7 @@ describe('setTempo', () => {
         }
       }
     });
-    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: Infinity });
+    const audio = createGameAudio({ tracks: [{ melody: [{ freq: 440, beats: 1 }] }], tempo: Infinity });
     audio.start(); // must not spin the lookahead loop
     // One beat at the sanitised 120 bpm default = 0.5s → 0.45 + 0.02 pad.
     expect(noteLength(ctx, 0)).toBeCloseTo(0.47);
@@ -367,7 +388,7 @@ describe('setTempo', () => {
     });
     // 1e6 bpm would schedule ~1,600 notes per 100ms lookahead window; the
     // clamp (1000 bpm) keeps a whole beat at 60ms → 0.054 + 0.02 stop pad.
-    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 1e6 });
+    const audio = createGameAudio({ tracks: [{ melody: [{ freq: 440, beats: 1 }] }], tempo: 1e6 });
     audio.start();
     expect(noteLength(ctx, 0)).toBeCloseTo(0.074);
 
@@ -401,7 +422,7 @@ describe('navigation teardown via Astro ClientRouter', () => {
       }
     });
 
-    const audio = createGameAudio({ melody: MELODY });
+    const audio = createGameAudio({ tracks: [{ melody: MELODY }] });
     audio.start();
     expect(ctx.close).not.toHaveBeenCalled();
 

@@ -41,36 +41,9 @@ export function clearRows(well: Well, rows: number[]): void {
 }
 
 /**
- * Instant cascade settle: every cell drops straight down its own column until
- * it rests on the floor or another cell, in one shot. Unlike classic Tetris
- * row-shifting, this fills covered holes. Kept as the fast fixpoint form (and
- * for callers that don't need to watch the fall); the interactive run and
- * `resolveClears` settle one row at a time via `settleStep` so a landslide can
- * complete rows *mid-fall*, which is what makes deep (×3+) chains reachable.
- * Returns whether anything moved.
- */
-export function cascadeGravity(well: Well): boolean {
-  let moved = false;
-  for (let x = 0; x < WELL_W; x++) {
-    let write = WELL_H - 1;
-    for (let y = WELL_H - 1; y >= 0; y--) {
-      const cell = well[y * WELL_W + x];
-      if (cell === 0) continue;
-      if (write !== y) {
-        well[write * WELL_W + x] = cell;
-        well[y * WELL_W + x] = 0;
-        moved = true;
-      }
-      write--;
-    }
-  }
-  return moved;
-}
-
-/**
  * One tick of gravity: every floating cell drops by exactly one row (if the
  * cell below it is empty). Returns whether anything moved. Iterating this to a
- * fixpoint equals `cascadeGravity`, but stepping it one row at a time lets the
+ * fixpoint fully settles the well, but stepping it one row at a time lets the
  * caller re-check for full rows between steps — a plug falling past a gap can
  * complete a row at an *intermediate* height that the instant settle skips
  * straight past, which is exactly how a cascade chains beyond ×2.

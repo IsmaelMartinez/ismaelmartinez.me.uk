@@ -26,11 +26,10 @@ import {
   LEVEL_H
 } from '../../src/games/lemmings/levels';
 import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
-import { exitArrowAngle, exitArrowVector, rescueProgress } from '../../src/games/lemmings/hud';
+import { exitArrowAngle, rescueProgress } from '../../src/games/lemmings/hud';
 import {
   newCombo,
   comboOnRescue,
-  comboAlive,
   rescuePoints,
   levelBonuses,
   RESCUE_POINTS,
@@ -527,17 +526,6 @@ describe('hud — destination arrow', () => {
 
   it('has a defined heading when critter and exit coincide', () => {
     expect(exitArrowAngle({ x: 5, y: 5 }, { x: 5, y: 5 })).toBe(0);
-  });
-
-  it('returns a unit vector toward the exit', () => {
-    const v = exitArrowVector({ x: 0, y: 0 }, { x: 3, y: 4 });
-    expect(Math.hypot(v.x, v.y)).toBeCloseTo(1);
-    expect(v.x).toBeCloseTo(0.6);
-    expect(v.y).toBeCloseTo(0.8);
-  });
-
-  it('returns a zero vector for coincident points (no NaN)', () => {
-    expect(exitArrowVector({ x: 7, y: 7 }, { x: 7, y: 7 })).toEqual({ x: 0, y: 0 });
   });
 });
 
@@ -1147,13 +1135,6 @@ describe('score — combos', () => {
       RESCUE_POINTS + (COMBO_MAX_STREAK - 1) * COMBO_STEP
     );
     expect(rescuePoints(COMBO_MAX_STREAK + 10)).toBe(rescuePoints(COMBO_MAX_STREAK));
-  });
-
-  it('reports whether a streak can still be extended', () => {
-    const c = comboOnRescue(newCombo(), 100);
-    expect(comboAlive(c, 100 + COMBO_WINDOW)).toBe(true);
-    expect(comboAlive(c, 100 + COMBO_WINDOW + 1)).toBe(false);
-    expect(comboAlive(newCombo(), 0)).toBe(false);
   });
 });
 

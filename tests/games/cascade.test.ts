@@ -5,7 +5,6 @@ import {
   createWell,
   fullRows,
   clearRows,
-  cascadeGravity,
   settleStep,
   resolveClears,
   type Well
@@ -181,20 +180,6 @@ describe('well: lines, cascade gravity, chains', () => {
     for (let x = 0; x < WELL_W; x++) fill(well, x, 19);
     for (let x = 0; x < WELL_W - 1; x++) fill(well, x, 18);
     expect(fullRows(well)).toEqual([19]);
-  });
-
-  it('cascade gravity drops every cell down its own column', () => {
-    const well = createWell();
-    fill(well, 3, 5, 4);
-    fill(well, 3, 10, 2);
-    fill(well, 7, 0, 6);
-    expect(cascadeGravity(well)).toBe(true);
-    expect(at(well, 3, 19)).toBe(2); // lower cell keeps the bottom slot
-    expect(at(well, 3, 18)).toBe(4);
-    expect(at(well, 7, 19)).toBe(6);
-    expect(at(well, 3, 5)).toBe(0);
-    // A settled well reports no movement.
-    expect(cascadeGravity(well)).toBe(false);
   });
 
   it('resolves a two-link chain: the landslide completes a second row', () => {

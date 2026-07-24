@@ -35,7 +35,6 @@ export {
   blockSeamPath,
   faceBandPath,
   drawBlock,
-  drawRamp,
   forEachTileBackToFront,
   rotatedDims,
   rotateTile,

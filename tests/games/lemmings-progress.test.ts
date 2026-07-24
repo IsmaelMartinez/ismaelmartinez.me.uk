@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   unlockedCount,
-  isLevelUnlocked,
   levelSelectItems,
   legacyClearedFromScore
 } from '../../src/games/lemmings/progress';
@@ -33,24 +32,6 @@ describe('Critter Rescue level unlocking', () => {
     it('unlocks nothing when there are no levels', () => {
       expect(unlockedCount(5, 0)).toBe(0);
       expect(unlockedCount(5, -1)).toBe(0);
-    });
-  });
-
-  describe('isLevelUnlocked', () => {
-    it('treats indices below the unlocked count as available', () => {
-      // Cleared level 4 -> indices 0..4 (levels 1..5) unlocked.
-      expect(isLevelUnlocked(0, 4, 9)).toBe(true);
-      expect(isLevelUnlocked(4, 4, 9)).toBe(true);
-      expect(isLevelUnlocked(5, 4, 9)).toBe(false);
-    });
-
-    it('rejects out-of-range and non-integer indices', () => {
-      expect(isLevelUnlocked(-1, 9, 9)).toBe(false);
-      expect(isLevelUnlocked(2.5, 9, 9)).toBe(false);
-    });
-
-    it('keeps level 1 (index 0) reachable from a cold start', () => {
-      expect(isLevelUnlocked(0, 0, 9)).toBe(true);
     });
   });
 

@@ -31,19 +31,6 @@ export function unlockedCount(highestCleared: number, totalLevels: number): numb
   return Math.max(1, Math.min(cleared + 1, totalLevels));
 }
 
-/** Whether a given 0-based level index can be selected yet. */
-export function isLevelUnlocked(
-  levelIndex: number,
-  highestCleared: number,
-  totalLevels: number
-): boolean {
-  return (
-    Number.isInteger(levelIndex) &&
-    levelIndex >= 0 &&
-    levelIndex < unlockedCount(highestCleared, totalLevels)
-  );
-}
-
 export interface LevelSelectItem {
   /** 0-based index into the LEVELS array — what the game loads. */
   index: number;

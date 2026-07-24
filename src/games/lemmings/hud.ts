@@ -26,18 +26,6 @@ export function exitArrowAngle(from: Point, exit: Point): number {
 }
 
 /**
- * Unit vector from a critter toward the exit. Handy for placing/offsetting the
- * arrow without recomputing trig. Returns {x:0,y:0} for coincident points.
- */
-export function exitArrowVector(from: Point, exit: Point): Point {
-  const dx = exit.x - from.x;
-  const dy = exit.y - from.y;
-  const len = Math.hypot(dx, dy);
-  if (len === 0) return { x: 0, y: 0 };
-  return { x: dx / len, y: dy / len };
-}
-
-/**
  * Rescue progress toward the level quota, clamped to [0, 1]. `needed <= 0`
  * (a hypothetical quota-free level) reads as fully complete so the bar never
  * divides by zero or reports a fraction above one when the crowd over-delivers.

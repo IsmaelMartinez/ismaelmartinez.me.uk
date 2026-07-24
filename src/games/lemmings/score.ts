@@ -41,11 +41,6 @@ export function comboOnRescue(state: ComboState, tick: number): ComboState {
   return { streak: chained ? state.streak + 1 : 1, lastRescueTick: tick };
 }
 
-/** Whether a streak is still alive (able to be extended) at `tick`. */
-export function comboAlive(state: ComboState, tick: number): boolean {
-  return state.streak > 0 && tick - state.lastRescueTick <= COMBO_WINDOW;
-}
-
 /** Points paid for a rescue at the given streak position (1 = no combo). */
 export function rescuePoints(streak: number): number {
   const links = Math.max(1, Math.min(streak, COMBO_MAX_STREAK));

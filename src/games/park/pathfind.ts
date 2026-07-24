@@ -4,7 +4,7 @@
  * model and keeps the park-specific helpers (standing beside buildings).
  */
 import { bfsFrom as engineBfsFrom, buildPath, type BfsResult } from '../engine/pathfind';
-import { GRID_W, GRID_H, neighbours, isWalkable, type TileType } from './grid';
+import { GRID_W, GRID_H, neighbours, isWalkable, footprintOf, type TileType } from './grid';
 
 export type { BfsResult };
 export { buildPath };
@@ -19,9 +19,22 @@ export function findPath(tiles: TileType[], from: number, to: number): number[] 
   return buildPath(bfsFrom(tiles, from), to);
 }
 
-/** Walkable tiles adjacent to a (building) tile — where guests stand to use it. */
+/**
+ * Walkable tiles adjacent to a building — where guests stand to use it. For a
+ * multi-tile ride (e.g. the 2×2 coaster) this spans the whole footprint, so a
+ * guest can approach from whichever side has a path; a single-tile building
+ * is just its walkable neighbours, exactly as before.
+ */
 export function adjacentWalkable(tiles: TileType[], building: number): number[] {
-  return neighbours(building).filter(n => isWalkable(tiles[n]));
+  const block = footprintOf(tiles, building);
+  const inBlock = new Set(block);
+  const stands = new Set<number>();
+  for (const cell of block) {
+    for (const n of neighbours(cell)) {
+      if (!inBlock.has(n) && isWalkable(tiles[n])) stands.add(n);
+    }
+  }
+  return [...stands];
 }
 
 /**

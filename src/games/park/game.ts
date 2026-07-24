@@ -42,6 +42,7 @@ import {
   createPark,
   canPlace,
   applyTool,
+  footprintTiles,
   toolCost,
   neighbours,
   isWalkable,
@@ -69,12 +70,10 @@ import {
   isRide,
   breakdownChance,
   pickBreakdownTile,
-  coasterStallChance,
   rollSurge,
   surgedInterval,
   maxGuests,
   BREAKDOWN_SECONDS,
-  STALL_SECONDS,
   type RideBreakdown,
   type Surge
 } from './mayhem';
@@ -85,26 +84,6 @@ import {
   type ParkObjective,
   type ParkProgress
 } from './objectives';
-import {
-  MIN_TRACK_LENGTH,
-  DIR_DELTA,
-  CAR_CAPACITY,
-  CART_MIN_SPEED,
-  stepTile,
-  dirBetween,
-  segmentClimb,
-  turnKind,
-  validateTrack,
-  canPlaceTrack,
-  rotateToStation,
-  thrillBoost,
-  nextCartSpeed,
-  advanceU,
-  type Segment,
-  type SegmentKind,
-  type Dir,
-  type TrackErrorCode
-} from './track';
 
 const BLOCK_HEIGHT = 16;
 /** Pixels a single terrain height step lifts a tile. */
@@ -122,12 +101,6 @@ const CANVAS_H = (GRID_W + GRID_H) * HALF_H + ORIGIN_Y + 10;
 const START_MONEY = 1500;
 const DAY_LENGTH = DAY_SECONDS; // seconds of game time per day (shared with the wage maths)
 const GUEST_SPEED = 2.4; // tiles per second
-/** Guests charged per coaster lap, taken at boarding — a premium ride, priced above the Big Wheel. */
-const TRACK_RIDE_PRICE = 7;
-/** Seconds a loaded/loading cart waits at the station before departing. */
-const LOAD_WAIT = 3;
-/** Guests waiting for a cart, per coaster. */
-const QUEUE_CAP = 6;
 
 
 // No ferris or flume entry: the Big Wheel and Log Flume are custom-drawn
@@ -208,6 +181,7 @@ const BUILDING_STYLE: Partial<Record<TileType, { color: string; height: number }
   carousel: { color: '#b34a8f', height: 30 },
   ferris: { color: '#5a67c0', height: 36 },
   pirateship: { color: '#8a5a34', height: 34 },
+  coaster: { color: '#6d5cc4', height: 42 },
   manor: { color: '#4a4668', height: 30 },
   bumper: { color: '#c05a4a', height: 16 },
   helter: { color: '#c94f7a', height: 40 },
@@ -340,7 +314,7 @@ interface Guest {
   path: number[];
   step: number;
   progress: number;
-  state: 'idle' | 'walking' | 'using' | 'leaving' | 'queuing' | 'riding';
+  state: 'idle' | 'walking' | 'using' | 'leaving';
   targetBuilding: number | null;
   useTimer: number;
   idleTimer: number;
@@ -352,26 +326,6 @@ interface Guest {
    * only — no simulation logic reads it.
    */
   styleRoll: number;
-}
-
-/**
- * A built, running coaster. `segments` is rotated (via `rotateToStation`) so
- * index 0 is always the station — the cart's `cartU` progress then lives in
- * `[0, segments.length)` with the station always at `u = 0`, so "the cart
- * wrapped past 0" directly means "back at the station", no extra bookkeeping.
- */
-interface Coaster {
-  segments: Segment[];
-  cartU: number;
-  cartSpeed: number;
-  cartState: 'loading' | 'running';
-  loadTimer: number;
-  queue: Guest[];
-  riders: Guest[];
-  /** How much a completed lap restores the `thrill` need — precomputed from track.ts's thrillBoost. */
-  thrillBoost: number;
-  /** Seconds the cart hangs jammed mid-track (mayhem); 0 = running fine. */
-  stallLeft: number;
 }
 
 type Phase = 'idle' | 'play' | 'over';
@@ -410,13 +364,6 @@ export function initParkGame(): void {
   const { show: showToast } = createToaster(toastArea, { durationMs: 2200 });
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.tool-btn'));
   const speedButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.speed-btn'));
-  const trackPalette = el('track-palette');
-  const trackKindsEl = root.querySelector<HTMLElement>('.track-kinds');
-  const trackKindButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.track-kind-btn'));
-  const trackStatusEl = el('track-status');
-  const trackCloseBtn = el('track-close-btn') as HTMLButtonElement;
-  const trackTestBtn = el('track-test-btn') as HTMLButtonElement;
-  const trackCancelBtn = el('track-cancel-btn') as HTMLButtonElement;
 
   const strings = {
     day: root.dataset.tDay || 'Day',
@@ -428,44 +375,15 @@ export function initParkGame(): void {
     needsHeight: root.dataset.tNeedsHeight || 'Needs higher ground!',
     tooSteep: root.dataset.tTooSteep || "Can't shape the land that steeply!",
     zoneLocked: root.dataset.tZoneLocked || 'Zone not unlocked yet!',
-    trackNotAdjacent: root.dataset.tTrackNotAdjacent || 'Track pieces must connect to the last one!',
-    trackBlocked: root.dataset.tTrackBlocked || "Can't lay track there!",
-    trackEmpty: root.dataset.tTrackEmpty || 'Lay some track first!',
-    trackNotClosedYet: root.dataset.tTrackNotClosedYet || "Tap the start tile to close the loop first!",
-    trackTooShort: root.dataset.tTrackTooShort || 'Loop needs to be longer before it can close!',
-    trackDuplicateTile: root.dataset.tTrackDuplicateTile || 'Track already crosses that tile!',
-    trackNeedsStation: root.dataset.tTrackNeedsStation || 'Needs exactly one station piece!',
-    trackNotClosed: root.dataset.tTrackNotClosed || "Track pieces don't connect correctly!",
-    trackTooSteep:
-      root.dataset.tTrackTooSteep || 'Too steep — a climb or drop needs a straight piece around it!',
-    trackHeightMismatch:
-      root.dataset.tTrackHeightMismatch || "Track and terrain heights don't match — reshape the land or the piece!",
-    trackStationStraight: root.dataset.tTrackStationStraight || 'The station must be on a straight run!',
-    trackDraftInWay: root.dataset.tTrackDraftInWay || 'Your coaster draft crosses that tile!',
-    trackStatusEmpty: root.dataset.tTrackStatusEmpty || 'Tap a grass tile to start laying track',
-    trackStatusDrafting:
-      root.dataset.tTrackStatusDrafting || 'Track length: {n} — tap the start tile to close the loop',
-    trackStatusClosed:
-      root.dataset.tTrackStatusClosed || 'Loop closed — Test Track to open it for £{cost}',
     breakdown: root.dataset.tBreakdown || 'A ride has broken down!',
     repaired: root.dataset.tRepaired || 'Ride repaired',
     surge: root.dataset.tSurge || 'A coach party pours through the gates!',
-    coasterStall: root.dataset.tCoasterStall || 'The coaster has jammed mid-track!',
     newRecord: root.dataset.tNewRecord || 'New record!',
     objWelcome: root.dataset.tObjWelcome || 'Welcome {n} guests',
     objRating: root.dataset.tObjRating || 'Reach a {n}% rating',
     objCrowd: root.dataset.tObjCrowd || 'Draw a crowd of {n}',
     goalReward: root.dataset.tGoalReward || 'Goal complete +£{n}',
     established: root.dataset.tEstablished || 'Park established — endless!'
-  };
-
-  const TRACK_ERROR_MESSAGES: Record<TrackErrorCode, string> = {
-    tooShort: strings.trackTooShort,
-    duplicateTile: strings.trackDuplicateTile,
-    needsStation: strings.trackNeedsStation,
-    notClosed: strings.trackNotClosed,
-    tooSteep: strings.trackTooSteep,
-    heightMismatch: strings.trackHeightMismatch
   };
 
   const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H);
@@ -587,34 +505,13 @@ export function initParkGame(): void {
   let hoverCacheKey = '';
   let hoverCachePlaceable = false;
   let hoverCacheCost = 0;
-  // Baked screen-space rail geometry per track tile (committed + draft),
-  // keyed on the same worldVersion (plus rotation) — see computeTrackGeom.
-  const railCache = new Map<number, TrackGeom>();
-  let railCacheKey = '';
   let clock = 0;
   // Floaters live in the shared effects module; balloons stay local (their
   // sway drift has no analogue in its physics).
   const fx = createEffects({ floaterSize: 11, floaterRise: 16, floaterLife: 1 });
   let balloons: { x: number; y: number; sway: number; color: string; life: number }[] = [];
-  let coasters: Coaster[] = [];
   let breakdowns: RideBreakdown[] = [];
   let surge: Surge | null = null;
-  // A drafted segment's `dir` and `kind` are placeholders until the *next*
-  // tap fixes them (see handleTrackTap) — trackClosed flips true once the
-  // closing tap sets the last segment's dir back to the start tile.
-  let trackDraft: Segment[] | null = null;
-  let trackClosed = false;
-  let trackKind: SegmentKind = 'station';
-  /**
-   * One record per extension tap (parallel to trackDraft[1..]): the previous
-   * head's kind before the tap overwrote it, so undo can restore it. (The
-   * head's dir needs no restore — a tail segment's dir is never read until
-   * the next extend/close rewrites it.) Terrain pushed by climb/drop pieces
-   * is NOT recorded: it's charged the moment it's shaped and stays shaped
-   * through undo/cancel, exactly like using the raise/lower tools by hand —
-   * reverting it later could clobber terraform the player did in between.
-   */
-  let draftSteps: { headKind: SegmentKind }[] = [];
   const board = initScoreboard(document.getElementById('highscores'));
 
   // The record readout shows the table's best, beaten live by the current run.
@@ -637,7 +534,7 @@ export function initParkGame(): void {
   }
 
   const treeCount = () => tiles.filter(t => t === 'tree').length;
-  const hasAnyBuilding = () => tiles.some(t => BUILDINGS[t]) || coasters.length > 0;
+  const hasAnyBuilding = () => tiles.some(t => BUILDINGS[t]);
   const isBroken = (i: number) => breakdowns.some(b => b.tile === i);
 
   /** A delighted guest sometimes lets a balloon go as they step off a ride. */
@@ -741,28 +638,9 @@ export function initParkGame(): void {
     }
     // Urgent need first; otherwise guests still gravitate to rides
     const want = mostUrgentNeed(guest.needs) ?? (guest.needs.fun < 80 ? 'fun' : null);
-    if (want === 'thrill') {
-      // Thrill is served by a built coaster OR a thrill ride (the Pirate
-      // Ship). Before the ship existed this scanned coasters only, so a
-      // coasterless park could never satisfy the need and bled guests.
-      const candidates = coasters.filter(c => c.queue.length < QUEUE_CAP).map(c => c.segments[0].tile);
-      tiles.forEach((tile, i) => {
-        if (BUILDINGS[tile]?.satisfies === 'thrill' && !isBroken(i)) candidates.push(i);
-      });
-      const found = nearestReachable(tiles, guest.tile, candidates);
-      if (found && found.path.length >= 2) {
-        startWalking(guest, found.path, found.building);
-        return;
-      }
-      if (found) {
-        // Already standing next to it: a coaster station queues, a thrill
-        // ride is used directly (like any other building).
-        const coaster = coasters.find(c => c.segments[0].tile === found.building);
-        if (coaster) joinQueue(guest, coaster);
-        else beginUsing(guest, found.building);
-        return;
-      }
-    } else if (want) {
+    if (want) {
+      // Every need — thrill included — is served by a building now that the
+      // coaster is just a placed 2×2 thrill ride, so one scan covers them all.
       const candidates: number[] = [];
       tiles.forEach((tile, i) => {
         // Broken rides are roped off — guests won't head for them.
@@ -810,32 +688,12 @@ export function initParkGame(): void {
     addFloater(building, `+£${def.price}`, '#4ade80');
   }
 
-  /** Queues a guest at a coaster's station; boarding happens in `updateCoaster`. */
-  function joinQueue(guest: Guest, coaster: Coaster) {
-    // The queue can fill up during the guest's walk over — chooseAction's
-    // own QUEUE_CAP check only holds at the moment they set off — so this
-    // re-checks at the point of actually joining, not just at dispatch.
-    if (coaster.queue.length >= QUEUE_CAP) {
-      guest.state = 'idle';
-      guest.idleTimer = 0.3;
-      return;
-    }
-    guest.state = 'queuing';
-    guest.targetBuilding = coaster.segments[0].tile;
-    coaster.queue.push(guest);
-  }
-
   function arrive(guest: Guest): boolean {
     // Returns false if the guest left the park. A leaving guest's route ends
     // at the entrance (or they were cut off entirely) — either way, despawn.
     if (guest.state === 'leaving') return false;
     if (guest.targetBuilding !== null) {
-      const coaster = coasters.find(c => c.segments[0].tile === guest.targetBuilding);
-      if (coaster) {
-        joinQueue(guest, coaster);
-      } else {
-        beginUsing(guest, guest.targetBuilding);
-      }
+      beginUsing(guest, guest.targetBuilding);
     } else {
       guest.state = 'idle';
       guest.idleTimer = 0.3 + Math.random() * 0.6;
@@ -883,16 +741,6 @@ export function initParkGame(): void {
         if (guest.idleTimer <= 0) chooseAction(guest);
         return true;
       }
-      case 'queuing': {
-        // Boarding (queuing → riding) happens in updateCoaster once the
-        // cart is at the station and has room; nothing to do per-frame.
-        return true;
-      }
-      case 'riding': {
-        // Position and the thrill payout are entirely driven by
-        // updateCoaster — riders aren't drawn individually (see render()).
-        return true;
-      }
     }
   }
 
@@ -905,8 +753,7 @@ export function initParkGame(): void {
           .every(i => isWalkable(tiles[i]));
         const targetValid =
           guest.targetBuilding === null ||
-          !!BUILDINGS[tiles[guest.targetBuilding]] ||
-          tiles[guest.targetBuilding] === 'track';
+          !!BUILDINGS[tiles[guest.targetBuilding]];
         if (!remainingValid || !targetValid) {
           guest.path = [];
           guest.step = 0;
@@ -927,126 +774,6 @@ export function initParkGame(): void {
     }
   }
 
-  // --- Coaster track ---
-
-  function createCoaster(segments: Segment[]): Coaster {
-    return {
-      segments,
-      cartU: 0,
-      cartSpeed: CART_MIN_SPEED,
-      cartState: 'loading',
-      loadTimer: LOAD_WAIT,
-      queue: [],
-      riders: [],
-      thrillBoost: thrillBoost(segments, heights),
-      stallLeft: 0
-    };
-  }
-
-  /** Bulldozing any one tile of a coaster tears down the whole loop and cart. */
-  function removeCoaster(coaster: Coaster) {
-    for (const seg of coaster.segments) tiles[seg.tile] = 'grass';
-    for (const guest of [...coaster.queue, ...coaster.riders]) {
-      guest.state = 'idle';
-      guest.idleTimer = 0.2;
-      guest.targetBuilding = null;
-    }
-    coasters = coasters.filter(c => c !== coaster);
-  }
-
-  function updateCoaster(coaster: Coaster, dt: number) {
-    if (coaster.cartState === 'loading') {
-      while (coaster.riders.length < CAR_CAPACITY && coaster.queue.length > 0) {
-        const guest = coaster.queue.shift()!;
-        guest.state = 'riding';
-        coaster.riders.push(guest);
-        money += TRACK_RIDE_PRICE;
-        addFloater(coaster.segments[0].tile, `+£${TRACK_RIDE_PRICE}`, '#4ade80');
-      }
-      coaster.loadTimer -= dt;
-      if (coaster.loadTimer <= 0) {
-        if (coaster.riders.length > 0) {
-          coaster.cartState = 'running';
-          coaster.cartSpeed = CART_MIN_SPEED;
-        } else {
-          coaster.loadTimer = LOAD_WAIT; // keep waiting rather than dispatch an empty cart
-        }
-      }
-      return;
-    }
-    // Mayhem: a running cart can jam mid-track and hang there a few seconds.
-    if (coaster.stallLeft > 0) {
-      coaster.stallLeft -= dt;
-      return;
-    }
-    if (coaster.riders.length > 0 && Math.random() < coasterStallChance(day) * dt) {
-      coaster.stallLeft = STALL_SECONDS;
-      const segTile = coaster.segments[Math.floor(coaster.cartU) % coaster.segments.length].tile;
-      addFloater(segTile, '🔧', '#fbbf24');
-      showToast(`🔧 ${strings.coasterStall}`);
-      return;
-    }
-    const segIndex = Math.floor(coaster.cartU) % coaster.segments.length;
-    coaster.cartSpeed = nextCartSpeed(coaster.cartSpeed, coaster.segments[segIndex].kind, dt);
-    const prevU = coaster.cartU;
-    coaster.cartU = advanceU(coaster.cartU, coaster.cartSpeed, dt, coaster.segments.length);
-    if (coaster.cartU < prevU) {
-      // Wrapped past 0 = back at the station: disembark, pay out thrill, reload.
-      for (const guest of coaster.riders) {
-        satisfyNeed(guest.needs, 'thrill', coaster.thrillBoost);
-        guest.state = 'idle';
-        guest.idleTimer = 0.2;
-        guest.targetBuilding = null;
-      }
-      coaster.riders = [];
-      coaster.cartU = 0;
-      coaster.cartSpeed = CART_MIN_SPEED;
-      coaster.cartState = 'loading';
-      coaster.loadTimer = LOAD_WAIT;
-    }
-  }
-
-  function updateTrackStatus() {
-    if (!trackPalette) return;
-    // The palette stays up while a draft exists — even with another tool
-    // selected — so Test/Cancel remain reachable and it's clear the
-    // in-progress loop hasn't been thrown away. The piece selector dims
-    // then, since canvas taps run the selected tool, not track laying.
-    trackPalette.style.display = selectedTool === 'track' || trackDraft !== null ? 'flex' : 'none';
-    if (trackKindsEl) {
-      const laying = selectedTool === 'track';
-      trackKindsEl.style.opacity = laying ? '' : '0.45';
-      trackKindsEl.style.pointerEvents = laying ? '' : 'none';
-      // pointer-events doesn't stop keyboard activation (Tab + Enter).
-      trackKindButtons.forEach(btn => (btn.disabled = !laying));
-    }
-    if (trackDraft === null) {
-      trackStatusEl.textContent = strings.trackStatusEmpty;
-    } else if (trackClosed) {
-      trackStatusEl.textContent = strings.trackStatusClosed.replace('{cost}', String(draftCost()));
-    } else {
-      trackStatusEl.textContent = strings.trackStatusDrafting.replace('{n}', String(trackDraft.length));
-    }
-    trackTestBtn.disabled = !trackClosed;
-  }
-
-  /**
-   * Whether applying `tool` to tile `i` would overwrite a drafted track
-   * tile. Terraforming under a draft is the point of keeping it alive
-   * across tool switches (shaping hills for climbs), so only tools that
-   * write the tile itself conflict — raise/lower touch heights only, and
-   * bulldoze/digTunnel can never pass canPlace on the draft's grass tiles.
-   */
-  function toolHitsDraft(i: number, tool: Tool): boolean {
-    if (!trackDraft || !trackDraft.some(s => s.tile === i)) return false;
-    return tool !== 'raiseLand' && tool !== 'lowerLand' && tool !== 'digTunnel' && tool !== 'bulldoze';
-  }
-
-  /** The draft's own tiles, which no terraform cascade may move — their heights are the loop's profile. */
-  function draftLockedTiles(): Set<number> | undefined {
-    return trackDraft ? new Set(trackDraft.map(s => s.tile)) : undefined;
-  }
-
   /** What applying a terraform plan charges: one raise/lower fee per height step moved, cascade-wide. */
   function terraformCharge(plan: Map<number, number>): number {
     return terraformSteps(plan, heights) * toolCost('raiseLand');
@@ -1054,13 +781,12 @@ export function initParkGame(): void {
 
   /**
    * The cascade a raise/lower tap on tile `i` would run, or null when it
-   * can't (out of range, unterraformable, or it would have to move a
-   * drafted track tile — the draft's heights are anchored). Shared by the
-   * hover highlight and the click handler so they can never disagree.
+   * can't (out of range or unterraformable). Shared by the hover highlight
+   * and the click handler so they can never disagree.
    */
   function manualTerraformPlan(tool: Tool, i: number): Map<number, number> | null {
     const target = heights[i] + (tool === 'raiseLand' ? 1 : -1);
-    return terraformPlan(tiles, heights, i, target, draftLockedTiles());
+    return terraformPlan(tiles, heights, i, target);
   }
 
   /**
@@ -1076,248 +802,6 @@ export function initParkGame(): void {
       return plan ? terraformCharge(plan) : Infinity;
     }
     return toolCost(tool, tiles, i);
-  }
-
-  /** Whether tapping tile `i` right now would be accepted by handleTrackTap — drives the hover highlight. */
-  function trackTapValid(i: number): boolean {
-    return planTrackTap(i).action !== 'reject';
-  }
-
-  /** What Test Track will charge: per-piece track cost. Terrain shaping was already paid tap by tap. */
-  function draftCost(): number {
-    return trackDraft ? trackDraft.length * toolCost('track') : 0;
-  }
-
-  type TrackTap =
-    | { action: 'reject'; message: string | null }
-    | { action: 'start' }
-    | { action: 'undo' }
-    | { action: 'extend'; exitKind: SegmentKind; plan: Map<number, number> | null }
-    | { action: 'close'; exitKind: SegmentKind; startKind: SegmentKind; stationAt: number };
-
-  /**
-   * Decides what tapping tile `i` would do to the draft, without mutating
-   * anything — handleTrackTap executes the result, and the hover highlight
-   * asks it whether the tap would land. Corners are derived from the tap
-   * direction rather than picked from a palette, and the selected
-   * Climb/Drop piece pushes the terrain under the new tile to fit (the
-   * `plan` on an extend). The closing piece is derived from the height gap
-   * back to the start tile, whose height anchors the loop.
-   */
-  function planTrackTap(i: number): TrackTap {
-    if (trackClosed) return { action: 'reject', message: null }; // Test Track or Cancel first
-    if (trackDraft === null) {
-      if (tiles[i] !== 'grass') return { action: 'reject', message: strings.trackBlocked };
-      return { action: 'start' };
-    }
-    const head = trackDraft[trackDraft.length - 1];
-    if (i === head.tile) return { action: 'undo' };
-    const dir = dirBetween(head.tile, i);
-    if (dir === null) return { action: 'reject', message: strings.trackNotAdjacent };
-    const closing = i === trackDraft[0].tile;
-    if (closing && trackDraft.length < MIN_TRACK_LENGTH) {
-      return { action: 'reject', message: strings.trackTooShort };
-    }
-    if (!closing) {
-      if (trackDraft.some(s => s.tile === i)) {
-        return { action: 'reject', message: strings.trackDuplicateTile };
-      }
-      if (tiles[i] !== 'grass') return { action: 'reject', message: strings.trackBlocked };
-    }
-
-    // The head's exit piece: a derived corner if the tap changes direction,
-    // else the selected Climb/Drop, else level. A station keeps its kind —
-    // it's a level, straight piece by definition, so it can't corner.
-    const entryDir =
-      trackDraft.length >= 2 ? dirBetween(trackDraft[trackDraft.length - 2].tile, head.tile) : null;
-    const turn = entryDir !== null ? turnKind(entryDir, dir) : null;
-    const closeDh = heights[i] - heights[head.tile];
-    let exitKind: SegmentKind;
-    if (turn) {
-      if (head.kind === 'station') return { action: 'reject', message: strings.trackStationStraight };
-      exitKind = turn;
-    } else if (head.kind === 'station') {
-      exitKind = 'station';
-    } else if (closing) {
-      exitKind = closeDh > 0 ? 'up' : closeDh < 0 ? 'down' : 'flat';
-    } else {
-      exitKind = trackKind === 'up' || trackKind === 'down' ? trackKind : 'flat';
-    }
-
-    const climbs = (k: SegmentKind) => segmentClimb(k) !== 0;
-    const prevKind = trackDraft.length >= 2 ? trackDraft[trackDraft.length - 2].kind : null;
-    if (climbs(exitKind) && prevKind !== null && climbs(prevKind)) {
-      return { action: 'reject', message: strings.trackTooSteep };
-    }
-
-    if (closing) {
-      // The closing piece must bridge the height gap back to the start
-      // exactly — corners and stations can't climb, and a straight can
-      // only bridge one step.
-      if (closeDh !== segmentClimb(exitKind)) {
-        return { action: 'reject', message: strings.trackHeightMismatch };
-      }
-      let startKind = trackDraft[0].kind;
-      const startTurn = turnKind(dir, dirBetween(trackDraft[0].tile, trackDraft[1].tile)!);
-      if (startTurn) {
-        if (climbs(startKind)) return { action: 'reject', message: strings.trackTooSteep };
-        // A station displaced by the corner is re-homed below.
-        startKind = startTurn;
-      }
-      if (climbs(exitKind) && climbs(startKind)) {
-        return { action: 'reject', message: strings.trackTooSteep };
-      }
-      // Exactly one station: if the loop has none — never selected, or the
-      // start corner just displaced it — it lands on the first level
-      // straight, so the obvious draft (loop first, details never) works.
-      const kinds = trackDraft.map((s, k) =>
-        k === 0 ? startKind : k === trackDraft!.length - 1 ? exitKind : s.kind
-      );
-      let stationAt = kinds.indexOf('station');
-      if (stationAt === -1) stationAt = kinds.indexOf('flat');
-      if (stationAt === -1) return { action: 'reject', message: strings.trackNeedsStation };
-      return { action: 'close', exitKind, startKind, stationAt };
-    }
-
-    // Climb/Drop pieces push the terrain under the new tile to fit, exactly
-    // like the terraform tools (cascading to neighbours); the draft's own
-    // tiles are anchored — their heights are already part of the profile.
-    const targetH = heights[head.tile] + segmentClimb(exitKind);
-    let plan: Map<number, number> | null = null;
-    if (heights[i] !== targetH) {
-      plan = terraformPlan(tiles, heights, i, targetH, draftLockedTiles());
-      if (!plan) {
-        // Only on failure: re-plan without the draft lock to tell "the
-        // cascade would move the draft itself" apart from "the land can't
-        // be shaped that way at all".
-        const blockedByDraft = terraformPlan(tiles, heights, i, targetH) !== null;
-        return {
-          action: 'reject',
-          message: blockedByDraft ? strings.trackDraftInWay : strings.tooSteep
-        };
-      }
-    }
-    return { action: 'extend', exitKind, plan };
-  }
-
-  /**
-   * Tap-to-extend track drafting: tapping the current head's own tile again
-   * undoes the last piece; tapping an orthogonal neighbour extends the
-   * draft; tapping back at the start tile closes the loop (once it's long
-   * enough) without adding a new segment. Terrain pushed by a climb/drop
-   * piece is charged on the spot (same rate as the terraform tools) and
-   * stays shaped through undo/cancel — re-laying a piece over land already
-   * at the right height costs nothing extra. All the decision logic lives
-   * in planTrackTap. See the "Build interaction" section of
-   * docs/plans/2026-07-09-park-overhaul-design.md.
-   */
-  function handleTrackTap(i: number) {
-    // The Close Loop button routes here directly, bypassing the canvas
-    // click handler's own phase guard.
-    if (phase !== 'play') return;
-    const tap = planTrackTap(i);
-    switch (tap.action) {
-      case 'reject':
-        if (tap.message) showToast(tap.message);
-        return;
-      case 'start':
-        trackDraft = [{ tile: i, dir: 0, kind: trackKind === 'station' ? 'station' : 'flat' }];
-        draftSteps = [];
-        break;
-      case 'undo': {
-        const step = draftSteps.pop();
-        trackDraft!.pop();
-        if (step) trackDraft![trackDraft!.length - 1].kind = step.headKind;
-        if (trackDraft!.length === 0) trackDraft = null;
-        bumpWorldVersion();
-        updateTrackStatus();
-        return;
-      }
-      case 'extend': {
-        const shapingCost = tap.plan ? terraformCharge(tap.plan) : 0;
-        if (shapingCost > money) {
-          showToast(strings.cantAfford);
-          return;
-        }
-        if (tap.plan) {
-          money -= shapingCost;
-          applyTerraformPlan(heights, tunnels, tap.plan);
-        }
-        const head = trackDraft![trackDraft!.length - 1];
-        draftSteps.push({ headKind: head.kind });
-        head.dir = dirBetween(head.tile, i)!;
-        head.kind = tap.exitKind;
-        // Only one station per loop — once placed, further taps with the
-        // station piece selected just lay plain track.
-        const hasStation = trackDraft!.some(s => s.kind === 'station');
-        trackDraft!.push({
-          tile: i,
-          dir: 0,
-          kind: trackKind === 'station' && !hasStation ? 'station' : 'flat'
-        });
-        break;
-      }
-      case 'close': {
-        const head = trackDraft![trackDraft!.length - 1];
-        head.dir = dirBetween(head.tile, i)!;
-        head.kind = tap.exitKind;
-        trackDraft![0].kind = tap.startKind;
-        trackDraft![tap.stationAt].kind = 'station';
-        trackClosed = true;
-        break;
-      }
-    }
-    bumpWorldVersion();
-    audio.playSfx('blip');
-    updateTrackStatus();
-  }
-
-  /**
-   * Drops the draft. Terrain shaped while drafting stays — it was paid for
-   * tap by tap, exactly as if the raise/lower tools had been used by hand.
-   */
-  function cancelTrackDraft() {
-    draftSteps = [];
-    trackDraft = null;
-    trackClosed = false;
-    bumpWorldVersion();
-    updateTrackStatus();
-  }
-
-  function testTrack() {
-    // The palette outlives the run (a draft keeps it visible), so without
-    // this guard Test Track could build a coaster into a finished game.
-    if (phase !== 'play') return;
-    if (!trackDraft) {
-      showToast(strings.trackEmpty);
-      return;
-    }
-    if (!trackClosed) {
-      showToast(strings.trackNotClosedYet);
-      return;
-    }
-    const result = validateTrack(trackDraft, heights);
-    if (!result.ok) {
-      showToast(TRACK_ERROR_MESSAGES[result.error]);
-      return;
-    }
-    if (!canPlaceTrack(tiles, trackDraft)) {
-      showToast(strings.trackBlocked);
-      return;
-    }
-    // Track pieces only — terrain shaping was already charged tap by tap.
-    const cost = draftCost();
-    if (cost > money) {
-      showToast(strings.cantAfford);
-      return;
-    }
-    money -= cost;
-    const rotated = rotateToStation(trackDraft);
-    for (const seg of rotated) tiles[seg.tile] = 'track';
-    coasters.push(createCoaster(rotated));
-    cancelTrackDraft();
-    invalidateGuests();
-    audio.playSfx('blip');
   }
 
   // --- Simulation ---
@@ -1336,7 +820,6 @@ export function initParkGame(): void {
     const simDt = dt * speedMult;
 
     guests = guests.filter(guest => updateGuest(guest, simDt));
-    for (const coaster of coasters) updateCoaster(coaster, simDt);
 
     // Mayhem: run down repairs (dropping any ride that was bulldozed) and
     // maybe break something new; odds ramp with the park's age.
@@ -1435,8 +918,8 @@ export function initParkGame(): void {
    */
   function resetPark(regenerate = true) {
     if (regenerate) ({ tiles, heights, tunnels, entrance } = createPark());
-    // Fresh terrain and cleared coasters: stale hover/rail cache entries
-    // must not survive into the new park.
+    // Fresh terrain: stale hover-placement cache entries must not survive
+    // into the new park.
     bumpWorldVersion();
     money = START_MONEY;
     day = 1;
@@ -1451,11 +934,9 @@ export function initParkGame(): void {
     speedMult = 1;
     fx.clear();
     balloons = [];
-    coasters = [];
     breakdowns = [];
     surge = null;
     board.beginRun();
-    cancelTrackDraft();
     renderObjective();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
     board.hide();
@@ -1468,206 +949,6 @@ export function initParkGame(): void {
   // Positions below are in tile units; isoProject turns them into pixels.
   function tileCenter(i: number): { x: number; y: number } {
     return { x: (i % GRID_W) + 0.5, y: Math.floor(i / GRID_W) + 0.5 };
-  }
-
-  /**
-   * Pixel lift at each of a tile's four iso corners for an 'up'/'down' rail
-   * segment travelling in `dir`: the two corners on the exit edge (the side
-   * bordering the next tile) sit at `nextLift`, the two on the opposite
-   * edge sit at `curLift` — a single-axis tilt along the direction of
-   * travel, not a partial average (which would twist the quad instead of
-   * sloping it). Superseded by computeTrackGeom's curve geometry, which
-   * slopes the rails themselves by interpolating z from entry edge to exit
-   * edge.
-   *
-   * Track geometry runs entry-edge → centre → exit-edge as a quadratic
-   * curve in world tile space (projectWorld handles view rotation). The
-   * geometry is a pure function of (track layout, terrain, rotation), so
-   * computeTrackGeom bakes it into railCache — rebuilt only when the
-   * `worldVersion:rotation` key changes — and drawTrackGeom just replays
-   * the strokes; the old per-frame version re-projected ~15 points per
-   * track tile per frame.
-   */
-  interface TrackGeom {
-    draft: boolean;
-    /**
-     * The draft tail's direction is still a placeholder (see
-     * handleTrackTap) — mark the tile with a bright-rimmed ballast pad (no
-     * rails yet) that clearly registers the tap on dark grass. `pad` is
-     * that marker's screen point (terrain lift folded in); when set, the
-     * full-geometry fields stay unused defaults.
-     */
-    pad: Pt | null;
-    e0: Pt;
-    x0: Pt;
-    c0: Pt;
-    zE: number;
-    zX: number;
-    zM: number;
-    sleepers: { sa: Pt; sb: Pt; z: number }[];
-    eaL: Pt;
-    xaL: Pt;
-    caL: Pt;
-    eaR: Pt;
-    xaR: Pt;
-    caR: Pt;
-    /** Station platform quad + its rim height, or null off stations. */
-    station: { a1: Pt; a2: Pt; b2: Pt; b1: Pt; z: number } | null;
-  }
-
-  const ORIGIN_PT: Pt = { x: 0, y: 0 };
-
-  function computeTrackGeom(i: number, seg: Segment, prevDir: Dir, draft: boolean, pending: boolean): TrackGeom {
-    const cx = (i % GRID_W) + 0.5;
-    const cy = Math.floor(i / GRID_W) + 0.5;
-    const zC = heights[i] * TERRAIN_STEP;
-    const geom: TrackGeom = {
-      draft,
-      pad: null,
-      e0: ORIGIN_PT,
-      x0: ORIGIN_PT,
-      c0: ORIGIN_PT,
-      zE: 0,
-      zX: 0,
-      zM: 0,
-      sleepers: [],
-      eaL: ORIGIN_PT,
-      xaL: ORIGIN_PT,
-      caL: ORIGIN_PT,
-      eaR: ORIGIN_PT,
-      xaR: ORIGIN_PT,
-      caR: ORIGIN_PT,
-      station: null
-    };
-    if (pending) {
-      const p = projectWorld(cx, cy);
-      geom.pad = { x: p.x, y: p.y - zC };
-      return geom;
-    }
-    const inV = DIR_DELTA[prevDir];
-    const outV = DIR_DELTA[seg.dir];
-    // Climb segments slope from their own height at the entry edge to the
-    // next tile's height at the exit edge; everything else is level.
-    const next = seg.kind === 'up' || seg.kind === 'down' ? stepTile(i, seg.dir) : null;
-    const zE = zC;
-    const zX = next !== null ? heights[next] * TERRAIN_STEP : zC;
-    // rot90 of the entry/exit direction: the rail offset axis at each end.
-    const pInX = -inV.dy;
-    const pInY = inV.dx;
-    const pOutX = -outV.dy;
-    const pOutY = outV.dx;
-    geom.zE = zE;
-    geom.zX = zX;
-    geom.zM = (zE + zX) / 2;
-    geom.e0 = projectWorld(cx - inV.dx * 0.5, cy - inV.dy * 0.5);
-    geom.x0 = projectWorld(cx + outV.dx * 0.5, cy + outV.dy * 0.5);
-    geom.c0 = projectWorld(cx, cy);
-
-    // Sleepers: short perpendicular ties along the curve.
-    for (let k = 0; k < 5; k++) {
-      const t = 0.1 + k * 0.2;
-      const mt = 1 - t;
-      // Quadratic point/tangent on the centre curve, in tile space.
-      const bx = mt * mt * (cx - inV.dx * 0.5) + 2 * mt * t * cx + t * t * (cx + outV.dx * 0.5);
-      const by = mt * mt * (cy - inV.dy * 0.5) + 2 * mt * t * cy + t * t * (cy + outV.dy * 0.5);
-      const tx = mt * (inV.dx * 0.5) + t * (outV.dx * 0.5);
-      const ty = mt * (inV.dy * 0.5) + t * (outV.dy * 0.5);
-      const tl = Math.hypot(tx, ty) || 1;
-      const px = -ty / tl;
-      const py = tx / tl;
-      geom.sleepers.push({
-        sa: projectWorld(bx + px * 0.19, by + py * 0.19),
-        sb: projectWorld(bx - px * 0.19, by - py * 0.19),
-        z: zE + (zX - zE) * t
-      });
-    }
-
-    // Twin rails: three points per rail. The offset curve's control point
-    // is where the two offset tangent lines meet — the miter
-    // (pIn+pOut)·off/(1+pIn·pOut) — which keeps the gauge constant on
-    // straights (÷2) and through corners (÷1); a flat ·0.5 pinched the
-    // rails to ~71% gauge at every corner apex.
-    const miter = 0.14 / (1 + (pInX * pOutX + pInY * pOutY));
-    geom.eaL = projectWorld(cx - inV.dx * 0.5 - pInX * 0.14, cy - inV.dy * 0.5 - pInY * 0.14);
-    geom.xaL = projectWorld(cx + outV.dx * 0.5 - pOutX * 0.14, cy + outV.dy * 0.5 - pOutY * 0.14);
-    geom.caL = projectWorld(cx - (pInX + pOutX) * miter, cy - (pInY + pOutY) * miter);
-    geom.eaR = projectWorld(cx - inV.dx * 0.5 + pInX * 0.14, cy - inV.dy * 0.5 + pInY * 0.14);
-    geom.xaR = projectWorld(cx + outV.dx * 0.5 + pOutX * 0.14, cy + outV.dy * 0.5 + pOutY * 0.14);
-    geom.caR = projectWorld(cx + (pInX + pOutX) * miter, cy + (pInY + pOutY) * miter);
-
-    if (seg.kind === 'station') {
-      // Boarding platform along the right-hand side of travel.
-      geom.station = {
-        a1: projectWorld(cx - outV.dx * 0.45 + pOutX * 0.24, cy - outV.dy * 0.45 + pOutY * 0.24),
-        a2: projectWorld(cx + outV.dx * 0.45 + pOutX * 0.24, cy + outV.dy * 0.45 + pOutY * 0.24),
-        b2: projectWorld(cx + outV.dx * 0.45 + pOutX * 0.46, cy + outV.dy * 0.45 + pOutY * 0.46),
-        b1: projectWorld(cx - outV.dx * 0.45 + pOutX * 0.46, cy - outV.dy * 0.45 + pOutY * 0.46),
-        z: zC
-      };
-    }
-    return geom;
-  }
-
-  function drawTrackGeom(g: TrackGeom) {
-    if (g.pad) {
-      ctx.fillStyle = '#6b655c';
-      ctx.beginPath();
-      ctx.ellipse(g.pad.x, g.pad.y, 8, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#c9ced8';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      return;
-    }
-
-    // Ballast bed: one wide stroke along the centre line.
-    ctx.strokeStyle = '#4c4741';
-    ctx.lineWidth = 10;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.moveTo(g.e0.x, g.e0.y - g.zE);
-    ctx.quadraticCurveTo(g.c0.x, g.c0.y - g.zM, g.x0.x, g.x0.y - g.zX);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#5f4a33';
-    ctx.lineWidth = 1.75;
-    for (const { sa, sb, z } of g.sleepers) {
-      ctx.beginPath();
-      ctx.moveTo(sa.x, sa.y - z);
-      ctx.lineTo(sb.x, sb.y - z);
-      ctx.stroke();
-    }
-
-    // Twin rails: dark understroke for contrast, bright steel on top.
-    for (let pass = 0; pass < 2; pass++) {
-      ctx.strokeStyle = pass === 0 ? '#26262e' : '#c9ced8';
-      ctx.lineWidth = pass === 0 ? 2 : 1;
-      ctx.beginPath();
-      ctx.moveTo(g.eaL.x, g.eaL.y - g.zE);
-      ctx.quadraticCurveTo(g.caL.x, g.caL.y - g.zM, g.xaL.x, g.xaL.y - g.zX);
-      ctx.moveTo(g.eaR.x, g.eaR.y - g.zE);
-      ctx.quadraticCurveTo(g.caR.x, g.caR.y - g.zM, g.xaR.x, g.xaR.y - g.zX);
-      ctx.stroke();
-    }
-
-    if (g.station) {
-      // A pale edge line so the station reads at a glance.
-      const { a1, a2, b2, b1, z } = g.station;
-      ctx.fillStyle = '#b3ab99';
-      ctx.beginPath();
-      ctx.moveTo(a1.x, a1.y - z - 2);
-      ctx.lineTo(a2.x, a2.y - z - 2);
-      ctx.lineTo(b2.x, b2.y - z - 2);
-      ctx.lineTo(b1.x, b1.y - z - 2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = '#efe9dc';
-      ctx.lineWidth = 0.75;
-      ctx.beginPath();
-      ctx.moveTo(a1.x, a1.y - z - 2);
-      ctx.lineTo(a2.x, a2.y - z - 2);
-      ctx.stroke();
-    }
   }
 
   /**
@@ -2706,119 +1987,6 @@ export function initParkGame(): void {
     ctx.fillText(emoji, c.x, gy - postH - 10);
   }
 
-  /** Rail height (in height steps) at fraction `t` through a segment's tile, entry edge → exit edge. */
-  function railZ(seg: Segment, t: number): number {
-    const z0 = heights[seg.tile];
-    if (seg.kind !== 'up' && seg.kind !== 'down') return z0;
-    const next = stepTile(seg.tile, seg.dir);
-    return next === null ? z0 : z0 + (heights[next] - z0) * t;
-  }
-
-  /**
-   * Screen position at `u` laps along a coaster's track (wraps). The x/y
-   * path runs tile centre to tile centre, but z follows the *rail*
-   * profile — a climb tile's rails slope from its own height at the entry
-   * edge to the next tile's height at the exit edge, so interpolating z
-   * between tile-centre heights would sink the train half a step into
-   * every climb (and float it above every drop). Integer u = a tile
-   * centre = halfway (t = 0.5) through that tile's rails.
-   */
-  function cartPoint(coaster: Coaster, u: number): { x: number; y: number } {
-    const n = coaster.segments.length;
-    const uu = ((u % n) + n) % n;
-    const segIndex = Math.floor(uu) % n;
-    const frac = uu - Math.floor(uu);
-    const curSeg = coaster.segments[segIndex];
-    const nextSeg = coaster.segments[(segIndex + 1) % n];
-    const from = tileCenter(curSeg.tile);
-    const to = tileCenter(nextSeg.tile);
-    const p = projectWorld(from.x + (to.x - from.x) * frac, from.y + (to.y - from.y) * frac);
-    const z = frac < 0.5 ? railZ(curSeg, 0.5 + frac) : railZ(nextSeg, frac - 0.5);
-    p.y -= z * TERRAIN_STEP;
-    return p;
-  }
-
-  /**
-   * Screen tangent at `u`, sampled strictly within the current
-   * centre-to-centre span — the path bends at integer u, and a sample
-   * straddling the bend can produce a near-vertical screen delta that
-   * would pirouette the car to ±90° on corners.
-   */
-  function cartTangent(coaster: Coaster, u: number): { dx: number; dy: number } {
-    const n = coaster.segments.length;
-    const uu = ((u % n) + n) % n;
-    const base = Math.floor(uu);
-    const frac = uu - base;
-    const t0 = base + Math.min(frac, 0.87);
-    const a = cartPoint(coaster, t0);
-    const b = cartPoint(coaster, t0 + 0.12);
-    return { dx: b.x - a.x, dy: b.y - a.y };
-  }
-
-  /**
-   * One train car at screen point (px, py) heading along screen delta
-   * (dx, dy): mirrored so the nose leads and the wheels stay down whatever
-   * the travel direction, tilted to the local track slope.
-   */
-  function drawTrainCar(px: number, py: number, dx: number, dy: number, riders: number, lead: boolean) {
-    const flip = dx < 0;
-    const ang = Math.atan2(dy, flip ? -dx : dx);
-    ctx.save();
-    ctx.translate(px, py - 4);
-    if (flip) ctx.scale(-1, 1);
-    ctx.rotate(ang);
-    // Wheels under the chassis, riding the rails.
-    ctx.fillStyle = '#171a22';
-    ctx.beginPath();
-    ctx.arc(-3.2, 1.6, 1.4, 0, Math.PI * 2);
-    ctx.arc(3.2, 1.6, 1.4, 0, Math.PI * 2);
-    ctx.fill();
-    // Body: rounded tub with a nose wedge on the lead car.
-    ctx.fillStyle = '#c23b4e';
-    ctx.beginPath();
-    ctx.moveTo(-5, 1);
-    ctx.lineTo(-5, -2.6);
-    ctx.lineTo(-3.8, -3.6);
-    ctx.lineTo(lead ? 3 : 3.8, -3.6);
-    ctx.lineTo(5, lead ? -1.2 : -2.6);
-    ctx.lineTo(5, 1);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.lineWidth = 0.75;
-    ctx.stroke();
-    // Lit trim line along the tub.
-    ctx.fillStyle = '#e8899a';
-    ctx.fillRect(-4.4, -3, lead ? 7 : 8, 0.8);
-    // Riders' heads peeking over the tub rim.
-    for (let k = 0; k < riders && k < CAR_CAPACITY; k++) {
-      ctx.fillStyle = GUEST_COLORS[k % GUEST_COLORS.length];
-      ctx.beginPath();
-      ctx.arc(-3 + k * 2, -4, 1.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  /** The two-car train, oriented along the rails; back car drawn first. */
-  function drawCoaster(coaster: Coaster) {
-    const front = cartPoint(coaster, coaster.cartU);
-    const frontT = cartTangent(coaster, coaster.cartU);
-    const rear = cartPoint(coaster, coaster.cartU - 0.42);
-    const rearT = cartTangent(coaster, coaster.cartU - 0.42);
-    const riders = coaster.riders.length;
-    // Painter's order: whichever car sits higher on screen goes first.
-    for (const car of rear.y <= front.y ? [0, 1] : [1, 0]) {
-      if (car === 0) drawTrainCar(rear.x, rear.y, rearT.dx, rearT.dy, Math.max(0, riders - 2), false);
-      else drawTrainCar(front.x, front.y, frontT.dx, frontT.dy, Math.min(2, riders), true);
-    }
-    if (riders > 0) {
-      ctx.font = 'bold 9px monospace';
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`×${riders}`, front.x, front.y - 16);
-    }
-  }
-
   /**
    * Whether tile `i` still reads as a tunnel: the flag alone isn't enough,
    * since lowering a *neighbouring* hillside back to flat leaves
@@ -2987,6 +2155,128 @@ export function initParkGame(): void {
     ctx.restore();
   }
 
+  /**
+   * A placed coaster, drawn across its whole 2×2 footprint in a post-pass
+   * (see render): a raised deck, an arched hill of twin rails with a small
+   * train, a vertical loop for flair, and a station hut. Upright and
+   * rotation-independent like the carousel, so it reads the same from every
+   * view angle; the sprite is centred on the footprint.
+   */
+  function drawCoasterRide(anchor: number, busy: boolean, broken: boolean) {
+    const ax = anchor % GRID_W;
+    const ay = Math.floor(anchor / GRID_W);
+    const liftPx = heights[anchor] * TERRAIN_STEP;
+    const baseColor = BUILDING_STYLE.coaster!.color;
+    const corner = (dx: number, dy: number) => {
+      const p = projectWorld(ax + dx, ay + dy);
+      p.y -= liftPx;
+      return p;
+    };
+    const deck = [corner(0, 0), corner(2, 0), corner(2, 2), corner(0, 2)];
+    const centre = corner(1, 1);
+
+    ctx.save();
+    if (broken) ctx.globalAlpha = 0.5;
+
+    // Raised deck: a darker base diamond peeking below a lit top diamond.
+    const skirt = 7;
+    ctx.fillStyle = shadeColor(baseColor, 0.5);
+    ctx.beginPath();
+    ctx.moveTo(deck[0].x, deck[0].y + skirt);
+    for (const p of deck.slice(1)) ctx.lineTo(p.x, p.y + skirt);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = shadeColor(baseColor, 1.05);
+    ctx.beginPath();
+    ctx.moveTo(deck[0].x, deck[0].y);
+    for (const p of deck.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = shadeColor(baseColor, 1.4);
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
+
+    // Superstructure, screen-space and upright, centred on the deck.
+    const cx = centre.x;
+    const cy = centre.y - 2;
+    const span = 30;
+    const railTop = cy - 34;
+    // Two support posts under the hill.
+    ctx.strokeStyle = shadeColor(baseColor, 1.5);
+    ctx.lineWidth = 2;
+    for (const sx of [-span * 0.35, span * 0.15]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + sx, cy);
+      ctx.lineTo(cx + sx, railTop + 6);
+      ctx.stroke();
+    }
+    // Quadratic hill through (cx - span, cy) → crest → (cx + span, cy).
+    const arcX = (t: number) => {
+      const mt = 1 - t;
+      return mt * mt * (cx - span) + 2 * mt * t * (cx - span * 0.2) + t * t * (cx + span * 0.1);
+    };
+    const arcY = (t: number) => {
+      const mt = 1 - t;
+      return mt * mt * (cy - 2) + 2 * mt * t * railTop + t * t * (railTop + 2);
+    };
+    // Sleepers along the hill.
+    ctx.strokeStyle = shadeColor(baseColor, 0.7);
+    ctx.lineWidth = 1;
+    for (let t = 0.1; t < 1; t += 0.14) {
+      ctx.beginPath();
+      ctx.moveTo(arcX(t), arcY(t) - 3);
+      ctx.lineTo(arcX(t), arcY(t) + 3);
+      ctx.stroke();
+    }
+    // Twin rails: dark understroke, bright steel on top.
+    const drawRail = (off: number, color: string, w: number) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(cx - span, cy - 2 + off);
+      ctx.quadraticCurveTo(cx - span * 0.2, railTop + off, cx + span * 0.1, railTop + 2 + off);
+      ctx.quadraticCurveTo(cx + span * 0.55, railTop + 12 + off, cx + span, cy - 6 + off);
+      ctx.stroke();
+    };
+    drawRail(0, '#26262e', 3);
+    drawRail(-2.4, '#c9ced8', 1.4);
+    drawRail(1.6, '#9aa0ad', 1.2);
+
+    // A vertical loop for flair, on the descent side.
+    ctx.strokeStyle = '#c9ced8';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(cx + span * 0.72, railTop + 15, 6, 9, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Train car: parked near the crest when idle, sliding along when in use.
+    const u = busy ? (clock * 0.5) % 1 : 0.14;
+    const carX = arcX(u);
+    const carY = arcY(u);
+    ctx.fillStyle = broken ? '#8a8f9c' : '#f24d4d';
+    ctx.fillRect(carX - 5, carY - 6, 10, 5);
+    for (let k = 0; k < 3; k++) {
+      ctx.fillStyle = GUEST_COLORS[k % GUEST_COLORS.length];
+      ctx.beginPath();
+      ctx.arc(carX - 3 + k * 3, carY - 6.5, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Station hut at the frontmost deck corner (rotation-robust).
+    const hut = deck.reduce((a, b) => (b.y > a.y ? b : a));
+    ctx.fillStyle = shadeColor(baseColor, 0.85);
+    ctx.fillRect(hut.x - 6, hut.y - 9, 12, 8);
+    ctx.fillStyle = '#e8b04a';
+    ctx.fillRect(hut.x - 6, hut.y - 12, 12, 3);
+
+    ctx.restore();
+
+    if (broken) {
+      ctx.font = '12px serif';
+      ctx.fillText('🔧', cx, railTop - 8 + Math.sin(clock * 5) * 2);
+    }
+  }
+
   // The sky fill doubles as the frame clear; the gradient itself never
   // changes, so build it once instead of once per frame.
   const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
@@ -3005,11 +2295,9 @@ export function initParkGame(): void {
     }
 
     // Guests draw interleaved with their *view* diagonal so blocks occlude
-    // them correctly under any rotation. Riders aren't drawn individually —
-    // the cart (drawCoaster) stands in for them.
+    // them correctly under any rotation.
     const guestsByDiag: Guest[][] = Array.from({ length: GRID_W + GRID_H - 1 }, () => []);
     for (const guest of guests) {
-      if (guest.state === 'riding') continue;
       const pos = guestPos(guest);
       const vp = rotatePoint(pos.x, pos.y, GRID_W, GRID_H, rotation);
       const d = Math.min(GRID_W + GRID_H - 2, Math.max(0, Math.floor(vp.tx) + Math.floor(vp.ty)));
@@ -3020,41 +2308,6 @@ export function initParkGame(): void {
     // zoneAt rescans every tile for gates, which turns O(tiles) rendering
     // into O(tiles²) if called once per tile inside the loop below.
     const tileZones = zonesForTiles(tiles);
-
-    // Committed coaster segments plus the in-progress draft (rendered as a
-    // translucent preview) so a player sees exactly what they're laying.
-    // The draft's tail segment has a placeholder `dir` (see handleTrackTap)
-    // until the next tap fixes it, so its ramp orientation isn't known yet
-    // — `pending` flags it so the renderer falls back to a flat marker
-    // instead of guessing a slope direction. The baked geometry only moves
-    // when track, terrain, or rotation changes: every mutation route bumps
-    // worldVersion, and rotation is in the key.
-    const railKey = `${worldVersion}:${rotation}`;
-    if (railKey !== railCacheKey) {
-      railCacheKey = railKey;
-      railCache.clear();
-      for (const coaster of coasters) {
-        const n = coaster.segments.length;
-        coaster.segments.forEach((seg, idx) => {
-          // The previous segment's dir is the direction of travel INTO this
-          // tile — the rails bend from that entry edge to seg.dir's exit
-          // edge.
-          const prevDir = coaster.segments[(idx - 1 + n) % n].dir;
-          railCache.set(seg.tile, computeTrackGeom(seg.tile, seg, prevDir, false, false));
-        });
-      }
-      if (trackDraft) {
-        const n = trackDraft.length;
-        trackDraft.forEach((seg, idx) => {
-          // Once the loop is closed the tail's dir was fixed by the closing
-          // tap (see handleTrackTap), so nothing is pending any more. The
-          // open draft's first tile has no entry yet — treat it as straight.
-          const pending = !trackClosed && idx === n - 1;
-          const prevDir = idx > 0 ? trackDraft![idx - 1].dir : trackClosed ? trackDraft![n - 1].dir : seg.dir;
-          railCache.set(seg.tile, computeTrackGeom(seg.tile, seg, prevDir, true, pending));
-        });
-      }
-    }
 
     // The world grid never moves; rendering walks the *view* grid (rotated
     // dimensions) back-to-front and maps each view tile to its world tile.
@@ -3077,8 +2330,8 @@ export function initParkGame(): void {
         const ripple = 0.85 + 0.25 * Math.sin(clock * 1.5 + (x + y) * 0.6);
         fillTile(ctx, VIEW, vx, vy, shadeColor('#1f6fa8', ripple));
       } else {
-        // Track tiles keep their grass under the drawn ballast-and-rails
-        // bed (drawTrackGeom) — a coaster loop shouldn't pave the lawn.
+        // The coaster's footprint tiles (anchor + annexes) render as plain
+        // grass here; the ride sprite is painted over them in a later pass.
         const groundColor =
           tile === 'path' || tile === 'entrance'
               ? '#8a7a5c'
@@ -3122,7 +2375,9 @@ export function initParkGame(): void {
         ctx.fillText('🌳', top.x, top.y - 7);
       } else if (GATE_EMOJI[tile]) {
         drawGate(vx, vy, liftPx, GATE_EMOJI[tile]!, ZONES[gateZone(tile)!].groundColor);
-      } else if (BUILDINGS[tile]) {
+      } else if (BUILDINGS[tile] && tile !== 'coaster') {
+        // The coaster is a 2×2 ride painted in a post-pass (see below), not
+        // a single in-loop block; its footprint tiles fell through to ground.
         const style = BUILDING_STYLE[tile] ?? { color: '#44447a', height: BLOCK_HEIGHT };
         const reskin = zone ? ZONE_BUILDING_STYLE[zone][tile] : undefined;
         const broken = isBroken(i);
@@ -3166,52 +2421,51 @@ export function initParkGame(): void {
         }
       }
 
-      const trackGeom = railCache.get(i);
-      if (trackGeom) {
-        ctx.save();
-        if (trackGeom.draft) ctx.globalAlpha = 0.55;
-        drawTrackGeom(trackGeom);
-        ctx.restore();
-      }
     });
     if (lastDiag >= 0) guestsByDiag[lastDiag].forEach(drawGuest);
-    coasters.forEach(drawCoaster);
+
+    // Coasters are 2×2 rides: paint each over its whole footprint in a final
+    // pass (back-to-front) so a ride is never clipped by its own front tiles'
+    // ground, which the tile loop drew earlier.
+    const coasterDiag = (i: number) => {
+      const vp = rotatePoint((i % GRID_W) + 1, Math.floor(i / GRID_W) + 1, GRID_W, GRID_H, rotation);
+      return vp.tx + vp.ty;
+    };
+    const coasterTiles: number[] = [];
+    tiles.forEach((t, i) => {
+      if (t === 'coaster') coasterTiles.push(i);
+    });
+    coasterTiles
+      .sort((a, b) => coasterDiag(a) - coasterDiag(b))
+      .forEach(i => drawCoasterRide(i, inUse.has(i), isBroken(i)));
 
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;
       const y = Math.floor(hoverTile / GRID_W);
-      const v = rotateTile(x, y, GRID_W, GRID_H, rotation);
       const lockedZone = gateZone(selectedTool);
-      // Placement legality can run a terraform-cascade BFS (placementCost /
-      // planTrackTap), so it's memoized per (tool, piece, tile, world
-      // version) instead of recomputed every frame; only the cheap money
-      // and zone-unlock comparisons stay per-frame.
-      const cacheKey = `${selectedTool}:${trackKind}:${hoverTile}:${worldVersion}`;
+      // Placement legality can run a terraform-cascade BFS (placementCost),
+      // so it's memoized per (tool, tile, world version) instead of
+      // recomputed every frame; only the cheap money and zone-unlock
+      // comparisons stay per-frame.
+      const cacheKey = `${selectedTool}:${hoverTile}:${worldVersion}`;
       if (cacheKey !== hoverCacheKey) {
         hoverCacheKey = cacheKey;
-        if (selectedTool === 'track') {
-          hoverCachePlaceable = trackTapValid(hoverTile);
-          hoverCacheCost = 0;
-        } else {
-          hoverCachePlaceable =
-            canPlace(tiles, heights, tunnels, x, y, selectedTool) &&
-            !toolHitsDraft(hoverTile, selectedTool);
-          hoverCacheCost = placementCost(selectedTool, hoverTile);
-        }
+        hoverCachePlaceable = canPlace(tiles, heights, tunnels, x, y, selectedTool);
+        hoverCacheCost = placementCost(selectedTool, hoverTile);
       }
       const valid =
         hoverCachePlaceable &&
         hoverCacheCost <= money &&
         (!lockedZone || zoneUnlocked(lockedZone, rating, money));
-      strokeTile(
-        ctx,
-        VIEW,
-        v.x,
-        v.y,
-        valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)',
-        2,
-        heights[hoverTile] * TERRAIN_STEP
-      );
+      const hoverColor = valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)';
+      // A multi-tile ride (the coaster) highlights its whole footprint, so the
+      // player sees the 2×2 it will drop rather than just the anchor tile.
+      const size = BUILDINGS[selectedTool as TileType]?.footprint ?? 1;
+      const cells = footprintTiles(x, y, size) ?? [hoverTile];
+      for (const c of cells) {
+        const cv = rotateTile(c % GRID_W, Math.floor(c / GRID_W), GRID_W, GRID_H, rotation);
+        strokeTile(ctx, VIEW, cv.x, cv.y, hoverColor, 2, heights[c] * TERRAIN_STEP);
+      }
     }
 
     // Escaped balloons drift up over everything, swaying on their strings.
@@ -3306,13 +2560,6 @@ export function initParkGame(): void {
     if (phase !== 'play') return;
     const i = tileFromEvent(e);
     if (i < 0) return;
-    // Track drafting is already a tap-by-tap flow with its own undo/close
-    // semantics (see handleTrackTap), so it bypasses the arm-then-confirm
-    // touch pattern below rather than requiring a double tap per piece.
-    if (selectedTool === 'track') {
-      handleTrackTap(i);
-      return;
-    }
     if (coarsePointer && armedTile !== i) {
       armedTile = i;
       hoverTile = i;
@@ -3321,39 +2568,18 @@ export function initParkGame(): void {
     const x = i % GRID_W;
     const y = Math.floor(i / GRID_W);
 
-    if (selectedTool === 'bulldoze' && tiles[i] === 'track') {
-      const coaster = coasters.find(c => c.segments.some(s => s.tile === i));
-      if (coaster) {
-        removeCoaster(coaster);
-      } else {
-        // No owning coaster (shouldn't happen in normal play) — still clear
-        // the tile so it can never become permanently un-bulldozable.
-        tiles[i] = 'grass';
-      }
-      bumpWorldVersion();
-      audio.playSfx('blip');
-      invalidateGuests();
-      return;
-    }
-    if (toolHitsDraft(i, selectedTool)) {
-      showToast(strings.trackDraftInWay);
-      return;
-    }
-    // Terraforming takes its own path: the cascade must also respect an
-    // in-progress draft's anchored tiles, which grid.ts's generic
-    // canPlace/applyTool know nothing about.
+    // Terraforming takes its own path: the cascade prices per height step and
+    // must be charged and applied here, which grid.ts's generic applyTool
+    // (a single flat-cost mutation) doesn't do.
     if (selectedTool === 'raiseLand' || selectedTool === 'lowerLand') {
       const plan = manualTerraformPlan(selectedTool, i);
       if (!plan) {
         const terraformable = tiles[i] === 'grass' || tiles[i] === 'path';
         const next = heights[i] + (selectedTool === 'raiseLand' ? 1 : -1);
         if (terraformable && next >= MIN_HEIGHT && next <= MAX_HEIGHT) {
-          // In range on shapeable ground, so the cascade itself was blocked:
-          // by the draft's anchored tiles if one accepts the unlocked plan,
-          // otherwise by something immovable (water, a building, track).
-          const blockedByDraft =
-            trackDraft !== null && terraformPlan(tiles, heights, i, next) !== null;
-          showToast(blockedByDraft ? strings.trackDraftInWay : strings.tooSteep);
+          // In range on shapeable ground, so the cascade itself was blocked
+          // by something immovable (water or a building) in its path.
+          showToast(strings.tooSteep);
         }
         return;
       }
@@ -3411,30 +2637,11 @@ export function initParkGame(): void {
 
   toolButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      // Switching tools deliberately keeps any in-progress track draft: the
-      // loop stays rendered (translucently) and drafting resumes when the
-      // track tool is re-selected — players terraform mid-draft to shape
-      // hills under their climbs. Only the Cancel button discards it.
       selectedTool = btn.dataset.tool as Tool;
       armedTile = -1;
       toolButtons.forEach(b => b.classList.toggle('active', b === btn));
-      updateTrackStatus();
     });
   });
-
-  trackKindButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      trackKind = btn.dataset.kind as SegmentKind;
-      trackKindButtons.forEach(b => b.classList.toggle('active', b === btn));
-    });
-  });
-  trackCloseBtn?.addEventListener('click', () => {
-    // Replays a tap on the start tile — the same "close the loop" gesture
-    // as tapping it directly on the canvas (see handleTrackTap).
-    if (trackDraft) handleTrackTap(trackDraft[0].tile);
-  });
-  trackTestBtn?.addEventListener('click', testTrack);
-  trackCancelBtn?.addEventListener('click', cancelTrackDraft);
 
   speedButtons.forEach(btn => {
     btn.addEventListener('click', () => {

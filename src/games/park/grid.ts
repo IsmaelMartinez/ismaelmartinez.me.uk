@@ -21,6 +21,7 @@ export type TileType =
   | 'carousel'
   | 'ferris'
   | 'pirateship'
+  | 'coaster'
   | 'manor'
   | 'bumper'
   | 'helter'
@@ -34,10 +35,10 @@ export type TileType =
   | 'gateFairytale'
   | 'gateAdventure'
   | 'gatePirate'
-  | 'track';
+  | 'rideannex';
 
 export type Tool =
-  | Exclude<TileType, 'grass' | 'entrance'>
+  | Exclude<TileType, 'grass' | 'entrance' | 'rideannex'>
   | 'bulldoze'
   | 'raiseLand'
   | 'lowerLand'
@@ -60,6 +61,9 @@ export interface BuildingDef {
   needsWater?: boolean;
   /** Minimum terrain height its own tile must sit at (e.g. Sky Tower). */
   minHeight?: number;
+  /** Side length in tiles of a multi-tile ride's square footprint (e.g. the
+   *  2×2 coaster). Absent or 1 means an ordinary single-tile building. */
+  footprint?: number;
 }
 
 export const BUILDINGS: Partial<Record<TileType, BuildingDef>> = {
@@ -69,6 +73,11 @@ export const BUILDINGS: Partial<Record<TileType, BuildingDef>> = {
   // single tile — before it, only a built coaster served the `thrill` need,
   // so coasterless parks bled guests. A good coaster still out-thrills it.
   pirateship: { cost: 500, price: 7, upkeep: 26, satisfies: 'thrill', useTime: 4.5, boost: 70 },
+  // The premium thrill ride: a placed 2×2 coaster that replaced the old
+  // lay-your-own-track editor. Best thrill in the park, priced and sized to
+  // match — it rides, breaks down, and is bulldozed through the generic
+  // building path; the footprint is the only thing that makes it special.
+  coaster: { cost: 800, price: 8, upkeep: 34, satisfies: 'thrill', useTime: 4.5, boost: 100, footprint: 2 },
   manor: { cost: 450, price: 6, upkeep: 24, satisfies: 'fun', useTime: 4, boost: 90 },
   bumper: { cost: 300, price: 4, upkeep: 16, satisfies: 'fun', useTime: 3, boost: 60 },
   helter: { cost: 350, price: 5, upkeep: 18, satisfies: 'fun', useTime: 3.5, boost: 75 },
@@ -89,8 +98,7 @@ const SIMPLE_COSTS: Partial<Record<Tool, number>> = {
   digTunnel: 30,
   gateFairytale: 150,
   gateAdventure: 250,
-  gatePirate: 350,
-  track: 40
+  gatePirate: 350
 };
 
 /**
@@ -232,6 +240,52 @@ export const idx = (x: number, y: number): number => y * GRID_W + x;
 
 export function isWalkable(tile: TileType): boolean {
   return tile === 'path' || tile === 'entrance';
+}
+
+/** The largest building footprint side length; the search bound for annex→anchor recovery. */
+export const MAX_FOOTPRINT = 2;
+
+/**
+ * The tile indices of a `size`×`size` building footprint anchored at its
+ * top-left corner (x, y), or null if the block would run off the grid. A
+ * single-tile building (size 1) is just [idx(x, y)].
+ */
+export function footprintTiles(x: number, y: number, size: number): number[] | null {
+  if (x < 0 || y < 0 || x + size > GRID_W || y + size > GRID_H) return null;
+  const cells: number[] = [];
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) cells.push(idx(x + dx, y + dy));
+  }
+  return cells;
+}
+
+/**
+ * Every tile of the multi-tile ride that tile `i` belongs to — whether `i`
+ * is the anchor (which holds the building's TileType) or one of its
+ * `rideannex` fillers. Returns [i] for a single-tile building or bare
+ * ground, so bulldoze and guest routing can treat a 2×2 coaster as one
+ * object from any of its four tiles. An annex's anchor is found by scanning
+ * the (up to) MAX_FOOTPRINT² top-left positions whose block could cover `i`;
+ * footprints never overlap (placement demands all-grass), so at most one matches.
+ */
+export function footprintOf(tiles: TileType[], i: number): number[] {
+  const def = BUILDINGS[tiles[i]];
+  if (def && (def.footprint ?? 1) > 1) {
+    return footprintTiles(i % GRID_W, Math.floor(i / GRID_W), def.footprint!) ?? [i];
+  }
+  if (tiles[i] === 'rideannex') {
+    const x = i % GRID_W;
+    const y = Math.floor(i / GRID_W);
+    for (let ay = Math.max(0, y - MAX_FOOTPRINT + 1); ay <= y; ay++) {
+      for (let ax = Math.max(0, x - MAX_FOOTPRINT + 1); ax <= x; ax++) {
+        const anchor = BUILDINGS[tiles[idx(ax, ay)]];
+        if (!anchor || (anchor.footprint ?? 1) <= 1) continue;
+        const cells = footprintTiles(ax, ay, anchor.footprint!);
+        if (cells && cells.includes(i)) return cells;
+      }
+    }
+  }
+  return [i];
 }
 
 export interface Park {
@@ -428,7 +482,7 @@ function isTerraformable(tile: TileType): boolean {
  * hillside faces renderable). Neighbours are pushed the minimum amount, and
  * those pushes recurse outward. Returns tile → new height for every tile
  * that must change, or null if the cascade would have to move a tile that
- * can't be reshaped (water, buildings, track, the entrance, anything in
+ * can't be reshaped (water, buildings, the entrance, anything in
  * `locked`) or `targetH` is out of range. A one-step change on open ground
  * plans exactly one tile, matching the old single-tile raise/lower.
  */
@@ -529,9 +583,21 @@ export function canPlace(
 
   const def = BUILDINGS[tool as TileType];
   if (def) {
+    const cells = footprintTiles(x, y, def.footprint ?? 1);
+    if (!cells) return false; // the block would run off the grid
+    const block = new Set(cells);
+    // Every footprint tile clear and level with the anchor: a flat pad, so a
+    // multi-tile ride never straddles a slope. (For a single-tile building
+    // the anchor grass check above already covered this; the loop is a no-op.)
+    for (const c of cells) {
+      if (tiles[c] !== 'grass' || heights[c] !== heights[i]) return false;
+    }
     if (def.minHeight !== undefined && heights[i] < def.minHeight) return false;
-    if (!neighbours(i).some(n => isWalkable(tiles[n]))) return false;
-    if (def.needsWater && !neighbours(i).some(n => tiles[n] === 'water')) return false;
+    // Reachable: some footprint tile touches a walkable tile OUTSIDE the block.
+    if (!cells.some(c => neighbours(c).some(n => !block.has(n) && isWalkable(tiles[n])))) return false;
+    if (def.needsWater && !cells.some(c => neighbours(c).some(n => !block.has(n) && tiles[n] === 'water'))) {
+      return false;
+    }
     return true;
   }
   return true;
@@ -547,8 +613,11 @@ export function applyTool(
 ): void {
   const i = idx(x, y);
   if (tool === 'bulldoze') {
-    tiles[i] = 'grass';
-    tunnels[i] = false;
+    // Bulldozing any tile of a multi-tile ride clears the whole footprint.
+    for (const c of footprintOf(tiles, i)) {
+      tiles[c] = 'grass';
+      tunnels[c] = false;
+    }
     return;
   }
   if (tool === 'raiseLand' || tool === 'lowerLand') {
@@ -559,6 +628,14 @@ export function applyTool(
   }
   if (tool === 'digTunnel') {
     tunnels[i] = true;
+    return;
+  }
+  const def = BUILDINGS[tool as TileType];
+  if (def && (def.footprint ?? 1) > 1) {
+    // Fill the block with inert annex tiles, then stamp the anchor last so it
+    // owns its own tile. canPlace has already guaranteed the block is clear.
+    for (const c of footprintTiles(x, y, def.footprint!)!) tiles[c] = 'rideannex';
+    tiles[i] = tool as TileType;
     return;
   }
   tiles[i] = tool as TileType;

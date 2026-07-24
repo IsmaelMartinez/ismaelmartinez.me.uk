@@ -27,7 +27,7 @@ import {
   rotatePoint,
   createViewRotator,
   createGameAudio,
-  wireSoundButton,
+  wireChannelButton,
   createToaster,
   createEffects,
   type IsoView,
@@ -213,22 +213,65 @@ export function initCityGame(): void {
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
-  // Calm, civic builder loop in F major.
+  // Cozy city-builder bed in C major (I–vi–IV–V): a warm pad, a sparse bell
+  // arpeggio, and a slow bass — SimCity-relaxed, unhurried.
   const audio = createGameAudio({
     tempo: 104,
-    wave: 'triangle',
-    melody: [
-      { freq: 349.23, beats: 1 },
-      { freq: 440.0, beats: 1 },
-      { freq: 523.25, beats: 1 },
-      { freq: 440.0, beats: 1 },
-      { freq: 392.0, beats: 1 },
-      { freq: 523.25, beats: 1 },
-      { freq: 698.46, beats: 1 },
-      { freq: 523.25, beats: 1 }
+    volume: 0.12,
+    echo: { time: 0.3, feedback: 0.2, mix: 0.18 },
+    tracks: [
+      // PAD: sustained warm chord roots, a soft bed under everything.
+      {
+        wave: 'triangle',
+        envelope: 'pad',
+        detune: 6,
+        volume: 0.45,
+        melody: [
+          { freq: 261.63, beats: 4 }, // C4  (I)
+          { freq: 220.0, beats: 4 }, // A3  (vi)
+          { freq: 174.61, beats: 4 }, // F3  (IV)
+          { freq: 196.0, beats: 4 } // G3  (V)
+        ]
+      },
+      // LEAD: light, unhurried bell arpeggio tracing each chord, with rests.
+      {
+        wave: 'sine',
+        envelope: 'pluck',
+        volume: 0.85,
+        melody: [
+          { freq: 523.25, beats: 1 }, // C5
+          { freq: 659.25, beats: 1 }, // E5
+          { freq: 783.99, beats: 1 }, // G5
+          { freq: 0, beats: 1 },
+          { freq: 440.0, beats: 1 }, // A4
+          { freq: 523.25, beats: 1 }, // C5
+          { freq: 659.25, beats: 1 }, // E5
+          { freq: 0, beats: 1 },
+          { freq: 523.25, beats: 1 }, // C5
+          { freq: 440.0, beats: 1 }, // A4
+          { freq: 698.46, beats: 1 }, // F5
+          { freq: 0, beats: 1 },
+          { freq: 587.33, beats: 1 }, // D5
+          { freq: 783.99, beats: 1 }, // G5
+          { freq: 493.88, beats: 1 }, // B4
+          { freq: 0, beats: 1 }
+        ]
+      },
+      // BASS: slow whole notes rooting the progression.
+      {
+        wave: 'triangle',
+        volume: 0.7,
+        melody: [
+          { freq: 65.41, beats: 4 }, // C2  (I)
+          { freq: 110.0, beats: 4 }, // A2  (vi)
+          { freq: 87.31, beats: 4 }, // F2  (IV)
+          { freq: 98.0, beats: 4 } // G2  (V)
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const makeView = (rot: Rotation): IsoView => ({
     halfW: HALF_W,

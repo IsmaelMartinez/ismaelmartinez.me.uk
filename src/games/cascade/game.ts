@@ -18,7 +18,7 @@ import {
   setupHiDpiCanvas,
   shadeColor,
   createGameAudio,
-  wireSoundButton,
+  wireChannelButton,
   createToaster,
   createEffects,
   hash01 as hash
@@ -318,31 +318,88 @@ export function initCascadeGame(): void {
   const board = () => boards[mode];
   recordEl.textContent = `${board().best()}`;
 
-  // A driving minor-key loop that setTempo() winds up level by level.
+  // A driving Korobeiniki-style minor loop that setTempo() winds up level by
+  // level: a busy square lead (A phrase then a contrasting high B phrase) over
+  // a pumping octave-2/3 bass. Both voices span 14 beats so the loop restarts
+  // together.
   const audio = createGameAudio({
     tempo: BASE_TEMPO,
-    wave: 'square',
     volume: 0.11,
-    melody: [
-      { freq: 164.81, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 246.94, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 261.63, beats: 0.5 },
-      { freq: 246.94, beats: 0.5 },
-      { freq: 196.0, beats: 0.5 },
-      { freq: 220.0, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 293.66, beats: 0.5 },
-      { freq: 261.63, beats: 0.5 },
-      { freq: 246.94, beats: 0.5 },
-      { freq: 220.0, beats: 0.5 },
-      { freq: 196.0, beats: 0.5 },
-      { freq: 146.83, beats: 0.5 }
+    tracks: [
+      {
+        // LEAD — square, energetic.
+        wave: 'square',
+        volume: 1.0,
+        melody: [
+          // A phrase.
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 493.88, beats: 0.5 }, // B4
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 493.88, beats: 0.5 }, // B4
+          { freq: 440.0, beats: 1.0 }, // A4
+          { freq: 440.0, beats: 0.5 }, // A4
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 493.88, beats: 1.0 }, // B4
+          // B phrase — a brighter, higher answer.
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 698.46, beats: 0.5 }, // F5
+          { freq: 880.0, beats: 0.5 }, // A5
+          { freq: 783.99, beats: 0.5 }, // G5
+          { freq: 698.46, beats: 0.5 }, // F5
+          { freq: 659.25, beats: 1.0 }, // E5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 493.88, beats: 1.0 } // B4
+        ]
+      },
+      {
+        // BASS — warm triangle, pumping eighth notes under the lead.
+        wave: 'triangle',
+        volume: 0.8,
+        melody: [
+          // Under the A phrase.
+          { freq: 82.41, beats: 0.5 }, // E2
+          { freq: 123.47, beats: 0.5 }, // B2
+          { freq: 164.81, beats: 0.5 }, // E3
+          { freq: 123.47, beats: 0.5 }, // B2
+          { freq: 82.41, beats: 0.5 }, // E2
+          { freq: 123.47, beats: 0.5 }, // B2
+          { freq: 164.81, beats: 0.5 }, // E3
+          { freq: 123.47, beats: 0.5 }, // B2
+          { freq: 110.0, beats: 0.5 }, // A2
+          { freq: 164.81, beats: 0.5 }, // E3
+          { freq: 220.0, beats: 0.5 }, // A3
+          { freq: 164.81, beats: 0.5 }, // E3
+          { freq: 82.41, beats: 0.5 }, // E2
+          { freq: 123.47, beats: 0.5 }, // B2
+          { freq: 82.41, beats: 0.5 }, // E2
+          // Under the B phrase.
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 110.0, beats: 0.5 }, // A2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 110.0, beats: 0.5 }, // A2
+          { freq: 98.0, beats: 0.5 }, // G2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 98.0, beats: 0.5 }, // G2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 123.47, beats: 0.5 }, // B2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 123.47, beats: 0.5 }, // B2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 82.41, beats: 0.5 } // E2
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const cellPx = (cx: number, cy: number) => ({
     x: WELL_X + cx * TILE,

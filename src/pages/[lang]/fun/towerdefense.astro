@@ -39,11 +39,22 @@ const t = useTranslations(lang);
         <div class="game-header">
           <h1><span class="td-emoji">🏰</span> {t('fun.towerdefense.title')}</h1>
           <button
-            id="sound-btn"
+            id="music-btn"
             class="btn sound-btn"
-            aria-label={t('fun.arcade.soundOn')}
-            data-sound-on={t('fun.arcade.soundOn')}
-            data-sound-off={t('fun.arcade.soundOff')}
+            data-glyph-on="🎵"
+            data-glyph-off="🎵"
+            aria-label={t('fun.arcade.musicOn')}
+            data-music-on={t('fun.arcade.musicOn')}
+            data-music-off={t('fun.arcade.musicOff')}
+          >🎵</button>
+          <button
+            id="sfx-btn"
+            class="btn sound-btn"
+            data-glyph-on="🔊"
+            data-glyph-off="🔇"
+            aria-label={t('fun.arcade.sfxOn')}
+            data-sfx-on={t('fun.arcade.sfxOn')}
+            data-sfx-off={t('fun.arcade.sfxOff')}
           >🔊</button>
           <div class="scores">
             <div class="score-item">

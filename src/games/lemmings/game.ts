@@ -17,7 +17,7 @@ import {
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
-  wireSoundButton
+  wireChannelButton
 } from '../engine';
 import { TerrainBitmap, AIR, BRIDGE, STEEL } from './bitmap';
 import {
@@ -262,23 +262,78 @@ export function initLemmingsGame(): void {
 
   const board = initScoreboard(document.getElementById('highscores'));
 
-  // Bright, bouncy chiptune in C major to march the critters along.
+  // A whimsical C-major folk skip: a bouncy lead over a walking bass to march
+  // the critters along. This cabinet sits quieter than the others.
   const audio = createGameAudio({
-    tempo: 132,
-    wave: 'square',
+    tempo: 136,
     volume: 0.09,
-    melody: [
-      { freq: 523.25, beats: 0.5 },
-      { freq: 659.25, beats: 0.5 },
-      { freq: 783.99, beats: 0.5 },
-      { freq: 659.25, beats: 0.5 },
-      { freq: 587.33, beats: 0.5 },
-      { freq: 783.99, beats: 0.5 },
-      { freq: 698.46, beats: 0.5 },
-      { freq: 523.25, beats: 0.5 }
+    echo: { time: 0.24, feedback: 0.18, mix: 0.15 },
+    tracks: [
+      {
+        // LEAD: skipping eighth-note melody with an A/B lilt.
+        wave: 'square',
+        detune: 5,
+        volume: 0.95,
+        envelope: 'pluck',
+        melody: [
+          { freq: 261.63, beats: 0.5 }, // C4
+          { freq: 329.63, beats: 0.5 }, // E4
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 329.63, beats: 0.5 }, // E4
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 329.63, beats: 1 }, // E4
+          { freq: 349.23, beats: 0.5 }, // F4
+          { freq: 440.0, beats: 0.5 }, // A4
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 440.0, beats: 0.5 }, // A4
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 493.88, beats: 0.5 }, // B4
+          { freq: 587.33, beats: 1 }, // D5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 493.88, beats: 0.5 }, // B4
+          { freq: 440.0, beats: 0.5 }, // A4
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 329.63, beats: 0.5 }, // E4
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 523.25, beats: 1 }, // C5
+          { freq: 440.0, beats: 0.5 }, // A4
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 329.63, beats: 0.5 }, // E4
+          { freq: 293.66, beats: 0.5 }, // D4
+          { freq: 329.63, beats: 0.5 }, // E4
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 261.63, beats: 1 } // C4
+        ]
+      },
+      {
+        // BASS: quarter-note walking line stepping up and down under the lead.
+        wave: 'triangle',
+        volume: 0.7,
+        envelope: 'pluck',
+        melody: [
+          { freq: 65.41, beats: 1 }, // C2
+          { freq: 73.42, beats: 1 }, // D2
+          { freq: 82.41, beats: 1 }, // E2
+          { freq: 98.0, beats: 1 }, // G2
+          { freq: 110.0, beats: 1 }, // A2
+          { freq: 98.0, beats: 1 }, // G2
+          { freq: 87.31, beats: 1 }, // F2
+          { freq: 82.41, beats: 1 }, // E2
+          { freq: 73.42, beats: 1 }, // D2
+          { freq: 82.41, beats: 1 }, // E2
+          { freq: 87.31, beats: 1 }, // F2
+          { freq: 98.0, beats: 1 }, // G2
+          { freq: 110.0, beats: 1 }, // A2
+          { freq: 98.0, beats: 1 }, // G2
+          { freq: 73.42, beats: 1 }, // D2
+          { freq: 65.41, beats: 1 } // C2
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   // --- Mutable game state ---
   let levelIndex = 0;

@@ -13,7 +13,7 @@ import {
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
-  wireSoundButton,
+  wireChannelButton,
   createEffects,
   shadeColor
 } from '../engine';
@@ -308,23 +308,66 @@ export function initTanksGame(): void {
   // armour the player's tank finished on, so a clean sweep outranks a scrape.
   const board = initScoreboard(document.getElementById('highscores'));
 
-  // Tense, martial battle march in A minor.
+  // Jaunty Worms/Scorched-Earth artillery march in C major: a brassy bouncing
+  // lead over an oom-pah root/fifth bass. Playful and competitive, not grim.
   const audio = createGameAudio({
     tempo: 116,
-    wave: 'sawtooth',
     volume: 0.1,
-    melody: [
-      { freq: 220.0, beats: 0.75 },
-      { freq: 220.0, beats: 0.25 },
-      { freq: 261.63, beats: 0.5 },
-      { freq: 329.63, beats: 0.5 },
-      { freq: 293.66, beats: 0.75 },
-      { freq: 220.0, beats: 0.25 },
-      { freq: 246.94, beats: 0.5 },
-      { freq: 196.0, beats: 0.5 }
+    echo: { time: 0.16, feedback: 0.15, mix: 0.12 },
+    tracks: [
+      {
+        // LEAD: brassy bouncing march, with a cheeky A#4 chromatic lean.
+        wave: 'sawtooth',
+        detune: 8,
+        volume: 0.95,
+        envelope: 'pluck',
+        melody: [
+          { freq: 392.0, beats: 0.5 },   // G4
+          { freq: 392.0, beats: 0.25 },  // G4
+          { freq: 392.0, beats: 0.25 },  // G4
+          { freq: 523.25, beats: 0.75 }, // C5
+          { freq: 493.88, beats: 0.25 }, // B4
+          { freq: 523.25, beats: 0.5 },  // C5
+          { freq: 587.33, beats: 0.5 },  // D5
+          { freq: 659.25, beats: 0.75 }, // E5
+          { freq: 587.33, beats: 0.25 }, // D5
+          { freq: 523.25, beats: 0.5 },  // C5
+          { freq: 493.88, beats: 0.5 },  // B4
+          { freq: 466.16, beats: 0.25 }, // A#4 (chromatic lean)
+          { freq: 493.88, beats: 0.25 }, // B4
+          { freq: 523.25, beats: 0.5 },  // C5
+          { freq: 392.0, beats: 1.0 },   // G4
+          { freq: 0, beats: 1.0 }        // rest
+        ]
+      },
+      {
+        // BASS: bouncy oom-pah, root/fifth on every half-beat.
+        wave: 'square',
+        volume: 0.78,
+        envelope: 'pluck',
+        melody: [
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 }    // G2
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const playerName = (i: number) =>
     i === 1 && mode === 'cpu' ? strings.cpu : i === 1 ? strings.player2 : strings.player1;

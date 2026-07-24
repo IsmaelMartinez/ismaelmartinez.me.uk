@@ -27,7 +27,7 @@ import {
   shadeColor,
   chebyshev,
   createGameAudio,
-  wireSoundButton,
+  wireChannelButton,
   createToaster,
   createEffects,
   type IsoView,
@@ -337,27 +337,75 @@ export function initTowerDefenseGame(): void {
   const board = initScoreboard(document.getElementById('highscores'));
   recordEl.textContent = `${board.best()}`;
 
-  // A brisk minor-key march — drums to hold a line to.
+  // A martial A-minor march — hold the line. A swelling low drone bed under
+  // a heroic dotted lead, over a steady on-the-beat marching bass.
   const audio = createGameAudio({
-    tempo: 138,
-    wave: 'square',
+    tempo: 136,
     volume: 0.12,
-    melody: [
-      { freq: 220.0, beats: 0.5 },
-      { freq: 220.0, beats: 0.5 },
-      { freq: 261.63, beats: 1 },
-      { freq: 220.0, beats: 1 },
-      { freq: 329.63, beats: 1 },
-      { freq: 293.66, beats: 0.5 },
-      { freq: 261.63, beats: 0.5 },
-      { freq: 246.94, beats: 1 },
-      { freq: 0, beats: 0.5 },
-      { freq: 196.0, beats: 0.5 },
-      { freq: 220.0, beats: 1.5 },
-      { freq: 0, beats: 0.5 }
+    echo: { time: 0.28, feedback: 0.25, mix: 0.2 },
+    tracks: [
+      {
+        // Drone/pad: a low tonic bed that descends A→F→E to build tension.
+        wave: 'sawtooth',
+        envelope: 'pad',
+        volume: 0.45,
+        melody: [
+          { freq: 110.0, beats: 4 },
+          { freq: 110.0, beats: 4 },
+          { freq: 87.31, beats: 4 },
+          { freq: 82.41, beats: 4 }
+        ]
+      },
+      {
+        // Lead: a resolute dotted march that resolves home to the tonic.
+        wave: 'square',
+        volume: 0.9,
+        melody: [
+          { freq: 440.0, beats: 1.5 },
+          { freq: 440.0, beats: 0.5 },
+          { freq: 523.25, beats: 1 },
+          { freq: 659.25, beats: 1 },
+          { freq: 587.33, beats: 1.5 },
+          { freq: 523.25, beats: 0.5 },
+          { freq: 493.88, beats: 1 },
+          { freq: 440.0, beats: 1 },
+          { freq: 659.25, beats: 1.5 },
+          { freq: 587.33, beats: 0.5 },
+          { freq: 523.25, beats: 1 },
+          { freq: 493.88, beats: 1 },
+          { freq: 440.0, beats: 1.5 },
+          { freq: 493.88, beats: 0.5 },
+          { freq: 523.25, beats: 1 },
+          { freq: 440.0, beats: 1 }
+        ]
+      },
+      {
+        // Bass: a steady marching pulse, one note to the beat, tonic/dominant.
+        wave: 'triangle',
+        volume: 0.75,
+        melody: [
+          { freq: 110.0, beats: 1 },
+          { freq: 110.0, beats: 1 },
+          { freq: 82.41, beats: 1 },
+          { freq: 82.41, beats: 1 },
+          { freq: 110.0, beats: 1 },
+          { freq: 110.0, beats: 1 },
+          { freq: 82.41, beats: 1 },
+          { freq: 82.41, beats: 1 },
+          { freq: 73.42, beats: 1 },
+          { freq: 73.42, beats: 1 },
+          { freq: 82.41, beats: 1 },
+          { freq: 82.41, beats: 1 },
+          { freq: 110.0, beats: 1 },
+          { freq: 82.41, beats: 1 },
+          { freq: 110.0, beats: 1 },
+          { freq: 110.0, beats: 1 }
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   function addFloater(tx: number, ty: number, text: string, color: string) {
     const p = isoProject(VIEW, tx, ty);

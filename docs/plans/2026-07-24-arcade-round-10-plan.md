@@ -120,4 +120,59 @@ plain missile.
 
 ## Execution notes (2026-07-24)
 
-_(filled in as goals land)_
+Both goals landed, order G1 then G2, one commit each, full bar after each
+(`lint + typecheck + build + test + check-links`; 585 to 590 tests over the
+round). Both features are additive behind the new arena and weapon, so the four
+Round 9 arenas and the three original weapons are untouched. The two interlock
+as planned.
+
+- **G1 — the bunker arena.** The fifth arena. `reshapeArena` handles bunker as
+  an early special case (a flat pillar top at `0.34h` over the rolling base) and
+  returns before the canyon/mesa/ridges blend, so nothing about the other
+  arenas or the byte-identical hills path changed. The load-bearing new concept
+  is a per-column solid mask: `arenaSolid` marks the pillar columns (and returns
+  an all-false mask for every other arena), `bunkerColumns` is the single source
+  both it and the reshape read so they cannot disagree, and `carveCrater` gained
+  a `solid` parameter and skips those columns. `game.ts` rolls the mask beside
+  the heightmap through one `rollTerrain` helper (the three roll sites all go
+  through it, so `solid` never lags `ground`), passes it to `carveCrater`, and
+  paints the solid columns in stone. Tests 585 to 588: the mask is exactly the
+  central band, the pillar is a flat tall top with the base unchanged,
+  `carveCrater` leaves a solid column standing while digging its neighbours, and
+  the bunker joins the winnability sweep and passes (the CPU arcs over the
+  pillar within 80px at both spawn separations). Browser smoke confirmed the
+  stone pillar renders.
+- **G2 — the Skipper.** A bouncing fourth weapon, tuned against the cover it has
+  to respect. `bounceOffSurface` in `physics.ts` is the pure, unit-tested core
+  (reflect the vertical velocity upward, bleed both components by a restitution,
+  lift clear of the surface). In `stepShot` a ground impact bounces only when
+  the shell has bounces left and the column is not solid; a solid column (the
+  pillar) detonates it instead, which is the interlock, so the very shot built
+  to skip around open ground is denied by cover. Bounces are bounded (two, each
+  decrementing) so there is no runaway. The CPU is left on its three weapons
+  because it aims through the non-bouncing `simulateShot`; `cpuPickWeapon` never
+  returns bounce, a deliberate player's-hands asymmetry. The weapon is
+  data-driven, so the button, the `1-4` number key and the ammo readout came for
+  free. Tests 588 to 590: the bounce maths and the Skipper's arsenal entry
+  (in `WEAPON_IDS` and `freshAmmo`, `bounces > 0`, lighter than the missile). A
+  browser smoke fired a Skipper on the bunker arena end to end: it flew, bounced
+  and detonated with no runtime error, and the four-weapon rack renders.
+
+A subagent review confirmed every load-bearing invariant sound under static
+analysis (pillar indestructibility, the arena/solid-mask agreement through the
+shared `bunkerColumns`, the terrain/solid sync through the single `rollTerrain`,
+the bounded two-bounce count, the pillar-stops-the-Skipper interlock, and the
+untouched three original weapons and four original arenas) and found nothing to
+block on. It raised one coverage note worth acting on: the interlock decision
+lived entirely in `game.ts`'s `stepShot`, which the headless suite never
+imports, so a future edit to that exact line would only be caught by a manual
+replay. The fiddly half of it, the clamp-and-lookup into the solid mask, is now
+a pure `isSolidColumn(solid, x, width)` in `terrain.ts` (rounding and clamping
+exactly as `surfaceYAt` does, so the collision sample and the cover test can
+never disagree at the pillar edge), and it is unit-tested: the pillar reads as
+cover, open dirt does not, and an out-of-range x clamps into the field. Tests
+590 to 591. The other note, that winnability is proven at the two spawn extremes
+rather than exhaustively over the continuous range, the reviewer independently
+judged a comfortable margin (max-power apex clears the `0.34h` pillar by
+hundreds of pixels), so it stands as the deliberate sampled guard the plan
+describes. Full bar green after the fix.

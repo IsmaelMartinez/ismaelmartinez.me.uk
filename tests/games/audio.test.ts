@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createGameAudio, loadMuted, type Note } from '../../src/games/engine/audio';
+import {
+  createGameAudio,
+  loadMusicMuted,
+  loadSfxMuted,
+  type Note
+} from '../../src/games/engine/audio';
 
 const MELODY: Note[] = [
   { freq: 440, beats: 1 },
@@ -38,9 +43,12 @@ describe('createGameAudio without AudioContext', () => {
     const audio = createGameAudio({ melody: MELODY });
     expect(typeof audio.start).toBe('function');
     expect(typeof audio.stop).toBe('function');
-    expect(typeof audio.toggleMute).toBe('function');
-    expect(typeof audio.isMuted).toBe('function');
-    expect(typeof audio.setMuted).toBe('function');
+    expect(typeof audio.toggleMusicMute).toBe('function');
+    expect(typeof audio.isMusicMuted).toBe('function');
+    expect(typeof audio.setMusicMuted).toBe('function');
+    expect(typeof audio.toggleSfxMute).toBe('function');
+    expect(typeof audio.isSfxMuted).toBe('function');
+    expect(typeof audio.setSfxMuted).toBe('function');
     expect(typeof audio.playSfx).toBe('function');
     expect(typeof audio.dispose).toBe('function');
 
@@ -56,36 +64,77 @@ describe('createGameAudio without AudioContext', () => {
     }).not.toThrow();
   });
 
-  it('defaults to unmuted (music enabled)', () => {
+  it('defaults to unmuted on both channels (music and effects enabled)', () => {
     const audio = createGameAudio({ melody: MELODY });
-    expect(audio.isMuted()).toBe(false);
+    expect(audio.isMusicMuted()).toBe(false);
+    expect(audio.isSfxMuted()).toBe(false);
   });
 });
 
-describe('mute toggle and shared persistence', () => {
+describe('split mute: toggles, independence, and shared persistence', () => {
   beforeEach(() => {
     installLocalStorage();
   });
 
-  it('toggleMute flips state and returns the new value', () => {
+  it('toggles each channel independently and returns the new value', () => {
+    const audio = createGameAudio({ melody: MELODY });
+    expect(audio.toggleMusicMute()).toBe(true);
+    expect(audio.isMusicMuted()).toBe(true);
+    // Muting music must not touch effects.
+    expect(audio.isSfxMuted()).toBe(false);
+
+    expect(audio.toggleSfxMute()).toBe(true);
+    expect(audio.isSfxMuted()).toBe(true);
+    expect(audio.isMusicMuted()).toBe(true);
+
+    expect(audio.toggleMusicMute()).toBe(false);
+    expect(audio.isMusicMuted()).toBe(false);
+    expect(audio.isSfxMuted()).toBe(true);
+  });
+
+  it('persists each channel under its own global key so a fresh game inherits it', () => {
+    const audio = createGameAudio({ melody: MELODY });
+    audio.setMusicMuted(true);
+    expect(loadMusicMuted()).toBe(true);
+    expect(loadSfxMuted()).toBe(false);
+
+    // A fresh instance (a different cabinet) picks up the shared choice.
+    const other = createGameAudio({ melody: MELODY });
+    expect(other.isMusicMuted()).toBe(true);
+    expect(other.isSfxMuted()).toBe(false);
+
+    other.setSfxMuted(true);
+    other.setMusicMuted(false);
+    expect(loadMusicMuted()).toBe(false);
+    expect(loadSfxMuted()).toBe(true);
+  });
+
+  it('migrates the pre-split single mute into both channels', () => {
+    localStorage.setItem('arcade-muted', '1');
+    const audio = createGameAudio({ melody: MELODY });
+    expect(audio.isMusicMuted()).toBe(true);
+    expect(audio.isSfxMuted()).toBe(true);
+    // Sticky under the new keys, so later reads don't depend on the legacy key.
+    expect(loadMusicMuted()).toBe(true);
+    expect(loadSfxMuted()).toBe(true);
+  });
+
+  it('does not re-mute from the legacy key once a channel was set post-split', () => {
+    localStorage.setItem('arcade-muted', '1');
+    localStorage.setItem('arcade-music-muted', '0');
+    const audio = createGameAudio({ melody: MELODY });
+    expect(audio.isMusicMuted()).toBe(false);
+  });
+
+  it('the deprecated combined mute drives both channels together', () => {
     const audio = createGameAudio({ melody: MELODY });
     expect(audio.isMuted()).toBe(false);
     expect(audio.toggleMute()).toBe(true);
-    expect(audio.isMuted()).toBe(true);
+    expect(audio.isMusicMuted()).toBe(true);
+    expect(audio.isSfxMuted()).toBe(true);
     expect(audio.toggleMute()).toBe(false);
-    expect(audio.isMuted()).toBe(false);
-  });
-
-  it('setMuted persists the preference under the shared arcade key', () => {
-    const audio = createGameAudio({ melody: MELODY });
-    audio.setMuted(true);
-    expect(loadMuted()).toBe(true);
-    // A fresh instance (a different game) picks up the shared choice.
-    const other = createGameAudio({ melody: MELODY });
-    expect(other.isMuted()).toBe(true);
-
-    other.setMuted(false);
-    expect(loadMuted()).toBe(false);
+    expect(audio.isMusicMuted()).toBe(false);
+    expect(audio.isSfxMuted()).toBe(false);
   });
 });
 
@@ -104,6 +153,118 @@ describe('createGameAudio with a stubbed AudioContext', () => {
 
     audio.start();
     expect(ctor).toHaveBeenCalledTimes(1);
+    audio.stop();
+  });
+
+  it('schedules an oscillator for every voice in a multi-track score', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    const audio = createGameAudio({
+      tracks: [
+        { melody: [{ freq: 440, beats: 1 }] },
+        { melody: [{ freq: 110, beats: 1 }], wave: 'triangle' }
+      ],
+      tempo: 120
+    });
+    // start()'s immediate scheduleAhead schedules the first note of each track.
+    audio.start();
+    expect(ctx.createOscillator).toHaveBeenCalledTimes(2);
+    audio.stop();
+  });
+
+  it('layers a detuned twin voice when a track sets detune', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    const audio = createGameAudio({
+      tracks: [{ melody: [{ freq: 440, beats: 1 }], detune: 8 }],
+      tempo: 120
+    });
+    audio.start();
+    // One note → the main voice plus its detuned twin.
+    expect(ctx.createOscillator).toHaveBeenCalledTimes(2);
+    const twin = ctx.createOscillator.mock.results[1].value;
+    expect(twin.detune.setValueAtTime).toHaveBeenCalledWith(8, expect.any(Number));
+    audio.stop();
+  });
+
+  it('builds a feedback-delay echo send when echo options are given', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    const audio = createGameAudio({
+      melody: [{ freq: 440, beats: 1 }],
+      tempo: 120,
+      echo: { time: 0.25, feedback: 0.3, mix: 0.4 }
+    });
+    audio.start();
+    expect(ctx.createDelay).toHaveBeenCalledTimes(1);
+    audio.stop();
+  });
+
+  it('muting music drops the master gain while effects still play', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 120 });
+    audio.start();
+    // The first gain created is the music master (before musicBus / per-note gains).
+    const master = ctx.createGain.mock.results[0].value;
+    const gainsBefore = ctx.createGain.mock.calls.length;
+
+    audio.setMusicMuted(true);
+    expect(master.gain.setTargetAtTime).toHaveBeenCalledWith(0, expect.any(Number), expect.any(Number));
+
+    // Effects are a separate channel: playSfx still builds its output graph.
+    audio.playSfx('blip');
+    expect(ctx.createGain.mock.calls.length).toBeGreaterThan(gainsBefore);
+    audio.stop();
+  });
+
+  it('muting effects makes playSfx a silent no-op', () => {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+
+    const audio = createGameAudio({ melody: [{ freq: 440, beats: 1 }], tempo: 120 });
+    audio.start();
+    audio.setSfxMuted(true);
+    const gainsBefore = ctx.createGain.mock.calls.length;
+    const oscBefore = ctx.createOscillator.mock.calls.length;
+
+    audio.playSfx('explosion');
+    expect(ctx.createGain.mock.calls.length).toBe(gainsBefore);
+    expect(ctx.createOscillator.mock.calls.length).toBe(oscBefore);
     audio.stop();
   });
 
@@ -276,6 +437,7 @@ function makeFakeContext() {
   const node = () => ({
     gain: param(),
     frequency: param(),
+    detune: param(),
     type: 'square',
     connect: vi.fn(),
     start: vi.fn(),
@@ -289,6 +451,7 @@ function makeFakeContext() {
     suspend: vi.fn(() => Promise.resolve()),
     close: vi.fn(() => Promise.resolve()),
     createGain: vi.fn(node),
-    createOscillator: vi.fn(node)
+    createOscillator: vi.fn(node),
+    createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() }))
   };
 }

@@ -12,6 +12,10 @@ Five independent read-only reviews ran in parallel, each on a disjoint slice, ea
 
 The codebase is already strong. The correctness review found no bugs above its confidence bar; the audio split-mute, its one-time legacy migration, the `astro:before-swap` teardown, and the hi-DPI `toLogical()` pointer contract are all correct in every cabinet. The architecture audit found the eight games remarkably conformant to their documented contracts. The simplification sweep called the codebase exceptionally clean and its findings polish rather than silliness. So this is a polishing pass, not a rescue. The value is in removing the last dead code, deduplicating a few copied helpers, closing real localisation and accessibility gaps on the public pages, and correcting drifted documentation.
 
+## Status
+
+All tasks A through J were applied in this pass and are green on the full bar (lint, typecheck, build, test, check-links). Task J (the ESLint recommended ruleset) settled cleanly: enabling it surfaced exactly one issue, Astro's generated `src/env.d.ts` triple-slash reference, handled with a one-line scoped override, and the rest of the codebase already satisfies the ruleset. The items under "Flagged for the owner" were deliberately not applied and await a decision.
+
 ## Tasks to apply
 
 These are low-risk, high-confidence changes. Each is covered by existing tests or a named verification. They are grouped by theme so the diff reads as a coherent sweep.

@@ -11,11 +11,38 @@ function clamp(value: number, min: number, max: number): number {
 
 /**
  * The selectable battlefield silhouettes. `hills` is the original rolling
- * terrain; the other three reshape it into a distinct arena (see
- * `reshapeArena`). All four still walk the same destructible heightmap, so the
- * physics and the CPU's shot search work on every one unchanged.
+ * terrain; the others reshape it into a distinct arena (see `reshapeArena`).
+ * All walk the same destructible heightmap, so the physics and the CPU's shot
+ * search work on every one unchanged. `bunker` additionally carries an
+ * indestructible central pillar (see `arenaSolid`), the only arena whose terrain
+ * the crater cannot cut.
  */
-export type ArenaType = 'hills' | 'canyon' | 'mesa' | 'ridges';
+export type ArenaType = 'hills' | 'canyon' | 'mesa' | 'ridges' | 'bunker';
+
+/**
+ * The inclusive column range [x0, x1] occupied by the bunker arena's central
+ * pillar. Shared by `reshapeArena` (which raises it) and `arenaSolid` (which
+ * marks it uncarveable) so the two never disagree on where the pillar is.
+ */
+export function bunkerColumns(width: number): { x0: number; x1: number } {
+  const centre = Math.round(width * 0.5);
+  const half = Math.max(1, Math.round(width * 0.03));
+  return { x0: centre - half, x1: centre + half };
+}
+
+/**
+ * The uncarveable column mask for an arena: `true` where `carveCrater` must
+ * leave the terrain alone. Only `bunker` has solid columns (its pillar); every
+ * other arena is fully carveable.
+ */
+export function arenaSolid(arena: ArenaType, width: number): boolean[] {
+  const solid = new Array<boolean>(width).fill(false);
+  if (arena === 'bunker') {
+    const { x0, x1 } = bunkerColumns(width);
+    for (let x = Math.max(0, x0); x <= Math.min(width - 1, x1); x++) solid[x] = true;
+  }
+  return solid;
+}
 
 export function generateTerrain(
   width: number,
@@ -62,6 +89,18 @@ function reshapeArena(
   const floorY = height * 0.92;
   const base = height * 0.65;
   const shaped = new Array<number>(width);
+
+  if (arena === 'bunker') {
+    // Rolling base everywhere, with a tall flat-topped pillar in the centre.
+    // The pillar is raised here for the silhouette; arenaSolid marks the same
+    // columns uncarveable so it survives every blast.
+    const { x0, x1 } = bunkerColumns(width);
+    const topY = clamp(height * 0.34, ceilY, floorY);
+    for (let x = 0; x < width; x++) {
+      shaped[x] = x >= x0 && x <= x1 ? topY : ground[x];
+    }
+    return shaped;
+  }
 
   for (let x = 0; x < width; x++) {
     const u = width > 1 ? x / (width - 1) : 0;
@@ -114,11 +153,13 @@ export function carveCrater(
   floorY: number,
   ex: number,
   ey: number,
-  radius: number
+  radius: number,
+  solid: boolean[] = []
 ): void {
   const x0 = Math.max(0, Math.ceil(ex - radius));
   const x1 = Math.min(ground.length - 1, Math.floor(ex + radius));
   for (let x = x0; x <= x1; x++) {
+    if (solid[x]) continue; // indestructible cover is never dug away
     const dx = x - ex;
     const dy = Math.sqrt(radius * radius - dx * dx);
     const top = ey - dy;

@@ -17,7 +17,7 @@ import {
   createEffects,
   shadeColor
 } from '../engine';
-import { generateTerrain, surfaceYAt, carveCrater, type ArenaType } from './terrain';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, type ArenaType } from './terrain';
 import {
   launchProjectile,
   stepProjectile,
@@ -150,6 +150,9 @@ export function initTanksGame(): void {
   // scene.rebuild can join it in onApply; paintTerrain guards the empty
   // pre-round ground.
   let ground: number[] = [];
+  // Uncarveable columns for the current arena (the bunker pillar); empty
+  // everywhere else. Rolled together with `ground` so they never disagree.
+  let solid: boolean[] = [];
   const scene = createStaticLayer(WIDTH, HEIGHT, paintScene);
   const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
     onApply: scene.rebuild
@@ -233,6 +236,31 @@ export function initTanksGame(): void {
     target.moveTo(0, ground[0]);
     for (let x = 1; x < WIDTH; x++) target.lineTo(x, ground[x]);
     target.stroke();
+
+    // Indestructible cover: overlay each contiguous run of solid columns in
+    // stone, so the bunker pillar reads as rock the crater can't touch rather
+    // than the carveable dirt around it.
+    if (solid.some(Boolean)) {
+      let x = 0;
+      while (x < WIDTH) {
+        if (!solid[x]) { x++; continue; }
+        let end = x;
+        let topY = ground[x];
+        while (end < WIDTH && solid[end]) { topY = Math.min(topY, ground[end]); end++; }
+        const stone = target.createLinearGradient(0, topY, 0, HEIGHT);
+        stone.addColorStop(0, '#6b7280');
+        stone.addColorStop(1, '#3b414b');
+        target.fillStyle = stone;
+        target.fillRect(x, topY, end - x, HEIGHT - topY);
+        target.strokeStyle = '#9aa3af';
+        target.lineWidth = 2;
+        target.beginPath();
+        target.moveTo(x, topY);
+        target.lineTo(end, topY);
+        target.stroke();
+        x = end;
+      }
+    }
   }
 
   // The baked scene: backdrop first, then the terrain painted over it, so the
@@ -354,8 +382,14 @@ export function initTanksGame(): void {
     };
   }
 
-  function newRound() {
+  // Roll a fresh heightmap and its uncarveable mask for the current arena.
+  function rollTerrain() {
     ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+    solid = arenaSolid(arena, WIDTH);
+  }
+
+  function newRound() {
+    rollTerrain();
     scene.rebuild();
     const p1x = 70 + Math.random() * 90;
     const p2x = WIDTH - 70 - Math.random() * 90;
@@ -452,7 +486,7 @@ export function initTanksGame(): void {
     const weapon = WEAPONS[weaponId];
     explosions.push({ x, y, t: 0, radius: weapon.radius });
     audio.playSfx('explosion');
-    carveCrater(ground, HEIGHT, x, y, weapon.radius);
+    carveCrater(ground, HEIGHT, x, y, weapon.radius, solid);
     scene.rebuild(); // re-bake the reshaped terrain
     spawnDirt(x, y, weapon.radius);
     shake = Math.min(0.6, shake + weapon.radius / 160);
@@ -1042,7 +1076,7 @@ export function initTanksGame(): void {
   });
 
   const isArena = (v: string | undefined): v is ArenaType =>
-    v === 'hills' || v === 'canyon' || v === 'mesa' || v === 'ridges';
+    v === 'hills' || v === 'canyon' || v === 'mesa' || v === 'ridges' || v === 'bunker';
   arenaButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const picked = btn.dataset.arena;
@@ -1052,7 +1086,7 @@ export function initTanksGame(): void {
         other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
       }
       // Repaint the idle backdrop so the picked arena previews immediately.
-      ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+      rollTerrain();
       scene.rebuild();
     });
   });
@@ -1071,7 +1105,7 @@ export function initTanksGame(): void {
   });
 
   // Idle backdrop so the canvas isn't empty behind the start overlay
-  ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+  rollTerrain();
   scene.rebuild();
   syncControls();
   createGameLoop(update, render).start();

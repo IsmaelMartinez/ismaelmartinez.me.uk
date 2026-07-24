@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateTerrain, surfaceYAt, carveCrater } from '../../src/games/tanks/terrain';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, bunkerColumns } from '../../src/games/tanks/terrain';
 import {
   launchProjectile,
   stepProjectile,
@@ -68,7 +68,7 @@ describe('terrain', () => {
 });
 
 describe('arenas', () => {
-  const ARENAS = ['hills', 'canyon', 'mesa', 'ridges'] as const;
+  const ARENAS = ['hills', 'canyon', 'mesa', 'ridges', 'bunker'] as const;
 
   it('leaves the default hills arena identical to the original three-wave generator', () => {
     // A standalone copy of the pre-arena generator. hills must match it byte for
@@ -161,6 +161,49 @@ describe('arenas', () => {
         }
       }
     }
+  });
+
+  it('marks the bunker pillar solid and every other arena fully carveable', () => {
+    const { x0, x1 } = bunkerColumns(WIDTH);
+    const bunkerSolid = arenaSolid('bunker', WIDTH);
+    expect(bunkerSolid).toHaveLength(WIDTH);
+    for (let x = 0; x < WIDTH; x++) {
+      expect(bunkerSolid[x], `col ${x}`).toBe(x >= x0 && x <= x1);
+    }
+    expect(bunkerSolid[0]).toBe(false);
+    expect(bunkerSolid[WIDTH - 1]).toBe(false);
+    for (const arena of ['hills', 'canyon', 'mesa', 'ridges'] as const) {
+      expect(arenaSolid(arena, WIDTH).some(Boolean), arena).toBe(false);
+    }
+  });
+
+  it('raises a flat tall pillar in the bunker arena, base terrain unchanged', () => {
+    const { x0, x1 } = bunkerColumns(WIDTH);
+    const hills = generateTerrain(WIDTH, HEIGHT, seededRandom(5), 'hills');
+    const bunker = generateTerrain(WIDTH, HEIGHT, seededRandom(5), 'bunker');
+    // Every pillar column is a flat top near the ceiling.
+    for (let x = x0; x <= x1; x++) {
+      expect(bunker[x], `pillar col ${x}`).toBeCloseTo(HEIGHT * 0.34, 5);
+    }
+    // The pillar top sits high (small y); the base outside it is untouched.
+    expect(bunker[x0]).toBeLessThan(HEIGHT * 0.5);
+    expect(bunker[0]).toBe(hills[0]);
+    expect(bunker[x0 - 5]).toBe(hills[x0 - 5]);
+    expect(bunker[x1 + 5]).toBe(hills[x1 + 5]);
+  });
+
+  it('never carves a solid column, only its carveable neighbours', () => {
+    const width = 60;
+    const ground = new Array<number>(width).fill(300);
+    const solid = new Array<boolean>(width).fill(false);
+    solid[30] = true; // one indestructible column
+    const before = [...ground];
+    carveCrater(ground, 450, 30, 300, 8, solid);
+    // The solid column rides out a direct hit...
+    expect(ground[30]).toBe(before[30]);
+    // ...while its carveable neighbours inside the blast are dug down.
+    expect(ground[28]).toBeGreaterThan(before[28]);
+    expect(ground[32]).toBeGreaterThan(before[32]);
   });
 });
 

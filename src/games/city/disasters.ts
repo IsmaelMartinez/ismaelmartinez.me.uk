@@ -41,6 +41,7 @@ export function isFlammable(tile: CityTile): boolean {
     tile.type === 'park' ||
     tile.type === 'school' ||
     tile.type === 'firehouse' ||
+    tile.type === 'police' ||
     (isZone(tile.type) && tile.level > 0)
   );
 }
@@ -225,7 +226,12 @@ export function wreckTile(tile: CityTile): boolean {
     }
     return true;
   }
-  if (tile.type === 'park' || tile.type === 'school' || tile.type === 'firehouse') {
+  if (
+    tile.type === 'park' ||
+    tile.type === 'school' ||
+    tile.type === 'firehouse' ||
+    tile.type === 'police'
+  ) {
     tile.type = 'rubble';
     tile.level = 0;
     return true;

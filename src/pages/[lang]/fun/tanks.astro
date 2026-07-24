@@ -74,6 +74,15 @@ const weapons = [
                   <button type="button" class="difficulty-btn" data-difficulty="veteran" aria-pressed="false">{t('fun.tanks.difficultyVeteran')}</button>
                 </div>
               </div>
+              <div class="arena-select" role="group" aria-label={t('fun.tanks.arena')}>
+                <span class="arena-label">{t('fun.tanks.arena')}</span>
+                <div class="arena-buttons">
+                  <button type="button" class="arena-btn active" data-arena="hills" aria-pressed="true">{t('fun.tanks.arenaHills')}</button>
+                  <button type="button" class="arena-btn" data-arena="canyon" aria-pressed="false">{t('fun.tanks.arenaCanyon')}</button>
+                  <button type="button" class="arena-btn" data-arena="mesa" aria-pressed="false">{t('fun.tanks.arenaMesa')}</button>
+                  <button type="button" class="arena-btn" data-arena="ridges" aria-pressed="false">{t('fun.tanks.arenaRidges')}</button>
+                </div>
+              </div>
               <div class="mode-buttons">
                 <button id="vs-cpu-btn" class="btn btn-primary btn-large">{t('fun.tanks.vsCpu')}</button>
                 <button id="two-player-btn" class="btn btn-primary btn-large">{t('fun.tanks.twoPlayer')}</button>
@@ -271,11 +280,13 @@ const weapons = [
     margin-bottom: var(--space-xl);
   }
 
-  .difficulty-select {
-    margin-bottom: var(--space-xl);
+  .difficulty-select,
+  .arena-select {
+    margin-bottom: var(--space-lg);
   }
 
-  .difficulty-label {
+  .difficulty-label,
+  .arena-label {
     display: block;
     font-size: 0.75rem;
     text-transform: uppercase;
@@ -284,7 +295,8 @@ const weapons = [
     margin-bottom: var(--space-sm);
   }
 
-  .difficulty-buttons {
+  .difficulty-buttons,
+  .arena-buttons {
     display: inline-flex;
     gap: var(--space-xs);
     padding: 4px;
@@ -293,7 +305,8 @@ const weapons = [
     border-radius: 0.7rem;
   }
 
-  .difficulty-btn {
+  .difficulty-btn,
+  .arena-btn {
     padding: var(--space-xs) var(--space-md);
     min-height: 40px;
     background: transparent;
@@ -306,11 +319,13 @@ const weapons = [
     transition: all 0.15s ease;
   }
 
-  .difficulty-btn:hover {
+  .difficulty-btn:hover,
+  .arena-btn:hover {
     color: var(--color-text);
   }
 
-  .difficulty-btn.active {
+  .difficulty-btn.active,
+  .arena-btn.active {
     background: rgba(37, 99, 235, 0.18);
     color: var(--color-text);
     box-shadow: inset 0 0 0 2px var(--color-accent);

@@ -137,7 +137,7 @@ const buildingHeight = (tile: CityTile): number => {
   // These include the smokestack/gable-roof-peak flourish drawn on top of
   // the base block, so fire icons and smoke line up above the whole shape.
   if (tile.type === 'power') return 38;
-  if (tile.type === 'school' || tile.type === 'firehouse') return 20;
+  if (tile.type === 'school' || tile.type === 'firehouse' || tile.type === 'police') return 20;
   if (!isZone(tile.type)) return 0;
   const level = Math.min(Math.max(tile.level, 0), DENSE_LEVEL);
   return ZONE_TOP_HEIGHT[tile.type][level];
@@ -194,6 +194,7 @@ export function initCityGame(): void {
     fireAlert: root.dataset.tFireAlert || 'Fire has broken out!',
     tornadoAlert: root.dataset.tTornadoAlert || 'Tornado touching down!',
     quakeAlert: root.dataset.tQuakeAlert || 'Earthquake!',
+    crimeAlert: root.dataset.tCrimeAlert || 'Crime is rising. Build a police station!',
     densityUnlocked: root.dataset.tDensityUnlocked || 'High-density zoning unlocked!',
     newRecord: root.dataset.tNewRecord || 'New record population!',
     events: {
@@ -258,6 +259,7 @@ export function initCityGame(): void {
   let tornado: Tornado | null = null;
   let shake = 0; // seconds of screen shake left (earthquakes)
   let densityToastShown = false;
+  let crimeToastShown = false;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let sparks: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
@@ -346,6 +348,7 @@ export function initCityGame(): void {
     tornado = null;
     shake = 0;
     densityToastShown = false;
+    crimeToastShown = false;
     board.beginRun();
     activeEvents = [];
     smoke = [];
@@ -431,6 +434,12 @@ export function initCityGame(): void {
         addSparks(i, '#4ade80', 6);
       }
       for (const i of result.decayed) addFloater(i, '▼', '#f87171');
+      // One-time nudge the first time crime bites, so the player learns the
+      // new pressure rather than watching an unexplained district shrink.
+      if (result.crimeDecayed.length && !crimeToastShown) {
+        crimeToastShown = true;
+        showToast(`🚨 ${strings.crimeAlert}`);
+      }
 
       // Chaos: active fires spread and burn down; new ones spark up
       if (fires.length) {
@@ -1424,6 +1433,18 @@ export function initCityGame(): void {
           drawPyramidCap(vx + 0.66, vy + 0.14, vx + 0.84, vy + 0.32, 23, 2.5, '#6a2a2a');
           ctx.font = '13px serif';
           ctx.fillText('🚒', top.x, top.y - 14);
+        } else if (tile.type === 'police') {
+          drawBlock(ctx, VIEW, vx, vy, 14, '#3f5a8f');
+          drawWindows(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, i, 2, 0, 14);
+          drawDoor(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, 0.5, '#26365c');
+          drawRoofRidge(vx, vy, 14, '#2f4670');
+          // Rooftop beacon pulsing on the shared blink cadence, phased by tile.
+          ctx.fillStyle = blink(clock, i) ? '#7dd3fc' : '#1e3a5f';
+          ctx.beginPath();
+          ctx.arc(top.x, top.y - 20, 1.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = '13px serif';
+          ctx.fillText('🚓', top.x, top.y - 14);
         } else if (isZone(tile.type)) {
           if (tile.level === 0) {
             fillTile(ctx, VIEW, vx, vy, ZONE_TINT[tile.type]);

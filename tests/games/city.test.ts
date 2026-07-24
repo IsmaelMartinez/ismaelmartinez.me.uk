@@ -26,6 +26,7 @@ import {
 import {
   computePowered,
   computeFireCover,
+  computePoliceCover,
   roadAdjacent,
   cityStats,
   computeDemand,
@@ -34,6 +35,8 @@ import {
   growthStep,
   maxZoneLevel,
   POWER_RADIUS,
+  POLICE_RADIUS,
+  CRIME_ONSET_POP,
   RESIDENTS_PER_LEVEL,
   DENSITY_UNLOCK_POP,
   DENSE_DEMAND_MIN
@@ -714,9 +717,11 @@ describe('city chaos — tornado', () => {
   });
 
   it('flattens civic buildings, tears out trees, and spares power/roads/water', () => {
-    const school = { type: 'school' as const, level: 0 };
-    expect(wreckTile(school)).toBe(true);
-    expect(school.type).toBe('rubble');
+    for (const type of ['school', 'firehouse', 'police', 'park'] as const) {
+      const civic = { type, level: 0 };
+      expect(wreckTile(civic), type).toBe(true);
+      expect(civic.type).toBe('rubble');
+    }
     const tree = { type: 'tree' as const, level: 0 };
     expect(wreckTile(tree)).toBe(true);
     expect(tree.type).toBe('empty');
@@ -804,6 +809,10 @@ describe('city density (level-4 zones)', () => {
     build(tiles, 6, 5, 'res');
     build(tiles, 5, 4, 'park');
     build(tiles, 3, 3, 'school');
+    // A thriving late-game city keeps a police station: past CRIME_ONSET_POP an
+    // unpoliced developed district would bleed to crime, so densification (a
+    // late-game reward) assumes the safety pillar is in place.
+    build(tiles, 6, 4, 'police');
     tiles[cityIdx(6, 5)].level = MAX_LEVEL;
     // Backdrop population and jobs (need not be serviced to count in stats):
     // enough residents to clear the unlock and enough jobs for hot res demand.
@@ -840,6 +849,74 @@ describe('city density (level-4 zones)', () => {
     tiles[cityIdx(7, 6)].level = 3;
     growthStep(tiles, () => 0);
     expect(tiles[cityIdx(6, 5)].level).toBe(MAX_LEVEL);
+  });
+});
+
+describe('city police and crime', () => {
+  it('prices and bills the police station', () => {
+    expect(TOOL_COSTS.police).toBe(275);
+    const tiles = createCity();
+    build(tiles, 0, 0, 'police');
+    build(tiles, 5, 0, 'firehouse');
+    // Infrastructure upkeep only (no stats): police 14 + firehouse 12.
+    expect(monthlyExpenses(tiles)).toBe(14 + 12);
+  });
+
+  it('covers tiles within POLICE_RADIUS of a station and no further', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'police');
+    const cover = computePoliceCover(tiles);
+    expect(cover[cityIdx(5, 5)]).toBe(true);
+    expect(cover[cityIdx(5 + POLICE_RADIUS, 5)]).toBe(true);
+    expect(cover[cityIdx(5 + POLICE_RADIUS + 1, 5)]).toBe(false);
+  });
+
+  // A serviced, developed res tile plus enough backdrop residents to cross
+  // CRIME_ONSET_POP while staying under the densification unlock, so the tile
+  // can only lose ground to crime, never gain a level this tick.
+  function exposedCity() {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'power');
+    build(tiles, 6, 6, 'road');
+    build(tiles, 6, 5, 'res');
+    tiles[cityIdx(6, 5)].level = 3;
+    for (let x = 10; x < 15; x++) {
+      build(tiles, x, 2, 'res');
+      tiles[cityIdx(x, 2)].level = 8;
+    }
+    return tiles;
+  }
+
+  it('bleeds a developed, unpoliced district once the city is large', () => {
+    const tiles = exposedCity();
+    const stats = cityStats(tiles);
+    expect(stats.population).toBeGreaterThanOrEqual(CRIME_ONSET_POP);
+    expect(stats.population).toBeLessThan(DENSITY_UNLOCK_POP);
+    // random()=0 clears any positive crime chance.
+    const result = growthStep(tiles, () => 0);
+    expect(result.crimeDecayed).toContain(cityIdx(6, 5));
+    expect(tiles[cityIdx(6, 5)].level).toBe(2);
+  });
+
+  it('holds the district when a police station is in reach', () => {
+    const tiles = exposedCity();
+    build(tiles, 6, 4, 'police');
+    const result = growthStep(tiles, () => 0);
+    expect(result.crimeDecayed).toHaveLength(0);
+    expect(tiles[cityIdx(6, 5)].level).toBe(3);
+  });
+
+  it('never touches a small city, even unpoliced', () => {
+    const tiles = createCity();
+    build(tiles, 5, 5, 'power');
+    build(tiles, 6, 6, 'road');
+    build(tiles, 6, 5, 'res');
+    tiles[cityIdx(6, 5)].level = 3;
+    const stats = cityStats(tiles);
+    expect(stats.population).toBeLessThan(CRIME_ONSET_POP);
+    const result = growthStep(tiles, () => 0);
+    expect(result.crimeDecayed).toHaveLength(0);
+    expect(tiles[cityIdx(6, 5)].level).toBe(3);
   });
 });
 
@@ -941,6 +1018,9 @@ describe('city traffic congestion', () => {
     build(tiles, 6, 5, 'res');
     build(tiles, 5, 4, 'park');
     build(tiles, 3, 3, 'school');
+    // Policed, like a real thriving city: past CRIME_ONSET_POP an unpoliced
+    // developed district would bleed to crime before it could densify.
+    build(tiles, 6, 4, 'police');
     tiles[cityIdx(6, 5)].level = MAX_LEVEL;
     for (let x = 10; x < 22; x++) {
       build(tiles, x, 2, 'res');

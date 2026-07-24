@@ -17,7 +17,7 @@ import {
   createEffects,
   shadeColor
 } from '../engine';
-import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
+import { generateTerrain, surfaceYAt, carveCrater, type ArenaType } from './terrain';
 import {
   launchProjectile,
   stepProjectile,
@@ -114,6 +114,9 @@ export function initTanksGame(): void {
   const weaponButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.weapon-btn'));
   const difficultyButtons = Array.from(
     root.querySelectorAll<HTMLButtonElement>('.difficulty-btn')
+  );
+  const arenaButtons = Array.from(
+    root.querySelectorAll<HTMLButtonElement>('.arena-btn')
   );
 
   const strings = {
@@ -245,6 +248,8 @@ export function initTanksGame(): void {
   let mode: 'cpu' | '2p' = 'cpu';
   // Selected difficulty tier (start-screen picker); only matters vs the CPU.
   let difficulty: Difficulty = 'gunner';
+  // Selected battlefield silhouette (start-screen picker).
+  let arena: ArenaType = 'hills';
   // Rounds decided so far this match, feeding the per-round accuracy ramp.
   let roundsDecided = 0;
   let wins = [0, 0];
@@ -350,7 +355,7 @@ export function initTanksGame(): void {
   }
 
   function newRound() {
-    ground = generateTerrain(WIDTH, HEIGHT);
+    ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
     scene.rebuild();
     const p1x = 70 + Math.random() * 90;
     const p2x = WIDTH - 70 - Math.random() * 90;
@@ -1036,6 +1041,22 @@ export function initTanksGame(): void {
     });
   });
 
+  const isArena = (v: string | undefined): v is ArenaType =>
+    v === 'hills' || v === 'canyon' || v === 'mesa' || v === 'ridges';
+  arenaButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const picked = btn.dataset.arena;
+      if (isArena(picked)) arena = picked;
+      for (const other of arenaButtons) {
+        other.classList.toggle('active', other === btn);
+        other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
+      }
+      // Repaint the idle backdrop so the picked arena previews immediately.
+      ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+      scene.rebuild();
+    });
+  });
+
   vsCpuBtn.addEventListener('click', () => startMatch('cpu'));
   twoPlayerBtn.addEventListener('click', () => startMatch('2p'));
   nextRoundBtn.addEventListener('click', () => {
@@ -1050,7 +1071,7 @@ export function initTanksGame(): void {
   });
 
   // Idle backdrop so the canvas isn't empty behind the start overlay
-  ground = generateTerrain(WIDTH, HEIGHT);
+  ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
   scene.rebuild();
   syncControls();
   createGameLoop(update, render).start();

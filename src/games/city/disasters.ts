@@ -41,6 +41,7 @@ export function isFlammable(tile: CityTile): boolean {
     tile.type === 'park' ||
     tile.type === 'school' ||
     tile.type === 'firehouse' ||
+    tile.type === 'police' ||
     (isZone(tile.type) && tile.level > 0)
   );
 }

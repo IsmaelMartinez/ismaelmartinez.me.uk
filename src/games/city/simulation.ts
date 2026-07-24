@@ -9,6 +9,13 @@ import { CITY_W, CITY_H, MAX_LEVEL, DENSE_LEVEL, isZone, isRoad, type CityTile, 
 export const POWER_RADIUS = 7;
 export const SCHOOL_RADIUS = 6;
 export const FIRE_RADIUS = 6;
+export const POLICE_RADIUS = 6;
+/** A developed district past this population starts to feel crime if it has no
+ *  police station in reach. Below it, the early game is left alone — the same
+ *  late-game-only philosophy as the per-capita service bill. */
+export const CRIME_ONSET_POP = 250;
+/** Per-tick chance an exposed developed zone loses a level to crime. */
+export const CRIME_DECAY_CHANCE = 0.05;
 export const RESIDENTS_PER_LEVEL = 8;
 export const COM_JOBS_PER_LEVEL = 6;
 export const IND_JOBS_PER_LEVEL = 8;
@@ -38,6 +45,12 @@ export function computePowered(tiles: CityTile[]): boolean[] {
  * are actively put out by the crews (see `stepFires`/`EXTINGUISH_CHANCE`). */
 export function computeFireCover(tiles: CityTile[]): boolean[] {
   return coverage(tiles, 'firehouse', FIRE_RADIUS);
+}
+
+/** Police coverage: a developed zone within POLICE_RADIUS of a station is safe
+ * from the crime decay in `growthStep`. */
+export function computePoliceCover(tiles: CityTile[]): boolean[] {
+  return coverage(tiles, 'police', POLICE_RADIUS);
 }
 
 export function roadAdjacent(tiles: CityTile[], i: number): boolean {
@@ -126,13 +139,15 @@ export function growthStep(
   random: () => number = Math.random,
   demandModifier: Partial<Demand> = {},
   congested: boolean[] = []
-): { grown: number[]; decayed: number[] } {
+): { grown: number[]; decayed: number[]; crimeDecayed: number[] } {
   const powered = computePowered(tiles);
+  const policed = computePoliceCover(tiles);
   const stats = cityStats(tiles);
   const demand = computeDemand(stats, demandModifier);
   const cap = maxZoneLevel(stats);
   const grown: number[] = [];
   const decayed: number[] = [];
+  const crimeDecayed: number[] = [];
 
   tiles.forEach((tile, i) => {
     if (!isZone(tile.type)) return;
@@ -142,6 +157,22 @@ export function growthStep(
         tile.level--;
         decayed.push(i);
       }
+      return;
+    }
+    // Crime: a developed district with no police station in reach hollows out
+    // once the city is large. A "hold what you built" pressure, distinct from
+    // the school gate on growth — an exposed zone still grows, it just bleeds a
+    // level now and then until it is policed. Gated on population and level so
+    // the early and mid game are never touched.
+    if (
+      tile.level >= 2 &&
+      !policed[i] &&
+      stats.population >= CRIME_ONSET_POP &&
+      random() < CRIME_DECAY_CHANCE
+    ) {
+      tile.level--;
+      decayed.push(i);
+      crimeDecayed.push(i);
       return;
     }
     // Traffic-choked: every road serving this zone is congested, with no
@@ -161,5 +192,5 @@ export function growthStep(
     }
   });
 
-  return { grown, decayed };
+  return { grown, decayed, crimeDecayed };
 }

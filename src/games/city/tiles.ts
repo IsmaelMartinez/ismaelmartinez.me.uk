@@ -19,11 +19,12 @@ export type CityTileType =
   | 'park'
   | 'school'
   | 'firehouse'
+  | 'police'
   | 'water'
   | 'tree'
   | 'rubble'
   | ZoneType;
-export type CityTool = 'road' | 'power' | 'park' | 'school' | 'firehouse' | 'bulldoze' | 'fill' | ZoneType;
+export type CityTool = 'road' | 'power' | 'park' | 'school' | 'firehouse' | 'police' | 'bulldoze' | 'fill' | ZoneType;
 
 export interface CityTile {
   type: CityTileType;
@@ -46,6 +47,7 @@ export const TOOL_COSTS: Record<CityTool, number> = {
   park: 30,
   school: 300,
   firehouse: 250,
+  police: 275,
   bulldoze: 0,
   fill: FILL_COST
 };

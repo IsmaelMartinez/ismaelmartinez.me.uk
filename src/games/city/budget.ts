@@ -29,7 +29,8 @@ const UPKEEP: Partial<Record<CityTileType, number>> = {
   power: 40,
   park: 3,
   school: 15,
-  firehouse: 12
+  firehouse: 12,
+  police: 14
 };
 
 export function monthlyIncome(stats: CityStats): number {

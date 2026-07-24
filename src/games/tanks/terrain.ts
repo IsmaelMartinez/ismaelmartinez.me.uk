@@ -44,6 +44,18 @@ export function arenaSolid(arena: ArenaType, width: number): boolean[] {
   return solid;
 }
 
+/**
+ * Whether the column under world-x `x` is indestructible cover in `solid`.
+ * Rounds and clamps x to a valid column exactly as `surfaceYAt` does, so a
+ * shot's collision sample and this cover test can never disagree at the pillar
+ * edge. This is the load-bearing half of the Skipper's interlock (a skip is
+ * denied on a solid column), kept pure here so it is unit-testable.
+ */
+export function isSolidColumn(solid: boolean[], x: number, width: number): boolean {
+  const ix = Math.min(width - 1, Math.max(0, Math.round(x)));
+  return solid[ix] === true;
+}
+
 export function generateTerrain(
   width: number,
   height: number,

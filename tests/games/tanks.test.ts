@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, bunkerColumns } from '../../src/games/tanks/terrain';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, bunkerColumns, isSolidColumn } from '../../src/games/tanks/terrain';
 import {
   launchProjectile,
   stepProjectile,
@@ -205,6 +205,22 @@ describe('arenas', () => {
     // ...while its carveable neighbours inside the blast are dug down.
     expect(ground[28]).toBeGreaterThan(before[28]);
     expect(ground[32]).toBeGreaterThan(before[32]);
+  });
+
+  it('reports the bunker pillar as cover for the Skipper interlock', () => {
+    // isSolidColumn is the load-bearing half of the bounce interlock: a skip is
+    // denied on a solid column (the pillar) and allowed on open dirt.
+    const solid = arenaSolid('bunker', WIDTH);
+    const { x0, x1 } = bunkerColumns(WIDTH);
+    const mid = Math.round((x0 + x1) / 2);
+    expect(isSolidColumn(solid, mid, WIDTH)).toBe(true); // pillar stops the skip
+    expect(isSolidColumn(solid, mid + 0.4, WIDTH)).toBe(true); // rounds into the pillar
+    expect(isSolidColumn(solid, 40, WIDTH)).toBe(false); // open dirt, the shot skips
+    // Out-of-range x clamps into the field rather than reading undefined.
+    expect(isSolidColumn(solid, -10, WIDTH)).toBe(false);
+    expect(isSolidColumn(solid, WIDTH + 50, WIDTH)).toBe(false);
+    // Every open arena is cover-free everywhere.
+    expect(isSolidColumn(arenaSolid('hills', WIDTH), 400, WIDTH)).toBe(false);
   });
 });
 

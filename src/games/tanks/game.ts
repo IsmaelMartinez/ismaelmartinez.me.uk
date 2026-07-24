@@ -17,7 +17,7 @@ import {
   createEffects,
   shadeColor
 } from '../engine';
-import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, type ArenaType } from './terrain';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, isSolidColumn, type ArenaType } from './terrain';
 import {
   launchProjectile,
   stepProjectile,
@@ -598,8 +598,7 @@ export function initTanksGame(): void {
       return false;
     }
     if (p.x >= 0 && p.x < WIDTH && p.y >= surfaceYAt(ground, p.x)) {
-      const ix = Math.min(WIDTH - 1, Math.max(0, Math.round(p.x)));
-      if (shot.bounces > 0 && !solid[ix]) {
+      if (shot.bounces > 0 && !isSolidColumn(solid, p.x, WIDTH)) {
         // Skip off the dirt: reflect upward, bleed speed, keep flying. A solid
         // column (the bunker pillar) is not skippable, so the shot detonates
         // against it instead — that is what makes the cover matter.

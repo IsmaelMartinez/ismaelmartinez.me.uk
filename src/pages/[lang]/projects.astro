@@ -17,7 +17,7 @@ const t = useTranslations(lang);
 const health = await fetchPortfolioHealth();
 ---
 
-<Layout title="Projects" lang={lang}>
+<Layout title={t('nav.projects')} description={t('section.projects.description')} lang={lang}>
   <section class="section">
     <div class="container">
       <header class="page-header">

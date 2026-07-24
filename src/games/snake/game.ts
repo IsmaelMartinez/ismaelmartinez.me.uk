@@ -19,6 +19,7 @@ import {
 import {
   COLS,
   ROWS,
+  ARENA_WALLS,
   BONUS_TICKS,
   BONUS_POINTS,
   FOOD_POINTS,
@@ -34,6 +35,8 @@ const CELL = 20;
 const WIDTH = COLS * CELL;
 const HEIGHT = ROWS * CELL;
 const DEATH_DELAY = 0.9; // seconds between dying and the game-over overlay
+/** Mossy stone for the arena walls, so they belong in the garden. */
+const WALL_BASE = '#2f4f3f';
 
 const DIRECTIONS: Record<string, Vec> = {
   up: { x: 0, y: -1 },
@@ -84,16 +87,23 @@ export function initSnakeGame(): void {
   const restartBtn = el('restart-btn');
   const scoreEl = el('score');
   const highScoreEl = el('high-score');
+  const arenaEl = el('arena');
   const finalScoreEl = el('final-score');
 
-  // The board (base fill, checkerboard, vignette) never changes, so it's
-  // baked once per DPR change instead of re-filling the checker pattern and
-  // a full-canvas radial gradient every frame.
+  const arenaAdvanceText = root.dataset.tArenaAdvance || 'The walls close in!';
+
+  // Declared before the board layer: `setupHiDpiCanvas` paints the bake
+  // immediately, and `paintBoard` reads the standing walls off the state.
+  let state: SnakeState = createSnakeState();
+  let prevSnake: Vec[] = state.snake.map(s => ({ ...s }));
+
+  // The board (base fill, checkerboard, vignette, standing walls) only changes
+  // when the arena ladder claims a cell, so it's baked and rebuilt on those
+  // steps instead of re-filling the checker pattern and a full-canvas radial
+  // gradient every frame.
   const boardLayer = createStaticLayer(WIDTH, HEIGHT, paintBoard);
   setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, { onApply: boardLayer.rebuild });
 
-  let state: SnakeState = createSnakeState();
-  let prevSnake: Vec[] = state.snake.map(s => ({ ...s }));
   let phase: Phase = 'idle';
   let paused = false;
   let moveTimer = 0;
@@ -155,6 +165,10 @@ export function initSnakeGame(): void {
 
   const addFloater = fx.floater;
 
+  const syncArena = () => {
+    arenaEl.textContent = `${state.arena + 1}/${ARENA_WALLS.length}`;
+  };
+
   function startGame() {
     state = createSnakeState();
     prevSnake = state.snake.map(s => ({ ...s }));
@@ -163,6 +177,10 @@ export function initSnakeGame(): void {
     moveTimer = 0;
     fx.clear();
     scoreEl.textContent = '0';
+    syncArena();
+    // A new run opens on the empty board, so the bake has to drop the walls
+    // the last run finished behind.
+    boardLayer.rebuild();
     overlay.style.display = 'none';
     gameOverOverlay.style.display = 'none';
     board.hide();
@@ -185,8 +203,19 @@ export function initSnakeGame(): void {
   function advance() {
     prevSnake = state.snake.map(s => ({ ...s }));
     const foodBefore = state.food;
+    const arenaBefore = state.arena;
+    const wallsBefore = state.walls.size;
     const event = step(state);
     const head = state.snake[0];
+    // Walls grow both when a rung arrives and, later, as claimed cells are
+    // vacated — either way the bake is stale and has to be redrawn.
+    if (state.walls.size !== wallsBefore) boardLayer.rebuild();
+    if (state.arena !== arenaBefore) {
+      syncArena();
+      audio.playSfx('score');
+      addFloater(WIDTH / 2, HEIGHT / 2, arenaAdvanceText, '#7dd3fc');
+      burst(WIDTH / 2, HEIGHT / 2, '#7dd3fc', 22);
+    }
     if (event === 'died') {
       die();
     } else if (event === 'ate') {
@@ -252,6 +281,29 @@ export function initSnakeGame(): void {
     vignette.addColorStop(1, 'rgba(2, 12, 6, 0.5)');
     target.fillStyle = vignette;
     target.fillRect(0, 0, WIDTH, HEIGHT);
+
+    for (const i of state.walls) drawWall(target, i);
+  }
+
+  /**
+   * One block of arena wall: a hashed stone shade so a run of them never reads
+   * as one flat bar, a lit top rim, and a dark grounding edge — the arcade's
+   * outline recipe at Snake's cell size.
+   */
+  function drawWall(target: CanvasRenderingContext2D, i: number) {
+    const x = (i % COLS) * CELL;
+    const y = Math.floor(i / COLS) * CELL;
+    const shade = 0.88 + hash01(i, 31) * 0.24;
+    target.fillStyle = shadeColor(WALL_BASE, shade);
+    target.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+    target.fillStyle = shadeColor(WALL_BASE, shade * 1.5);
+    target.fillRect(x + 1, y + 1, CELL - 2, 2);
+    target.fillStyle = 'rgba(4, 12, 7, 0.75)';
+    target.fillRect(x + 1, y + CELL - 3, CELL - 2, 2);
+    // A mortar seam, offset per cell, so the coursing looks laid rather than
+    // stamped.
+    target.fillStyle = 'rgba(4, 12, 7, 0.35)';
+    target.fillRect(x + 4 + Math.floor(hash01(i, 7) * 10), y + 4, 1, CELL - 8);
   }
 
 
@@ -449,6 +501,13 @@ export function initSnakeGame(): void {
     }
 
     boardLayer.draw(ctx);
+    // Claimed-but-not-yet-solid cells pulse as ghosts, so the player can see
+    // where the walls are about to land and steer clear.
+    if (state.pendingWalls.size > 0) {
+      ctx.globalAlpha = 0.32 + 0.16 * Math.sin(clock * 6);
+      for (const i of state.pendingWalls) drawWall(ctx, i);
+      ctx.globalAlpha = 1;
+    }
     if (state.food.x >= 0) {
       drawApple(px(state.food.x), px(state.food.y), state.food.x * COLS + state.food.y);
     }

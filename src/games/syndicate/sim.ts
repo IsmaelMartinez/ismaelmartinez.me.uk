@@ -44,6 +44,7 @@ export type WorldEvent =
   | { type: 'kill'; kind: Unit['kind']; by: 'player' | 'hostile'; x: number; y: number }
   | { type: 'agentDown'; x: number; y: number }
   | { type: 'persuade'; kind: Unit['kind']; x: number; y: number }
+  | { type: 'vipSecured'; x: number; y: number }
   | { type: 'pickup'; weapon: WeaponId; role: 'agent' | 'follower'; upgraded: boolean; x: number; y: number };
 
 export interface World {
@@ -68,6 +69,14 @@ export const followerCount = (world: World): number =>
 
 export const persuadedCivilians = (world: World): number =>
   world.units.reduce((n, u) => n + (u.alive && u.persuaded && u.kind === 'civilian' ? 1 : 0), 0);
+
+/** The escort asset, collected or not, on the missions that field one. */
+export const vipOf = (world: World): Unit | null =>
+  world.units.find(u => u.kind === 'vip') ?? null;
+
+/** True once an agent has reached the asset and it is trailing the squad. */
+export const escorting = (unit: Unit): boolean =>
+  unit.kind === 'vip' && unit.faction === 'player';
 
 const tileOf = (u: Unit): number => idx(Math.floor(u.x), Math.floor(u.y));
 
@@ -226,7 +235,14 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
   world.shots = world.shots.filter(shot => (shot.life -= dt) > 0);
 
   const agents = livingAgents(world);
-  const armedPlayers = world.units.filter(u => u.alive && u.faction === 'player' && u.weapon);
+  // What hostiles will shoot at. Armed player units draw fire as they always
+  // have, plus a collected escort asset: it carries no weapon, so without
+  // this it would be literally unshootable and an escort mission could never
+  // be lost. A pinned asset is still neutral and ignored, which is what makes
+  // reaching it the moment the contract turns dangerous.
+  const prey = world.units.filter(
+    u => u.alive && u.faction === 'player' && (u.weapon !== null || u.kind === 'vip')
+  );
   const hostiles = world.units.filter(u => u.alive && u.faction === 'hostile');
 
   for (const unit of world.units) {
@@ -239,7 +255,11 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
     let speed = UNIT_SPEED[unit.kind];
     if (unit.kind === 'civilian' && unit.panic > 0) speed = 3.2;
     if (unit.persuaded) speed = UNIT_SPEED.agent;
-    if (unit.faction === 'player' && world.boost > 0) speed *= BOOST_SPEED;
+    // Adrenaline is the squad's own chrome, so a boosted squad outruns the
+    // asset it is escorting — sprint ahead and you leave it exposed.
+    if (unit.faction === 'player' && unit.kind !== 'vip' && world.boost > 0) {
+      speed *= BOOST_SPEED;
+    }
 
     if (unit.kind === 'agent') {
       // Movement is the player's; agents only auto-fire.
@@ -264,15 +284,19 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
         const target = visibleTarget(world, unit, hostiles, WEAPONS[unit.weapon].range);
         if (target) fire(world, unit, target, events);
       }
+    } else if (unit.kind === 'vip') {
+      // Pinned where the contract left it until an agent arrives; from then
+      // on it trails the squad on the same routine persuaded minds use.
+      if (escorting(unit)) follow(world, unit, agents);
     } else if (unit.faction === 'hostile') {
       const weapon = unit.weapon ? WEAPONS[unit.weapon] : null;
-      const prey = visibleTarget(world, unit, armedPlayers, SIGHT_RANGE);
-      if (prey && weapon) {
-        if (distance(unit, prey) <= weapon.range) {
+      const mark = visibleTarget(world, unit, prey, SIGHT_RANGE);
+      if (mark && weapon) {
+        if (distance(unit, mark) <= weapon.range) {
           unit.path = [];
-          if (unit.cooldown <= 0) fire(world, unit, prey, events);
+          if (unit.cooldown <= 0) fire(world, unit, mark, events);
         } else if (unit.repathTimer <= 0) {
-          const path = findPath(world.tiles, tileOf(unit), tileOf(prey));
+          const path = findPath(world.tiles, tileOf(unit), tileOf(mark));
           if (path) unit.path = path;
           unit.repathTimer = 0.7;
         }
@@ -297,6 +321,19 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
       unit.panic = 0;
       unit.path = [];
       events.push({ type: 'persuade', kind: unit.kind, x: unit.x, y: unit.y });
+    }
+  }
+
+  // Collecting the asset: walking an agent up to it is the whole interaction.
+  // It joins the squad's faction, starts following, and from this moment the
+  // streets can shoot it.
+  for (const agent of agents) {
+    for (const unit of world.units) {
+      if (!unit.alive || unit.kind !== 'vip' || unit.faction === 'player') continue;
+      if (distance(agent, unit) > PERSUADE_RADIUS) continue;
+      unit.faction = 'player';
+      unit.path = [];
+      events.push({ type: 'vipSecured', x: unit.x, y: unit.y });
     }
   }
 

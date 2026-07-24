@@ -37,6 +37,8 @@ import {
   livingAgents,
   followerCount,
   persuadedCivilians,
+  vipOf,
+  escorting,
   type World
 } from './sim';
 import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus, type MissionSpec } from './missions';
@@ -131,7 +133,8 @@ export function initSyndicateGame(): void {
       s('tMission6Name', 'Endgame'),
       s('tMission7Name', 'Hold the Line'),
       s('tMission8Name', 'Scorched Earth'),
-      s('tMission9Name', 'Total Control')
+      s('tMission9Name', 'Total Control'),
+      s('tMission10Name', 'Safe Passage')
     ],
     missionBriefs: [
       s('tMission1Brief', ''),
@@ -142,13 +145,17 @@ export function initSyndicateGame(): void {
       s('tMission6Brief', ''),
       s('tMission7Brief', ''),
       s('tMission8Brief', ''),
-      s('tMission9Brief', '')
+      s('tMission9Brief', ''),
+      s('tMission10Brief', '')
     ],
     objectiveEliminate: s('tObjectiveEliminate', 'Eliminate the rival agents'),
     objectivePersuade: s('tObjectivePersuade', 'Persuade civilians'),
     objectiveExtract: s('tObjectiveExtract', 'Reach the extraction point'),
     objectiveAssassinate: s('tObjectiveAssassinate', 'Assassinate the rival executive'),
     objectiveSecure: s('tObjectiveSecure', 'Hold the landing zone'),
+    objectiveReachAsset: s('tObjectiveReachAsset', 'Reach the asset'),
+    objectiveEscort: s('tObjectiveEscort', 'Escort the asset to extraction'),
+    vipSecured: s('tVipSecured', 'Asset secured — get it out'),
     missionComplete: s('tMissionComplete', 'Mission complete'),
     nextMission: s('tNextMission', 'Next contract'),
     gameOver: s('tGameOver', 'Squad eliminated'),
@@ -401,6 +408,9 @@ export function initSyndicateGame(): void {
         addFloater(event.x, event.y, `+£${bonus}`, '#67e8f9');
         const kindName = strings.kinds[event.kind];
         if (kindName) showToast(`🧠 ${kindName} ${strings.joined}`);
+      } else if (event.type === 'vipSecured') {
+        spawnSparkle(event.x, event.y, '#fcd34d');
+        showToast(`🎓 ${strings.vipSecured}`);
       } else if (event.type === 'pickup') {
         spawnSparkle(event.x, event.y, '#fde68a');
         if (event.role === 'follower') {
@@ -420,6 +430,20 @@ export function initSyndicateGame(): void {
     const ex = (extraction % MAP_W) + 0.5;
     const ey = Math.floor(extraction / MAP_W) + 0.5;
     return livingAgents(world).some(a => Math.hypot(a.x - ex, a.y - ey) <= EXTRACTION_RADIUS);
+  }
+
+  /**
+   * The escort's win test. Deliberately about the asset and not the squad: an
+   * agent alone on the pad must not extract a mission whose whole point is
+   * what it brought with it.
+   */
+  function vipAtExtraction(): boolean {
+    if (extraction < 0) return false;
+    const vip = vipOf(world);
+    if (!vip || !vip.alive || !escorting(vip)) return false;
+    const ex = (extraction % MAP_W) + 0.5;
+    const ey = Math.floor(extraction / MAP_W) + 0.5;
+    return Math.hypot(vip.x - ex, vip.y - ey) <= EXTRACTION_RADIUS;
   }
 
   function update(dt: number) {
@@ -482,7 +506,8 @@ export function initSyndicateGame(): void {
       world.units,
       persuadedCivilians(world),
       atExtraction,
-      holdProgress
+      holdProgress,
+      vipAtExtraction()
     );
     if (status === 'won') completeMission();
     else if (status === 'lost') endCampaign(false);
@@ -703,6 +728,17 @@ export function initSyndicateGame(): void {
       ctx.stroke();
     }
 
+    if (escorting(u)) {
+      // A collected asset gets its own ground ring: it was never persuaded, so
+      // it carries no follower mote, and it is the one unit on the field the
+      // player cannot afford to lose track of.
+      ctx.strokeStyle = `rgba(252, 211, 77, ${0.6 + 0.25 * Math.sin(clock * 5)})`;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 1, 11.5, 5.4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     let coat = '#3b4a66';
     let trim = '#5870a0';
     let head = '#caa07a';
@@ -726,6 +762,12 @@ export function initSyndicateGame(): void {
     } else if (u.kind === 'target') {
       coat = '#9a7b22';
       trim = '#f5c84b';
+      head = '#caa07a';
+    } else if (u.kind === 'vip') {
+      // The asset wears a technician's pale coat: the only bright silhouette
+      // on a street of dark chrome, so it never gets lost in a crowd.
+      coat = '#d5dae6';
+      trim = '#f6f8fc';
       head = '#caa07a';
     } else {
       coat = CIVILIAN_TINTS[u.tint % CIVILIAN_TINTS.length];
@@ -760,7 +802,7 @@ export function initSyndicateGame(): void {
       ctx.lineTo(p.x + 6.6, p.y - 6.4);
       ctx.lineTo(p.x + 5.8, p.y - 18.4);
       ctx.lineTo(p.x - 5.8, p.y - 18.4);
-    } else if (u.kind === 'civilian') {
+    } else if (u.kind === 'civilian' || u.kind === 'vip') {
       // Slighter frame; coat length varies with the tint roll.
       const hem = p.y - 5.8 - (u.tint % 3) * 1;
       ctx.moveTo(p.x - 5, hem);
@@ -842,6 +884,25 @@ export function initSyndicateGame(): void {
       ctx.fillRect(p.x + dir * 5.2 - 2.6, p.y - 7.2, 5.2, 4);
       ctx.fillStyle = '#c9a227';
       ctx.fillRect(p.x + dir * 5.2 - 0.5, p.y - 6.4, 1, 1);
+    } else if (u.kind === 'vip') {
+      // Coat placket down the front and a courier satchel slung across it —
+      // whatever the contract is really for is in that bag.
+      ctx.strokeStyle = shadeColor(coat, 0.6);
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 18.2);
+      ctx.lineTo(p.x, p.y - 6.6);
+      ctx.stroke();
+      ctx.strokeStyle = '#6b5233';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 4.2, p.y - 18.2);
+      ctx.lineTo(p.x + dir * 3.6, p.y - 11);
+      ctx.stroke();
+      ctx.fillStyle = '#8a6a41';
+      ctx.fillRect(p.x + dir * 3.6 - 2.4, p.y - 11.4, 4.8, 4.2);
+      ctx.fillStyle = shadeColor('#8a6a41', 1.45);
+      ctx.fillRect(p.x + dir * 3.6 - 2.4, p.y - 11.4, 4.8, 1);
     }
 
     // Weapon arm — armed units level their actual hardware in their heading.
@@ -912,6 +973,13 @@ export function initSyndicateGame(): void {
     if (u.kind === 'target') {
       ctx.font = '13px serif';
       ctx.fillText('👑', p.x, p.y - 30 + Math.sin(clock * 3) * 1.4);
+    }
+
+    if (u.kind === 'vip') {
+      // Marks the asset in both states — pinned across the city, so the squad
+      // can find it, and in tow, so the squad can keep it.
+      ctx.font = '13px serif';
+      ctx.fillText('🎓', p.x, p.y - 30 + Math.sin(clock * 3) * 1.4);
     }
 
     if (u.hp < u.maxHp && u.alive) {
@@ -1047,16 +1115,21 @@ export function initSyndicateGame(): void {
 
   function drawExtraction() {
     // The pad marks the persuade escape route and doubles as the `secure`
-    // landing zone (same functional marker, no new art) — lit green while the
-    // squad actually controls it.
-    const marked = spec.objective === 'persuade' || spec.objective === 'secure';
+    // landing zone and the `escort` drop-off (same functional marker, no new
+    // art) — lit green while the squad actually controls it.
+    const marked =
+      spec.objective === 'persuade' ||
+      spec.objective === 'secure' ||
+      spec.objective === 'escort';
     if (extraction < 0 || !marked || phase !== 'play') return;
     const x = extraction % MAP_W;
     const y = Math.floor(extraction / MAP_W);
     const open =
       spec.objective === 'secure'
         ? agentAtExtraction()
-        : persuadedCivilians(world) >= spec.persuadeQuota;
+        : spec.objective === 'escort'
+          ? vipAtExtraction()
+          : persuadedCivilians(world) >= spec.persuadeQuota;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 4);
     const colour = open ? '#4ade80' : '#94a3b8';
 
@@ -1231,6 +1304,12 @@ export function initSyndicateGame(): void {
       } else if (spec.objective === 'secure') {
         const target = spec.holdSeconds ?? 0;
         objectiveEl.textContent = `🚁 ${strings.objectiveSecure} (${Math.floor(holdProgress)}/${target}s)`;
+      } else if (spec.objective === 'escort') {
+        const vip = vipOf(world);
+        objectiveEl.textContent =
+          vip && escorting(vip)
+            ? `🚁 ${strings.objectiveEscort}`
+            : `🎓 ${strings.objectiveReachAsset}`;
       } else {
         objectiveEl.textContent = `🎯 ${strings.objectiveAssassinate}`;
       }

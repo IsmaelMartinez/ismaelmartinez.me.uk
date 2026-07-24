@@ -16,13 +16,18 @@ interface Props {
   lang: Locale;
   /** Accent colour matching the game's cabinet. */
   accent?: string;
+  /**
+   * DOM id the game looks the panel up by. Only needs overriding when a
+   * cabinet fields more than one table on a page (Cascade's two modes).
+   */
+  panelId?: string;
 }
 
-const { gameId, lang, accent = '#22c55e' } = Astro.props;
+const { gameId, lang, accent = '#22c55e', panelId = 'highscores' } = Astro.props;
 const t = useTranslations(lang);
 ---
 
-<div class="hs-panel" id="highscores" data-hs-game={gameId} style={`--hs-accent: ${accent}`} hidden>
+<div class="hs-panel" id={panelId} data-hs-game={gameId} style={`--hs-accent: ${accent}`} hidden>
   <form class="hs-entry" hidden>
     <p class="hs-new">{t('fun.arcade.newHighScore')}</p>
     <label class="hs-prompt" for={`hs-input-${gameId}`}>{t('fun.arcade.enterInitials')}</label>

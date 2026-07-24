@@ -159,6 +159,17 @@ describe('storage-backed tables', () => {
     expect(loadTable('snake')).toEqual([entry('---', 340)]);
   });
 
+  it('keeps a cabinet\'s two mode tables apart', () => {
+    // Cascade fields one board per mode, so the ids must not share storage:
+    // a countdown score has no business ranking against a marathon one.
+    submitScore('cascade', 'ISM', 5000);
+    submitScore('cascade-countdown', 'ISM', 900);
+    expect(loadTable('cascade')).toEqual([entry('ISM', 5000)]);
+    expect(loadTable('cascade-countdown')).toEqual([entry('ISM', 900)]);
+    expect(topEntry('cascade')?.score).toBe(5000);
+    expect(topEntry('cascade-countdown')?.score).toBe(900);
+  });
+
   it('does not migrate a legacy key for tanks (different metric)', () => {
     store['tanks-victories'] = '7';
     expect(loadTable('tanks')).toEqual([]);

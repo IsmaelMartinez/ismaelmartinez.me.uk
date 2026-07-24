@@ -1,20 +1,21 @@
 /**
- * Syndicate — campaign missions. Nine contracts, escalating the roster and
+ * Syndicate — campaign missions. Ten contracts, escalating the roster and
  * weapon tiers: wipe out the rival agents, persuade a crowd and reach
  * extraction, assassinate the rival executive, then a reinforced wipe, a
  * recruitment under heavy fire, the decapitation strike, the first `secure`
  * contract — a new objective mould that has the squad fight to the extraction
  * zone and *hold* it for a spell against a dug-in guard ring — a
- * scorched-earth wipe against the rivals' last reserves, and a `secure`
- * finale with the longest hold behind the deepest ring. The mid-campaign
- * assassinate keeps the minigun and the executive `target` from being a
- * last-mission-only reveal.
+ * scorched-earth wipe against the rivals' last reserves, a `secure` mission
+ * with the longest hold behind the deepest ring, and an `escort` finale: the
+ * only contract the squad can lose by failing to protect something rather
+ * than failing to destroy it. The mid-campaign assassinate keeps the minigun
+ * and the executive `target` from being a last-mission-only reveal.
  */
 import { MAP_W, MAP_H, nearestWalkable, type MapTile } from './map';
 import { spreadTargets, walkableTiles } from './pathfind';
 import { createUnit, type Unit, type WeaponId } from './units';
 
-export type Objective = 'eliminate' | 'persuade' | 'assassinate' | 'secure';
+export type Objective = 'eliminate' | 'persuade' | 'assassinate' | 'secure' | 'escort';
 
 export interface MissionSpec {
   id: number;
@@ -150,10 +151,29 @@ export const MISSIONS: MissionSpec[] = [
     persuadeQuota: 0,
     holdSeconds: 30,
     reward: 8000
+  },
+  {
+    // Safe Passage — the campaign's last mould, and the only one the squad
+    // can lose without dying: an asset pinned behind a guard ring, to be
+    // reached, collected and walked out alive. Fewer hostiles than the
+    // scorched-earth wipe on purpose; the difficulty is the escort, not the
+    // body count.
+    id: 10,
+    objective: 'escort',
+    civilians: 12,
+    guards: 7,
+    enemies: 6,
+    guardWeapon: 'uzi',
+    enemyWeapon: 'minigun',
+    persuadeQuota: 0,
+    reward: 9000
   }
 ];
 
 export const SQUAD_SIZE = 4;
+
+/** Tiles the escort asset must sit clear of the extraction pad. */
+export const ESCORT_MIN_FROM_PAD = 12;
 
 export interface MissionSetup {
   units: Unit[];
@@ -218,6 +238,27 @@ export function spawnMission(
     for (let n = 0; n < spec.guards; n++) {
       units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? lair, MAP_W, spec.guardWeapon));
     }
+  } else if (spec.objective === 'escort') {
+    // The asset is pinned deep in the city behind the same guard ring the
+    // executive's lair uses, so the squad has to fight in for it and then
+    // fight the whole way back out with it in tow. Unlike the executive —
+    // who can be holed up anywhere, because killing him ends it on the spot —
+    // the asset has to be a real walk from *both* ends, or the escort leg
+    // that defines the mould collapses to a couple of steps next to the pad.
+    const exX = (extraction % MAP_W) + 0.5;
+    const exY = Math.floor(extraction / MAP_W) + 0.5;
+    let holding = remoteTile(walkable, spawnX, spawnY, 18, random);
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const dx = (holding % MAP_W) + 0.5 - exX;
+      const dy = Math.floor(holding / MAP_W) + 0.5 - exY;
+      if (Math.hypot(dx, dy) >= ESCORT_MIN_FROM_PAD) break;
+      holding = remoteTile(walkable, spawnX, spawnY, 18, random);
+    }
+    units.push(createUnit(nextId++, 'vip', holding, MAP_W));
+    const ring = spreadTargets(tiles, holding, spec.guards + 1);
+    for (let n = 0; n < spec.guards; n++) {
+      units.push(createUnit(nextId++, 'guard', ring[n + 1] ?? holding, MAP_W, spec.guardWeapon));
+    }
   } else if (spec.objective === 'secure') {
     // The landing zone is contested — guards dig in around the extraction pad
     // (the same ring the executive's lair uses), so the squad has to fight in
@@ -245,9 +286,16 @@ export function missionStatus(
   units: Unit[],
   persuadedCivilians: number,
   agentAtExtraction: boolean,
-  holdProgress = 0
+  holdProgress = 0,
+  vipAtExtraction = false
 ): MissionState {
   if (!units.some(u => u.alive && u.kind === 'agent')) return 'lost';
+  // The escort mould is the only one with a lose condition of its own: a dead
+  // asset ends the contract wherever its body happens to be, so this is
+  // checked before any win.
+  if (spec.objective === 'escort' && units.some(u => u.kind === 'vip' && !u.alive)) {
+    return 'lost';
+  }
   switch (spec.objective) {
     case 'eliminate':
       // Persuaded rivals count: they work for you now.
@@ -267,5 +315,13 @@ export function missionStatus(
       const target = spec.holdSeconds ?? 0;
       return target > 0 && holdProgress >= target ? 'won' : 'ongoing';
     }
+    case 'escort':
+      // Won by walking the asset out alive. Requiring a *living* asset in the
+      // roster means a spec that forgot to field one surfaces as an unwon
+      // mission rather than winning the instant an agent stands on the pad —
+      // the same guard `secure` got for a missing hold requirement.
+      return units.some(u => u.alive && u.kind === 'vip') && vipAtExtraction
+        ? 'won'
+        : 'ongoing';
   }
 }

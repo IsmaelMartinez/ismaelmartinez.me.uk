@@ -60,7 +60,8 @@ export type RunEvent =
   | { type: 'lock' }
   | { type: 'clear'; rows: number[]; chain: number; points: number }
   | { type: 'levelUp'; level: number }
-  | { type: 'topOut' };
+  | { type: 'topOut' }
+  | { type: 'timeUp' };
 
 export interface CascadeRun {
   well: Well;
@@ -89,10 +90,18 @@ export interface CascadeRun {
   clearTimer: number;
   /** Seconds left before the next one-row drop during the `settling` phase. */
   settleTimer: number;
+  /**
+   * Seconds the run is allowed to last, or 0 for the open-ended marathon.
+   * The state machine knows nothing about "modes" beyond this number: a
+   * countdown is a marathon with a deadline.
+   */
+  timeLimit: number;
+  /** Seconds left on the deadline; meaningless while `timeLimit` is 0. */
+  timeLeft: number;
   drawPiece: () => PieceId;
 }
 
-export function createRun(random: () => number): CascadeRun {
+export function createRun(random: () => number, timeLimit = 0): CascadeRun {
   const drawPiece = createBag(random);
   const piece = spawnPiece(drawPiece());
   return {
@@ -112,6 +121,8 @@ export function createRun(random: () => number): CascadeRun {
     lowestY: piece.y,
     clearTimer: 0,
     settleTimer: 0,
+    timeLimit,
+    timeLeft: timeLimit,
     drawPiece
   };
 }
@@ -210,6 +221,18 @@ function lockNow(run: CascadeRun, events: RunEvent[]): void {
 export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
   const events: RunEvent[] = [];
   if (run.phase === 'over') return events;
+
+  // The deadline is wall time, so it burns through the clear flash and the
+  // landslide too: a long cascade is worth points, never extra seconds.
+  if (run.timeLimit > 0) {
+    run.timeLeft -= dt;
+    if (run.timeLeft <= 0) {
+      run.timeLeft = 0;
+      run.phase = 'over';
+      events.push({ type: 'timeUp' });
+      return events;
+    }
+  }
 
   if (run.phase === 'clearing') {
     // The cleared rows are lit; once the flash elapses they vanish and the

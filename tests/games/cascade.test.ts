@@ -596,3 +596,65 @@ describe('headless playthrough (seeded, deterministic)', () => {
     expect(Array.from(a.run.well)).toEqual(Array.from(b.run.well));
   });
 });
+
+describe('countdown mode', () => {
+  it('leaves the marathon untouched: no limit, no clock, no timeUp', () => {
+    const run = createRun(seededRandom(3));
+    expect(run.timeLimit).toBe(0);
+    const log: RunEvent[] = [];
+    for (let n = 0; n < 2000; n++) log.push(...tickRun(run, 0.1));
+    expect(log.some(e => e.type === 'timeUp')).toBe(false);
+  });
+
+  it('ends the run when the deadline passes, exactly once', () => {
+    const run = createRun(seededRandom(3), 5);
+    expect(run.timeLeft).toBe(5);
+    const log: RunEvent[] = [];
+    for (let n = 0; n < 80; n++) log.push(...tickRun(run, 0.1));
+    expect(run.phase).toBe('over');
+    expect(run.timeLeft).toBe(0);
+    expect(log.filter(e => e.type === 'timeUp')).toHaveLength(1);
+    expect(log.some(e => e.type === 'topOut')).toBe(false);
+    // A run already over stays over and emits nothing more.
+    expect(tickRun(run, 1)).toEqual([]);
+  });
+
+  it('burns the clock through a cascade, so chains buy points and not time', () => {
+    // Two complete rows waiting under the piece: the lock resolves them, so
+    // the run spends the next stretch in `clearing` and `settling` rather
+    // than `falling`. Those are exactly the phases a long chain lives in.
+    const run = createRun(seededRandom(7), 60);
+    for (let x = 0; x < WELL_W; x++) {
+      fill(run.well, x, WELL_H - 1, 2);
+      fill(run.well, x, WELL_H - 2, 2);
+    }
+    hardDrop(run);
+    expect(run.phase).toBe('clearing');
+
+    const before = run.timeLeft;
+    let spent = 0;
+    let ticksInCascade = 0;
+    for (let n = 0; n < 6; n++) {
+      if (run.phase === 'clearing' || run.phase === 'settling') ticksInCascade++;
+      tickRun(run, 0.05);
+      spent += 0.05;
+    }
+    expect(ticksInCascade).toBeGreaterThan(0);
+    expect(before - run.timeLeft).toBeCloseTo(spent, 5);
+  });
+
+  it('tops out on a full well before the clock, and reports it as a top-out', () => {
+    // A generous deadline the run cannot reach: the greedy player is switched
+    // off, so pieces pile straight up the spawn column.
+    const run = createRun(seededRandom(9), 600);
+    const log: RunEvent[] = [];
+    for (let n = 0; n < 4000 && run.phase !== 'over'; n++) {
+      log.push(...hardDrop(run));
+      log.push(...tickRun(run, CLEAR_TIME + 0.01));
+    }
+    expect(run.phase).toBe('over');
+    expect(log.some(e => e.type === 'topOut')).toBe(true);
+    expect(log.some(e => e.type === 'timeUp')).toBe(false);
+    expect(run.timeLeft).toBeGreaterThan(0);
+  });
+});

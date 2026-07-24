@@ -21,6 +21,7 @@ import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, type ArenaType } 
 import {
   launchProjectile,
   stepProjectile,
+  bounceOffSurface,
   stepFall,
   explosionDamage,
   matchScore,
@@ -37,6 +38,8 @@ const BARREL_LEN = 24;
 const EXPLOSION_TIME = 0.55;
 const DIRECT_HIT_RADIUS = 14;
 const MAX_WIND = 50;
+/** Speed a Skipper shell keeps after each ground bounce (0..1). */
+const BOUNCE_RESTITUTION = 0.62;
 const WINS_PER_MATCH = 3;
 const CPU_THINK_TIME = 1.1;
 const SAFE_DROP = 30; // px a tank can fall without damage
@@ -62,6 +65,8 @@ interface Tank {
 interface Shot {
   p: Projectile;
   weapon: WeaponId;
+  /** Ground bounces left before this shell detonates (Skipper only). */
+  bounces: number;
   canSplit: boolean;
   flightTime: number;
   trail: { x: number; y: number }[];
@@ -449,6 +454,7 @@ export function initTanksGame(): void {
       {
         p: launchProjectile(tip.x, tip.y, tank.angle, tank.power),
         weapon: tank.weapon,
+        bounces: weapon.bounces ?? 0,
         canSplit: weapon.cluster > 1,
         flightTime: 0,
         trail: []
@@ -570,6 +576,7 @@ export function initTanksGame(): void {
         ...parts.map(part => ({
           p: part,
           weapon: shot.weapon,
+          bounces: 0,
           canSplit: false,
           flightTime: shot.flightTime,
           trail: [] as { x: number; y: number }[]
@@ -591,6 +598,16 @@ export function initTanksGame(): void {
       return false;
     }
     if (p.x >= 0 && p.x < WIDTH && p.y >= surfaceYAt(ground, p.x)) {
+      const ix = Math.min(WIDTH - 1, Math.max(0, Math.round(p.x)));
+      if (shot.bounces > 0 && !solid[ix]) {
+        // Skip off the dirt: reflect upward, bleed speed, keep flying. A solid
+        // column (the bunker pillar) is not skippable, so the shot detonates
+        // against it instead — that is what makes the cover matter.
+        shot.bounces--;
+        bounceOffSurface(p, surfaceYAt(ground, p.x), BOUNCE_RESTITUTION);
+        audio.playSfx('blip');
+        return true;
+      }
       impactAt(p.x, p.y, shot.weapon);
       return false;
     }
@@ -818,6 +835,21 @@ export function initTanksGame(): void {
       ctx.lineTo(4.5, 2.2);
       ctx.closePath();
       ctx.fill();
+    } else if (shot.weapon === 'bounce') {
+      // Skipper: a round rubberised ball that skips off the ground.
+      ctx.fillStyle = '#65a30d';
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#bef264'; // highlight
+      ctx.beginPath();
+      ctx.arc(-1.5, -1.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#365314'; // seam
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(2.5, 0, 4.5, 2.3, 4, false);
+      ctx.stroke();
     } else {
       // Missile: a finned nose-cone shell.
       ctx.fillStyle = '#eab308'; // tail fins
@@ -1023,7 +1055,7 @@ export function initTanksGame(): void {
     if (!isHumanTurn() || isTextEntry(e.target)) return;
     if (gameKeys.has(e.key)) e.preventDefault();
     const tank = tanks[current];
-    const weaponIdx = ['1', '2', '3'].indexOf(e.key);
+    const weaponIdx = ['1', '2', '3', '4'].indexOf(e.key);
     if (weaponIdx >= 0) {
       const id = WEAPON_IDS[weaponIdx];
       if (tank.ammo[id] > 0) {

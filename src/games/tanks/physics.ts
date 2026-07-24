@@ -46,6 +46,18 @@ export function stepProjectile(p: Projectile, wind: number, dt: number): void {
   p.y += p.vy * dt;
 }
 
+/**
+ * Skips a shell off the ground: it lifts clear of the surface, flips its
+ * downward velocity back upward, and bleeds both velocity components by
+ * `restitution` (0..1) so each bounce is shorter than the last. Used by the
+ * Skipper weapon; keeps the bounce maths pure and unit-testable.
+ */
+export function bounceOffSurface(p: Projectile, surfaceY: number, restitution: number): void {
+  p.y = surfaceY - 1;
+  p.vy = -Math.abs(p.vy) * restitution;
+  p.vx *= restitution;
+}
+
 export interface Impact {
   x: number;
   y: number;

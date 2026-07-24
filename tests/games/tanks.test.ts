@@ -3,6 +3,7 @@ import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, bunkerColumns } f
 import {
   launchProjectile,
   stepProjectile,
+  bounceOffSurface,
   simulateShot,
   explosionDamage,
   stepFall,
@@ -208,6 +209,15 @@ describe('arenas', () => {
 });
 
 describe('physics', () => {
+  it('bounces a shell off the surface: reflects upward and bleeds speed', () => {
+    const p = { x: 100, y: 305, vx: 40, vy: 60 }; // falling into the ground
+    bounceOffSurface(p, 300, 0.6);
+    expect(p.y).toBe(299); // lifted just clear of the surface
+    expect(p.vy).toBeCloseTo(-36, 5); // -|60| * 0.6, now heading up
+    expect(p.vx).toBeCloseTo(24, 5); // 40 * 0.6
+    expect(p.vy).toBeLessThan(0);
+  });
+
   it('launches straight up at 90 degrees', () => {
     const p = launchProjectile(100, 100, 90, 50);
     expect(p.vx).toBeCloseTo(0, 5);
@@ -455,6 +465,14 @@ describe('weapons', () => {
       expect(WEAPONS[id].maxDamage).toBeGreaterThan(0);
       expect(WEAPONS[id].cluster).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('stocks the Skipper as a scarce bouncing special', () => {
+    expect(WEAPON_IDS).toContain('bounce');
+    expect(freshAmmo().bounce).toBeGreaterThan(0);
+    expect(WEAPONS.bounce.bounces).toBeGreaterThan(0);
+    // Lighter than the plain missile, to pay for its reach.
+    expect(WEAPONS.bounce.maxDamage).toBeLessThan(WEAPONS.missile.maxDamage);
   });
 
   it('splits a cluster into a symmetric horizontal fan', () => {

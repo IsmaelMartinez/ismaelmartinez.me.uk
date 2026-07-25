@@ -529,8 +529,7 @@ export function terraformSteps(plan: Map<number, number>, heights: number[]): nu
 /**
  * Applies a terraform plan: sets each planned height and closes any tunnel
  * dug on a moved tile — a tunnel flag is only meaningful at height 0. The
- * single mutation site for terrain plans, whatever produced them (the
- * raise/lower tools via applyTool, or track drafting's automatic shaping).
+ * single mutation site for terrain plans (the raise/lower tools via applyTool).
  */
 export function applyTerraformPlan(
   heights: number[],

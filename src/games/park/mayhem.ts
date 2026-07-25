@@ -1,7 +1,7 @@
 /**
- * Pixel Park mayhem: ride breakdowns, coaster stalls, and gate-flooding
- * crowd surges, all ramping up as the park matures so the late game stays
- * lively. DOM-free so every rule is testable with a seeded random.
+ * Pixel Park mayhem: ride breakdowns and gate-flooding crowd surges, all
+ * ramping up as the park matures so the late game stays lively. DOM-free so
+ * every rule is testable with a seeded random.
  */
 import { BUILDINGS, type TileType } from './grid';
 

@@ -2309,6 +2309,27 @@ export function initParkGame(): void {
     // into O(tiles²) if called once per tile inside the loop below.
     const tileZones = zonesForTiles(tiles);
 
+    // Each coaster is a 2×2 ride drawn as one sprite when the tile loop
+    // reaches its frontmost (nearest-camera) footprint tile — so it
+    // interleaves with the guest depth-sort like every other building,
+    // rather than being painted over everyone in a later pass. Keyed
+    // front-tile → anchor, rebuilt each frame (a park has a handful of coasters).
+    const coasterFrontTile = new Map<number, number>();
+    tiles.forEach((t, ci) => {
+      if (t !== 'coaster') return;
+      const cells = footprintTiles(ci % GRID_W, Math.floor(ci / GRID_W), BUILDINGS.coaster!.footprint!)!;
+      let front = ci;
+      let frontDiag = -1;
+      for (const c of cells) {
+        const cv = rotateTile(c % GRID_W, Math.floor(c / GRID_W), GRID_W, GRID_H, rotation);
+        if (cv.x + cv.y > frontDiag) {
+          frontDiag = cv.x + cv.y;
+          front = c;
+        }
+      }
+      coasterFrontTile.set(front, ci);
+    });
+
     // The world grid never moves; rendering walks the *view* grid (rotated
     // dimensions) back-to-front and maps each view tile to its world tile.
     const dims = rotatedDims(GRID_W, GRID_H, rotation);
@@ -2421,23 +2442,15 @@ export function initParkGame(): void {
         }
       }
 
+      // Draw a coaster (its whole 2×2 sprite) when the loop reaches the ride's
+      // frontmost footprint tile, so it depth-sorts against guests exactly
+      // like a normal building instead of being painted over all of them.
+      const coasterAnchor = coasterFrontTile.get(i);
+      if (coasterAnchor !== undefined) {
+        drawCoasterRide(coasterAnchor, inUse.has(coasterAnchor), isBroken(coasterAnchor));
+      }
     });
     if (lastDiag >= 0) guestsByDiag[lastDiag].forEach(drawGuest);
-
-    // Coasters are 2×2 rides: paint each over its whole footprint in a final
-    // pass (back-to-front) so a ride is never clipped by its own front tiles'
-    // ground, which the tile loop drew earlier.
-    const coasterDiag = (i: number) => {
-      const vp = rotatePoint((i % GRID_W) + 1, Math.floor(i / GRID_W) + 1, GRID_W, GRID_H, rotation);
-      return vp.tx + vp.ty;
-    };
-    const coasterTiles: number[] = [];
-    tiles.forEach((t, i) => {
-      if (t === 'coaster') coasterTiles.push(i);
-    });
-    coasterTiles
-      .sort((a, b) => coasterDiag(a) - coasterDiag(b))
-      .forEach(i => drawCoasterRide(i, inUse.has(i), isBroken(i)));
 
     if (hoverTile >= 0 && phase === 'play') {
       const x = hoverTile % GRID_W;

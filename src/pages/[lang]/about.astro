@@ -15,7 +15,7 @@ const t = useTranslations(lang);
 
 const focusAreas = [
   { icon: '🤖', title: t('about.focus1Title'), body: t('about.focus1') },
-  { icon: '🧭', title: t('about.focus2Title'), body: t('about.focus2') },
+  { icon: '⚡', title: t('about.focus2Title'), body: t('about.focus2') },
   { icon: '🌍', title: t('about.focus3Title'), body: t('about.focus3') },
 ];
 
@@ -53,21 +53,6 @@ const aboutJsonLd = {
               </div>
             ))}
           </div>
-        </div>
-
-        <div class="about-section">
-          <h2>{t('about.careerTitle')}</h2>
-          <ul class="career-list">
-            <li>{t('about.career1')}</li>
-            <li>{t('about.career2')}</li>
-            <li>{t('about.career3')}</li>
-            <li>{t('about.career4')}</li>
-          </ul>
-        </div>
-
-        <div class="about-section">
-          <h2>{t('about.interestsTitle')}</h2>
-          <p>{t('about.interests')}</p>
         </div>
 
         <div class="about-section">
@@ -148,23 +133,6 @@ const aboutJsonLd = {
     .focus-grid {
       grid-template-columns: repeat(3, 1fr);
     }
-  }
-
-  .career-list {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-  }
-
-  .career-list li {
-    padding: var(--space-md) var(--space-lg);
-    background: var(--color-bg-secondary);
-    border: var(--frame-width) solid var(--color-frame);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-btn);
-    color: var(--color-text-muted);
-    line-height: 1.5;
   }
 
   .social-row {

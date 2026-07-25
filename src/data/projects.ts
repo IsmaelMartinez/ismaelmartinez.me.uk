@@ -85,17 +85,57 @@ export const projects: Project[] = [
     featured: true
   },
   {
-    name: 'votescot',
+    name: 'generator-atlassian-compass-event-catalog',
     description: {
-      en: 'An open-source vote compass for the 2026 Scottish Parliament election, built with Astro and React islands, helping voters match parties to their views.',
-      es: 'Una brújula electoral de código abierto para las elecciones al Parlamento Escocés de 2026, construida con Astro y React islands, que ayuda a los votantes a emparejar partidos con sus opiniones.',
-      cat: 'Una brúixola electoral de codi obert per a les eleccions al Parlament Escocès de 2026, construïda amb Astro i React islands, ajudant els votants a emparellar partits amb les seves opinions.'
+      en: 'An EventCatalog generator that pulls services and their event relationships out of Atlassian Compass, so an event-driven estate documents itself.',
+      es: 'Un generador de EventCatalog que extrae los servicios y sus relaciones de eventos de Atlassian Compass, para que una arquitectura orientada a eventos se documente sola.',
+      cat: "Un generador d'EventCatalog que extreu els serveis i les seves relacions d'esdeveniments d'Atlassian Compass, perquè una arquitectura orientada a esdeveniments es documenti sola."
     },
-    url: 'https://github.com/IsmaelMartinez/votescot',
-    github: 'https://github.com/IsmaelMartinez/votescot',
-    tags: ['Astro', 'React', 'Civic Tech'],
+    url: 'https://github.com/IsmaelMartinez/generator-atlassian-compass-event-catalog',
+    github: 'https://github.com/IsmaelMartinez/generator-atlassian-compass-event-catalog',
+    tags: ['EventCatalog', 'TypeScript', 'Event-Driven'],
+    featured: true
+  },
+  {
+    name: 'ai-model-advisor',
+    description: {
+      en: 'A model-selection advisor that recommends the right model for a task from benchmarks, cost, and constraints — because not every problem needs a frontier model.',
+      es: 'Un asesor de selección de modelos que recomienda el modelo adecuado para cada tarea a partir de benchmarks, coste y restricciones, porque no todos los problemas necesitan un modelo de frontera.',
+      cat: 'Un assessor de selecció de models que recomana el model adequat per a cada tasca a partir de benchmarks, cost i restriccions, perquè no tots els problemes necessiten un model de frontera.'
+    },
+    url: 'https://github.com/IsmaelMartinez/ai-model-advisor',
+    github: 'https://github.com/IsmaelMartinez/ai-model-advisor',
+    tags: ['AI', 'JavaScript', 'Tooling'],
+    featured: true
+  },
+  {
+    name: 'github-issue-triage-bot',
+    description: {
+      en: 'A standalone Go service that triages GitHub issues using vector search and LLM analysis.',
+      es: 'Un servicio independiente en Go que clasifica incidencias de GitHub mediante búsqueda vectorial y análisis con LLM.',
+      cat: 'Un servei independent en Go que classifica incidències de GitHub mitjançant cerca vectorial i anàlisi amb LLM.'
+    },
+    url: 'https://github.com/IsmaelMartinez/github-issue-triage-bot',
+    github: 'https://github.com/IsmaelMartinez/github-issue-triage-bot',
+    tags: ['Go', 'AI Agent', 'Automation'],
     featured: true
   }
+];
+
+/** Upstream projects I have landed changes in. Each link is my pull requests there. */
+export interface ExternalContribution {
+  repo: string;
+  url: string;
+}
+
+export const externalContributions: ExternalContribution[] = [
+  { repo: 'aws/aws-cdk', url: 'https://github.com/aws/aws-cdk/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
+  { repo: 'electron/electron', url: 'https://github.com/electron/electron/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
+  { repo: 'asyncapi/spec', url: 'https://github.com/asyncapi/spec/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
+  { repo: 'snyk/user-docs', url: 'https://github.com/snyk/user-docs/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
+  { repo: 'vercel-labs/skills', url: 'https://github.com/vercel-labs/skills/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
+  { repo: 'event-catalog/generator-eventbridge', url: 'https://github.com/event-catalog/generator-eventbridge/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
+  { repo: 'The-PR-Agent/pr-agent', url: 'https://github.com/The-PR-Agent/pr-agent/pulls?q=is%3Apr+author%3AIsmaelMartinez' }
 ];
 
 export function getFeaturedProjects(): Project[] {

@@ -3,7 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import LinkCard from '../../components/LinkCard.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
-import { socialLinks } from '../../data/links';
+import { socialLinks, feedLink } from '../../data/links';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -11,6 +11,9 @@ export function getStaticPaths() {
 
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
+
+const readLinks = [{ ...feedLink, url: `/${lang}/rss.xml` }, ...socialLinks.filter(link => link.group === 'read')];
+const connectLinks = socialLinks.filter(link => link.group === 'connect');
 ---
 
 <Layout title={t('nav.connect')} description={t('section.connect.description')} lang={lang}>
@@ -21,10 +24,22 @@ const t = useTranslations(lang);
         <p class="page-description">{t('section.connect.description')}</p>
       </header>
 
-      <div class="links-list">
-        {socialLinks.map(link => (
-          <LinkCard link={link} lang={lang} />
-        ))}
+      <div class="link-group">
+        <h2 class="group-title">{t('connect.readTitle')}</h2>
+        <div class="links-list">
+          {readLinks.map(link => (
+            <LinkCard link={link} lang={lang} />
+          ))}
+        </div>
+      </div>
+
+      <div class="link-group">
+        <h2 class="group-title">{t('connect.connectTitle')}</h2>
+        <div class="links-list">
+          {connectLinks.map(link => (
+            <LinkCard link={link} lang={lang} />
+          ))}
+        </div>
       </div>
     </div>
   </section>
@@ -45,6 +60,19 @@ const t = useTranslations(lang);
     font-size: 1.125rem;
     color: var(--color-text-muted);
     max-width: 600px;
+  }
+
+  .link-group + .link-group {
+    margin-top: var(--space-2xl);
+  }
+
+  .group-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-md);
   }
 
   .links-list {

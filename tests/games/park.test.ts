@@ -19,7 +19,9 @@ import {
   zoneAt,
   zonesForTiles,
   zoneDiscountFactor,
-  gateZone
+  gateZone,
+  footprintTiles,
+  footprintOf
 } from '../../src/games/park/grid';
 import { findPath, bfsFrom, nearestReachable, adjacentWalkable } from '../../src/games/park/pathfind';
 import { seededRandom } from './seeded-random';
@@ -54,32 +56,11 @@ import {
   isRide,
   breakdownChance,
   pickBreakdownTile,
-  coasterStallChance,
   rollSurge,
   surgedInterval,
   maxGuests,
   SURGE_SECONDS
 } from '../../src/games/park/mayhem';
-import {
-  MIN_TRACK_LENGTH,
-  CART_MIN_SPEED,
-  CART_MAX_SPEED,
-  CART_CRUISE_SPEED,
-  stepTile,
-  dirBetween,
-  rotateDir,
-  segmentClimb,
-  turnKind,
-  validateTrack,
-  rotateToStation,
-  trackHeightDrop,
-  thrillBoost,
-  nextCartSpeed,
-  advanceU,
-  canPlaceTrack,
-  type Segment,
-  type SegmentKind
-} from '../../src/games/park/track';
 
 describe('park grid', () => {
   it('creates a flat grass board with an entrance and starter path', () => {
@@ -482,9 +463,16 @@ describe('park attraction catalogue (Round 7)', () => {
 
   it('makes the Pirate Ship the only single-tile thrill satisfier, and treats it as a ride', () => {
     const thrill = (Object.keys(BUILDINGS) as (keyof typeof BUILDINGS)[]).filter(
-      t => BUILDINGS[t]!.satisfies === 'thrill'
+      t => BUILDINGS[t]!.satisfies === 'thrill' && (BUILDINGS[t]!.footprint ?? 1) === 1
     );
     expect(thrill).toEqual(['pirateship']);
+    // The coaster is also a thrill satisfier, but a 2×2 placed ride, not a
+    // single-tile one — the premium thrill option above the Pirate Ship.
+    expect(BUILDINGS.coaster).toBeDefined();
+    expect(BUILDINGS.coaster!.satisfies).toBe('thrill');
+    expect(BUILDINGS.coaster!.footprint).toBe(2);
+    expect(BUILDINGS.coaster!.boost).toBe(100);
+    expect(isRide('coaster')).toBe(true);
     // Rides (fun or thrill) break down; stalls/toilets do not.
     expect(isRide('pirateship')).toBe(true);
     expect(isRide('manor')).toBe(true);
@@ -520,6 +508,126 @@ describe('park attraction catalogue (Round 7)', () => {
     // Using it restores the need above the urgent line (the generic
     // using-handler applies def.satisfies/def.boost).
     satisfyNeed(needs, BUILDINGS.pirateship!.satisfies, BUILDINGS.pirateship!.boost);
+    expect(needs.thrill).toBeGreaterThan(URGENT_THRESHOLD);
+  });
+});
+
+describe('park coaster (2×2 placed ride)', () => {
+  const CELLS = [idx(5, 5), idx(6, 5), idx(5, 6), idx(6, 6)];
+
+  it('enumerates a square footprint anchored at its top-left, or null off-grid', () => {
+    expect(footprintTiles(3, 4, 2)).toEqual([idx(3, 4), idx(4, 4), idx(3, 5), idx(4, 5)]);
+    expect(footprintTiles(7, 2, 1)).toEqual([idx(7, 2)]);
+    expect(footprintTiles(GRID_W - 1, 5, 2)).toBeNull(); // runs off the right edge
+    expect(footprintTiles(5, GRID_H - 1, 2)).toBeNull(); // runs off the bottom edge
+  });
+
+  it('places the coaster on flat grass with a path adjacent to the block', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path'); // west of the anchor
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'coaster')).toBe(true);
+  });
+
+  it('refuses when any of the four tiles is not grass', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path');
+    applyTool(tiles, heights, tunnels, 6, 6, 'tree'); // a tree inside the block
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'coaster')).toBe(false);
+  });
+
+  it('refuses when the block would run off the grid', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    expect(canPlace(tiles, heights, tunnels, GRID_W - 1, 5, 'coaster')).toBe(false);
+  });
+
+  it('refuses when the four tiles are not all at the same height', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path');
+    heights[idx(6, 6)] = 1; // one footprint tile raised above the anchor
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'coaster')).toBe(false);
+  });
+
+  it('refuses when no footprint tile has an adjacent path', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    expect(canPlace(tiles, heights, tunnels, 5, 5, 'coaster')).toBe(false);
+  });
+
+  it('writes the anchor and three annex tiles, priced like any building', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path');
+    applyTool(tiles, heights, tunnels, 5, 5, 'coaster');
+    expect(tiles[idx(5, 5)]).toBe('coaster');
+    expect(tiles[idx(6, 5)]).toBe('rideannex');
+    expect(tiles[idx(5, 6)]).toBe('rideannex');
+    expect(tiles[idx(6, 6)]).toBe('rideannex');
+    expect(toolCost('coaster')).toBe(BUILDINGS.coaster!.cost);
+  });
+
+  it('recovers the whole footprint from the anchor or any annex tile', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path');
+    applyTool(tiles, heights, tunnels, 5, 5, 'coaster');
+    const want = new Set(CELLS);
+    for (const cell of CELLS) {
+      expect(new Set(footprintOf(tiles, cell))).toEqual(want);
+    }
+  });
+
+  it('clears all four tiles when the anchor is bulldozed', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path');
+    applyTool(tiles, heights, tunnels, 5, 5, 'coaster');
+    applyTool(tiles, heights, tunnels, 5, 5, 'bulldoze');
+    for (const cell of CELLS) expect(tiles[cell]).toBe('grass');
+  });
+
+  it('clears all four tiles when an annex is bulldozed', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path');
+    applyTool(tiles, heights, tunnels, 5, 5, 'coaster');
+    applyTool(tiles, heights, tunnels, 6, 6, 'bulldoze'); // an annex, not the anchor
+    for (const cell of CELLS) expect(tiles[cell]).toBe('grass');
+  });
+
+  it('counts the placed coaster once for attractions and upkeep', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 4, 5, 'path');
+    applyTool(tiles, heights, tunnels, 5, 5, 'coaster');
+    expect(attractionCount(tiles)).toBe(1);
+    expect(dailyUpkeep(tiles)).toBe(BUILDINGS.coaster!.upkeep);
+  });
+
+  it('offers standing tiles spanning the whole block, not just beside the anchor', () => {
+    const { tiles, heights, tunnels } = createFlatPark();
+    applyTool(tiles, heights, tunnels, 7, 6, 'path'); // adjacent to the (6,6) annex tile
+    applyTool(tiles, heights, tunnels, 5, 5, 'coaster');
+    const stands = adjacentWalkable(tiles, idx(5, 5));
+    expect(stands).toContain(idx(7, 6));
+  });
+
+  it('lets a thrill-starved guest reach and be satisfied by a placed 2×2 coaster', () => {
+    const { tiles, heights, tunnels, entrance } = createFlatPark();
+    for (let n = 3; n <= 8; n++) tiles[entrance - n * GRID_W] = 'path';
+    const anchorX = 13;
+    const anchorY = 6; // (13,6) sits east of the path tile at (12,6)
+    const anchor = idx(anchorX, anchorY);
+    expect(canPlace(tiles, heights, tunnels, anchorX, anchorY, 'coaster')).toBe(true);
+    applyTool(tiles, heights, tunnels, anchorX, anchorY, 'coaster');
+    expect(tiles[anchor]).toBe('coaster');
+
+    const needs = createNeeds(() => 0.5);
+    needs.thrill = 12;
+    expect(mostUrgentNeed(needs)).toBe('thrill');
+
+    const candidates: number[] = [];
+    tiles.forEach((t, i) => {
+      if (BUILDINGS[t]?.satisfies === 'thrill') candidates.push(i);
+    });
+    const found = nearestReachable(tiles, entrance, candidates);
+    expect(found).not.toBeNull();
+    expect(found!.building).toBe(anchor);
+
+    satisfyNeed(needs, BUILDINGS.coaster!.satisfies, BUILDINGS.coaster!.boost);
     expect(needs.thrill).toBeGreaterThan(URGENT_THRESHOLD);
   });
 });
@@ -650,289 +758,6 @@ describe('park economy', () => {
   });
 });
 
-describe('coaster track', () => {
-  /**
-   * Builds a closed clockwise loop around the perimeter of a w×h rectangle
-   * anchored at (x0, y0), with dir/kind derived purely from tile geometry
-   * (turnR at every corner, flat along every straight run) — every segment
-   * is internally consistent by construction, so tests only need to
-   * override the specific kind(s) they're exercising.
-   */
-  function rectLoop(x0: number, y0: number, w: number, h: number): Segment[] {
-    const tiles: number[] = [];
-    for (let x = x0; x < x0 + w; x++) tiles.push(idx(x, y0));
-    for (let y = y0 + 1; y < y0 + h; y++) tiles.push(idx(x0 + w - 1, y));
-    for (let x = x0 + w - 2; x >= x0; x--) tiles.push(idx(x, y0 + h - 1));
-    for (let y = y0 + h - 2; y > y0; y--) tiles.push(idx(x0, y));
-    const n = tiles.length;
-    return tiles.map((tile, i) => {
-      const dir = dirBetween(tile, tiles[(i + 1) % n])!;
-      const prevDir = dirBetween(tiles[(i - 1 + n) % n], tile)!;
-      const kind: SegmentKind = dir === prevDir ? 'flat' : rotateDir(prevDir, 1) === dir ? 'turnR' : 'turnL';
-      return { tile, dir, kind };
-    });
-  }
-
-  /** First segment with the given kind — a stand-in for "one of the straight middles". */
-  function firstOfKind(segments: Segment[], kind: SegmentKind, from = 0): number {
-    return segments.findIndex((s, i) => i >= from && s.kind === kind);
-  }
-
-  /**
-   * Sequentially derives a heights array consistent with each segment's own
-   * kind (up=+1, down=-1, else=0) starting from 0 at segments[0].tile — so
-   * every segment's own dh check passes by construction. The loop only
-   * closes back to a self-consistent height at segments[0] if the chosen
-   * kinds' deltas sum to zero around the loop; tests that want a closed,
-   * height-consistent loop balance their up/down picks accordingly.
-   */
-  function heightsFor(segments: Segment[]): number[] {
-    const heights = new Array(GRID_W * GRID_H).fill(0);
-    let h = 0;
-    for (let i = 0; i < segments.length; i++) {
-      heights[segments[i].tile] = h;
-      const dh = segments[i].kind === 'up' ? 1 : segments[i].kind === 'down' ? -1 : 0;
-      h += dh;
-    }
-    return heights;
-  }
-
-  function withStation(segments: Segment[]): Segment[] {
-    const copy = segments.map(s => ({ ...s }));
-    copy[firstOfKind(copy, 'flat')].kind = 'station';
-    return copy;
-  }
-
-  describe('stepTile / dirBetween / rotateDir', () => {
-    it('steps one tile per direction and returns null past the edge', () => {
-      const tile = idx(5, 5);
-      expect(stepTile(tile, 1)).toBe(idx(6, 5)); // east
-      expect(stepTile(tile, 2)).toBe(idx(5, 6)); // south
-      expect(stepTile(idx(0, 5), 3)).toBeNull(); // west off the left edge
-      expect(stepTile(idx(5, 0), 0)).toBeNull(); // north off the top edge
-    });
-
-    it('finds the direction between orthogonal neighbours, or null otherwise', () => {
-      expect(dirBetween(idx(5, 5), idx(6, 5))).toBe(1);
-      expect(dirBetween(idx(5, 5), idx(5, 4))).toBe(0);
-      expect(dirBetween(idx(5, 5), idx(6, 6))).toBeNull(); // diagonal
-      expect(dirBetween(idx(5, 5), idx(5, 5))).toBeNull(); // same tile
-    });
-
-    it('rotates directions left and right, wrapping at the compass', () => {
-      expect(rotateDir(0, 1)).toBe(1);
-      expect(rotateDir(0, -1)).toBe(3);
-      expect(rotateDir(3, 1)).toBe(0);
-    });
-
-    it('derives corner kinds from entry and exit directions', () => {
-      expect(turnKind(0, 0)).toBeNull(); // straight through
-      expect(turnKind(0, 1)).toBe('turnR'); // north → east
-      expect(turnKind(0, 3)).toBe('turnL'); // north → west
-      expect(turnKind(3, 0)).toBe('turnR'); // west → north wraps the compass
-      expect(turnKind(2, 1)).toBe('turnL'); // south → east
-    });
-
-    it('maps each segment kind to its exit height step', () => {
-      expect(segmentClimb('up')).toBe(1);
-      expect(segmentClimb('down')).toBe(-1);
-      expect(segmentClimb('flat')).toBe(0);
-      expect(segmentClimb('station')).toBe(0);
-      expect(segmentClimb('turnL')).toBe(0);
-      expect(segmentClimb('turnR')).toBe(0);
-    });
-  });
-
-  describe('validateTrack', () => {
-    it('accepts a minimal valid closed loop with exactly one station', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      expect(loop).toHaveLength(MIN_TRACK_LENGTH);
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: true });
-    });
-
-    it('rejects a loop shorter than the minimum', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2)).slice(0, 3);
-      expect(validateTrack(loop, heightsFor(rectLoop(1, 1, 3, 2)))).toEqual({
-        ok: false,
-        error: 'tooShort'
-      });
-    });
-
-    it('rejects a loop that revisits a tile', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      loop[loop.length - 1].tile = loop[0].tile;
-      expect(validateTrack(loop, heightsFor(loop)).ok).toBe(false);
-      expect((validateTrack(loop, heightsFor(loop)) as { error: string }).error).toBe(
-        'duplicateTile'
-      );
-    });
-
-    it('rejects a loop with no station', () => {
-      const loop = rectLoop(1, 1, 3, 2); // all turnR/flat, no station
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'needsStation' });
-    });
-
-    it('rejects a loop with more than one station', () => {
-      const loop = withStation(rectLoop(1, 1, 4, 2));
-      const secondFlat = firstOfKind(loop, 'flat');
-      loop[secondFlat].kind = 'station';
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'needsStation' });
-    });
-
-    it('rejects a loop whose dir does not actually reach the next tile', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      loop[0].dir = rotateDir(loop[0].dir, 1);
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'notClosed' });
-    });
-
-    it('rejects a kind whose implied turn does not match the observed dir', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      const turnSeg = loop.find(s => s.kind === 'turnR')!;
-      turnSeg.kind = 'turnL'; // dir stays the same, but turnL expects the opposite rotation
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'notClosed' });
-    });
-
-    it('rejects a flat/turn segment whose actual height delta is nonzero', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      const heights = heightsFor(loop);
-      heights[loop[0].tile] += 1; // breaks the dh=0 expectation on whichever segment leads into it
-      expect(validateTrack(loop, heights)).toEqual({ ok: false, error: 'heightMismatch' });
-    });
-
-    it('rejects an up segment over flat terrain as a height mismatch, not a geometry error', () => {
-      // The terraform-mid-draft workflow: track laid first, land shaped
-      // after. A forgotten raise must point at the terrain, not the loop.
-      const loop = withStation(rectLoop(1, 1, 4, 2));
-      loop[firstOfKind(loop, 'flat')].kind = 'up';
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'heightMismatch' });
-    });
-
-    it('rejects two consecutive up/down segments with no flat between them', () => {
-      // A 5-wide top edge has three straight middle tiles in a row; the
-      // 5-wide bottom edge balances the height change back to zero so the
-      // loop still closes, isolating the steepness rule as the only failure.
-      const loop = rectLoop(1, 1, 5, 2);
-      const topFlats = loop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
-      const [up1, up2, station] = topFlats.slice(0, 3);
-      const [down1, down2] = topFlats.slice(3, 5);
-      loop[up1].kind = 'up';
-      loop[up2].kind = 'up';
-      loop[station].kind = 'station';
-      loop[down1].kind = 'down';
-      loop[down2].kind = 'down';
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: false, error: 'tooSteep' });
-    });
-
-    it('accepts an isolated up/down pair separated by a flat', () => {
-      const loop = rectLoop(1, 1, 5, 2);
-      const topFlats = loop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
-      const [up, station, down] = topFlats.slice(0, 3);
-      loop[up].kind = 'up';
-      loop[station].kind = 'station';
-      loop[down].kind = 'down';
-      expect(validateTrack(loop, heightsFor(loop))).toEqual({ ok: true });
-    });
-  });
-
-  describe('rotateToStation', () => {
-    it('rotates the loop so the station segment is first, preserving cyclic order', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      const stationTile = loop.find(s => s.kind === 'station')!.tile;
-      const rotated = rotateToStation(loop);
-      expect(rotated[0].kind).toBe('station');
-      expect(rotated[0].tile).toBe(stationTile);
-      expect(rotated).toHaveLength(loop.length);
-      // Same cyclic sequence, just rotated — every tile still appears once.
-      expect(new Set(rotated.map(s => s.tile))).toEqual(new Set(loop.map(s => s.tile)));
-    });
-
-    it('is a no-op when the station is already first', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      const stationIndex = loop.findIndex(s => s.kind === 'station');
-      const rotatedOnce = rotateToStation(loop);
-      expect(rotateToStation(rotatedOnce)).toEqual(rotatedOnce);
-      expect(stationIndex).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  describe('trackHeightDrop / thrillBoost', () => {
-    it('is zero for a flat loop', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      expect(trackHeightDrop(loop, heightsFor(loop))).toBe(0);
-    });
-
-    it('sums only the descending segments', () => {
-      const loop = rectLoop(1, 1, 5, 2);
-      const topFlats = loop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
-      const [up, station, down] = topFlats.slice(0, 3);
-      loop[up].kind = 'up';
-      loop[station].kind = 'station';
-      loop[down].kind = 'down';
-      expect(trackHeightDrop(loop, heightsFor(loop))).toBe(1);
-    });
-
-    it('scales thrill boost with height drop and loop length, capped at 100', () => {
-      const flatLoop = withStation(rectLoop(1, 1, 3, 2));
-      const flatBoost = thrillBoost(flatLoop, heightsFor(flatLoop));
-
-      const hillLoop = rectLoop(1, 1, 5, 2);
-      const topFlats = hillLoop.map((s, i) => (s.kind === 'flat' ? i : -1)).filter(i => i >= 0);
-      const [up, station, down] = topFlats.slice(0, 3);
-      hillLoop[up].kind = 'up';
-      hillLoop[station].kind = 'station';
-      hillLoop[down].kind = 'down';
-      const hillBoost = thrillBoost(hillLoop, heightsFor(hillLoop));
-
-      expect(hillBoost).toBeGreaterThan(flatBoost);
-      expect(hillBoost).toBeLessThanOrEqual(100);
-      expect(flatBoost).toBeGreaterThan(0);
-    });
-  });
-
-  describe('cart speed model', () => {
-    it('accelerates going down, within the max speed clamp', () => {
-      let speed = CART_CRUISE_SPEED;
-      for (let i = 0; i < 10; i++) speed = nextCartSpeed(speed, 'down', 0.5);
-      expect(speed).toBeGreaterThan(CART_CRUISE_SPEED);
-      expect(speed).toBeLessThanOrEqual(CART_MAX_SPEED);
-    });
-
-    it('decelerates going up, but never below the min speed clamp', () => {
-      let speed = CART_CRUISE_SPEED;
-      for (let i = 0; i < 20; i++) speed = nextCartSpeed(speed, 'up', 0.5);
-      expect(speed).toBeGreaterThanOrEqual(CART_MIN_SPEED);
-      expect(speed).toBe(CART_MIN_SPEED);
-    });
-
-    it('drags flat-segment speed back toward cruise speed', () => {
-      let speed = CART_MAX_SPEED;
-      for (let i = 0; i < 20; i++) speed = nextCartSpeed(speed, 'flat', 0.5);
-      expect(speed).toBeCloseTo(CART_CRUISE_SPEED, 1);
-    });
-  });
-
-  describe('advanceU', () => {
-    it('advances progress and wraps at the loop length', () => {
-      expect(advanceU(0, 2, 1, 10)).toBe(2);
-      expect(advanceU(9, 2, 1, 10)).toBe(1); // 11 wraps to 1 in a loop of length 10
-    });
-  });
-
-  describe('canPlaceTrack', () => {
-    it('requires every segment tile to currently be grass', () => {
-      const loop = withStation(rectLoop(1, 1, 3, 2));
-      const { tiles, heights, tunnels } = createFlatPark();
-      expect(canPlaceTrack(tiles, loop)).toBe(true);
-      applyTool(tiles, heights, tunnels, 2, 1, 'tree');
-      expect(canPlaceTrack(tiles, loop)).toBe(false);
-    });
-  });
-
-  it('prices the track tile like any other simple tool', () => {
-    expect(toolCost('track')).toBeGreaterThan(0);
-  });
-});
-
 describe('park mayhem', () => {
   it('stays calm through the grace days, then ramps to a cap of 1', () => {
     expect(mayhemIntensity(1)).toBe(0);
@@ -952,7 +777,7 @@ describe('park mayhem', () => {
     expect(isRide('food')).toBe(false);
     expect(isRide('toilet')).toBe(false);
     expect(isRide('grass')).toBe(false);
-    expect(isRide('track')).toBe(false);
+    expect(isRide('coaster')).toBe(true);
   });
 
   it('breakdown odds scale with the ride count and stay zero early on', () => {
@@ -961,8 +786,6 @@ describe('park mayhem', () => {
     const many = breakdownChance(20, 4);
     expect(few).toBeGreaterThan(0);
     expect(many).toBeCloseTo(few * 4);
-    expect(coasterStallChance(2)).toBe(0);
-    expect(coasterStallChance(20)).toBeGreaterThan(0);
   });
 
   it('picks a working ride to break, never an already-broken or non-ride tile', () => {

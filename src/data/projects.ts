@@ -129,13 +129,12 @@ export interface ExternalContribution {
 }
 
 export const externalContributions: ExternalContribution[] = [
-  { repo: 'aws/aws-cdk', url: 'https://github.com/aws/aws-cdk/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
-  { repo: 'electron/electron', url: 'https://github.com/electron/electron/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
-  { repo: 'asyncapi/spec', url: 'https://github.com/asyncapi/spec/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
-  { repo: 'snyk/user-docs', url: 'https://github.com/snyk/user-docs/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
-  { repo: 'vercel-labs/skills', url: 'https://github.com/vercel-labs/skills/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
-  { repo: 'event-catalog/generator-eventbridge', url: 'https://github.com/event-catalog/generator-eventbridge/pulls?q=is%3Apr+author%3AIsmaelMartinez' },
-  { repo: 'The-PR-Agent/pr-agent', url: 'https://github.com/The-PR-Agent/pr-agent/pulls?q=is%3Apr+author%3AIsmaelMartinez' }
+  { repo: 'aws/aws-cdk', url: 'https://github.com/aws/aws-cdk/pulls?q=is%3Apr+author%3AIsmaelMartinez+is%3Amerged' },
+  { repo: 'electron/electron', url: 'https://github.com/electron/electron/pulls?q=is%3Apr+author%3AIsmaelMartinez+is%3Amerged' },
+  { repo: 'asyncapi/parser-js', url: 'https://github.com/asyncapi/parser-js/pulls?q=is%3Apr+author%3AIsmaelMartinez+is%3Amerged' },
+  { repo: 'event-catalog/generator-eventbridge', url: 'https://github.com/event-catalog/generator-eventbridge/pulls?q=is%3Apr+author%3AIsmaelMartinez+is%3Amerged' },
+  { repo: 'vercel-labs/skills', url: 'https://github.com/vercel-labs/skills/pulls?q=is%3Apr+author%3AIsmaelMartinez+is%3Amerged' },
+  { repo: 'The-PR-Agent/pr-agent', url: 'https://github.com/The-PR-Agent/pr-agent/pulls?q=is%3Apr+author%3AIsmaelMartinez+is%3Amerged' }
 ];
 
 export function getFeaturedProjects(): Project[] {

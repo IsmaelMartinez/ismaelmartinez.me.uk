@@ -31,7 +31,8 @@ export const translations = {
     'hero.headline1': 'Building software that\'s ',
     'hero.headlineAccent': 'reliable',
     'hero.headline2': ', open, and worth writing about.',
-    'hero.description': 'I build things, write about technology, and contribute to open source. I care deeply about responsible AI — and about how this technology lets us explore problems in entirely new ways.',
+    'hero.headlineAside': 'Or at least trying to.',
+    'hero.description': 'I build, I write, and I contribute to open source. I care about doing AI responsibly, and about the doors it opens on problems worth solving.',
 
     // Sections
     'section.projects': 'Open Source Projects',
@@ -541,7 +542,8 @@ export const translations = {
     'hero.headline1': 'Construyo software ',
     'hero.headlineAccent': 'fiable',
     'hero.headline2': ', abierto y del que vale la pena escribir.',
-    'hero.description': 'Construyo cosas, escribo sobre tecnología y contribuyo al código abierto. Me importa profundamente la IA responsable, y cómo esta tecnología nos permite explorar problemas de formas completamente nuevas.',
+    'hero.headlineAside': 'O al menos lo intento.',
+    'hero.description': 'Construyo, escribo y contribuyo al código abierto. Me importa hacer IA de forma responsable, y las puertas que abre a problemas que vale la pena resolver.',
 
     // Sections
     'section.projects': 'Proyectos Open Source',
@@ -1054,7 +1056,8 @@ export const translations = {
     'hero.headline1': 'Construeixo software ',
     'hero.headlineAccent': 'fiable',
     'hero.headline2': ', obert i del qual val la pena escriure.',
-    'hero.description': 'Construeixo coses, escric sobre tecnologia i contribueixo al codi obert. Em preocupa profundament la IA responsable, i com aquesta tecnologia ens permet explorar problemes de maneres completament noves.',
+    'hero.headlineAside': 'O almenys ho intento.',
+    'hero.description': 'Construeixo, escric i contribueixo al codi obert. M\'importa fer IA de manera responsable, i les portes que obre a problemes que val la pena resoldre.',
 
     // Sections
     'section.projects': 'Projectes Open Source',

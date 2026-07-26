@@ -444,6 +444,40 @@ describe('POST conditional writes', () => {
     expect(response.status).toBe(503);
     expect(vi.mocked(put)).toHaveBeenCalledTimes(3);
   });
+
+  /*
+   * Regression: a real submission went missing in production this way. The
+   * store answers "no board" both for a game that has never been played and
+   * for a read that trails a blob created a moment earlier, and `put` has no
+   * conditional-create to separate them. Taking absence at face value sends a
+   * write with no ETag, which replaces the board instead of adding to it.
+   */
+  it('retries rather than overwriting when a read trails a just-created board', async () => {
+    blob.state.onRead = () => {
+      seed('snake', { all: [entry('AAA', 900, NOW_SECONDS - 5, 'rival-0')] }, 'etag-created');
+    };
+
+    const response = await POST(postRequest(submission({ score: 4210, nonce: 'mine' })));
+
+    expect(response.status).toBe(200);
+    // The rival survived, which only holds if the absent read was not believed.
+    expect(stored('snake').all.map(e => e.n).sort()).toEqual(['mine', 'rival-0']);
+    // Every write that landed was conditional, so none could have clobbered.
+    const conditional = vi
+      .mocked(put)
+      .mock.calls.every(call => (call[2] as { ifMatch?: string }).ifMatch !== undefined);
+    expect(conditional).toBe(true);
+  });
+
+  it('still creates the board when it is genuinely absent', async () => {
+    const response = await POST(postRequest(submission({ score: 100, nonce: 'first' })));
+
+    expect(response.status).toBe(200);
+    expect(stored('snake').all.map(e => e.n)).toEqual(['first']);
+    // Absence is only accepted once the retries have given storage time to settle.
+    expect(vi.mocked(get)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(put)).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('POST rate limits', () => {

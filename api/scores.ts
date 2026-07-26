@@ -115,6 +115,15 @@ const GAME_WINDOW = 24 * 60 * 60;
 const WRITE_ATTEMPTS = 3;
 
 /**
+ * Pause before re-reading after a losing attempt. A read can trail a write
+ * that has only just landed, so retrying instantly tends to fetch the same
+ * stale view and burn the attempt for nothing.
+ */
+const RETRY_BACKOFF_MS = 150;
+
+const pause = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
  * Blobs are cached for a month by default. A minute is the floor the API
  * allows and is all a leaderboard needs: submitters see their own new table
  * in the POST response, so nobody is looking at a stale board they just
@@ -277,7 +286,22 @@ async function record(
   const hash = hashAddress(clientAddress(request));
 
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+    if (attempt > 0) await pause(RETRY_BACKOFF_MS * attempt);
     const loaded = await readBoard(game, true);
+
+    /*
+     * An absent board normally means this is the first score the game has
+     * ever taken, and the write below then has no ETag to match on. But a
+     * read that trails a blob created moments earlier looks exactly the same
+     * from here, and `put` offers no conditional-create to tell them apart.
+     * Believing a lagging read would send an unconditional write that
+     * replaces the whole board rather than adding to it, which is how a real
+     * submission went missing in testing. So absence is only accepted on the
+     * final attempt, once the backoffs above have given storage time to
+     * settle. A genuine first write costs those attempts once per game.
+     */
+    if (!loaded && attempt < WRITE_ATTEMPTS - 1) continue;
+
     const board = loaded?.board ?? { top: [], all: [], recent: [] };
     const now = Math.floor(Date.now() / 1000);
 
@@ -312,8 +336,9 @@ async function record(
         contentType: 'application/json',
         allowOverwrite: true,
         cacheControlMaxAge: BLOB_CACHE_SECONDS,
-        // A first write has no ETag to match on. Every later write carries
-        // one, so a read that went stale mid-merge fails here and retries.
+        // Every write that read an existing board carries its ETag, so a read
+        // that went stale mid-merge is rejected here and retried. Only the
+        // accepted-absence path above writes without one.
         ...(loaded ? { ifMatch: loaded.etag } : {})
       });
     } catch (error) {

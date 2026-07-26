@@ -7,6 +7,11 @@ Goal: every visitor sees the same top ten per cabinet, and the record of who
 scored what is kept over time. Constraint from the owner: use the minimum
 possible external service, ideally none.
 
+Revision note: the first draft of this plan recommended a new Cloudflare account
+and rejected Vercel on a concurrency argument. That argument was wrong on the
+facts, and the recommendation is now Vercel. The correction is explained in full
+under "Why the first draft was wrong" so the reasoning stays auditable.
+
 ## What exists today
 
 Every cabinet already has a complete top-ten table, it is just private to the
@@ -71,113 +76,142 @@ prefilled `issues/new` link and harvested by an Action. It is auditable,
 moderated by construction, and costs nothing, but it asks every player for a
 GitHub account and a manual click. That is a fun easter egg, not a leaderboard.
 
-So: one small service. The rest of this plan picks the smallest one and keeps
-everything else in the repository.
+So something has to accept the write. The good news, which the first draft
+missed, is that it does not have to be anything new.
 
-## Recommendation: a single Cloudflare Worker with D1
+## Recommendation: a Vercel Function plus Blob, on the deployment that already exists
 
-One Worker, one D1 database, one free Cloudflare account, roughly a hundred
-lines of code living in this repository. Free tier limits are 100,000 Worker
-requests per day with 10ms CPU per invocation, and for D1 five million rows read
-per day, 100,000 rows written per day, and 5GB of storage. This site's arcade
-traffic is orders of magnitude below all of those.
+This repository already has a live Vercel project. It is not the leftover
+`vercel.json` the CLAUDE.md describes: CI runs a real deployment on every PR,
+and production is serving the site right now at `ismaelmartinezmeuk.vercel.app`
+from the London region, even though the apex domain points at GitHub Pages. The
+account, the project and the build pipeline all exist and are already
+maintained.
 
-D1 rather than KV because the top ten is one indexed query with a tie-break that
-matches the existing rule exactly, and because concurrent submissions are
-transactional. The KV alternative would be a read-modify-write on a JSON blob,
-which is eventually consistent and can lose an entry when two players finish at
-the same moment.
+So the recommendation is a single Vercel Function in this repository that accepts
+score submissions and keeps each game's top ten as a JSON blob in Vercel Blob,
+which is Vercel's own first-party storage. No new account anywhere, no new
+vendor relationship, no second deploy pipeline, and nothing to remember to renew.
+That is what the owner asked for, and it turns out to be available.
 
-One fact from checking the domain: `ismaelmartinez.me.uk` is on Route 53 and its
-apex points at GitHub Pages. Cloudflare custom domains require the zone to be on
-Cloudflare, so `scores.ismaelmartinez.me.uk` would mean moving DNS. That is a
-bigger change than this feature deserves, so the plan assumes the free
-`*.workers.dev` hostname and treats a custom subdomain as a later cosmetic
-choice.
+Vercel's own documentation names this exact shape as a supported use of Blob,
+describing a valid mutable-blob case as "a single JSON file that's updated every
+5 minutes with a top list of sales or other regularly refreshed data". A
+leaderboard is that file.
 
-Supabase was considered and dropped because free projects pause after a week of
-inactivity, which is a realistic traffic pattern here and would mean the board
-is down precisely when a rare visitor arrives.
+## Why the first draft was wrong
 
-## The zero-new-account alternative, and its cost
+The first draft claimed Blob could only do an unguarded read-modify-write, so
+two players finishing at the same moment could silently lose an entry, and it
+recommended paying for that with a new Cloudflare account and a SQL database.
 
-Vercel deserves a closer look than `vercel.json` suggests, because it is not
-just a leftover config file: CI on this repository runs a real Vercel
-deployment, so the account and project already exist even though the apex
-domain points at GitHub Pages. A Vercel Function could accept the write with no
-new account anywhere, which is exactly what the owner asked for.
+Vercel Blob supports conditional writes. `head()` or `get()` returns an ETag, and
+`put()` accepts an `ifMatch` option that only succeeds if the blob has not
+changed since that ETag was issued, throwing `BlobPreconditionFailedError`
+otherwise. That is optimistic concurrency control, and a small retry loop around
+it makes the read-modify-write correct. The lost-update problem the first draft
+was built on does not exist.
 
-The catch is storage. Vercel's only first-party stores are Blob, which is object
-storage for files, and Edge Config, which is documented for data that is read
-often and changes rarely with writes taking seconds. Everything relational or
-key-value comes from marketplace partners (Neon, Upstash, Supabase), which means
-a third-party account after all. Edge Config is disqualified by its write model.
-That leaves a Function writing the top ten as a JSON object in Blob.
+It is worth being precise about why this matters beyond the one fact. The draft
+used that supposed flaw to argue Blob was "the same class of problem" as the
+Umami option it had already rejected. That comparison was not sound even on its
+own terms. Umami would have dropped a large and systematic share of players, the
+ones running content blockers, every single time. A lost update would have been
+a rare random collision. Treating those as equivalent inflated a small risk into
+a disqualifying one, and it happened to point at the more expensive answer.
 
-That would work, and it is genuinely zero new accounts. The cost is correctness
-under concurrency: updating a JSON blob is a read-modify-write with no
-transaction, so two players finishing within the same moment can lose one of the
-two entries. At this site's traffic that collision is rare rather than
-impossible, and it fails silently when it happens.
+Two smaller things also went the other way once checked. Reads do not need to
+touch the Function at all, since a cached response is served by Vercel's CDN,
+whereas on Cloudflare every single read would be a Worker invocation counting
+against the free daily limit. And a custom subdomain is easy on Vercel, because
+`scores.ismaelmartinez.me.uk` is just a CNAME record added at Route 53 where DNS
+already lives, while a Cloudflare custom domain requires moving the whole zone to
+Cloudflare. The draft listed that DNS friction as a downside and then recommended
+the option that had it.
 
-So the choice is a real trade rather than a technicality. Cloudflare costs one
-new free account and gets a database that cannot lose an entry. Vercel Blob
-costs nothing new and accepts a rare silent loss. The recommendation stays with
-Cloudflare, because a leaderboard that occasionally eats a record is the same
-class of problem as the Umami option this plan already rejected, but if "no new
-accounts" is the overriding constraint then Vercel Blob is the honest way to get
-there and the rest of this plan (API shape, client integration, validation,
-interface) applies unchanged.
+## What Cloudflare would still have bought
+
+Being fair to the rejected option, since the point is a real comparison rather
+than a reversal.
+
+D1 is a SQL database, so the top ten is one indexed query and the growing history
+of every submission is queryable without writing aggregation code. On free tier
+limits it is generous: 100,000 Worker requests per day, 5 million D1 rows read
+per day, 100,000 written, and 5GB of storage. And it has no cache propagation
+delay, where Blob takes up to 60 seconds for an overwrite to reach every reader.
+
+None of that outweighs a new account and a second deploy pipeline for a personal
+arcade with nine tables. Keep this section so the decision can be revisited if
+the board ever outgrows a JSON file.
+
+Supabase was considered and dropped separately, because free projects pause after
+a week of inactivity, which is a realistic traffic pattern here and would mean
+the board is down precisely when a rare visitor arrives.
 
 ## Data model
 
-A single table, keeping every submission rather than only the current top ten,
-which is what makes "keep track of it" true over time and costs nothing at this
-volume.
+One JSON blob per game, at a stable pathname such as `scores/snake.json`, holding
+both the current top ten and the full submission history. History is what makes
+"keep track of it" true over time, and at this volume it costs nothing to carry
+in the same file.
 
-```sql
-CREATE TABLE scores (
-  id         INTEGER PRIMARY KEY,
-  game       TEXT    NOT NULL,
-  initials   TEXT    NOT NULL,
-  score      INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  nonce      TEXT    NOT NULL
-);
-CREATE INDEX idx_game_rank ON scores (game, score DESC, created_at ASC);
-CREATE UNIQUE INDEX idx_nonce ON scores (nonce);
+```json
+{
+  "top": [{ "i": "IMR", "s": 4210, "t": 1785000000 }],
+  "all": [{ "i": "IMR", "s": 4210, "t": 1785000000, "n": "<uuid>" }]
+}
 ```
 
-`ORDER BY score DESC, created_at ASC` reproduces the local tie rule, so a table
-never reorders when a player compares the two views. The `nonce` is a client
-generated `crypto.randomUUID()`; its unique index makes a browser-level retry a
-no-op instead of a duplicate row, which matters because duplicates on a
-ten-row board are immediately visible.
+`top` is derived, not authoritative: it is recomputed from `all` on every write by
+sorting on score descending and timestamp ascending, which reproduces the local
+tie rule exactly so a table never reorders when a player compares the two views.
+Sorting through the existing `insertScore` from `src/games/engine/highscores.ts`
+rather than a reimplementation is the right move, since its ordering is already
+covered by `tests/games/highscores.test.ts`.
+
+`n` is a client-generated `crypto.randomUUID()`. The Function ignores a
+submission whose nonce is already present, which makes a browser-level retry a
+no-op instead of a duplicate row. That matters because duplicates on a ten-row
+board are immediately visible.
+
+If `all` ever grows large enough to make rewriting the file wasteful, the split is
+obvious and can be deferred until it is actually needed: keep `top` in the hot
+blob and roll history into per-month blobs.
 
 ## API
 
-Two routes on the Worker, CORS restricted to the site origin.
+Two routes on one Vercel Function, CORS restricted to the site origin, both
+served from the existing deployment so only one host is involved.
 
-`GET /scores` returns the top ten for every game in one response, shaped
-`{ "snake": [{ "i": "IMR", "s": 4210 }, ...], ... }`, with a short
-`Cache-Control: public, max-age=30`. One request serves a game page and, later,
-the arcade index.
+`GET /api/scores` returns the top ten for every game in one response, shaped
+`{ "snake": [{ "i": "IMR", "s": 4210 }, ...], ... }`, with a `Cache-Control`
+header so the CDN serves repeat reads without re-invoking the Function. One
+request serves a game page and, later, the arcade index.
 
-`POST /scores` takes `{ game, initials, score, nonce }` and returns
+`POST /api/scores` takes `{ game, initials, score, nonce }` and returns
 `{ rank, table }`, where `rank` is the global position (0 if it did not chart)
-and `table` is the new top ten, so the client renders the result without a
-second round trip.
+and `table` is the new top ten, so the client renders the result without a second
+round trip. This also neatly sidesteps the 60 second cache propagation delay for
+the one person who cares most: the player who just submitted sees the
+authoritative table in the response, while everyone else picks it up within the
+minute.
 
-The request body is sent as `text/plain` and parsed as JSON by the Worker. This
+The request body is sent as `text/plain` and parsed as JSON by the Function. This
 is deliberate: it keeps the POST a CORS simple request, avoiding a preflight
 round trip on a request that may be racing page unload, and it keeps the client
 compatible with `sendBeacon` if `keepalive` ever proves unreliable.
 
-Validation in the Worker rejects anything where `game` is not in the allowlist,
-`initials` does not match `/^[A-Z0-9]{1,3}$/`, or `score` is not a positive
-safe integer below a generous ceiling. The allowlist should be a single exported
-array shared by the Worker and the site, so adding a tenth cabinet cannot leave
-the two disagreeing.
+The write path is `head()` for the ETag, read, merge, then `put()` with
+`allowOverwrite: true` and `ifMatch`, retrying a small fixed number of times on
+`BlobPreconditionFailedError`. A stale read is self-correcting under this scheme,
+because a stale read carries a stale ETag and the conditional write simply fails
+and retries.
+
+Validation rejects anything where `game` is not in the allowlist, `initials` does
+not match `/^[A-Z0-9]{1,3}$/`, or `score` is not a positive safe integer below a
+generous ceiling. The allowlist should be a single exported array shared by the
+Function and the site, so adding a tenth cabinet cannot leave the two
+disagreeing.
 
 ## Integration with the existing scoreboard
 
@@ -213,11 +247,11 @@ that is the instant, offline-proof path. On commit, the entry is written locally
 and submitted globally; if a global rank comes back the panel switches to the
 World tab with the new row highlighted, and if it does not, the player stays on
 their device board none the wiser. Whether the default tab should instead be
-World is the main open question below.
+World is an open question below.
 
 A later, optional phase can show the world number one on each cabinet in
-`src/pages/[lang]/fun/index.astro`, which the single `GET /scores` response
-already supports.
+`src/pages/[lang]/fun/index.astro`, which the single `GET` response already
+supports.
 
 ## Supporting changes
 
@@ -225,11 +259,32 @@ New UI strings need entries in all three locales in `src/i18n/translations.ts`,
 following the existing `fun.arcade.*` keys: the two tab labels, a loading state,
 an unreachable-board note, and a world rank readout.
 
-CSP needs the Worker origin in `connect-src`, in both places it is declared: the
-meta tag in `src/layouts/Layout.astro` and the header in `vercel.json:31`. The
-comment already sitting above the meta tag, added after the Umami outage,
+CSP needs the endpoint origin in `connect-src`, in both places it is declared:
+the meta tag in `src/layouts/Layout.astro` and the header in `vercel.json:31`.
+The comment already sitting above the meta tag, added after the Umami outage,
 explains why these two must not drift apart, and this is exactly the kind of
 change that causes the drift.
+
+## Limits and failure modes
+
+Writes are the metered dimension: one submission is one Blob advanced operation,
+plus one simple operation for the `head()`. Hobby rate limits are 1,200 simple
+and 900 advanced operations per minute, which this site will never approach.
+The monthly included allowance is the number to confirm before building, since
+Vercel's published pricing example cites 10,000 included advanced operations and
+does not restate the figure in its Hobby section. Ten thousand writes a month is
+roughly three hundred scores a day, far beyond realistic arcade traffic, but it
+is worth checking rather than assuming.
+
+The failure mode on exceeding Hobby limits is worth knowing because it is
+sharper than a rate limit: Vercel does not bill for overage on Hobby, it disables
+Blob access until thirty days have passed. Given the headroom this is a remote
+risk, but it argues for the client degrading silently to the local board rather
+than surfacing an error, which is what this plan specifies anyway.
+
+Reads should be verified during the first phase. The intent is that a cached
+`GET` costs no Function invocation, which needs confirming against the real
+`Cache-Control` behaviour before relying on it.
 
 ## Abuse, moderation and privacy
 
@@ -239,29 +294,31 @@ plan should not pretend otherwise. Server-side validation raises the cost of
 cheating rather than preventing it.
 
 The proportionate measures are a generous per-submission ceiling and integer
-validation, a rate limit per address using Cloudflare's rate limiting binding
-(which needs no stored data, so no IP addresses are retained), and a small
-blocklist for the handful of offensive three-character combinations that
-`A-Z0-9` permits. Moderation is a `wrangler d1 execute` delete from the command
-line, which needs no admin endpoint and therefore no admin secret.
+validation, a light rate limit per address, and a small blocklist for the handful
+of offensive three-character combinations that `A-Z0-9` permits. Moderation is
+editing the JSON blob, which needs no admin endpoint and therefore no admin
+secret.
 
 Replay validation, submitting the run's inputs and re-simulating them
 server-side against the DOM-free game modules, is genuinely possible for the
 deterministic cabinets and is the only real anti-cheat option. It is
 disproportionate for a personal site and is explicitly rejected here.
 
-Initials are not personal data, and with the rate limiting binding no addresses
-are stored, so this adds no new processing worth a policy page. Worth a sentence
-if a privacy page is ever added, since the site does not currently have one.
+Initials are not personal data. If rate limiting stores anything derived from an
+address it should be a salted hash with a short TTL rather than the address
+itself, which keeps this clear of anything needing a policy page. Worth a
+sentence if a privacy page is ever added, since the site does not currently have
+one.
 
 ## Testing
 
 The ordering rules are already proven in `tests/games/highscores.test.ts`, and
-the Worker's SQL must mirror them; a test asserting that the SQL ordering and
-`insertScore` agree on a tie is the one that catches a real regression. The
-Worker's validation and shaping logic should be pure functions unit-tested by
-the existing Vitest suite. Integration testing is manual against `wrangler dev`,
-rather than adding the Workers test pool and its CI cost for two routes.
+the Function should reuse `insertScore` rather than reimplement it, which makes
+that coverage do double duty. The Function's validation and shaping logic should
+be pure functions unit-tested by the existing Vitest suite. The conditional-write
+retry loop deserves a test with a stubbed Blob client that fails the first
+`put()` with `BlobPreconditionFailedError`, since that path is the one that only
+runs under a race and will otherwise never be exercised before it matters.
 
 The client side needs a test that a failed submission leaves the local table
 untouched, since that is the guarantee protecting gameplay.
@@ -271,38 +328,37 @@ untouched, since that is the guarantee protecting gameplay.
 Four phases, each independently reviewable, with user-visible risk arriving only
 in the third.
 
-The first stands the Worker and database up in `workers/scores/` with no site
-changes at all, verified with curl. The second adds the read path, the World tab,
-the i18n keys and the CSP entries, so the board is visible but empty. The third
-turns on submission from `commit()` and the rank readout. The fourth, optional,
-puts the world record on the arcade index cabinets.
+The first adds the Function and the Blob store with no site changes at all,
+verified with curl, including confirming the read-caching behaviour and the
+conditional-write retry under a deliberately forced conflict. The second adds
+the read path, the World tab, the i18n keys and the CSP entry, so the board is
+visible but empty. The third turns on submission from `commit()` and the rank
+readout. The fourth, optional, puts the world record on the arcade index
+cabinets.
 
-Deployment of the Worker is a GitHub Action on changes under `workers/**` using
-a `CLOUDFLARE_API_TOKEN` repository secret. Note for whoever opens that PR: the
-`gh` CLI token in use does not carry the `workflow` scope, so a PR adding a
-workflow file needs an admin or UI merge.
+There is no separate deploy pipeline to build, which is most of the reason this
+option wins: the Function ships with the site on the existing Vercel deployment,
+and the only new secret is the Blob read-write token, which Vercel injects as an
+environment variable when the store is linked to the project.
 
 The global board starts empty. Existing local scores are not migrated, because
 they carry no attribution and cannot be verified.
 
 ## Open decisions
 
-1. The one that decides the rest: one new free Cloudflare account with a
-   database that cannot lose an entry, or zero new accounts on the existing
-   Vercel project with a JSON blob that can rarely lose one. Recommendation:
-   Cloudflare.
-2. Hostname, if Cloudflare: accept `*.workers.dev` now, or move DNS from Route 53
-   to Cloudflare for `scores.ismaelmartinez.me.uk`. Recommendation: workers.dev,
-   revisit later.
-3. Default tab when the panel opens: This device, or World. Recommendation: This
+1. Hostname: use the existing `ismaelmartinezmeuk.vercel.app` deployment, or add
+   `scores.ismaelmartinez.me.uk` as a CNAME at Route 53 pointing at Vercel.
+   Recommendation: start on the existing hostname, add the subdomain later if the
+   vercel.app origin in CSP bothers you.
+2. Default tab when the panel opens: This device, or World. Recommendation: This
    device during the entry flow, switching to World once a rank returns.
-4. Submit every committed score above zero, or only ones that chart locally.
+3. Submit every committed score above zero, or only ones that chart locally.
    Recommendation: every score above zero.
-5. Keep every submission row, or only the current top ten. Recommendation: keep
-   everything, it is what makes the history real and costs nothing.
-6. Optional arcade touch: Cloudflare exposes a country code per request for free,
-   so rows could show a flag beside the initials. Coarse and non-identifying, but
-   it is an addition rather than a requirement.
+4. Keep every submission in `all`, or only the current top ten. Recommendation:
+   keep everything, it is what makes the history real and costs nothing now.
+5. Whether the site's canonical host should move to Vercel entirely. Out of scope
+   for this plan and deliberately not proposed, but worth noting that once the
+   arcade depends on a Vercel Function, the site is running on two hosts.
 
 ## Out of scope
 

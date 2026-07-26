@@ -1,9 +1,9 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import ArticleCard from '../../components/ArticleCard.astro';
-import ContactCTA from '../../components/ContactCTA.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
+import { feedLink } from '../../data/links';
 import { getCollection } from 'astro:content';
 
 export function getStaticPaths() {
@@ -50,6 +50,12 @@ const sortedArticles = articles.sort((a, b) =>
         </div>
       )}
 
+      <div class="subscribe-section">
+        <h2 class="section-title">{t('writing.subscribeTitle')}</h2>
+        <p class="platform-description">{feedLink.description[lang]}</p>
+        <a href={`/${lang}/rss.xml`} class="btn btn-primary">{t('cta.rss')} →</a>
+      </div>
+
       <div class="platforms-section">
         <h2 class="section-title">{t('article.externalPlatforms')}</h2>
         <div class="writing-platforms">
@@ -83,8 +89,6 @@ const sortedArticles = articles.sort((a, b) =>
 
     </div>
   </section>
-
-  <ContactCTA lang={lang} />
 </Layout>
 
 <style>
@@ -119,6 +123,22 @@ const sortedArticles = articles.sort((a, b) =>
     gap: var(--space-lg);
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     margin-bottom: var(--space-xl);
+  }
+
+  .subscribe-section {
+    margin-bottom: var(--space-2xl);
+    padding: var(--space-xl);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+  }
+
+  .subscribe-section .section-title {
+    margin-bottom: var(--space-sm);
+  }
+
+  .subscribe-section .platform-description {
+    margin-bottom: var(--space-lg);
   }
 
   .platforms-section {

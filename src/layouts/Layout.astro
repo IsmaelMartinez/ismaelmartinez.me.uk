@@ -84,8 +84,11 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <ClientRouter />
 
     <!-- Umami Analytics -->
-    <!-- SRI pins a specific script version. If Umami updates the script and the hash breaks, it's acceptable to remove the integrity attribute and rely on CSP alone. -->
-    <script defer src="https://cloud.umami.is/script.js" data-website-id="d3ef0011-73bb-46a5-a248-f5220efa13eb" integrity="sha384-njZ5sCqL2nQlDz+tuOzt4BOOdB4zc8UVx7AiE6EGDrjYZPfNHel8zAmY2ESoQilv" crossorigin="anonymous"></script>
+    <!-- No SRI: cloud.umami.is/script.js is a rolling URL with no versioned
+         alternative, so a pinned hash silently blocks the script the next time
+         Umami ships a change — which is exactly what happened. CSP restricts
+         script-src to this origin, which is the control that survives. -->
+    <script defer src="https://cloud.umami.is/script.js" data-website-id="d3ef0011-73bb-46a5-a248-f5220efa13eb"></script>
   </head>
   <body>
     <a href="#main-content" class="skip-link">{t('nav.skipToContent')}</a>

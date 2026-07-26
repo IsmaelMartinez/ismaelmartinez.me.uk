@@ -9,7 +9,7 @@ export interface Needs {
   hunger: number;
   thirst: number;
   bladder: number;
-  /** Satisfied only by riding a coaster; see track.ts. */
+  /** Satisfied by thrill rides: the placed coaster and the Pirate Ship. */
   thrill: number;
 }
 

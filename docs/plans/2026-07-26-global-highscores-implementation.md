@@ -94,4 +94,29 @@ No accounts or login. No live-updating boards. No per-week tables. No anti-cheat
 
 ## Status
 
-Not started. Contracts frozen by review on 2026-07-26.
+Applied and green on the full bar: lint clean, typecheck 0 errors, build 158 pages, 637 tests
+(up from 578), links verified. All seven lanes landed against the frozen contracts, six as
+parallel subagents and the `scoreboard.ts` surgery in the main session.
+
+Two contract notes came out of the build and neither was changed unilaterally.
+
+The write path reads through `get(path, { access: 'public', useCache: false })` rather than the
+contract's literal `head()`. This is a deliberate deviation and it is a correctness fix, not a
+convenience: a blob's `cacheControlMaxAge` defaults to a month and cannot go below a minute, and
+blob URLs are served through the CDN, so a `head()` ETag paired with a separately fetched body
+can disagree by up to the cache age. The conditional write would then succeed against a current
+ETag while merging into a stale board, silently dropping everyone else's scores, which is the
+exact failure `ifMatch` exists to prevent. A single `get()` with the cache bypassed returns the
+bytes and the ETag that provably belong to them, and returns `null` for a missing blob, which
+also handles the first write without catching an error.
+
+`Cache-Control: public, max-age=30` is implemented exactly as frozen, but it does not do what
+the research assumed. Vercel's CDN caches a function response only on `s-maxage` (or the
+`Vercel-CDN-Cache-Control` family); plain `max-age` is a browser directive. As written, every
+uncached visitor's `GET` reaches the function and reads all nine blobs, so reads rather than
+writes are what will consume the Blob quota. Adding `s-maxage=30` alongside it is a one-line
+change and is the owner's call, since the contract was frozen.
+
+Known and accepted: the very first write to a brand-new board races (`put` has no `ifNoneMatch`),
+which can drop one score once per board ever; and the 1KB body check counts UTF-16 units rather
+than bytes, which is bounded and harmless behind the same cap.

@@ -120,3 +120,42 @@ change and is the owner's call, since the contract was frozen.
 Known and accepted: the very first write to a brand-new board races (`put` has no `ifNoneMatch`),
 which can drop one score once per board ever; and the 1KB body check counts UTF-16 units rather
 than bytes, which is bounded and harmless behind the same cap.
+
+### Adversarial review
+
+An Opus review against these contracts raised five findings. Three were fixed.
+
+The blocklist the rejection list calls for had simply not been built: the Function only tested the
+`/^[A-Z0-9]{1,3}$/` pattern, so a slur could reach a public board with no admin endpoint to
+remove it. There is now a `BLOCKED_INITIALS` set rejected alongside the pattern, with a test that
+asserts the blocked triples pass the pattern first, so it proves the block is doing the work.
+
+A global submit could outlive the run that made it. The POST allows five seconds and a short run
+takes less, so a slow reply from the previous run could land after `show()` had reset state and
+pin the wrong world rank onto the current run, with the out-of-order case leaving it wrong until
+a third run. `commit()` now captures a `runToken` and the reply drops its rank if the token moved
+on. The board in that reply is never stale, so it is still applied.
+
+The device and world tabs disagreed on ties within the same second. Timestamps have one-second
+resolution and `all` is stored newest-first, so a stable sort on it put the LATER of two equal
+scores on top: the inverse of the arcade rule, and most likely to be seen exactly under
+contention, since contending writes retry within a second of each other. `sortByRank` now
+reverses to oldest-first before sorting, and a test feeds the array in real storage order to
+prove the earlier entry wins.
+
+Two findings were deliberately not restructured. The per-address hourly limit is per address per
+game rather than global, because `recent` lives in each game's blob, so one address can spend it
+on each of the nine boards. Making it global needs a tenth shared blob and a second
+read-modify-write on every submission, which is not worth it when the per-game daily cap is what
+actually bounds the quota. The code comments now say this plainly rather than implying a global
+limit. Separately, `all` capped at 500 newest is exactly as frozen, but it means an all-time
+record is evicted once 500 later scores arrive on that game, which at the daily cap is about
+seventeen days and in practice much longer. That is contract-compliant and the goal of "keeping
+the record over time" is not, so it is the owner's call: keeping the current top ten out of the
+cap would be a few lines.
+
+The review also confirmed clean: every pre-existing `scoreboard.ts` invariant, the absence of any
+secret in `src/` or `dist/`, CSP parity against the literal endpoint origin, the `data-t-*` and
+class-name seams between lanes, all five i18n keys in all three locales, the nine client gameIds
+matching the server allowlist exactly, and both Cascade panels loading and submitting
+independently.

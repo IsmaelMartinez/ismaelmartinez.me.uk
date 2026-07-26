@@ -222,6 +222,31 @@ describe('device table vs server rankTop agreement', () => {
     );
   });
 
+  /**
+   * Server timestamps have one-second resolution, so two submissions that
+   * contend for the same board routinely share a `t`. That is precisely when
+   * the arcade rule matters and the sort has no timestamp left to separate
+   * them, so it falls back to storage order. The server stores `all`
+   * newest-first, which is how this history is built here: sorting it without
+   * accounting for that direction would put the LATER submitter on top, the
+   * exact inverse of what the device table shows for the same two scores.
+   */
+  it('keeps the earlier of two same-second, same-score entries higher', () => {
+    const newestFirst: HistoryEntry[] = [
+      { i: 'LTE', s: 5000, t: 1785000000, n: 'n-late' },
+      { i: 'ERL', s: 5000, t: 1785000000, n: 'n-early' }
+    ];
+
+    expect(rankTop(newestFirst).map(e => e.i)).toEqual(['ERL', 'LTE']);
+
+    // And the device table, folded in the same chronological order, agrees.
+    let deviceTable: { initials: string; score: number }[] = [];
+    for (const initials of ['ERL', 'LTE']) {
+      deviceTable = insertScore(deviceTable, initials, 5000).table;
+    }
+    expect(deviceTable.map(e => e.initials)).toEqual(['ERL', 'LTE']);
+  });
+
   it('sorts descending by score, ascending by t within a tie, capped at 10, without mutating input', () => {
     const history: HistoryEntry[] = [
       { i: 'A', s: 100, t: 5, n: 'n1' },

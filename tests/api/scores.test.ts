@@ -252,6 +252,17 @@ describe('POST rejections', () => {
     }
   });
 
+  // The board is public, shared and has no admin endpoint, so a slur that
+  // gets in stays on every cabinet until someone hand-edits the blob.
+  it('rejects blocked initials even though they match the pattern', async () => {
+    for (const initials of ['ASS', 'FUC', 'NIG', 'TIT']) {
+      // Proving the block is doing the work, not the pattern.
+      expect(/^[A-Z0-9]{1,3}$/.test(initials)).toBe(true);
+      const response = await POST(postRequest(submission({ initials, nonce: `n-${initials}` })));
+      expect(response.status).toBe(400);
+    }
+  });
+
   it('rejects scores that are not positive safe integers under ten million', async () => {
     for (const score of [0, -5, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 10_000_000, 1e21, '500']) {
       const response = await POST(postRequest(submission({ score })));

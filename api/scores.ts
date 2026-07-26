@@ -11,6 +11,12 @@
  *   recent  the 50 newest accepted writes as salted address hashes, kept
  *           only for rate limiting
  *
+ * Because that state is per blob, the per-address limit is per address per
+ * game, not per address overall: one address can spend it on each of the nine
+ * boards. Making it global would need a tenth shared blob and a second
+ * read-modify-write on every submission, which is not worth it here, because
+ * the per-game daily cap below is what actually bounds the quota.
+ *
  * Timestamps are server-assigned. The arcade tie rule (equal scores keep the
  * older entry higher) survives globally only if `t` is monotonic with write
  * order, which a client-supplied time would not be, so a `t` in the request
@@ -88,6 +94,19 @@ const MAX_BODY_CHARS = 1024;
 const MAX_SCORE = 10_000_000;
 const INITIALS = /^[A-Z0-9]{1,3}$/;
 
+/**
+ * Three letters of A-Z0-9 reach a handful of slurs and obscenities, and this
+ * board is public, shared and has no admin endpoint: anything that lands here
+ * shows on every cabinet in three locales until someone hand-edits the blob.
+ * Rejected rather than rewritten, so a client that sends one sees the failure
+ * and falls back to its device table.
+ */
+const BLOCKED_INITIALS = new Set([
+  'ASS', 'CNT', 'COK', 'CUM', 'DIC', 'DIK', 'FAG', 'FUC', 'FUK', 'FUX',
+  'GAY', 'JAP', 'JEW', 'KKK', 'NIG', 'PIS', 'POO', 'PUS', 'SEX', 'SHT',
+  'SLT', 'SPS', 'TIT', 'TWT', 'VAG', 'WOG'
+]);
+
 const ADDRESS_LIMIT = 5;
 const ADDRESS_WINDOW = 60 * 60;
 const GAME_LIMIT = 30;
@@ -105,9 +124,21 @@ const BLOB_CACHE_SECONDS = 60;
 
 const boardPath = (gameId: string): string => `scores/${gameId}.json`;
 
-/** Highest score first; equal scores keep the earlier submission above. */
+/**
+ * Highest score first; equal scores keep the earlier submission above, which
+ * is the rule the per-device tables follow so the two tabs cannot disagree.
+ *
+ * Precondition: `all` is newest-first, which is how `record` writes it. Two
+ * entries can tie on score AND on second (likely, in fact, since contending
+ * writes retry within a second of each other), and at that point the only
+ * remaining signal for which came first is position in the array. Reversing
+ * to oldest-first before a stable sort therefore leaves the older of a full
+ * tie above. Sorting the newest-first array directly would rank the later
+ * submission higher, inverting the arcade rule exactly in the case where it
+ * is most likely to be seen.
+ */
 const sortByRank = (all: HistoryEntry[]): HistoryEntry[] =>
-  [...all].sort((a, b) => b.s - a.s || a.t - b.t);
+  [...all].reverse().sort((a, b) => b.s - a.s || a.t - b.t);
 
 /**
  * The published table. Always derived from `all`, never read back off
@@ -223,6 +254,7 @@ export async function POST(request: Request): Promise<Response> {
   const { game, initials, score, nonce } = parsed as Partial<Submission>;
   if (typeof game !== 'string' || !GAMES.includes(game)) return fail(400, 'unknown game', cors);
   if (typeof initials !== 'string' || !INITIALS.test(initials)) return fail(400, 'bad initials', cors);
+  if (BLOCKED_INITIALS.has(initials)) return fail(400, 'bad initials', cors);
   if (typeof score !== 'number' || !Number.isSafeInteger(score) || score <= 0 || score >= MAX_SCORE) {
     return fail(400, 'bad score', cors);
   }
@@ -254,6 +286,8 @@ async function record(
       return Response.json({ rank: rankOf(board.all, nonce), table: rankTop(board.all) }, { headers: cors });
     }
 
+    // Per address per game per hour: `recent` lives in this game's blob and
+    // sees no other board's traffic. See the note at the top of the file.
     const fromAddress = board.recent.filter(r => r.h === hash && r.t > now - ADDRESS_WINDOW).length;
     if (fromAddress >= ADDRESS_LIMIT) return fail(429, 'too many submissions', cors);
 

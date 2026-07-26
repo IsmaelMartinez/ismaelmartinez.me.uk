@@ -152,6 +152,12 @@ export function initScoreboard(
   // Kept per scope so switching tabs highlights the row that scope ranked.
   let deviceRank = 0;
   let worldRank = 0;
+  // Bumped by every `show()`. A global submit can still be in flight when the
+  // next run ends (the POST allows five seconds, a short run takes less), and
+  // without this its reply would pin the previous run's world rank onto the
+  // current one. Responses can also arrive out of order, so the check is
+  // against the token the submit was issued under, not a plain "is newer".
+  let runToken = 0;
   // This run's provisional entry already written to the table — kept whole
   // (not just the score) so it is still found if the saved initials change
   // in the meantime, e.g. via a commit in another tab.
@@ -257,11 +263,13 @@ export function initScoreboard(
     // so global submission is gated on the score existing, not on its rank.
     // `submitGlobal` no-ops away from production and never rejects.
     if (score > 0) {
+      const token = runToken;
       submitGlobal(gameId!, initials, score).then(result => {
         if (!result) return;
-        // The POST answers with the new board, so a submission never costs a
-        // follow-up read and the World tab is warm before it is first opened.
+        // The board itself is never stale, so it lands whichever run it came
+        // from; only the rank belongs to one run and is dropped once past.
         world = { ...world, [gameId!]: result.table };
+        if (token !== runToken) return;
         worldRank = result.rank;
         render();
       });
@@ -322,6 +330,7 @@ export function initScoreboard(
       scope = 'device';
       deviceRank = 0;
       worldRank = 0;
+      runToken++;
       syncTabs();
       // The final entry replaces any provisional one from this run.
       const table = unstash(loadTable(gameId!));

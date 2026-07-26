@@ -97,10 +97,37 @@ choice.
 
 Supabase was considered and dropped because free projects pause after a week of
 inactivity, which is a realistic traffic pattern here and would mean the board
-is down precisely when a rare visitor arrives. Vercel was considered because
-`vercel.json` already exists as a mirror config, but Vercel's storage is now
-provisioned through marketplace partners, so it means a third-party account
-anyway and loses on the "minimum service" test.
+is down precisely when a rare visitor arrives.
+
+## The zero-new-account alternative, and its cost
+
+Vercel deserves a closer look than `vercel.json` suggests, because it is not
+just a leftover config file: CI on this repository runs a real Vercel
+deployment, so the account and project already exist even though the apex
+domain points at GitHub Pages. A Vercel Function could accept the write with no
+new account anywhere, which is exactly what the owner asked for.
+
+The catch is storage. Vercel's only first-party stores are Blob, which is object
+storage for files, and Edge Config, which is documented for data that is read
+often and changes rarely with writes taking seconds. Everything relational or
+key-value comes from marketplace partners (Neon, Upstash, Supabase), which means
+a third-party account after all. Edge Config is disqualified by its write model.
+That leaves a Function writing the top ten as a JSON object in Blob.
+
+That would work, and it is genuinely zero new accounts. The cost is correctness
+under concurrency: updating a JSON blob is a read-modify-write with no
+transaction, so two players finishing within the same moment can lose one of the
+two entries. At this site's traffic that collision is rare rather than
+impossible, and it fails silently when it happens.
+
+So the choice is a real trade rather than a technicality. Cloudflare costs one
+new free account and gets a database that cannot lose an entry. Vercel Blob
+costs nothing new and accepts a rare silent loss. The recommendation stays with
+Cloudflare, because a leaderboard that occasionally eats a record is the same
+class of problem as the Umami option this plan already rejected, but if "no new
+accounts" is the overriding constraint then Vercel Blob is the honest way to get
+there and the rest of this plan (API shape, client integration, validation,
+interface) applies unchanged.
 
 ## Data model
 
@@ -260,15 +287,20 @@ they carry no attribution and cannot be verified.
 
 ## Open decisions
 
-1. Hostname: accept `*.workers.dev` now, or move DNS from Route 53 to Cloudflare
-   for `scores.ismaelmartinez.me.uk`. Recommendation: workers.dev, revisit later.
-2. Default tab when the panel opens: This device, or World. Recommendation: This
+1. The one that decides the rest: one new free Cloudflare account with a
+   database that cannot lose an entry, or zero new accounts on the existing
+   Vercel project with a JSON blob that can rarely lose one. Recommendation:
+   Cloudflare.
+2. Hostname, if Cloudflare: accept `*.workers.dev` now, or move DNS from Route 53
+   to Cloudflare for `scores.ismaelmartinez.me.uk`. Recommendation: workers.dev,
+   revisit later.
+3. Default tab when the panel opens: This device, or World. Recommendation: This
    device during the entry flow, switching to World once a rank returns.
-3. Submit every committed score above zero, or only ones that chart locally.
+4. Submit every committed score above zero, or only ones that chart locally.
    Recommendation: every score above zero.
-4. Keep every submission row, or only the current top ten. Recommendation: keep
+5. Keep every submission row, or only the current top ten. Recommendation: keep
    everything, it is what makes the history real and costs nothing.
-5. Optional arcade touch: Cloudflare exposes a country code per request for free,
+6. Optional arcade touch: Cloudflare exposes a country code per request for free,
    so rows could show a flag beside the initials. Coarse and non-identifying, but
    it is an addition rather than a requirement.
 

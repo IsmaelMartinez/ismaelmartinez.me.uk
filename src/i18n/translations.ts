@@ -31,20 +31,26 @@ export const translations = {
     'hero.headline1': 'Building software that\'s ',
     'hero.headlineAccent': 'reliable',
     'hero.headline2': ', open, and worth writing about.',
-    'hero.description': 'I build things, write about technology, and contribute to open source. I care deeply about responsible AI — and about how this technology lets us explore problems in entirely new ways.',
+    'hero.headlineAside': 'Or at least trying to.',
+    'hero.description': 'I build, I write, and I contribute to open source. I care about doing AI responsibly, and about the doors it opens on problems worth solving.',
 
     // Sections
     'section.projects': 'Open Source Projects',
     'section.projects.description': 'Some of my contributions to the open source community',
+    'section.contributions': 'Contributions elsewhere',
+    'section.contributions.description': "Projects I don't maintain, but have landed fixes and features in.",
     'section.writing': 'Latest Writing',
     'section.writing.description': 'Thoughts on software development, technology, and more',
     'section.connect': 'Let\'s Connect',
-    'section.connect.description': 'Have a question, an idea, or a project in mind? Reach out on any of these platforms — LinkedIn is the fastest way to get hold of me.',
+    'section.connect.description': 'Where to read what I write, and where to find me. The feed is the best way to keep up.',
+    'connect.readTitle': 'Read and subscribe',
+    'connect.connectTitle': 'Find me elsewhere',
 
     // Contact CTA
-    'cta.title': 'Let\'s build something together',
-    'cta.description': 'Whether it\'s responsible AI, event-driven systems, open source, or just a good problem worth exploring — I\'d love to hear from you.',
-    'cta.connect': 'Contact me',
+    'cta.title': 'Follow along',
+    'cta.description': 'I write about responsible AI, event-driven systems, and open source. New posts land here first.',
+    'cta.connect': 'Connect',
+    'cta.rss': 'Subscribe via RSS',
     'cta.linkedin': 'Connect on LinkedIn',
 
     // Footer
@@ -57,6 +63,10 @@ export const translations = {
     'common.viewOnMedium': 'View on Medium',
     'common.viewOnDevto': 'View on Dev.to',
 
+    // 404
+    'notFound.title': '404: Page Not Found | Ismael Martinez',
+    'notFound.message': "This page doesn't exist, but these do:",
+
     // Articles
     'article.updated': 'Updated',
     'article.availableIn': 'Available in',
@@ -65,6 +75,7 @@ export const translations = {
     'article.backToWriting': 'Back to Writing',
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'External Platforms',
+    'writing.subscribeTitle': 'Subscribe',
     'article.mediumBlurb': 'In-depth articles about software development, architecture, and technology.',
     'article.devtoBlurb': 'Technical tutorials, tips, and community discussions.',
     'article.minRead': 'min read',
@@ -459,23 +470,16 @@ export const translations = {
     // About
     'nav.about': 'About',
     'about.title': 'About',
-    'about.description': 'Principal software developer, open source maintainer, and advocate for responsible AI',
+    'about.description': 'Principal software developer in Edinburgh, working on AI enablement, event-driven systems, and open source',
     'about.bioTitle': 'Hello!',
-    'about.bio': "I'm Ismael Martinez, a principal software developer based in Edinburgh, Scotland, currently at Postcode Lottery. I've spent over 20 years building reliable, well-crafted software across industries — from systems administration and cloud architecture to event-driven systems, observability, and platform engineering. I maintain several open source projects, including teams-for-linux, and I write regularly about what I learn along the way.",
-    'about.focusTitle': 'What Drives Me',
-    'about.focus1Title': 'Responsible AI',
-    'about.focus1': "I'm passionate about building AI systems responsibly — with the governance, observability, and human oversight they need. I write about agentic systems, the automation trap, and keeping people in the loop.",
-    'about.focus2Title': 'New Ways of Exploring Problems',
-    'about.focus2': 'What excites me most about this technology is how it changes the way we approach problems — prototyping in hours instead of weeks, asking better questions, and exploring ideas that used to feel out of reach.',
-    'about.focus3Title': 'Open Source & Accessibility',
-    'about.focus3': 'From a Teams client for Linux to sonified data visualisations and an offline hearing test, I build tools that are open, accessible, and respectful of your data.',
-    'about.careerTitle': 'Career Highlights',
-    'about.career1': 'Over 20 years of experience spanning systems administration, cloud, and software development across multiple industries',
-    'about.career2': 'Specialising in cloud-native architectures, DevOps practices, and platform engineering',
-    'about.career3': 'Open source maintainer and contributor — including teams-for-linux and other community projects',
-    'about.career4': 'Regular writer on software development and responsible AI, published here and syndicated to Medium and Dev.to',
-    'about.interestsTitle': 'Interests',
-    'about.interests': 'Outside of coding, I enjoy exploring new technologies, reading about software architecture, and spending time with my family. I believe in continuous learning and sharing knowledge with the community.',
+    'about.bio': "I'm Ismael Martinez, a principal software developer in Edinburgh, Scotland, at People's Postcode Lottery. Nearly three decades in, I've gone from building servers and wrangling networks to designing event-driven systems on AWS, and lately to helping teams adopt AI without losing the plot. I maintain teams-for-linux, an open source Teams client used by around half a million people a month, and I write about what I learn.",
+    'about.focusTitle': "What I'm working on now",
+    'about.focus1Title': 'AI enablement',
+    'about.focus1': 'I lead AI adoption where I work, developer-first: the people building these systems need to understand them before anyone else can rely on them. Part of that is routing between local and hosted models, so teams reach for the right one rather than the biggest.',
+    'about.focus2Title': 'Event-driven systems',
+    'about.focus2': 'Most of my architecture work is event-driven, on AWS. I care about the unglamorous parts that decide whether a system survives contact with production: observability, clear contracts, and knowing what happens when a consumer falls over.',
+    'about.focus3Title': 'Open source',
+    'about.focus3': 'I maintain teams-for-linux and a handful of smaller tools, and I contribute to other projects when I can, among them aws-cdk, electron, and asyncapi. Open, accessible, and respectful of your data is the bar I aim for.',
     'about.elsewhereTitle': 'Find Me Elsewhere',
 
     // Health
@@ -518,20 +522,26 @@ export const translations = {
     'hero.headline1': 'Construyo software ',
     'hero.headlineAccent': 'fiable',
     'hero.headline2': ', abierto y del que vale la pena escribir.',
-    'hero.description': 'Construyo cosas, escribo sobre tecnología y contribuyo al código abierto. Me importa profundamente la IA responsable, y cómo esta tecnología nos permite explorar problemas de formas completamente nuevas.',
+    'hero.headlineAside': 'O al menos lo intento.',
+    'hero.description': 'Construyo, escribo y contribuyo al código abierto. Me importa hacer IA de forma responsable, y las puertas que abre a problemas que vale la pena resolver.',
 
     // Sections
     'section.projects': 'Proyectos Open Source',
     'section.projects.description': 'Algunas de mis contribuciones a la comunidad de código abierto',
+    'section.contributions': 'Contribuciones en otros proyectos',
+    'section.contributions.description': 'Proyectos que no mantengo, pero en los que he aportado correcciones y funcionalidades.',
     'section.writing': 'Últimos Escritos',
     'section.writing.description': 'Reflexiones sobre desarrollo de software, tecnología y más',
     'section.connect': 'Conectemos',
-    'section.connect.description': '¿Tienes una pregunta, una idea o un proyecto en mente? Escríbeme por cualquiera de estas plataformas; LinkedIn es la forma más rápida de localizarme.',
+    'section.connect.description': 'Dónde leer lo que escribo y dónde encontrarme. El feed es la mejor forma de estar al día.',
+    'connect.readTitle': 'Leer y suscribirse',
+    'connect.connectTitle': 'Encuéntrame en otros sitios',
 
     // Contact CTA
-    'cta.title': '¿Construimos algo juntos?',
-    'cta.description': 'Ya sea sobre IA responsable, sistemas orientados a eventos, código abierto o simplemente un buen problema que explorar, me encantará saber de ti.',
-    'cta.connect': 'Contáctame',
+    'cta.title': 'Sigue el hilo',
+    'cta.description': 'Escribo sobre IA responsable, sistemas orientados a eventos y código abierto. Las entradas nuevas aparecen aquí primero.',
+    'cta.connect': 'Conectar',
+    'cta.rss': 'Suscríbete por RSS',
     'cta.linkedin': 'Conecta en LinkedIn',
 
     // Footer
@@ -544,6 +554,10 @@ export const translations = {
     'common.viewOnMedium': 'Ver en Medium',
     'common.viewOnDevto': 'Ver en Dev.to',
 
+    // 404
+    'notFound.title': '404: Página no encontrada | Ismael Martinez',
+    'notFound.message': 'Esta página no existe, pero estas sí:',
+
     // Articles
     'article.updated': 'Actualizado',
     'article.availableIn': 'Disponible en',
@@ -552,6 +566,7 @@ export const translations = {
     'article.backToWriting': 'Volver a Escritos',
     'article.localArticles': 'Artículos',
     'article.externalPlatforms': 'Plataformas Externas',
+    'writing.subscribeTitle': 'Suscríbete',
     'article.mediumBlurb': 'Artículos detallados sobre desarrollo de software, arquitectura y tecnología.',
     'article.devtoBlurb': 'Tutoriales técnicos, consejos y debates de la comunidad.',
     'article.minRead': 'min de lectura',
@@ -948,23 +963,16 @@ export const translations = {
     // About
     'nav.about': 'Sobre mí',
     'about.title': 'Sobre mí',
-    'about.description': 'Desarrollador de software principal, mantenedor de código abierto y defensor de la IA responsable',
+    'about.description': 'Desarrollador de software principal en Edimburgo, centrado en la adopción de IA, los sistemas orientados a eventos y el código abierto',
     'about.bioTitle': '¡Hola!',
-    'about.bio': 'Soy Ismael Martinez, desarrollador de software principal en Edimburgo (Escocia), actualmente en Postcode Lottery. Llevo más de 20 años construyendo software fiable y bien diseñado en múltiples industrias: desde la administración de sistemas y la arquitectura cloud hasta las arquitecturas orientadas a eventos, la observabilidad y la ingeniería de plataformas. Mantengo varios proyectos de código abierto, incluido teams-for-linux, y escribo regularmente sobre lo que aprendo por el camino.',
-    'about.focusTitle': 'Qué me motiva',
-    'about.focus1Title': 'IA responsable',
-    'about.focus1': 'Me apasiona construir sistemas de IA de forma responsable: con la gobernanza, la observabilidad y la supervisión humana que necesitan. Escribo sobre sistemas agénticos, la trampa de la automatización y mantener a las personas al mando.',
-    'about.focus2Title': 'Nuevas formas de explorar problemas',
-    'about.focus2': 'Lo que más me entusiasma de esta tecnología es cómo cambia nuestra manera de abordar los problemas: prototipar en horas en lugar de semanas, hacer mejores preguntas y explorar ideas que antes parecían inalcanzables.',
-    'about.focus3Title': 'Código abierto y accesibilidad',
-    'about.focus3': 'Desde un cliente de Teams para Linux hasta visualizaciones de datos sonificadas y una prueba auditiva sin conexión, construyo herramientas abiertas, accesibles y respetuosas con tus datos.',
-    'about.careerTitle': 'Trayectoria',
-    'about.career1': 'Más de 20 años de experiencia en administración de sistemas, cloud y desarrollo de software en múltiples industrias',
-    'about.career2': 'Especializado en arquitecturas cloud-native, prácticas DevOps e ingeniería de plataformas',
-    'about.career3': 'Mantenedor y contribuidor de código abierto, incluido teams-for-linux y otros proyectos de la comunidad',
-    'about.career4': 'Escritor habitual sobre desarrollo de software e IA responsable, publicado aquí y sindicado en Medium y Dev.to',
-    'about.interestsTitle': 'Intereses',
-    'about.interests': 'Fuera del código, me gusta explorar nuevas tecnologías, leer sobre arquitectura de software y pasar tiempo con mi familia. Creo en el aprendizaje continuo y en compartir conocimiento con la comunidad.',
+    'about.bio': 'Soy Ismael Martinez, desarrollador de software principal en Edimburgo (Escocia), en People\'s Postcode Lottery. Casi tres décadas después, he pasado de montar servidores y pelearme con redes a diseñar sistemas orientados a eventos sobre AWS, y últimamente a ayudar a los equipos a adoptar la IA sin perder el norte. Mantengo teams-for-linux, un cliente de Teams de código abierto que usan cerca de medio millón de personas al mes, y escribo sobre lo que voy aprendiendo.',
+    'about.focusTitle': 'En qué trabajo ahora',
+    'about.focus1Title': 'Adopción de IA',
+    'about.focus1': 'Lidero la adopción de IA donde trabajo, empezando por quien desarrolla: quienes construyen estos sistemas necesitan entenderlos antes de que nadie más pueda confiar en ellos. Parte de eso es enrutar entre modelos locales y en la nube, para que los equipos usen el adecuado y no el más grande.',
+    'about.focus2Title': 'Sistemas orientados a eventos',
+    'about.focus2': 'La mayor parte de mi trabajo de arquitectura es orientado a eventos, sobre AWS. Me importan las partes poco lucidas que deciden si un sistema sobrevive al contacto con producción: observabilidad, contratos claros y saber qué pasa cuando un consumidor se cae.',
+    'about.focus3Title': 'Código abierto',
+    'about.focus3': 'Mantengo teams-for-linux y un puñado de herramientas más pequeñas, y contribuyo a otros proyectos cuando puedo, entre ellos aws-cdk, electron y asyncapi. Abierto, accesible y respetuoso con tus datos es el listón al que apunto.',
     'about.elsewhereTitle': 'Encuéntrame en otros sitios',
 
     // Health
@@ -1007,20 +1015,26 @@ export const translations = {
     'hero.headline1': 'Construeixo software ',
     'hero.headlineAccent': 'fiable',
     'hero.headline2': ', obert i del qual val la pena escriure.',
-    'hero.description': 'Construeixo coses, escric sobre tecnologia i contribueixo al codi obert. Em preocupa profundament la IA responsable, i com aquesta tecnologia ens permet explorar problemes de maneres completament noves.',
+    'hero.headlineAside': 'O almenys ho intento.',
+    'hero.description': 'Construeixo, escric i contribueixo al codi obert. M\'importa fer IA de manera responsable, i les portes que obre a problemes que val la pena resoldre.',
 
     // Sections
     'section.projects': 'Projectes Open Source',
     'section.projects.description': 'Algunes de les meves contribucions a la comunitat de codi obert',
+    'section.contributions': 'Contribucions en altres projectes',
+    'section.contributions.description': 'Projectes que no mantinc, però on he aportat correccions i funcionalitats.',
     'section.writing': 'Últims Escrits',
     'section.writing.description': 'Reflexions sobre desenvolupament de software, tecnologia i més',
     'section.connect': 'Connectem',
-    'section.connect.description': 'Tens una pregunta, una idea o un projecte en ment? Escriu-me per qualsevol d\'aquestes plataformes; LinkedIn és la manera més ràpida de localitzar-me.',
+    'section.connect.description': "On llegir el que escric i on trobar-me. El feed és la millor manera d'estar al dia.",
+    'connect.readTitle': "Llegir i subscriure's",
+    'connect.connectTitle': "Troba'm en altres llocs",
 
     // Contact CTA
-    'cta.title': 'Construïm alguna cosa junts?',
-    'cta.description': 'Ja sigui sobre IA responsable, sistemes orientats a esdeveniments, codi obert o simplement un bon problema per explorar, m\'encantarà saber de tu.',
-    'cta.connect': 'Contacta amb mi',
+    'cta.title': 'Segueix el fil',
+    'cta.description': 'Escric sobre IA responsable, sistemes orientats a esdeveniments i codi obert. Les entrades noves apareixen aquí primer.',
+    'cta.connect': 'Connectar',
+    'cta.rss': 'Subscriu-te per RSS',
     'cta.linkedin': 'Connecta a LinkedIn',
 
     // Footer
@@ -1033,6 +1047,10 @@ export const translations = {
     'common.viewOnMedium': 'Veure a Medium',
     'common.viewOnDevto': 'Veure a Dev.to',
 
+    // 404
+    'notFound.title': '404: Pàgina no trobada | Ismael Martinez',
+    'notFound.message': 'Aquesta pàgina no existeix, però aquestes sí:',
+
     // Articles
     'article.updated': 'Actualitzat',
     'article.availableIn': 'Disponible en',
@@ -1041,6 +1059,7 @@ export const translations = {
     'article.backToWriting': 'Tornar a Escrits',
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'Plataformes Externes',
+    'writing.subscribeTitle': 'Subscriu-te',
     'article.mediumBlurb': 'Articles detallats sobre desenvolupament de software, arquitectura i tecnologia.',
     'article.devtoBlurb': 'Tutorials tècnics, consells i debats de la comunitat.',
     'article.minRead': 'min de lectura',
@@ -1437,23 +1456,16 @@ export const translations = {
     // About
     'nav.about': 'Sobre mi',
     'about.title': 'Sobre mi',
-    'about.description': 'Desenvolupador de software principal, mantenidor de codi obert i defensor de la IA responsable',
+    'about.description': "Desenvolupador de software principal a Edimburg, centrat en l'adopció d'IA, els sistemes orientats a esdeveniments i el codi obert",
     'about.bioTitle': 'Hola!',
-    'about.bio': "Sóc Ismael Martinez, desenvolupador de software principal a Edimburg (Escòcia), actualment a Postcode Lottery. Fa més de 20 anys que construeixo software fiable i ben dissenyat en múltiples indústries: des de l'administració de sistemes i l'arquitectura cloud fins a les arquitectures orientades a esdeveniments, l'observabilitat i l'enginyeria de plataformes. Mantinc diversos projectes de codi obert, incloent teams-for-linux, i escric regularment sobre el que aprenc pel camí.",
-    'about.focusTitle': 'Què em motiva',
-    'about.focus1Title': 'IA responsable',
-    'about.focus1': "M'apassiona construir sistemes d'IA de manera responsable: amb la governança, l'observabilitat i la supervisió humana que necessiten. Escric sobre sistemes agèntics, la trampa de l'automatització i mantenir les persones al capdavant.",
-    'about.focus2Title': "Noves maneres d'explorar problemes",
-    'about.focus2': "El que més m'entusiasma d'aquesta tecnologia és com canvia la nostra manera d'abordar els problemes: prototipar en hores en lloc de setmanes, fer millors preguntes i explorar idees que abans semblaven inabastables.",
-    'about.focus3Title': 'Codi obert i accessibilitat',
-    'about.focus3': "Des d'un client de Teams per a Linux fins a visualitzacions de dades sonificades i una prova d'oïda fora de línia, construeixo eines obertes, accessibles i respectuoses amb les teves dades.",
-    'about.careerTitle': 'Trajectòria',
-    'about.career1': "Més de 20 anys d'experiència en administració de sistemes, cloud i desenvolupament de software en múltiples indústries",
-    'about.career2': 'Especialitzat en arquitectures cloud-native, pràctiques DevOps i enginyeria de plataformes',
-    'about.career3': "Mantenidor i contribuïdor de codi obert, incloent teams-for-linux i altres projectes de la comunitat",
-    'about.career4': "Escriptor habitual sobre desenvolupament de software i IA responsable, publicat aquí i sindicat a Medium i Dev.to",
-    'about.interestsTitle': 'Interessos',
-    'about.interests': "Fora del codi, m'agrada explorar noves tecnologies, llegir sobre arquitectura de software i passar temps amb la meva família. Crec en l'aprenentatge continu i en compartir coneixement amb la comunitat.",
+    'about.bio': "Sóc Ismael Martinez, desenvolupador de software principal a Edimburg (Escòcia), a People's Postcode Lottery. Gairebé tres dècades després, he passat de muntar servidors i barallar-me amb xarxes a dissenyar sistemes orientats a esdeveniments sobre AWS, i darrerament a ajudar els equips a adoptar la IA sense perdre el nord. Mantinc teams-for-linux, un client de Teams de codi obert que fan servir prop de mig milió de persones al mes, i escric sobre el que vaig aprenent.",
+    'about.focusTitle': 'En què treballo ara',
+    'about.focus1Title': "Adopció d'IA",
+    'about.focus1': "Lidero l'adopció d'IA on treballo, començant per qui desenvolupa: qui construeix aquests sistemes necessita entendre'ls abans que ningú altre hi pugui confiar. Part d'això és encaminar entre models locals i al núvol, perquè els equips facin servir l'adequat i no el més gran.",
+    'about.focus2Title': 'Sistemes orientats a esdeveniments',
+    'about.focus2': "La major part de la meva feina d'arquitectura és orientada a esdeveniments, sobre AWS. M'importen les parts poc lluïdes que decideixen si un sistema sobreviu al contacte amb producció: observabilitat, contractes clars i saber què passa quan un consumidor cau.",
+    'about.focus3Title': 'Codi obert',
+    'about.focus3': "Mantinc teams-for-linux i un grapat d'eines més petites, i contribueixo a altres projectes quan puc, entre ells aws-cdk, electron i asyncapi. Obert, accessible i respectuós amb les teves dades és el llistó al qual apunto.",
     'about.elsewhereTitle': "Troba'm en altres llocs",
 
     // Health

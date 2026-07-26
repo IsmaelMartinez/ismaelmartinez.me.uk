@@ -12,7 +12,7 @@ export const personJsonLd = {
   jobTitle: 'Principal Software Developer',
   worksFor: {
     '@type': 'Organization',
-    name: 'Postcode Lottery'
+    name: "People's Postcode Lottery"
   },
   homeLocation: {
     '@type': 'Place',

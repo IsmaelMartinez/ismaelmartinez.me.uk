@@ -63,6 +63,10 @@ export const translations = {
     'common.viewOnMedium': 'View on Medium',
     'common.viewOnDevto': 'View on Dev.to',
 
+    // 404
+    'notFound.title': '404: Page Not Found | Ismael Martinez',
+    'notFound.message': "This page doesn't exist, but these do:",
+
     // Articles
     'article.updated': 'Updated',
     'article.availableIn': 'Available in',
@@ -71,6 +75,7 @@ export const translations = {
     'article.backToWriting': 'Back to Writing',
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'External Platforms',
+    'writing.subscribeTitle': 'Subscribe',
     'article.mediumBlurb': 'In-depth articles about software development, architecture, and technology.',
     'article.devtoBlurb': 'Technical tutorials, tips, and community discussions.',
     'article.minRead': 'min read',
@@ -572,6 +577,10 @@ export const translations = {
     'common.viewOnMedium': 'Ver en Medium',
     'common.viewOnDevto': 'Ver en Dev.to',
 
+    // 404
+    'notFound.title': '404: Página no encontrada | Ismael Martinez',
+    'notFound.message': 'Esta página no existe, pero estas sí:',
+
     // Articles
     'article.updated': 'Actualizado',
     'article.availableIn': 'Disponible en',
@@ -580,6 +589,7 @@ export const translations = {
     'article.backToWriting': 'Volver a Escritos',
     'article.localArticles': 'Artículos',
     'article.externalPlatforms': 'Plataformas Externas',
+    'writing.subscribeTitle': 'Suscríbete',
     'article.mediumBlurb': 'Artículos detallados sobre desarrollo de software, arquitectura y tecnología.',
     'article.devtoBlurb': 'Tutoriales técnicos, consejos y debates de la comunidad.',
     'article.minRead': 'min de lectura',
@@ -1084,6 +1094,10 @@ export const translations = {
     'common.viewOnMedium': 'Veure a Medium',
     'common.viewOnDevto': 'Veure a Dev.to',
 
+    // 404
+    'notFound.title': '404: Pàgina no trobada | Ismael Martinez',
+    'notFound.message': 'Aquesta pàgina no existeix, però aquestes sí:',
+
     // Articles
     'article.updated': 'Actualitzat',
     'article.availableIn': 'Disponible en',
@@ -1092,6 +1106,7 @@ export const translations = {
     'article.backToWriting': 'Tornar a Escrits',
     'article.localArticles': 'Articles',
     'article.externalPlatforms': 'Plataformes Externes',
+    'writing.subscribeTitle': 'Subscriu-te',
     'article.mediumBlurb': 'Articles detallats sobre desenvolupament de software, arquitectura i tecnologia.',
     'article.devtoBlurb': 'Tutorials tècnics, consells i debats de la comunitat.',
     'article.minRead': 'min de lectura',

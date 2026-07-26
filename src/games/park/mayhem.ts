@@ -1,7 +1,7 @@
 /**
- * Pixel Park mayhem: ride breakdowns, coaster stalls, and gate-flooding
- * crowd surges, all ramping up as the park matures so the late game stays
- * lively. DOM-free so every rule is testable with a seeded random.
+ * Pixel Park mayhem: ride breakdowns and gate-flooding crowd surges, all
+ * ramping up as the park matures so the late game stays lively. DOM-free so
+ * every rule is testable with a seeded random.
  */
 import { BUILDINGS, type TileType } from './grid';
 
@@ -58,17 +58,6 @@ export function pickBreakdownTile(
   });
   if (!candidates.length) return null;
   return candidates[Math.floor(random() * candidates.length)];
-}
-
-// --- Coaster stalls ---
-
-/** Chance per second that a running coaster cart jams on the track. */
-export const STALL_CHANCE = 0.008;
-/** How long a stalled cart hangs there while riders scream. */
-export const STALL_SECONDS = 6;
-
-export function coasterStallChance(day: number): number {
-  return STALL_CHANCE * mayhemIntensity(day);
 }
 
 // --- Crowd surges ---

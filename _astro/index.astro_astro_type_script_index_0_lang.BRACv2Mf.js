@@ -1,0 +1,1 @@
+import{f as e,n as t}from"./highscores.DXGjYqSr.js";function n(){let n=document.querySelectorAll(`.best-value[data-game-id]`);for(let r of n){let n=r.dataset.gameId?e(r.dataset.gameId):null;r.textContent=n?`${n.initials} ${t(n.score)}`:t(0)}}n(),document.addEventListener(`astro:after-swap`,n);

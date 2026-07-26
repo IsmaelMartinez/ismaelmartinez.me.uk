@@ -8,6 +8,11 @@
  * restarting, navigating away, or closing the tab commits a pending entry
  * with the last-used initials, and long-running games can `stash()` the
  * current run's best as they go so a mid-run tab close keeps it too.
+ *
+ * The panel shows two boards through one list: the device table above, and
+ * the board every visitor shares behind the World tab. The world board is
+ * fetched lazily (nobody pays for it until they ask) and every committed
+ * score is offered to it, so the two tabs are written by the same commit.
  */
 import {
   loadTable,
@@ -25,6 +30,10 @@ import {
   INITIALS_LENGTH,
   type ScoreEntry
 } from './highscores';
+import { fetchGlobal, submitGlobal } from './globalScores';
+
+/** Which board the panel is currently drawing into its single list. */
+type Scope = 'device' | 'world';
 
 export interface Scoreboard {
   /** Present a finished run's score on the game-over screen. */
@@ -123,8 +132,26 @@ export function initScoreboard(
   const input = panel.querySelector<HTMLInputElement>('.hs-input');
   const list = panel.querySelector<HTMLOListElement>('.hs-list');
   const empty = panel.querySelector<HTMLElement>('.hs-empty');
+  const note = panel.querySelector<HTMLElement>('.hs-note');
+  const tabs = [...panel.querySelectorAll<HTMLButtonElement>('.hs-tab')];
+  // Runtime-composed strings ride in on data attributes, the repo's channel
+  // for copy that server-side `useTranslations` cannot render.
+  const worldText = {
+    loading: panel.dataset.tWorldLoading ?? '',
+    unavailable: panel.dataset.tWorldUnavailable ?? '',
+    rank: panel.dataset.tWorldRank ?? ''
+  };
 
   let pendingScore: number | null = null;
+  let scope: Scope = 'device';
+  // Null until a world fetch resolves. Null after a failed one too, which is
+  // why `worldPending` exists: "not loaded" and "unreachable" look the same
+  // in the data and must not read the same on screen.
+  let world: Record<string, ScoreEntry[]> | null = null;
+  let worldPending = false;
+  // Kept per scope so switching tabs highlights the row that scope ranked.
+  let deviceRank = 0;
+  let worldRank = 0;
   // This run's provisional entry already written to the table — kept whole
   // (not just the score) so it is still found if the saved initials change
   // in the meantime, e.g. via a commit in another tab.
@@ -135,8 +162,22 @@ export function initScoreboard(
     return stashed === null ? table : removeEntry(table, stashed.initials, stashed.score);
   }
 
-  function renderTable(highlightRank = 0, table = loadTable(gameId!)) {
+  /** The world tab's status line: loading, unreachable, or a placed rank. */
+  function noteText(): string {
+    if (scope !== 'world') return '';
+    if (!world) return worldPending ? worldText.loading : worldText.unavailable;
+    return worldRank > 0 ? worldText.rank.replace('{rank}', String(worldRank)) : '';
+  }
+
+  /**
+   * Draws the active scope into the one list. `deviceTable` lets `show()`
+   * hand over the table it has already unstashed rather than re-reading it.
+   */
+  function render(deviceTable?: ScoreEntry[]) {
     if (!list) return;
+    const worldScope = scope === 'world';
+    const table = worldScope ? (world?.[gameId!] ?? []) : (deviceTable ?? loadTable(gameId!));
+    const highlightRank = worldScope ? worldRank : deviceRank;
     list.textContent = '';
     table.forEach((entry, i) => {
       const row = document.createElement('li');
@@ -153,8 +194,45 @@ export function initScoreboard(
       }
       list.appendChild(row);
     });
-    // The "no scores yet" nudge makes no sense under an open initials form.
-    if (empty) empty.hidden = table.length > 0 || !(form?.hidden ?? true);
+    // The "no scores yet" nudge makes no sense under an open initials form,
+    // nor on a world board that has not answered yet: the note speaks there.
+    if (empty) {
+      empty.hidden = (worldScope && !world) || table.length > 0 || !(form?.hidden ?? true);
+    }
+    if (note) {
+      const message = noteText();
+      note.textContent = message;
+      note.hidden = message === '';
+    }
+  }
+
+  function syncTabs() {
+    for (const tab of tabs) {
+      tab.setAttribute('aria-selected', String((tab.dataset.hsScope ?? 'device') === scope));
+    }
+  }
+
+  /** One fetch per panel, on the first visit to the World tab. */
+  function loadWorld() {
+    if (worldPending) return;
+    worldPending = true;
+    render();
+    fetchGlobal().then(boards => {
+      worldPending = false;
+      world = boards;
+      render();
+    });
+  }
+
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+      const next: Scope = tab.dataset.hsScope === 'world' ? 'world' : 'device';
+      if (next === scope) return;
+      scope = next;
+      syncTabs();
+      if (scope === 'world' && !world) loadWorld();
+      render();
+    });
   }
 
   function commit(focusResult: boolean) {
@@ -165,14 +243,29 @@ export function initScoreboard(
     const score = pendingScore;
     const rank = submitScore(gameId!, initials, score);
     pendingScore = null;
+    deviceRank = rank;
     saveInitials(initials);
     if (form) form.hidden = true;
-    renderTable(rank);
+    render();
     if (focusResult) {
       const row = list?.querySelector<HTMLElement>('.hs-current');
       row?.scrollIntoView({ block: 'nearest' });
     }
     if (rank > 0) options.onSave?.({ initials, score }, rank);
+    // Offered to the world board even when it missed the device top ten: a
+    // device already holding ten better runs can still take a world place,
+    // so global submission is gated on the score existing, not on its rank.
+    // `submitGlobal` no-ops away from production and never rejects.
+    if (score > 0) {
+      submitGlobal(gameId!, initials, score).then(result => {
+        if (!result) return;
+        // The POST answers with the new board, so a submission never costs a
+        // follow-up read and the World tab is warm before it is first opened.
+        world = { ...world, [gameId!]: result.table };
+        worldRank = result.rank;
+        render();
+      });
+    }
   }
 
   if (form) {
@@ -224,6 +317,12 @@ export function initScoreboard(
     show(score: number) {
       pendingScore = null;
       panel.hidden = false;
+      // A finished run always lands on the device tab: that is where the
+      // initials form sits and where the freshly lit row will appear.
+      scope = 'device';
+      deviceRank = 0;
+      worldRank = 0;
+      syncTabs();
       // The final entry replaces any provisional one from this run.
       const table = unstash(loadTable(gameId!));
       if (stashed !== null) saveTable(gameId!, table);
@@ -232,12 +331,12 @@ export function initScoreboard(
         pendingScore = score;
         form.hidden = false;
         input.value = loadInitials();
-        renderTable(0, table);
+        render(table);
         input.focus();
         input.select();
       } else {
         if (form) form.hidden = true;
-        renderTable(0, table);
+        render(table);
       }
     },
     hide() {

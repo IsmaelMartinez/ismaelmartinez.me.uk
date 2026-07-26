@@ -769,7 +769,7 @@ describe('park mayhem', () => {
     expect(mayhemIntensity(999)).toBe(1);
   });
 
-  it('classes exactly the fun buildings as breakable rides', () => {
+  it('classes the fun and thrill buildings as breakable rides', () => {
     expect(isRide('carousel')).toBe(true);
     expect(isRide('ferris')).toBe(true);
     expect(isRide('flume')).toBe(true);
@@ -777,7 +777,11 @@ describe('park mayhem', () => {
     expect(isRide('food')).toBe(false);
     expect(isRide('toilet')).toBe(false);
     expect(isRide('grass')).toBe(false);
+    // Both thrill rides break down. The pirate ship became breakable when
+    // isRide widened from 'fun' to 'fun' || 'thrill' for the placed coaster,
+    // so it is pinned here rather than left as an unnamed side effect.
     expect(isRide('coaster')).toBe(true);
+    expect(isRide('pirateship')).toBe(true);
   });
 
   it('breakdown odds scale with the ride count and stay zero early on', () => {

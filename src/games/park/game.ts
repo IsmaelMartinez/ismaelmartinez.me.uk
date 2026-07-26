@@ -505,6 +505,11 @@ export function initParkGame(): void {
   let hoverCacheKey = '';
   let hoverCachePlaceable = false;
   let hoverCacheCost = 0;
+  // Which footprint tile of each coaster is nearest the camera. A pure function
+  // of the tiles and the rotation, so it is keyed like the rail geometry was
+  // rather than rescanning all 336 tiles every frame.
+  let coasterFrontKey = '';
+  let coasterFrontCache = new Map<number, number>();
   let clock = 0;
   // Floaters live in the shared effects module; balloons stay local (their
   // sway drift has no analogue in its physics).
@@ -527,7 +532,11 @@ export function initParkGame(): void {
 
   function addFloater(tile: number, text: string, color: string) {
     const c = tileCenter(tile);
-    const p = projectWorld(c.x, c.y);
+    // A multi-tile ride is drawn centred on its whole block, so shift the
+    // floater to the block centre instead of leaving it over the anchor
+    // corner. Single-tile buildings shift by zero.
+    const spread = ((BUILDINGS[tiles[tile]]?.footprint ?? 1) - 1) / 2;
+    const p = projectWorld(c.x + spread, c.y + spread);
     p.y -= heights[tile] * TERRAIN_STEP;
     const buildingHeight = BUILDING_STYLE[tiles[tile]]?.height ?? BLOCK_HEIGHT;
     fx.floater(p.x, p.y - buildingHeight - 6, text, color);
@@ -2313,22 +2322,28 @@ export function initParkGame(): void {
     // reaches its frontmost (nearest-camera) footprint tile — so it
     // interleaves with the guest depth-sort like every other building,
     // rather than being painted over everyone in a later pass. Keyed
-    // front-tile → anchor, rebuilt each frame (a park has a handful of coasters).
-    const coasterFrontTile = new Map<number, number>();
-    tiles.forEach((t, ci) => {
-      if (t !== 'coaster') return;
-      const cells = footprintTiles(ci % GRID_W, Math.floor(ci / GRID_W), BUILDINGS.coaster!.footprint!)!;
-      let front = ci;
-      let frontDiag = -1;
-      for (const c of cells) {
-        const cv = rotateTile(c % GRID_W, Math.floor(c / GRID_W), GRID_W, GRID_H, rotation);
-        if (cv.x + cv.y > frontDiag) {
-          frontDiag = cv.x + cv.y;
-          front = c;
+    // front-tile → anchor, and memoized on (world version, rotation): it only
+    // changes when a coaster is built or bulldozed, or the camera turns.
+    const coasterFrontKeyNow = `${worldVersion}:${rotation}`;
+    if (coasterFrontKeyNow !== coasterFrontKey) {
+      coasterFrontKey = coasterFrontKeyNow;
+      coasterFrontCache = new Map<number, number>();
+      tiles.forEach((t, ci) => {
+        if (t !== 'coaster') return;
+        const cells = footprintTiles(ci % GRID_W, Math.floor(ci / GRID_W), BUILDINGS.coaster!.footprint!)!;
+        let front = ci;
+        let frontDiag = -1;
+        for (const c of cells) {
+          const cv = rotateTile(c % GRID_W, Math.floor(c / GRID_W), GRID_W, GRID_H, rotation);
+          if (cv.x + cv.y > frontDiag) {
+            frontDiag = cv.x + cv.y;
+            front = c;
+          }
         }
-      }
-      coasterFrontTile.set(front, ci);
-    });
+        coasterFrontCache.set(front, ci);
+      });
+    }
+    const coasterFrontTile = coasterFrontCache;
 
     // The world grid never moves; rendering walks the *view* grid (rotated
     // dimensions) back-to-front and maps each view tile to its world tile.

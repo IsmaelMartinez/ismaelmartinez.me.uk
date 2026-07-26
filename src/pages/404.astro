@@ -13,6 +13,10 @@ const notFoundCopy = Object.fromEntries(
   ])
 );
 const fallback = notFoundCopy[defaultLang];
+
+// Escape < the same way toJsonLd does, so a translation can never break out of
+// the <script> tag it is embedded in.
+const escapedCopy = JSON.stringify(notFoundCopy).replace(/</g, '\\u003c');
 ---
 
 <!doctype html>
@@ -39,7 +43,7 @@ const fallback = notFoundCopy[defaultLang];
       </div>
     </main>
     <script is:inline set:html={`(function(){
-  var copy = ${JSON.stringify(notFoundCopy)};
+  var copy = ${escapedCopy};
   var segment = location.pathname.split('/')[1];
   if (!Object.prototype.hasOwnProperty.call(copy, segment)) return;
   document.documentElement.lang = segment;

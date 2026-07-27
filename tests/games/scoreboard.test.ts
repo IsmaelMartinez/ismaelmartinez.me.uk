@@ -1,5 +1,40 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createRunRecord } from '../../src/games/engine/scoreboard';
+import { createRunRecord, worldNoteText } from '../../src/games/engine/scoreboard';
+
+const TEXT = {
+  loading: 'Loading...',
+  unavailable: 'World scores unavailable',
+  rank: 'World rank #{rank}'
+};
+
+describe('worldNoteText', () => {
+  it('shows the loading text while a first fetch is in flight', () => {
+    expect(worldNoteText({ loaded: false, pending: true, rank: 0, count: 0 }, TEXT)).toBe('Loading...');
+  });
+
+  it('shows unavailable when no board loaded and nothing is pending', () => {
+    expect(worldNoteText({ loaded: false, pending: false, rank: 0, count: 0 }, TEXT)).toBe(
+      'World scores unavailable'
+    );
+  });
+
+  it('shows nothing for a loaded board the run did not chart on', () => {
+    expect(worldNoteText({ loaded: true, pending: false, rank: 0, count: 5 }, TEXT)).toBe('');
+  });
+
+  it('shows the placed rank when it points at a real row', () => {
+    expect(worldNoteText({ loaded: true, pending: false, rank: 2, count: 5 }, TEXT)).toBe('World rank #2');
+  });
+
+  // Regression: a submission sets the rank alongside the board it charted on,
+  // then loadWorld() swaps in a stale CDN read whose table is empty while the
+  // rank stays put. The note must not claim "World rank #1" over a board that
+  // simultaneously reads "No scores yet".
+  it('hides a rank that no longer indexes a row on the board being shown', () => {
+    expect(worldNoteText({ loaded: true, pending: false, rank: 1, count: 0 }, TEXT)).toBe('');
+    expect(worldNoteText({ loaded: true, pending: false, rank: 4, count: 3 }, TEXT)).toBe('');
+  });
+});
 
 describe('createRunRecord', () => {
   it('seeds best() from the initial table best', () => {

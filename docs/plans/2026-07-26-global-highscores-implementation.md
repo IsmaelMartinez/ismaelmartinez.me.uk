@@ -117,9 +117,17 @@ uncached visitor's `GET` reaches the function and reads all nine blobs, so reads
 writes are what will consume the Blob quota. Adding `s-maxage=30` alongside it is a one-line
 change and is the owner's call, since the contract was frozen.
 
-Known and accepted: the very first write to a brand-new board races (`put` has no `ifNoneMatch`),
-which can drop one score once per board ever; and the 1KB body check counts UTF-16 units rather
-than bytes, which is bounded and harmless behind the same cap.
+Known and accepted: the 1KB body check counts UTF-16 units rather than bytes, which is bounded
+and harmless behind the same cap.
+
+The first-write race was recorded here as dropping at most one score once per board ever. That
+was wrong, and production proved it: two submissions half a second apart on the same board left
+only the second, because a read that trails a just-created blob is indistinguishable from a board
+that does not exist, and `put` has no conditional-create to separate them. Believing that absence
+sends a write with no ETag, which replaces the board rather than adding to it, and the condition
+recurs rather than firing once. Absence is now only accepted on the final write attempt, after
+backoffs give storage time to settle, and every other write stays conditional. See the "Blob write
+race" section below.
 
 ### Adversarial review
 
@@ -159,3 +167,59 @@ secret in `src/` or `dist/`, CSP parity against the literal endpoint origin, the
 class-name seams between lanes, all five i18n keys in all three locales, the nine client gameIds
 matching the server allowlist exactly, and both Cascade panels loading and submitting
 independently.
+
+### Blob write race (found in production, 2026-07-26)
+
+The Vercel Blob store was created after the merge, which finally allowed the write path to run
+for the first time anywhere. Two faults surfaced immediately, neither reachable before the store
+existed.
+
+Two submissions to the same board half a second apart left only the second one. The first created
+`scores/cascade.json` holding one entry; the second read the board as absent, took the
+first-write branch, and wrote unconditionally, replacing it. The read had simply not caught up
+with a blob created moments earlier. Nothing distinguishes that from a game nobody has played,
+and `put` offers `ifMatch` but no `ifNoneMatch`, so there is no conditional create to lean on.
+The fix is to stop believing an absent read on sight: `record` now retries, with a backoff, and
+only accepts absence on its final attempt, by which point storage has had time to settle. A
+genuine first write pays those attempts once per game. Every other write remains conditional, so
+no write that saw an existing board can clobber it.
+
+The second fault shared the cause. Rapid successive writes returned 503 "board busy" because the
+three conditional attempts ran back to back within a few milliseconds, each re-reading the same
+stale view and failing its precondition. The retries now pause between attempts, which is what
+makes a re-read worth doing at all.
+
+Both are covered by tests that fail without the fix: one drives a rival write in between the read
+and the write to prove the board is merged rather than replaced, and one proves a genuinely
+absent board is still created. The cost is about six seconds on the suite, since those retries
+sleep for real rather than against a faked clock.
+
+### World board freshness (2026-07-26 and 2026-07-27)
+
+A score could vanish from the World tab moments after being posted. `loadWorld` applied its reply
+unconditionally, so a fetch issued before a submission and answered after it (reads are cached for
+half a minute, which is ample) put the pre-submission board back on screen, taking the player's own
+entry off it in front of them.
+
+The panel now tracks one generation number, `worldGen`, for the newest board that has landed. Only
+a submission's own reply bumps it, because that is the one answer guaranteed to contain the score
+just written; a fetch is served from whatever the CDN holds and can be older than the moment it was
+issued, so issue order alone is not a freshness order. Both paths note the generation when they
+start and stand down if it moved while they were out. That covers a fetch overtaken by a submission
+and, equally, an older submission's reply arriving after a newer one, which the first version of
+this guard let through: it dropped the stale rank but still applied the stale table, so a board
+missing the newest run could sit in memory until something else replaced it.
+
+Separately, the board only ever loaded once. `loadWorld` was gated on `!world`, so a session that
+opened the World tab kept that one snapshot until the page was reloaded, and nobody else's runs
+appeared. Worse, a submission populates `world` on its own, so a player who finished a run before
+ever opening the tab never fetched at all and spent the session on a board frozen at their own
+submission. Every switch to the World tab now refetches, which is what a player has instead of a
+refresh button: tapping across from the device board is the gesture. Flipping tabs repeatedly is
+free because the response's `max-age` answers the repeats from the browser cache, and a refresh
+that fails keeps the board already on screen rather than downgrading it to "unavailable".
+
+None of it is covered by a test. `scoreboard.ts` is DOM-wired and the suite has no jsdom, which is
+a repo-wide decision left open. The refresh and the failed-refresh fallback were instead checked in
+a real browser against the dev server, which reads the production board over CORS and cannot write
+to it, confirming one request per switch to the tab and a retained board when `fetch` rejects.

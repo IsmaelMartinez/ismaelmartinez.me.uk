@@ -60,10 +60,12 @@ const arcadeGames: ArcadeGame[] = [
     color: '#84cc16',
     path: '/fun/lemmings'
   },
-  // Pixel Park is parked off the floor for now: its ride graphics need more
-  // work before it ships, so we're stabilising the other cabinets first. The
-  // game and its /fun/park page stay in the repo — re-add an entry here to
-  // bring it back to the floor for a future release.
+  // Pixel Park is parked: its ride graphics need more work before it ships, so
+  // we're stabilising the other cabinets first. Its cabinet is off the floor
+  // AND its page is unpublished — renamed to the unrouted
+  // src/pages/[lang]/fun/_park.astro, so no /fun/park route is built. The game
+  // under src/games/park/ stays in the repo. To bring it back for a future
+  // release: rename _park.astro back to park.astro and re-add an entry here.
   {
     id: 'cascade',
     shelf: 'featured',

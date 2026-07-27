@@ -36,11 +36,17 @@ But the underlying reason wasn't technical. When we created the bot, it could pr
 
 So I brought it back to run it myself. I verify every draft it creates, every review it does, and I steer it. That part, the judgement and the dealing with people, couldn't be automated, or at least not now. It's the same pattern as the other two articles, I decide, the AI executes, I review, applied to triage. The autonomous bot ended up being a skill that I drive.
 
+## Remaking It as a Skill
+
+So I remade it, this time as a skill. Start simpler. And honestly, in a couple of afternoons I trained the skill with all the information I'd accumulated.
+
+The skill doesn't need the shadow repos, because I call it when I want to. Maybe one day I'll hand them over to an agent, but for now I don't need that. A skill with no infrastructure behind it has no latency problems, and the `gh issue list` command doesn't do too badly either and gives better results. And this applies to the Electron issues too.
+
 ## The One Thing That Earned Its Place
 
 Of all that apparatus, the one thing that proved it earned its place was the embeddings. Having the issue history vectorised and linked really does help find related issues that would otherwise slip past me. That's the piece I'm keeping.
 
-Right now I'm in the middle of moving those embeddings out of the data repo and into something more local, with the config or information inside teams-for-linux itself, driven from the skill. Will it hold? I don't know. Only time will tell.
+Right now I'm in the middle of moving those embeddings out of the repository and into something more local, with the config or information inside teams-for-linux itself, driven from the skill. Will it hold? I don't know. Only time will tell.
 
 ## Closing Thought
 

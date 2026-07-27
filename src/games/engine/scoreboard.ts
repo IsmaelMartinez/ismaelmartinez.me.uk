@@ -149,6 +149,9 @@ export function initScoreboard(
   // in the data and must not read the same on screen.
   let world: Record<string, ScoreEntry[]> | null = null;
   let worldPending = false;
+  // Bumped by every world fetch and by every landed submission, so a reply
+  // that has been overtaken can tell and stand down.
+  let worldFetch = 0;
   // Kept per scope so switching tabs highlights the row that scope ranked.
   let deviceRank = 0;
   let worldRank = 0;
@@ -222,9 +225,16 @@ export function initScoreboard(
   function loadWorld() {
     if (worldPending) return;
     worldPending = true;
+    const token = ++worldFetch;
     render();
     fetchGlobal().then(boards => {
       worldPending = false;
+      // A submission that landed while this was in flight has already written
+      // a fresher board, so this reply is dropped rather than applied. Reads
+      // are CDN-cached for half a minute, which is easily long enough for the
+      // answer here to predate the score the player just posted, and applying
+      // it would take their own entry back off the board in front of them.
+      if (token !== worldFetch) return;
       world = boards;
       render();
     });
@@ -269,6 +279,9 @@ export function initScoreboard(
         // The board itself is never stale, so it lands whichever run it came
         // from; only the rank belongs to one run and is dropped once past.
         world = { ...world, [gameId!]: result.table };
+        // Supersede any fetch already in flight: its reply can only be older
+        // than this one, which came back from the write itself.
+        worldFetch++;
         if (token !== runToken) return;
         worldRank = result.rank;
         render();

@@ -14,7 +14,7 @@ interface Props {
   ogImage?: string;
 }
 
-const { title, description = "Ismael Martinez - Principal Software Developer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical, ogImage } = Astro.props;
+const { title, description = "Ismael Martinez Ramos - Principal Software Developer & Open Source Enthusiast", lang = 'en', ogType = 'website', publishedDate, tags, canonical: customCanonical, ogImage } = Astro.props;
 const t = useTranslations(lang);
 const rawPath = Astro.url.pathname.replace(`/${lang}`, '') || '/';
 // Tag names are locale-specific with no cross-locale mapping, so the language
@@ -23,7 +23,7 @@ const tagDetailMatch = rawPath.match(/^\/tags\/[^/]/);
 const currentPath = tagDetailMatch ? '/tags/' : rawPath;
 const canonicalUrl = customCanonical || new URL(Astro.url.pathname, Astro.site).href;
 const ogImageUrl = ogImage ? new URL(ogImage, Astro.site).href : new URL('/og-image.png', Astro.site).href;
-const fullTitle = `${title} | Ismael Martinez`;
+const fullTitle = `${title} | Ismael Martinez Ramos`;
 const locales = ['en', 'es', 'cat'] as const;
 const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 ---
@@ -56,7 +56,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImageUrl} />
-    <meta property="og:site_name" content="Ismael Martinez" />
+    <meta property="og:site_name" content="Ismael Martinez Ramos" />
     <meta property="og:locale" content={{ en: 'en_GB', es: 'es_ES', cat: 'ca_ES' }[lang]} />
     {publishedDate && <meta property="article:published_time" content={publishedDate.toISOString()} />}
     {tags?.map(tag => <meta property="article:tag" content={tag} />)}
@@ -74,7 +74,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <link rel="alternate" hreflang="x-default" href={new URL(getLocalizedPath(currentPath, 'en'), Astro.site).href} />
 
     <!-- RSS Feed -->
-    <link rel="alternate" type="application/rss+xml" title={`Ismael Martinez (${lang.toUpperCase()})`} href={`/${lang}/rss.xml`} />
+    <link rel="alternate" type="application/rss+xml" title={`Ismael Martinez Ramos (${lang.toUpperCase()})`} href={`/${lang}/rss.xml`} />
 
     <slot name="head" />
 
@@ -100,7 +100,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
     <nav class="nav" aria-label={t('nav.mainNavigation')}>
       <div class="container nav-container">
-        <a href={getLocalizedPath('/', lang)} class="nav-logo">Ismael <em>Martinez</em></a>
+        <a href={getLocalizedPath('/', lang)} class="nav-logo">Ismael <em>Martinez Ramos</em></a>
 
         <button id="menu-toggle" class="menu-toggle" aria-label={t('nav.menuToggle')} aria-controls="nav-links" aria-expanded="false" type="button">
           <span class="menu-icon"></span>
@@ -150,7 +150,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           <span class="footer-separator">·</span>
           <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">RSS</a>
         </p>
-        <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez</p>
+        <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez Ramos</p>
       </div>
     </footer>
 

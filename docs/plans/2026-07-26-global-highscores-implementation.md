@@ -110,12 +110,14 @@ exact failure `ifMatch` exists to prevent. A single `get()` with the cache bypas
 bytes and the ETag that provably belong to them, and returns `null` for a missing blob, which
 also handles the first write without catching an error.
 
-`Cache-Control: public, max-age=30` is implemented exactly as frozen, but it does not do what
-the research assumed. Vercel's CDN caches a function response only on `s-maxage` (or the
-`Vercel-CDN-Cache-Control` family); plain `max-age` is a browser directive. As written, every
-uncached visitor's `GET` reaches the function and reads all nine blobs, so reads rather than
-writes are what will consume the Blob quota. Adding `s-maxage=30` alongside it is a one-line
-change and is the owner's call, since the contract was frozen.
+`Cache-Control: public, max-age=30` is implemented exactly as frozen and does what the research
+assumed. This section previously claimed the opposite, that Vercel's CDN caches a function
+response only on `s-maxage` and that plain `max-age` is a browser-only directive, and recommended
+adding `s-maxage=30`. Measuring the deployed endpoint on 2026-07-27 disproved that: repeated
+requests return `x-vercel-cache: HIT` with `age` climbing to 25 and then resetting to `0` with a
+`MISS` at the thirty-second boundary, so the edge is caching the response and honouring the TTL.
+Reads therefore do not reach the function once a region is warm, and writes rather than reads are
+what consume the Blob quota, as originally intended. No header change is needed.
 
 Known and accepted: the 1KB body check counts UTF-16 units rather than bytes, which is bounded
 and harmless behind the same cap.

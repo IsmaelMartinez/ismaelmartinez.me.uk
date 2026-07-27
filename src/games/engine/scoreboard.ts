@@ -109,6 +109,37 @@ export function createRunRecord(
   };
 }
 
+/** The text templates the world tab's status line draws from. */
+export interface WorldNoteText {
+  loading: string;
+  unavailable: string;
+  rank: string;
+}
+
+/**
+ * The world tab's status line, kept pure so it can be unit-tested apart from
+ * the DOM wiring. Three states: a board still loading, a board that could not
+ * be reached, or a placed rank.
+ *
+ * The rank is shown only when it points at a real row of the board being drawn
+ * (`count`). A submission sets the rank alongside the board it charted on, but
+ * a later `loadWorld()` can swap in a CDN-cached read taken before that score
+ * propagated — a board that no longer holds the entry, often empty — while the
+ * rank stays put. Drawing "World rank #1" over that board is the bug where the
+ * panel reads "No scores yet" and "World rank #1" at once, so a rank past the
+ * board's end is treated as no placement rather than a claim about an absent
+ * row.
+ */
+export function worldNoteText(
+  state: { loaded: boolean; pending: boolean; rank: number; count: number },
+  text: WorldNoteText
+): string {
+  if (!state.loaded) return state.pending ? text.loading : text.unavailable;
+  return state.rank > 0 && state.rank <= state.count
+    ? text.rank.replace('{rank}', String(state.rank))
+    : '';
+}
+
 export interface ScoreboardOptions {
   /** Called after an entry lands on the table (including auto-commits). */
   onSave?: (entry: ScoreEntry, rank: number) => void;
@@ -177,13 +208,6 @@ export function initScoreboard(
     return stashed === null ? table : removeEntry(table, stashed.initials, stashed.score);
   }
 
-  /** The world tab's status line: loading, unreachable, or a placed rank. */
-  function noteText(): string {
-    if (scope !== 'world') return '';
-    if (!world) return worldPending ? worldText.loading : worldText.unavailable;
-    return worldRank > 0 ? worldText.rank.replace('{rank}', String(worldRank)) : '';
-  }
-
   /**
    * Draws the active scope into the one list. `deviceTable` lets `show()`
    * hand over the table it has already unstashed rather than re-reading it.
@@ -215,7 +239,14 @@ export function initScoreboard(
       empty.hidden = (worldScope && !world) || table.length > 0 || !(form?.hidden ?? true);
     }
     if (note) {
-      const message = noteText();
+      // The rank rides on the board actually drawn (`table`), so a stale refetch
+      // that empties the world board can't leave "World rank #1" over it.
+      const message = worldScope
+        ? worldNoteText(
+            { loaded: !!world, pending: worldPending, rank: worldRank, count: table.length },
+            worldText
+          )
+        : '';
       note.textContent = message;
       note.hidden = message === '';
     }

@@ -1,5 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -12,11 +14,15 @@ const t = useTranslations(lang);
 
 const tools = [
   { id: 'road', emoji: '🛣️', label: t('fun.city.toolRoad'), cost: 10 },
+  { id: 'fill', emoji: '🧱', label: t('fun.city.toolFill'), cost: 60 },
   { id: 'res', emoji: '🏠', label: t('fun.city.toolRes'), cost: 50 },
   { id: 'com', emoji: '🏬', label: t('fun.city.toolCom'), cost: 75 },
   { id: 'ind', emoji: '🏭', label: t('fun.city.toolInd'), cost: 100 },
   { id: 'power', emoji: '⚡', label: t('fun.city.toolPower'), cost: 500 },
   { id: 'park', emoji: '🌳', label: t('fun.city.toolPark'), cost: 30 },
+  { id: 'school', emoji: '🏫', label: t('fun.city.toolSchool'), cost: 300 },
+  { id: 'firehouse', emoji: '🚒', label: t('fun.city.toolFirehouse'), cost: 250 },
+  { id: 'police', emoji: '👮', label: t('fun.city.toolPolice'), cost: 275 },
   { id: 'bulldoze', emoji: '🚜', label: t('fun.city.toolBulldoze'), cost: 0 }
 ];
 ---
@@ -34,16 +40,23 @@ const tools = [
         data-t-expenses={t('fun.city.expenses')}
         data-t-cant-afford={t('fun.city.cantAfford')}
         data-t-milestone={t('fun.city.milestone')}
+        data-t-obj-pop={t('fun.city.objPop')}
+        data-t-established={t('fun.city.established')}
+        data-t-fire-alert={t('fun.city.fireAlert')}
+        data-t-tornado-alert={t('fun.city.tornadoAlert')}
+        data-t-quake-alert={t('fun.city.quakeAlert')}
+        data-t-crime-alert={t('fun.city.crimeAlert')}
+        data-t-density-unlocked={t('fun.city.densityUnlocked')}
+        data-t-new-record={t('fun.city.newRecord')}
+        data-t-event-grant={t('fun.city.eventGrant')}
+        data-t-event-protest={t('fun.city.eventProtest')}
+        data-t-event-festival={t('fun.city.eventFestival')}
+        data-t-event-strike={t('fun.city.eventStrike')}
+        data-t-event-boom={t('fun.city.eventBoom')}
       >
         <div class="game-header">
           <h1><span class="city-emoji">🏙️</span> {t('fun.city.title')}</h1>
-          <button
-            id="sound-btn"
-            class="btn sound-btn"
-            aria-label={t('fun.arcade.soundOn')}
-            data-sound-on={t('fun.arcade.soundOn')}
-            data-sound-off={t('fun.arcade.soundOff')}
-          >🔊</button>
+          <SoundToggles lang={lang} />
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.city.money')}</span>
@@ -68,6 +81,11 @@ const tools = [
           </div>
         </div>
 
+        <div class="objective-bar">
+          <span class="objective-label">🏙️ {t('fun.city.goal')}</span>
+          <span id="objective" class="objective-text" aria-live="polite"></span>
+        </div>
+
         <div class="game-area">
           <div class="canvas-scroll" id="canvas-scroll">
             <canvas id="game-canvas"></canvas>
@@ -89,6 +107,7 @@ const tools = [
                 {t('fun.city.monthsLabel')}: <strong id="final-months">0</strong> ·
                 {t('fun.city.peakPop')}: <strong id="final-pop">0</strong>
               </p>
+              <HighScoreTable gameId="city" lang={lang} accent="#38bdf8" />
               <button id="restart-btn" class="btn btn-primary btn-large">{t('fun.city.playAgain')}</button>
             </div>
           </div>
@@ -120,6 +139,8 @@ const tools = [
               </div>
             </div>
             <div class="speed-controls">
+              <button type="button" id="rotate-left" class="rotate-btn" aria-label={t('fun.city.rotateLeft')} title={t('fun.city.rotateLeft')}>↺</button>
+              <button type="button" id="rotate-right" class="rotate-btn" aria-label={t('fun.city.rotateRight')} title={t('fun.city.rotateRight')}>↻</button>
               <button class="speed-btn" data-speed="0">⏸</button>
               <button class="speed-btn active" data-speed="1">▶</button>
               <button class="speed-btn" data-speed="3">⏩</button>
@@ -132,8 +153,12 @@ const tools = [
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initCityGame no-ops on pages without a fresh game root.
   import { initCityGame } from '../../../games/city';
   initCityGame();
+  document.addEventListener('astro:after-swap', initCityGame);
 </script>
 
 <style>
@@ -211,6 +236,32 @@ const tools = [
     color: #4ade80;
   }
 
+  .objective-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    font-size: 0.9rem;
+  }
+
+  .objective-label {
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+
+  .objective-text {
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+
   .game-area {
     position: relative;
     background: var(--color-bg-secondary);
@@ -222,6 +273,7 @@ const tools = [
   .canvas-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    perspective: 1200px;
   }
 
   #game-canvas {
@@ -230,6 +282,7 @@ const tools = [
     height: auto;
     aspect-ratio: 76 / 45;
     cursor: pointer;
+    backface-visibility: hidden;
   }
 
   /* Keep tiles tappable on phones: minimum board size + horizontal pan */
@@ -273,14 +326,17 @@ const tools = [
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
   }
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
     max-width: 520px;
   }
@@ -420,7 +476,8 @@ const tools = [
     gap: var(--space-xs);
   }
 
-  .speed-btn {
+  .speed-btn,
+  .rotate-btn {
     width: 44px;
     height: 44px;
     font-size: 1.1rem;
@@ -433,7 +490,8 @@ const tools = [
   }
 
   .speed-btn:hover,
-  .speed-btn.active {
+  .speed-btn.active,
+  .rotate-btn:hover {
     border-color: #38bdf8;
     background: rgba(56, 189, 248, 0.12);
   }

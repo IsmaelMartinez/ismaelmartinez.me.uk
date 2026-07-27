@@ -1,5 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -13,11 +15,12 @@ const t = useTranslations(lang);
 const weapons = [
   { id: 'missile', emoji: '🚀', label: t('fun.tanks.weaponMissile') },
   { id: 'heavy', emoji: '💣', label: t('fun.tanks.weaponHeavy') },
-  { id: 'mirv', emoji: '🎇', label: t('fun.tanks.weaponMirv') }
+  { id: 'mirv', emoji: '🎇', label: t('fun.tanks.weaponMirv') },
+  { id: 'bounce', emoji: '🎾', label: t('fun.tanks.weaponBounce') }
 ];
 ---
 
-<Layout title="Tank Duel" lang={lang}>
+<Layout title={t('fun.tanks.title')} lang={lang}>
   <section class="tanks-section">
     <div class="container">
       <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
@@ -32,16 +35,11 @@ const weapons = [
         data-t-wins-match={t('fun.tanks.winsMatch')}
         data-t-draw={t('fun.tanks.draw')}
         data-t-wind={t('fun.tanks.wind')}
+        data-t-match-score={t('fun.tanks.matchScore')}
       >
         <div class="game-header">
           <h1><span class="tank-emoji">🎯</span> {t('fun.tanks.title')}</h1>
-          <button
-            id="sound-btn"
-            class="btn sound-btn"
-            aria-label={t('fun.arcade.soundOn')}
-            data-sound-on={t('fun.arcade.soundOn')}
-            data-sound-off={t('fun.arcade.soundOff')}
-          >🔊</button>
+          <SoundToggles lang={lang} />
           <div class="scores">
             <div class="score-item">
               <span class="score-label" id="p1-label">{t('fun.tanks.player1')}</span>
@@ -64,6 +62,24 @@ const weapons = [
             <div class="overlay-content">
               <span class="play-icon">🎯</span>
               <p>{t('fun.tanks.instructions')}</p>
+              <div class="difficulty-select" role="group" aria-label={t('fun.tanks.difficulty')}>
+                <span class="difficulty-label">{t('fun.tanks.difficulty')}</span>
+                <div class="difficulty-buttons">
+                  <button type="button" class="difficulty-btn" data-difficulty="rookie" aria-pressed="false">{t('fun.tanks.difficultyRookie')}</button>
+                  <button type="button" class="difficulty-btn active" data-difficulty="gunner" aria-pressed="true">{t('fun.tanks.difficultyGunner')}</button>
+                  <button type="button" class="difficulty-btn" data-difficulty="veteran" aria-pressed="false">{t('fun.tanks.difficultyVeteran')}</button>
+                </div>
+              </div>
+              <div class="arena-select" role="group" aria-label={t('fun.tanks.arena')}>
+                <span class="arena-label">{t('fun.tanks.arena')}</span>
+                <div class="arena-buttons">
+                  <button type="button" class="arena-btn active" data-arena="hills" aria-pressed="true">{t('fun.tanks.arenaHills')}</button>
+                  <button type="button" class="arena-btn" data-arena="canyon" aria-pressed="false">{t('fun.tanks.arenaCanyon')}</button>
+                  <button type="button" class="arena-btn" data-arena="mesa" aria-pressed="false">{t('fun.tanks.arenaMesa')}</button>
+                  <button type="button" class="arena-btn" data-arena="ridges" aria-pressed="false">{t('fun.tanks.arenaRidges')}</button>
+                  <button type="button" class="arena-btn" data-arena="bunker" aria-pressed="false">{t('fun.tanks.arenaBunker')}</button>
+                </div>
+              </div>
               <div class="mode-buttons">
                 <button id="vs-cpu-btn" class="btn btn-primary btn-large">{t('fun.tanks.vsCpu')}</button>
                 <button id="two-player-btn" class="btn btn-primary btn-large">{t('fun.tanks.twoPlayer')}</button>
@@ -74,6 +90,8 @@ const weapons = [
             <div class="overlay-content">
               <span id="round-emoji" class="round-emoji">💥</span>
               <h2 id="round-message"></h2>
+              <p id="match-score" class="match-score" style="display: none;"></p>
+              <HighScoreTable gameId="tanks" lang={lang} accent="#3b82f6" />
               <button id="next-round-btn" class="btn btn-primary btn-large">{t('fun.tanks.nextRound')}</button>
               <button id="play-again-btn" class="btn btn-primary btn-large" style="display: none;">{t('fun.tanks.playAgain')}</button>
             </div>
@@ -109,8 +127,12 @@ const weapons = [
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initTanksGame no-ops on pages without a fresh game root.
   import { initTanksGame } from '../../../games/tanks';
   initTanksGame();
+  document.addEventListener('astro:after-swap', initTanksGame);
 </script>
 
 <style>
@@ -180,7 +202,7 @@ const weapons = [
   .score-value {
     font-size: 1.5rem;
     font-weight: 700;
-    color: #f97316;
+    color: var(--color-accent);
   }
 
   .score-value.p1 {
@@ -216,19 +238,29 @@ const weapons = [
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
   }
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
     max-width: 480px;
   }
 
   .play-icon,
+  .match-score {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fbbf24;
+    margin-bottom: var(--space-md);
+  }
+
   .round-emoji {
     font-size: 4rem;
     display: block;
@@ -237,12 +269,63 @@ const weapons = [
 
   .overlay-content h2 {
     font-size: 1.75rem;
-    color: #f97316;
+    color: #60a5fa;
     margin-bottom: var(--space-xl);
   }
 
   .overlay-content p {
     margin-bottom: var(--space-xl);
+  }
+
+  .difficulty-select,
+  .arena-select {
+    margin-bottom: var(--space-lg);
+  }
+
+  .difficulty-label,
+  .arena-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-sm);
+  }
+
+  .difficulty-buttons,
+  .arena-buttons {
+    display: inline-flex;
+    gap: var(--space-xs);
+    padding: 4px;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.7rem;
+  }
+
+  .difficulty-btn,
+  .arena-btn {
+    padding: var(--space-xs) var(--space-md);
+    min-height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 0.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .difficulty-btn:hover,
+  .arena-btn:hover {
+    color: var(--color-text);
+  }
+
+  .difficulty-btn.active,
+  .arena-btn.active {
+    background: rgba(37, 99, 235, 0.18);
+    color: var(--color-text);
+    box-shadow: inset 0 0 0 2px var(--color-accent);
   }
 
   .mode-buttons {
@@ -268,6 +351,8 @@ const weapons = [
     display: flex;
     align-items: center;
     gap: var(--space-xs);
+    /* Keep a comfortable tap height on phones (was 30px tall) */
+    min-height: 44px;
     padding: var(--space-xs) var(--space-md);
     background: var(--color-bg-secondary);
     border: 2px solid var(--color-border);
@@ -278,12 +363,12 @@ const weapons = [
   }
 
   .weapon-btn:hover:not(:disabled) {
-    border-color: #f97316;
+    border-color: var(--color-accent);
   }
 
   .weapon-btn.active {
-    border-color: #f97316;
-    background: rgba(249, 115, 22, 0.12);
+    border-color: var(--color-accent);
+    background: rgba(37, 99, 235, 0.14);
   }
 
   .weapon-btn:disabled {
@@ -305,7 +390,7 @@ const weapons = [
   .weapon-ammo {
     font-size: 0.75rem;
     font-weight: 700;
-    color: #facc15;
+    color: var(--color-accent);
   }
 
   .controls {
@@ -338,7 +423,7 @@ const weapons = [
 
   .control-group input[type='range'] {
     width: 100%;
-    accent-color: #f97316;
+    accent-color: var(--color-accent);
   }
 
   .control-group input[type='range']:disabled {
@@ -382,6 +467,32 @@ const weapons = [
 
     .fire-btn {
       width: 100%;
+    }
+
+    .overlay-content {
+      padding: var(--space-md);
+    }
+
+    .play-icon,
+    .round-emoji {
+      font-size: 2.75rem;
+      margin-bottom: var(--space-sm);
+    }
+
+    .overlay-content p {
+      margin-bottom: var(--space-md);
+    }
+
+    .mode-buttons {
+      flex-direction: column;
+    }
+
+    .mode-buttons .btn-large {
+      width: 100%;
+    }
+
+    .btn-large {
+      padding: var(--space-md) var(--space-lg);
     }
 
     .keys-hint {

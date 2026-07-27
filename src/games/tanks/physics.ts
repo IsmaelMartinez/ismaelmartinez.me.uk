@@ -27,12 +27,35 @@ export function launchProjectile(
   return { x, y, vx: Math.cos(rad) * speed, vy: -Math.sin(rad) * speed };
 }
 
+/**
+ * High-score-table score for a match won against the CPU: each round of
+ * winning margin is worth 100 points, plus the armour the player's tank
+ * finished on. Assumes hp is on the 0–100 scale tanks spawn with — a clean
+ * sweep on full health must outrank a narrower win, so keep the margin
+ * step above the hp cap if tank durability ever changes.
+ */
+export function matchScore(roundsWon: number, roundsLost: number, hp: number): number {
+  return (roundsWon - roundsLost) * 100 + Math.round(Math.max(0, hp));
+}
+
 /** Advances a projectile by dt seconds. Wind is a horizontal acceleration. */
 export function stepProjectile(p: Projectile, wind: number, dt: number): void {
   p.vx += wind * dt;
   p.vy += GRAVITY * dt;
   p.x += p.vx * dt;
   p.y += p.vy * dt;
+}
+
+/**
+ * Skips a shell off the ground: it lifts clear of the surface, flips its
+ * downward velocity back upward, and bleeds both velocity components by
+ * `restitution` (0..1) so each bounce is shorter than the last. Used by the
+ * Skipper weapon; keeps the bounce maths pure and unit-testable.
+ */
+export function bounceOffSurface(p: Projectile, surfaceY: number, restitution: number): void {
+  p.y = surfaceY - 1;
+  p.vy = -Math.abs(p.vy) * restitution;
+  p.vx *= restitution;
 }
 
 export interface Impact {
@@ -64,6 +87,47 @@ export function simulateShot(
     if (p.y >= surfaceYAt(ground, p.x) && p.x >= 0 && p.x < width) {
       return { x: p.x, y: p.y };
     }
+  }
+  return null;
+}
+
+export const FALL_GRAVITY = 600; // px/s² for tanks dropping into craters
+
+export interface FallBody {
+  /** Vertical position (canvas y, grows downwards). */
+  y: number;
+  /** y where the current fall started, or null when grounded. */
+  fallFrom: number | null;
+  fallVy: number;
+}
+
+/**
+ * Advances a body's gravity drop towards the terrain surface below it.
+ *
+ * A fall in progress always continues until the body actually reaches the
+ * surface — the landing test must not depend on the takeoff threshold, or a
+ * step that ends within that margin of the surface would leave `fallFrom`
+ * set forever (which froze the game while it waited for tanks to settle).
+ *
+ * Returns the total drop height on the step the body lands, otherwise null.
+ */
+export function stepFall(body: FallBody, surface: number, dt: number): number | null {
+  if (body.fallFrom === null) {
+    if (body.y >= surface - 0.5) {
+      // Grounded; track terrain that collapsed by less than the threshold.
+      body.y = surface;
+      return null;
+    }
+    body.fallFrom = body.y;
+    body.fallVy = 0;
+  }
+  body.fallVy += FALL_GRAVITY * dt;
+  body.y = Math.min(surface, body.y + body.fallVy * dt);
+  if (body.y >= surface) {
+    const drop = surface - body.fallFrom;
+    body.fallFrom = null;
+    body.fallVy = 0;
+    return drop;
   }
   return null;
 }

@@ -27,3 +27,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Arcade screenshot-harness output (scripts/screenshot-games.js)
+/before/
+/after/
+/shots/

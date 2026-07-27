@@ -18,13 +18,3 @@ export function saveScore(key: string, value: number): void {
     // Storage unavailable; score simply won't persist.
   }
 }
-
-/** Persists `score` only if it beats the stored value. Returns the current high score. */
-export function recordHighScore(key: string, score: number): number {
-  const high = loadScore(key);
-  if (score > high) {
-    saveScore(key, score);
-    return score;
-  }
-  return high;
-}

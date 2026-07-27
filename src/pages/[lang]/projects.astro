@@ -4,7 +4,7 @@ import ProjectCard from '../../components/ProjectCard.astro';
 import PortfolioHealthBadge from '../../components/PortfolioHealthBadge.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
-import { projects } from '../../data/projects';
+import { projects, externalContributions } from '../../data/projects';
 import { fetchPortfolioHealth } from '../../data/health';
 
 export function getStaticPaths() {
@@ -16,7 +16,7 @@ const t = useTranslations(lang);
 const health = await fetchPortfolioHealth();
 ---
 
-<Layout title="Projects" lang={lang}>
+<Layout title={t('nav.projects')} description={t('section.projects.description')} lang={lang}>
   <section class="section">
     <div class="container">
       <header class="page-header">
@@ -30,6 +30,18 @@ const health = await fetchPortfolioHealth();
         {projects.map(project => (
           <ProjectCard project={project} lang={lang} />
         ))}
+      </div>
+
+      <div class="contributions">
+        <h2 class="contributions-title">{t('section.contributions')}</h2>
+        <p class="contributions-description">{t('section.contributions.description')}</p>
+        <ul class="contributions-list">
+          {externalContributions.map(contribution => (
+            <li>
+              <a href={contribution.url} target="_blank" rel="noopener noreferrer">{contribution.repo}</a>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   </section>
@@ -54,5 +66,45 @@ const health = await fetchPortfolioHealth();
 
   .badge-row {
     margin-top: var(--space-md);
+  }
+
+  .contributions {
+    margin-top: var(--space-2xl);
+  }
+
+  .contributions-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: var(--space-sm);
+  }
+
+  .contributions-description {
+    color: var(--color-text-muted);
+    max-width: 600px;
+    margin-bottom: var(--space-lg);
+  }
+
+  .contributions-list {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .contributions-list a {
+    display: inline-block;
+    padding: var(--space-sm) var(--space-md);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--color-text);
+    background: var(--color-bg-secondary);
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-btn);
+    text-decoration: none;
+  }
+
+  .contributions-list a:hover {
+    color: var(--color-accent);
   }
 </style>

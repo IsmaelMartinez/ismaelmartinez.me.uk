@@ -5,15 +5,30 @@
  * module owns DOM wiring, the turn state machine, and canvas rendering. It
  * expects the markup defined in src/pages/[lang]/fun/tanks.astro.
  */
-import { createGameLoop, loadScore, saveScore, createGameAudio, wireSoundButton } from '../engine';
-import { generateTerrain, surfaceYAt, carveCrater } from './terrain';
+import {
+  createGameLoop,
+  createStaticLayer,
+  loadScore,
+  saveScore,
+  initScoreboard,
+  setupHiDpiCanvas,
+  createGameAudio,
+  wireChannelButton,
+  createEffects,
+  shadeColor,
+  clamp
+} from '../engine';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, isSolidColumn, type ArenaType } from './terrain';
 import {
   launchProjectile,
   stepProjectile,
+  bounceOffSurface,
+  stepFall,
   explosionDamage,
+  matchScore,
   type Projectile
 } from './physics';
-import { chooseAiShot } from './ai';
+import { chooseAiShot, cpuDifficulty, cpuPickWeapon, type Difficulty } from './ai';
 import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster, type Ammo, type WeaponId } from './weapons';
 
 const WIDTH = 800;
@@ -24,11 +39,12 @@ const BARREL_LEN = 24;
 const EXPLOSION_TIME = 0.55;
 const DIRECT_HIT_RADIUS = 14;
 const MAX_WIND = 50;
+/** Speed a Skipper shell keeps after each ground bounce (0..1). */
+const BOUNCE_RESTITUTION = 0.62;
 const WINS_PER_MATCH = 3;
-const CPU_DIFFICULTY = 0.72;
 const CPU_THINK_TIME = 1.1;
-const FALL_GRAVITY = 600; // px/s² for tanks dropping into craters
 const SAFE_DROP = 30; // px a tank can fall without damage
+const SKY_MARGIN = 20; // backdrop overdraw so screen shake never shows an edge
 const VICTORIES_KEY = 'tanks-victories';
 
 interface Tank {
@@ -50,6 +66,8 @@ interface Tank {
 interface Shot {
   p: Projectile;
   weapon: WeaponId;
+  /** Ground bounces left before this shell detonates (Skipper only). */
+  bounces: number;
   canSplit: boolean;
   flightTime: number;
   trail: { x: number; y: number }[];
@@ -62,41 +80,29 @@ interface Explosion {
   radius: number;
 }
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  color: string;
-  size: number;
-}
-
-interface Floater {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  life: number;
-}
-
 type Phase = 'idle' | 'aim' | 'cpu-think' | 'fly' | 'round-over';
 
 export function initTanksGame(): void {
   const root = document.getElementById('tanks-root');
   const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
   if (!root || !canvasEl) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
   const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const startOverlay = el('start-overlay');
   const roundOverlay = el('round-overlay');
   const roundEmoji = el('round-emoji');
   const roundMessage = el('round-message');
+  const matchScoreEl = el('match-score');
   const nextRoundBtn = el('next-round-btn') as HTMLButtonElement;
   const playAgainBtn = el('play-again-btn') as HTMLButtonElement;
   const vsCpuBtn = el('vs-cpu-btn') as HTMLButtonElement;
@@ -112,6 +118,12 @@ export function initTanksGame(): void {
   const p2Wins = el('p2-wins');
   const victoriesEl = el('victories');
   const weaponButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.weapon-btn'));
+  const difficultyButtons = Array.from(
+    root.querySelectorAll<HTMLButtonElement>('.difficulty-btn')
+  );
+  const arenaButtons = Array.from(
+    root.querySelectorAll<HTMLButtonElement>('.arena-btn')
+  );
 
   const strings = {
     player1: root.dataset.tPlayer1 || 'Player 1',
@@ -120,23 +132,172 @@ export function initTanksGame(): void {
     winsRound: root.dataset.tWinsRound || 'wins the round!',
     winsMatch: root.dataset.tWinsMatch || 'wins the match!',
     draw: root.dataset.tDraw || 'Mutual destruction!',
-    wind: root.dataset.tWind || 'Wind'
+    wind: root.dataset.tWind || 'Wind',
+    matchScore: root.dataset.tMatchScore || 'Match score'
   };
 
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+  const stars = Array.from({ length: 60 }, () => ({
+    x: Math.random() * WIDTH,
+    y: Math.random() * HEIGHT * 0.55,
+    r: 0.5 + Math.random() * 1.2
+  }));
 
+  // The whole backdrop (sky, stars, moon, mountains) plus the terrain bakes
+  // into one static layer, rebuilt only when it actually changes — a DPR change
+  // or a crater reshaping the ground — instead of re-filling gradients and
+  // re-tessellating the terrain (~1,600 lineTo calls) every frame. The terrain
+  // is painted *onto* the opaque backdrop inside the layer, so blitting the
+  // finished opaque layer reproduces the old "backdrop blit + terrain draw"
+  // pixel-for-pixel (a transparent terrain-only layer would fringe the
+  // anti-aliased ground edge by a LSB and break the byte-identical bake). The
+  // SKY_MARGIN overdraw that keeps screen shake from exposing a bare edge is
+  // filled live on the rare shaking frames, so the layer stays board-aligned
+  // (see createStaticLayer). `ground` is declared before setupHiDpiCanvas so
+  // scene.rebuild can join it in onApply; paintTerrain guards the empty
+  // pre-round ground.
   let ground: number[] = [];
+  // Uncarveable columns for the current arena (the bunker pillar); empty
+  // everywhere else. Rolled together with `ground` so they never disagree.
+  let solid: boolean[] = [];
+  const scene = createStaticLayer(WIDTH, HEIGHT, paintScene);
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
+    onApply: scene.rebuild
+  });
+
+  function makeSky(target: CanvasRenderingContext2D): CanvasGradient {
+    const sky = target.createLinearGradient(0, 0, 0, HEIGHT);
+    sky.addColorStop(0, '#0a0a20');
+    sky.addColorStop(1, '#2b1a4e');
+    return sky;
+  }
+  // Used only to flood the shake margin, so it never shows a bare edge.
+  const skyFill = makeSky(ctx);
+
+  function paintBackdrop(target: CanvasRenderingContext2D) {
+    target.fillStyle = makeSky(target);
+    target.fillRect(0, 0, WIDTH, HEIGHT);
+
+    target.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    for (const star of stars) {
+      target.beginPath();
+      target.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+      target.fill();
+    }
+
+    // Moon with a soft halo, tucked toward the top-right of the battlefield.
+    const moonGlow = target.createRadialGradient(WIDTH - 110, 64, 4, WIDTH - 110, 64, 52);
+    moonGlow.addColorStop(0, 'rgba(226, 232, 255, 0.4)');
+    moonGlow.addColorStop(1, 'rgba(226, 232, 255, 0)');
+    target.fillStyle = moonGlow;
+    target.fillRect(WIDTH - 162, 12, 104, 104);
+    target.fillStyle = '#e8ecff';
+    target.beginPath();
+    target.arc(WIDTH - 110, 64, 16, 0, Math.PI * 2);
+    target.fill();
+    target.fillStyle = 'rgba(170, 180, 215, 0.5)';
+    target.beginPath();
+    target.arc(WIDTH - 105, 60, 3.5, 0, Math.PI * 2);
+    target.arc(WIDTH - 115, 69, 2.5, 0, Math.PI * 2);
+    target.fill();
+
+    // Two distant mountain silhouettes for parallax depth behind the terrain.
+    for (const [amp, base, tone, seed] of [
+      [46, 0.62, 'rgba(30, 24, 66, 0.9)', 1.7],
+      [30, 0.72, 'rgba(22, 18, 48, 0.95)', 4.3]
+    ] as const) {
+      target.fillStyle = tone;
+      target.beginPath();
+      target.moveTo(0, HEIGHT);
+      for (let x = 0; x <= WIDTH; x += 6) {
+        const y =
+          HEIGHT * base -
+          Math.sin(x * 0.006 + seed) * amp * 0.6 -
+          Math.sin(x * 0.017 + seed * 2.1) * amp * 0.4;
+        target.lineTo(x, y);
+      }
+      target.lineTo(WIDTH, HEIGHT);
+      target.closePath();
+      target.fill();
+    }
+  }
+
+  // Baked terrain: the dirt polygon + green surface line, identical to the old
+  // per-frame render. Repainted only when `ground` changes (crater / new round).
+  function paintTerrain(target: CanvasRenderingContext2D) {
+    if (!ground.length) return;
+    const dirt = target.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);
+    dirt.addColorStop(0, '#1e3a2f');
+    dirt.addColorStop(1, '#14241d');
+    target.fillStyle = dirt;
+    target.beginPath();
+    target.moveTo(0, HEIGHT);
+    for (let x = 0; x < WIDTH; x++) target.lineTo(x, ground[x]);
+    target.lineTo(WIDTH, HEIGHT);
+    target.closePath();
+    target.fill();
+
+    target.strokeStyle = '#34d399';
+    target.lineWidth = 2;
+    target.beginPath();
+    target.moveTo(0, ground[0]);
+    for (let x = 1; x < WIDTH; x++) target.lineTo(x, ground[x]);
+    target.stroke();
+
+    // Indestructible cover: overlay each contiguous run of solid columns in
+    // stone, so the bunker pillar reads as rock the crater can't touch rather
+    // than the carveable dirt around it.
+    if (solid.some(Boolean)) {
+      let x = 0;
+      while (x < WIDTH) {
+        if (!solid[x]) { x++; continue; }
+        let end = x;
+        let topY = ground[x];
+        while (end < WIDTH && solid[end]) { topY = Math.min(topY, ground[end]); end++; }
+        const stone = target.createLinearGradient(0, topY, 0, HEIGHT);
+        stone.addColorStop(0, '#6b7280');
+        stone.addColorStop(1, '#3b414b');
+        target.fillStyle = stone;
+        target.fillRect(x, topY, end - x, HEIGHT - topY);
+        target.strokeStyle = '#9aa3af';
+        target.lineWidth = 2;
+        target.beginPath();
+        target.moveTo(x, topY);
+        target.lineTo(end, topY);
+        target.stroke();
+        x = end;
+      }
+    }
+  }
+
+  // The baked scene: backdrop first, then the terrain painted over it, so the
+  // layer is fully opaque and blits to an exact copy of the old draw order.
+  function paintScene(target: CanvasRenderingContext2D) {
+    paintBackdrop(target);
+    paintTerrain(target);
+  }
+
   let tanks: Tank[] = [];
   let current = 0;
   let wind = 0;
   let mode: 'cpu' | '2p' = 'cpu';
+  // Selected difficulty tier (start-screen picker); only matters vs the CPU.
+  let difficulty: Difficulty = 'gunner';
+  // Selected battlefield silhouette (start-screen picker).
+  let arena: ArenaType = 'hills';
+  // Rounds decided so far this match, feeding the per-round accuracy ramp.
+  let roundsDecided = 0;
   let wins = [0, 0];
   let phase: Phase = 'idle';
   let shots: Shot[] = [];
   let explosions: Explosion[] = [];
-  let particles: Particle[] = [];
-  let floaters: Floater[] = [];
+  const fx = createEffects({
+    gravityScale: 420,
+    cullBelowY: HEIGHT + 10,
+    floaterSize: 13,
+    floaterRise: 22,
+    floaterLife: 1
+  });
+  let smoke: { x: number; y: number; r: number; vx: number; life: number; maxLife: number }[] = [];
   let muzzleFlash: { x: number; y: number; t: number } | null = null;
   let shake = 0;
   let cpuTimer = 0;
@@ -144,29 +305,70 @@ export function initTanksGame(): void {
   let victories = loadScore(VICTORIES_KEY);
   victoriesEl.textContent = victories.toString();
 
-  // Tense, martial battle march in A minor.
+  // High-score table for matches won against the CPU: round margin plus the
+  // armour the player's tank finished on, so a clean sweep outranks a scrape.
+  const board = initScoreboard(document.getElementById('highscores'));
+
+  // Jaunty Worms/Scorched-Earth artillery march in C major: a brassy bouncing
+  // lead over an oom-pah root/fifth bass. Playful and competitive, not grim.
   const audio = createGameAudio({
     tempo: 116,
-    wave: 'sawtooth',
     volume: 0.1,
-    melody: [
-      { freq: 220.0, beats: 0.75 },
-      { freq: 220.0, beats: 0.25 },
-      { freq: 261.63, beats: 0.5 },
-      { freq: 329.63, beats: 0.5 },
-      { freq: 293.66, beats: 0.75 },
-      { freq: 220.0, beats: 0.25 },
-      { freq: 246.94, beats: 0.5 },
-      { freq: 196.0, beats: 0.5 }
+    echo: { time: 0.16, feedback: 0.15, mix: 0.12 },
+    tracks: [
+      {
+        // LEAD: brassy bouncing march, with a cheeky A#4 chromatic lean.
+        wave: 'sawtooth',
+        detune: 8,
+        volume: 0.95,
+        envelope: 'pluck',
+        melody: [
+          { freq: 392.0, beats: 0.5 },   // G4
+          { freq: 392.0, beats: 0.25 },  // G4
+          { freq: 392.0, beats: 0.25 },  // G4
+          { freq: 523.25, beats: 0.75 }, // C5
+          { freq: 493.88, beats: 0.25 }, // B4
+          { freq: 523.25, beats: 0.5 },  // C5
+          { freq: 587.33, beats: 0.5 },  // D5
+          { freq: 659.25, beats: 0.75 }, // E5
+          { freq: 587.33, beats: 0.25 }, // D5
+          { freq: 523.25, beats: 0.5 },  // C5
+          { freq: 493.88, beats: 0.5 },  // B4
+          { freq: 466.16, beats: 0.25 }, // A#4 (chromatic lean)
+          { freq: 493.88, beats: 0.25 }, // B4
+          { freq: 523.25, beats: 0.5 },  // C5
+          { freq: 392.0, beats: 1.0 },   // G4
+          { freq: 0, beats: 1.0 }        // rest
+        ]
+      },
+      {
+        // BASS: bouncy oom-pah, root/fifth on every half-beat.
+        wave: 'square',
+        volume: 0.78,
+        envelope: 'pluck',
+        melody: [
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 146.83, beats: 0.5 }, // D3
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 },   // G2
+          { freq: 65.41, beats: 0.5 },  // C2
+          { freq: 98.0, beats: 0.5 }    // G2
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
-
-  const stars = Array.from({ length: 60 }, () => ({
-    x: Math.random() * WIDTH,
-    y: Math.random() * HEIGHT * 0.55,
-    r: 0.5 + Math.random() * 1.2
-  }));
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const playerName = (i: number) =>
     i === 1 && mode === 'cpu' ? strings.cpu : i === 1 ? strings.player2 : strings.player1;
@@ -206,13 +408,7 @@ export function initTanksGame(): void {
     if (amount <= 0 || tank.hp <= 0) return;
     tank.hp = Math.max(0, tank.hp - amount);
     tank.flash = 0.35;
-    floaters.push({
-      x: tank.x,
-      y: tank.y - TANK_H - 30,
-      text: `-${amount}`,
-      color: '#f87171',
-      life: 1
-    });
+    fx.floater(tank.x, tank.y - TANK_H - 30, `-${amount}`, '#f87171');
   }
 
   function newWind() {
@@ -235,15 +431,22 @@ export function initTanksGame(): void {
     };
   }
 
+  // Roll a fresh heightmap and its uncarveable mask for the current arena.
+  function rollTerrain() {
+    ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
+    solid = arenaSolid(arena, WIDTH);
+  }
+
   function newRound() {
-    ground = generateTerrain(WIDTH, HEIGHT);
+    rollTerrain();
+    scene.rebuild();
     const p1x = 70 + Math.random() * 90;
     const p2x = WIDTH - 70 - Math.random() * 90;
     tanks = [makeTank(p1x, 60, '#38bdf8'), makeTank(p2x, 120, '#f87171')];
     shots = [];
     explosions = [];
-    particles = [];
-    floaters = [];
+    fx.clear();
+    smoke = [];
     muzzleFlash = null;
     current = Math.random() < 0.5 ? 0 : 1;
     newWind();
@@ -266,6 +469,7 @@ export function initTanksGame(): void {
   function startMatch(selectedMode: 'cpu' | '2p') {
     mode = selectedMode;
     wins = [0, 0];
+    roundsDecided = 0;
     p1Label.textContent = strings.player1;
     p2Label.textContent = playerName(1);
     p1Wins.textContent = '0';
@@ -284,12 +488,6 @@ export function initTanksGame(): void {
     };
   }
 
-  function cpuPickWeapon(tank: Tank): WeaponId {
-    if (tank.ammo.heavy > 0 && Math.random() < 0.4) return 'heavy';
-    if (tank.ammo.mirv > 0 && Math.random() < 0.3) return 'mirv';
-    return 'missile';
-  }
-
   function fire() {
     const tank = tanks[current];
     const weapon = WEAPONS[tank.weapon];
@@ -300,6 +498,7 @@ export function initTanksGame(): void {
       {
         p: launchProjectile(tip.x, tip.y, tank.angle, tank.power),
         weapon: tank.weapon,
+        bounces: weapon.bounces ?? 0,
         canSplit: weapon.cluster > 1,
         flightTime: 0,
         trail: []
@@ -312,11 +511,14 @@ export function initTanksGame(): void {
   }
 
   function spawnDirt(x: number, y: number, radius: number) {
+    // A directional wind-blown cone, not the shared radial burst — the
+    // spawn math stays local and hands finished particles to emit().
+    // emit() draws squares 2× its size, so halve the old side length.
     const count = Math.round(radius / 3);
     for (let i = 0; i < count; i++) {
       const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.8;
       const speed = 60 + Math.random() * radius * 3.2;
-      particles.push({
+      fx.emit({
         x: x + (Math.random() - 0.5) * radius * 0.8,
         y,
         vx: Math.cos(angle) * speed + wind * 0.3,
@@ -324,7 +526,8 @@ export function initTanksGame(): void {
         life: 0.5 + Math.random() * 0.5,
         maxLife: 1,
         color: Math.random() < 0.5 ? '#34d399' : '#1e3a2f',
-        size: 1.5 + Math.random() * 2
+        size: (1.5 + Math.random() * 2) / 2,
+        gravity: 1
       });
     }
   }
@@ -333,7 +536,8 @@ export function initTanksGame(): void {
     const weapon = WEAPONS[weaponId];
     explosions.push({ x, y, t: 0, radius: weapon.radius });
     audio.playSfx('explosion');
-    carveCrater(ground, HEIGHT, x, y, weapon.radius);
+    carveCrater(ground, HEIGHT, x, y, weapon.radius, solid);
+    scene.rebuild(); // re-bake the reshaped terrain
     spawnDirt(x, y, weapon.radius);
     shake = Math.min(0.6, shake + weapon.radius / 160);
     for (const tank of tanks) {
@@ -357,6 +561,8 @@ export function initTanksGame(): void {
 
   function finishRound(winner: number | null) {
     phase = 'round-over';
+    // A decided round (win or mutual destruction) tightens the CPU next round.
+    roundsDecided++;
     syncControls();
     if (winner !== null) {
       wins[winner]++;
@@ -367,7 +573,8 @@ export function initTanksGame(): void {
       audio.playSfx('gameover');
       audio.stop();
     }
-    if (matchOver && winner === 0 && mode === 'cpu') {
+    const playerWonMatch = matchOver && winner === 0 && mode === 'cpu';
+    if (playerWonMatch) {
       victories++;
       saveScore(VICTORIES_KEY, victories);
       victoriesEl.textContent = victories.toString();
@@ -379,29 +586,22 @@ export function initTanksGame(): void {
         : `${playerName(winner)} ${matchOver ? strings.winsMatch : strings.winsRound}`;
     nextRoundBtn.style.display = matchOver ? 'none' : 'inline-block';
     playAgainBtn.style.display = matchOver ? 'inline-block' : 'none';
+    // Winning the match surfaces the number that faces the table — round
+    // margin × 100 plus surviving armour — so the score isn't a mystery.
+    const finalScore = matchScore(wins[0], wins[1], tanks[0].hp);
+    matchScoreEl.textContent = `🏅 ${strings.matchScore}: ${finalScore}`;
+    matchScoreEl.style.display = playerWonMatch ? 'block' : 'none';
     roundOverlay.style.display = 'flex';
+    // After the overlay is visible, so the initials input can take focus.
+    if (playerWonMatch) board.show(finalScore);
   }
 
   /** Tanks above the (possibly freshly cratered) surface fall and take damage. */
   function updateFalls(dt: number) {
     for (const tank of tanks) {
-      const surface = surfaceYAt(ground, tank.x);
-      if (tank.y < surface - 0.5) {
-        if (tank.fallFrom === null) {
-          tank.fallFrom = tank.y;
-          tank.fallVy = 0;
-        }
-        tank.fallVy += FALL_GRAVITY * dt;
-        tank.y = Math.min(surface, tank.y + tank.fallVy * dt);
-        if (tank.y >= surface) {
-          const drop = surface - tank.fallFrom;
-          if (drop > SAFE_DROP) {
-            applyDamage(tank, Math.min(30, Math.round((drop - SAFE_DROP) * 0.5)));
-          }
-          tank.fallFrom = null;
-        }
-      } else if (tank.fallFrom === null && tank.y !== surface) {
-        tank.y = surface;
+      const drop = stepFall(tank, surfaceYAt(ground, tank.x), dt);
+      if (drop !== null && drop > SAFE_DROP) {
+        applyDamage(tank, Math.min(30, Math.round((drop - SAFE_DROP) * 0.5)));
       }
     }
   }
@@ -420,6 +620,7 @@ export function initTanksGame(): void {
         ...parts.map(part => ({
           p: part,
           weapon: shot.weapon,
+          bounces: 0,
           canSplit: false,
           flightTime: shot.flightTime,
           trail: [] as { x: number; y: number }[]
@@ -441,6 +642,15 @@ export function initTanksGame(): void {
       return false;
     }
     if (p.x >= 0 && p.x < WIDTH && p.y >= surfaceYAt(ground, p.x)) {
+      if (shot.bounces > 0 && !isSolidColumn(solid, p.x, WIDTH)) {
+        // Skip off the dirt: reflect upward, bleed speed, keep flying. A solid
+        // column (the bunker pillar) is not skippable, so the shot detonates
+        // against it instead — that is what makes the cover matter.
+        shot.bounces--;
+        bounceOffSurface(p, surfaceYAt(ground, p.x), BOUNCE_RESTITUTION);
+        audio.playSfx('blip');
+        return true;
+      }
       impactAt(p.x, p.y, shot.weapon);
       return false;
     }
@@ -455,17 +665,26 @@ export function initTanksGame(): void {
     }
     for (const tank of tanks) tank.flash = Math.max(0, tank.flash - dt);
 
-    particles = particles.filter(p => {
-      p.life -= dt;
-      p.vy += 420 * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      return p.life > 0 && p.y < HEIGHT + 10;
-    });
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 22 * dt;
-      return f.life > 0;
+    fx.update(dt);
+    // Battle damage: a badly mauled tank trails smoke until the round ends.
+    for (const tank of tanks) {
+      if (tank.hp > 0 && tank.hp <= 35 && Math.random() < dt * 7) {
+        smoke.push({
+          x: tank.x + (Math.random() - 0.5) * 10,
+          y: tank.y - TANK_H - 4,
+          r: 1.5 + Math.random() * 1.5,
+          vx: 4 + Math.random() * 8,
+          life: 1.1 + Math.random() * 0.6,
+          maxLife: 1.7
+        });
+      }
+    }
+    smoke = smoke.filter(s => {
+      s.life -= dt;
+      s.x += s.vx * dt;
+      s.y -= 20 * dt;
+      s.r += 3.5 * dt;
+      return s.life > 0;
     });
     explosions = explosions.filter(e => (e.t += dt) < EXPLOSION_TIME);
 
@@ -474,18 +693,19 @@ export function initTanksGame(): void {
       if (cpuTimer <= 0) {
         cpuShotPending = false;
         const cpu = tanks[1];
+        const foe = tanks[0];
         const shot = chooseAiShot(
           ground,
           WIDTH,
           HEIGHT,
           { x: cpu.x, y: cpu.y - TANK_H },
-          { x: tanks[0].x, y: tanks[0].y },
+          { x: foe.x, y: foe.y },
           wind,
-          CPU_DIFFICULTY
+          cpuDifficulty(difficulty, roundsDecided)
         );
         cpu.angle = shot.angle;
         cpu.power = shot.power;
-        cpu.weapon = cpuPickWeapon(cpu);
+        cpu.weapon = cpuPickWeapon(cpu.ammo, Math.abs(foe.x - cpu.x), foe.hp);
         syncControls();
         fire();
       }
@@ -513,24 +733,86 @@ export function initTanksGame(): void {
     ctx.save();
     ctx.translate(tank.x, tank.y);
 
-    if (!destroyed) {
-      const rad = (tank.angle * Math.PI) / 180;
-      ctx.strokeStyle = flashing ? '#fff' : tank.color;
-      ctx.lineWidth = 4;
+    // Value ramp off the team colour: a dark grounding edge and a lit top rim
+    // over the base fill (the drawBlock recipe), so the hull reads as armour.
+    const body = destroyed ? '#44403c' : flashing ? '#fff' : tank.color;
+    const dark = destroyed ? '#292524' : shadeColor(body, 0.45);
+    const lit = flashing ? '#fff' : shadeColor(body, 1.4);
+
+    // --- Tread band: a dark rounded track with road wheels showing through
+    // and a heftier drive sprocket at each end. ---
+    ctx.fillStyle = destroyed ? '#1c1917' : '#1f2937';
+    ctx.beginPath();
+    ctx.roundRect(-TANK_W / 2, -6, TANK_W, 6, 3);
+    ctx.fill();
+    ctx.fillStyle = destroyed ? '#0c0a09' : shadeColor(body, 0.5);
+    const wheels = 5;
+    for (let i = 0; i < wheels; i++) {
+      const wx = -TANK_W / 2 + 5 + (i * (TANK_W - 10)) / (wheels - 1);
+      const r = i === 0 || i === wheels - 1 ? 2.6 : 1.7;
       ctx.beginPath();
-      ctx.moveTo(0, -TANK_H);
-      ctx.lineTo(Math.cos(rad) * BARREL_LEN, -TANK_H - Math.sin(rad) * BARREL_LEN);
-      ctx.stroke();
+      ctx.arc(wx, -3, r, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    ctx.fillStyle = destroyed ? '#44403c' : flashing ? '#fff' : tank.color;
+    // --- Barrel (drawn before the turret so its root is capped) ---
+    if (!destroyed) {
+      const rad = (tank.angle * Math.PI) / 180;
+      const tipX = Math.cos(rad) * BARREL_LEN;
+      const tipY = -TANK_H - Math.sin(rad) * BARREL_LEN;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = flashing ? '#fff' : dark;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(0, -TANK_H);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+      ctx.strokeStyle = body;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -TANK_H);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      // Muzzle lip
+      ctx.fillStyle = flashing ? '#fff' : dark;
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- Hull: body + lit top rim + dark grounding outline ---
+    ctx.fillStyle = body;
     ctx.beginPath();
-    ctx.roundRect(-TANK_W / 2, -TANK_H, TANK_W, TANK_H, 5);
+    ctx.roundRect(-TANK_W / 2 + 1, -TANK_H, TANK_W - 2, TANK_H - 4, 4);
     ctx.fill();
-    ctx.fillStyle = destroyed ? '#292524' : 'rgba(0, 0, 0, 0.35)';
+    ctx.fillStyle = lit;
     ctx.beginPath();
-    ctx.roundRect(-TANK_W / 2, -5, TANK_W, 5, 2);
+    ctx.roundRect(-TANK_W / 2 + 3, -TANK_H + 1, TANK_W - 6, 2.5, 1.5);
     ctx.fill();
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(-TANK_W / 2 + 1, -TANK_H, TANK_W - 2, TANK_H - 4, 4);
+    ctx.stroke();
+
+    // --- Turret: a rounded mound the barrel springs from, seated on the hull
+    // top with its own rim + edge. ---
+    if (!destroyed) {
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.roundRect(-7, -TANK_H - 4, 14, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = lit;
+      ctx.beginPath();
+      ctx.roundRect(-5, -TANK_H - 3, 10, 1.8, 0.9);
+      ctx.fill();
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-7, -TANK_H - 4, 14, 7, 3.5);
+      ctx.stroke();
+    }
 
     // HP bar + name
     const barW = 44;
@@ -552,44 +834,115 @@ export function initTanksGame(): void {
     ctx.restore();
   }
 
+  /** A drawn shell per weapon, oriented to its velocity (replaces the emoji /
+   * plain-circle projectile): the missile a finned nose-cone, the heavy a dark
+   * finned bomb, the MIRV a segmented cluster shell. */
+  function drawShell(shot: Shot) {
+    const p = shot.p;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Math.atan2(p.vy, p.vx));
+    if (shot.weapon === 'heavy') {
+      ctx.fillStyle = '#3f3f46';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 6.5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#52525b'; // tail fins
+      ctx.beginPath();
+      ctx.moveTo(-5, -1);
+      ctx.lineTo(-8.5, -4);
+      ctx.lineTo(-6, 0);
+      ctx.lineTo(-8.5, 4);
+      ctx.lineTo(-5, 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fbbf24'; // hot nose cap
+      ctx.beginPath();
+      ctx.arc(4.6, 0, 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (shot.weapon === 'mirv') {
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 5.5, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(120, 53, 15, 0.6)'; // cluster banding bumps
+      for (const sx of [-2.2, 0, 2.2]) {
+        ctx.beginPath();
+        ctx.arc(sx, 0, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fef08a'; // pointed nose
+      ctx.beginPath();
+      ctx.moveTo(4.5, -2.2);
+      ctx.lineTo(8, 0);
+      ctx.lineTo(4.5, 2.2);
+      ctx.closePath();
+      ctx.fill();
+    } else if (shot.weapon === 'bounce') {
+      // Skipper: a round rubberised ball that skips off the ground.
+      ctx.fillStyle = '#65a30d';
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#bef264'; // highlight
+      ctx.beginPath();
+      ctx.arc(-1.5, -1.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#365314'; // seam
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(2.5, 0, 4.5, 2.3, 4, false);
+      ctx.stroke();
+    } else {
+      // Missile: a finned nose-cone shell.
+      ctx.fillStyle = '#eab308'; // tail fins
+      ctx.beginPath();
+      ctx.moveTo(-4, -2.5);
+      ctx.lineTo(-6.5, -4);
+      ctx.lineTo(-4, -1);
+      ctx.moveTo(-4, 2.5);
+      ctx.lineTo(-6.5, 4);
+      ctx.lineTo(-4, 1);
+      ctx.fill();
+      ctx.fillStyle = '#fde047'; // body
+      ctx.beginPath();
+      ctx.moveTo(5.5, 0);
+      ctx.lineTo(1, -3);
+      ctx.lineTo(-4, -2.5);
+      ctx.lineTo(-4, 2.5);
+      ctx.lineTo(1, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#f87171'; // nose tip
+      ctx.beginPath();
+      ctx.moveTo(5.5, 0);
+      ctx.lineTo(2, -1.6);
+      ctx.lineTo(2, 1.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function render() {
     ctx.save();
     if (shake > 0) {
-      ctx.translate((Math.random() - 0.5) * shake * 18, (Math.random() - 0.5) * shake * 18);
+      // Whole-pixel jitter keeps the backdrop blit on the device-pixel grid
+      // (a fractional offset would bilinear-blur the baked layer), and only
+      // the exposed margin strips need the sky fill — the blit repaints the
+      // whole interior anyway.
+      ctx.translate(
+        Math.round((Math.random() - 0.5) * shake * 18),
+        Math.round((Math.random() - 0.5) * shake * 18)
+      );
+      ctx.fillStyle = skyFill;
+      ctx.fillRect(-SKY_MARGIN, -SKY_MARGIN, WIDTH + SKY_MARGIN * 2, SKY_MARGIN);
+      ctx.fillRect(-SKY_MARGIN, HEIGHT, WIDTH + SKY_MARGIN * 2, SKY_MARGIN);
+      ctx.fillRect(-SKY_MARGIN, 0, SKY_MARGIN, HEIGHT);
+      ctx.fillRect(WIDTH, 0, SKY_MARGIN, HEIGHT);
     }
 
-    const sky = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-    sky.addColorStop(0, '#0a0a20');
-    sky.addColorStop(1, '#2b1a4e');
-    ctx.fillStyle = sky;
-    ctx.fillRect(-20, -20, WIDTH + 40, HEIGHT + 40);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    for (const star of stars) {
-      ctx.beginPath();
-      ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    if (ground.length) {
-      const dirt = ctx.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);
-      dirt.addColorStop(0, '#1e3a2f');
-      dirt.addColorStop(1, '#14241d');
-      ctx.fillStyle = dirt;
-      ctx.beginPath();
-      ctx.moveTo(0, HEIGHT);
-      for (let x = 0; x < WIDTH; x++) ctx.lineTo(x, ground[x]);
-      ctx.lineTo(WIDTH, HEIGHT);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = '#34d399';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, ground[0]);
-      for (let x = 1; x < WIDTH; x++) ctx.lineTo(x, ground[x]);
-      ctx.stroke();
-    }
+    scene.draw(ctx);
 
     // Wind indicator
     if (phase !== 'idle') {
@@ -633,18 +986,19 @@ export function initTanksGame(): void {
         ctx.arc(shot.trail[i].x, shot.trail[i].y, 2, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = '#fde047';
-      ctx.beginPath();
-      ctx.arc(shot.p.x, shot.p.y, shot.weapon === 'heavy' ? 5.5 : 4, 0, Math.PI * 2);
-      ctx.fill();
+      drawShell(shot);
     }
 
-    for (const p of particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    for (const s of smoke) {
+      ctx.globalAlpha = Math.max(0, (s.life / s.maxLife) * 0.4);
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
+
+    fx.drawParticles(ctx);
 
     for (const explosion of explosions) {
       const progress = explosion.t / EXPLOSION_TIME;
@@ -662,30 +1016,13 @@ export function initTanksGame(): void {
       ctx.fill();
     }
 
-    ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.drawFloaters(ctx);
 
     ctx.restore();
   }
 
   // --- Input wiring ---
-
-  const clamp = (value: number, min: number, max: number) =>
-    Math.min(max, Math.max(min, value));
-
-  function canvasPoint(e: PointerEvent): { x: number; y: number } {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) * (WIDTH / rect.width),
-      y: (e.clientY - rect.top) * (HEIGHT / rect.height)
-    };
-  }
 
   // Drag anywhere on the battlefield to aim: the vector from the turret to
   // the pointer sets angle and power. Touch-friendly; sliders fine-tune.
@@ -694,7 +1031,7 @@ export function initTanksGame(): void {
   function aimFromPointer(e: PointerEvent) {
     const tank = tanks[current];
     if (!tank) return;
-    const p = canvasPoint(e);
+    const p = hiDpi.toLogical(e);
     const dx = p.x - tank.x;
     const dy = tank.y - TANK_H - p.y;
     const dist = Math.hypot(dx, dy);
@@ -754,11 +1091,11 @@ export function initTanksGame(): void {
       target.isContentEditable ||
       (target instanceof HTMLInputElement && target.type !== 'range'));
 
-  document.addEventListener('keydown', e => {
+  const onKeydown = (e: KeyboardEvent) => {
     if (!isHumanTurn() || isTextEntry(e.target)) return;
     if (gameKeys.has(e.key)) e.preventDefault();
     const tank = tanks[current];
-    const weaponIdx = ['1', '2', '3'].indexOf(e.key);
+    const weaponIdx = ['1', '2', '3', '4'].indexOf(e.key);
     if (weaponIdx >= 0) {
       const id = WEAPON_IDS[weaponIdx];
       if (tank.ammo[id] > 0) {
@@ -787,6 +1124,43 @@ export function initTanksGame(): void {
         return;
     }
     syncControls();
+  };
+  document.addEventListener('keydown', onKeydown);
+  // Document-level listeners outlive a ClientRouter swap; each wiring retires
+  // its own handler so re-inits don't stack keyboard handlers forever.
+  document.addEventListener(
+    'astro:before-swap',
+    () => document.removeEventListener('keydown', onKeydown),
+    { once: true }
+  );
+
+  const isDifficulty = (v: string | undefined): v is Difficulty =>
+    v === 'rookie' || v === 'gunner' || v === 'veteran';
+  difficultyButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const picked = btn.dataset.difficulty;
+      if (isDifficulty(picked)) difficulty = picked;
+      for (const other of difficultyButtons) {
+        other.classList.toggle('active', other === btn);
+        other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
+      }
+    });
+  });
+
+  const isArena = (v: string | undefined): v is ArenaType =>
+    v === 'hills' || v === 'canyon' || v === 'mesa' || v === 'ridges' || v === 'bunker';
+  arenaButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const picked = btn.dataset.arena;
+      if (isArena(picked)) arena = picked;
+      for (const other of arenaButtons) {
+        other.classList.toggle('active', other === btn);
+        other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
+      }
+      // Repaint the idle backdrop so the picked arena previews immediately.
+      rollTerrain();
+      scene.rebuild();
+    });
   });
 
   vsCpuBtn.addEventListener('click', () => startMatch('cpu'));
@@ -797,12 +1171,14 @@ export function initTanksGame(): void {
   });
   playAgainBtn.addEventListener('click', () => {
     roundOverlay.style.display = 'none';
+    board.hide();
     startOverlay.style.display = 'flex';
     phase = 'idle';
   });
 
   // Idle backdrop so the canvas isn't empty behind the start overlay
-  ground = generateTerrain(WIDTH, HEIGHT);
+  rollTerrain();
+  scene.rebuild();
   syncControls();
   createGameLoop(update, render).start();
 }

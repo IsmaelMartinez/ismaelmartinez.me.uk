@@ -1,5 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -11,21 +13,19 @@ const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 ---
 
-<Layout title="Snake Game" lang={lang}>
+<Layout title={t('fun.snake.title')} lang={lang}>
   <section class="snake-section">
     <div class="container">
       <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
 
-      <div class="game-container">
+      <div
+        id="snake-root"
+        class="game-container"
+        data-t-arena-advance={t('fun.snake.arenaAdvance')}
+      >
         <div class="game-header">
           <h1><span class="snake-emoji">🐍</span> {t('fun.snake.title')}</h1>
-          <button
-            id="sound-btn"
-            class="btn sound-btn"
-            aria-label={t('fun.arcade.soundOn')}
-            data-sound-on={t('fun.arcade.soundOn')}
-            data-sound-off={t('fun.arcade.soundOff')}
-          >🔊</button>
+          <SoundToggles lang={lang} />
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.snake.score')}</span>
@@ -34,6 +34,10 @@ const t = useTranslations(lang);
             <div class="score-item">
               <span class="score-label">{t('fun.snake.highScore')}</span>
               <span id="high-score" class="score-value">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.snake.arena')}</span>
+              <span id="arena" class="score-value">1/5</span>
             </div>
           </div>
         </div>
@@ -52,6 +56,7 @@ const t = useTranslations(lang);
               <span class="game-over-emoji">💀</span>
               <h2>{t('fun.snake.gameOver')}</h2>
               <p class="final-score">{t('fun.snake.score')}: <span id="final-score">0</span></p>
+              <HighScoreTable gameId="snake" lang={lang} accent="#22c55e" />
               <button id="restart-btn" class="btn btn-primary btn-large">{t('fun.snake.playAgain')}</button>
             </div>
           </div>
@@ -71,8 +76,12 @@ const t = useTranslations(lang);
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initSnakeGame no-ops on pages without a fresh game root.
   import { initSnakeGame } from '../../../games/snake';
   initSnakeGame();
+  document.addEventListener('astro:after-swap', initSnakeGame);
 </script>
 
 <style>
@@ -168,14 +177,17 @@ const t = useTranslations(lang);
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
   }
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
   }
 

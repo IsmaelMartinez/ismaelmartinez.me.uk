@@ -5,10 +5,21 @@
  * loop, and canvas rendering. It expects the markup defined in
  * src/pages/[lang]/fun/snake.astro.
  */
-import { createGameLoop, loadScore, recordHighScore, createGameAudio, wireSoundButton } from '../engine';
+import {
+  createGameLoop,
+  createStaticLayer,
+  initScoreboard,
+  setupHiDpiCanvas,
+  createGameAudio,
+  wireChannelButton,
+  createEffects,
+  hash01,
+  shadeColor
+} from '../engine';
 import {
   COLS,
   ROWS,
+  ARENA_WALLS,
   BONUS_TICKS,
   BONUS_POINTS,
   FOOD_POINTS,
@@ -23,8 +34,9 @@ import {
 const CELL = 20;
 const WIDTH = COLS * CELL;
 const HEIGHT = ROWS * CELL;
-const HIGH_SCORE_KEY = 'snake-high-score';
 const DEATH_DELAY = 0.9; // seconds between dying and the game-over overlay
+/** Mossy stone for the arena walls, so they belong in the garden. */
+const WALL_BASE = '#2f4f3f';
 
 const DIRECTIONS: Record<string, Vec> = {
   up: { x: 0, y: -1 },
@@ -48,34 +60,25 @@ const KEY_DIRECTIONS: Record<string, Vec> = {
   D: DIRECTIONS.right
 };
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  color: string;
-}
-
-interface Floater {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  life: number;
-}
-
 type Phase = 'idle' | 'play' | 'dying' | 'over';
 
 const px = (cell: number) => cell * CELL + CELL / 2;
 
 export function initSnakeGame(): void {
+  // The root check keeps this init from grabbing another arcade page's
+  // #game-canvas when the after-swap listener fires on a non-Snake page.
+  const root = document.getElementById('snake-root');
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!canvas) return;
+  if (!root || !canvas) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const overlay = el('game-overlay');
@@ -84,61 +87,114 @@ export function initSnakeGame(): void {
   const restartBtn = el('restart-btn');
   const scoreEl = el('score');
   const highScoreEl = el('high-score');
+  const arenaEl = el('arena');
   const finalScoreEl = el('final-score');
 
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+  const arenaAdvanceText = root.dataset.tArenaAdvance || 'The walls close in!';
 
+  // Declared before the board layer: `setupHiDpiCanvas` paints the bake
+  // immediately, and `paintBoard` reads the standing walls off the state.
   let state: SnakeState = createSnakeState();
   let prevSnake: Vec[] = state.snake.map(s => ({ ...s }));
+
+  // The board (base fill, checkerboard, vignette, standing walls) only changes
+  // when the arena ladder claims a cell, so it's baked and rebuilt on those
+  // steps instead of re-filling the checker pattern and a full-canvas radial
+  // gradient every frame.
+  const boardLayer = createStaticLayer(WIDTH, HEIGHT, paintBoard);
+  setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, { onApply: boardLayer.rebuild });
+
   let phase: Phase = 'idle';
   let paused = false;
   let moveTimer = 0;
   let deathTimer = 0;
   let clock = 0;
   let shake = 0;
-  let particles: Particle[] = [];
-  let floaters: Floater[] = [];
-  let highScore = loadScore(HIGH_SCORE_KEY);
+  const fx = createEffects({
+    floaterSize: 13,
+    floaterRise: 28,
+    floaterLife: 0.9
+  });
 
-  highScoreEl.textContent = highScore.toString();
+  const syncHighScore = () => {
+    highScoreEl.textContent = board.best().toString();
+  };
+  const board = initScoreboard(document.getElementById('highscores'), {
+    onSave: syncHighScore
+  });
+  syncHighScore();
 
-  // Upbeat, slithery chiptune loop in C major.
+  // Lean, Nokia-era chiptune loop in C major: a fast square bleep lead over a
+  // sparse triangle bass ticking the chord roots. Two voices, no pad, no echo.
   const audio = createGameAudio({
-    tempo: 132,
-    wave: 'square',
-    melody: [
-      { freq: 523.25, beats: 0.5 },
-      { freq: 659.25, beats: 0.5 },
-      { freq: 783.99, beats: 0.5 },
-      { freq: 659.25, beats: 0.5 },
-      { freq: 587.33, beats: 0.5 },
-      { freq: 698.46, beats: 0.5 },
-      { freq: 880.0, beats: 0.5 },
-      { freq: 0, beats: 0.5 }
+    tempo: 134,
+    volume: 0.14,
+    tracks: [
+      {
+        // Bright arpeggio-driven lead — a catchy 16-note phrase over two bars.
+        wave: 'square',
+        melody: [
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 783.99, beats: 0.5 }, // G5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 440.0, beats: 0.5 }, // A4
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 493.88, beats: 0.5 }, // B4
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 783.99, beats: 0.5 }, // G5
+          { freq: 587.33, beats: 0.5 }, // D5
+          { freq: 523.25, beats: 0.5 }, // C5
+          { freq: 659.25, beats: 0.5 }, // E5
+          { freq: 392.0, beats: 0.5 }, // G4
+          { freq: 0, beats: 0.5 } // rest
+        ]
+      },
+      {
+        // Sparse bass: one chord root every two beats (C, Am, G, C).
+        wave: 'triangle',
+        volume: 0.9,
+        melody: [
+          { freq: 130.81, beats: 2 }, // C3
+          { freq: 110.0, beats: 2 }, // A2
+          { freq: 98.0, beats: 2 }, // G2
+          { freq: 130.81, beats: 2 } // C3
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   function burst(x: number, y: number, color: string, count: number) {
+    // Snake's pops predate the shared radial burst: uniform 40–150 px/s
+    // speeds, jittered lifetimes, drag instead of gravity, round dots —
+    // the spawn math stays local and hands finished particles to emit().
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 40 + Math.random() * 110;
-      particles.push({
+      fx.emit({
         x,
         y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 0.45 + Math.random() * 0.3,
         maxLife: 0.75,
-        color
+        color,
+        size: 2.5,
+        drag: 2.5,
+        shape: 'circle'
       });
     }
   }
 
-  function addFloater(x: number, y: number, text: string, color: string) {
-    floaters.push({ x, y, text, color, life: 0.9 });
-  }
+  const addFloater = fx.floater;
+
+  const syncArena = () => {
+    arenaEl.textContent = `${state.arena + 1}/${ARENA_WALLS.length}`;
+  };
 
   function startGame() {
     state = createSnakeState();
@@ -146,11 +202,18 @@ export function initSnakeGame(): void {
     phase = 'play';
     paused = false;
     moveTimer = 0;
-    particles = [];
-    floaters = [];
+    fx.clear();
     scoreEl.textContent = '0';
+    syncArena();
+    // A new run opens on the empty board, so the bake has to drop the walls
+    // the last run finished behind.
+    boardLayer.rebuild();
     overlay.style.display = 'none';
     gameOverOverlay.style.display = 'none';
+    board.hide();
+    // Snake ignores bank()'s newRecord (no record toast here), but the
+    // per-run baseline still has to reset for its stash gate to work.
+    board.beginRun();
     audio.start();
   }
 
@@ -162,15 +225,24 @@ export function initSnakeGame(): void {
     burst(px(head.x), px(head.y), '#f87171', 26);
     audio.playSfx('gameover');
     audio.stop();
-    highScore = recordHighScore(HIGH_SCORE_KEY, state.score);
-    highScoreEl.textContent = highScore.toString();
   }
 
   function advance() {
     prevSnake = state.snake.map(s => ({ ...s }));
     const foodBefore = state.food;
+    const arenaBefore = state.arena;
+    const wallsBefore = state.walls.size;
     const event = step(state);
     const head = state.snake[0];
+    // Walls grow both when a rung arrives and, later, as claimed cells are
+    // vacated — either way the bake is stale and has to be redrawn.
+    if (state.walls.size !== wallsBefore) boardLayer.rebuild();
+    if (state.arena !== arenaBefore) {
+      syncArena();
+      audio.playSfx('score');
+      addFloater(WIDTH / 2, HEIGHT / 2, arenaAdvanceText, '#7dd3fc');
+      burst(WIDTH / 2, HEIGHT / 2, '#7dd3fc', 22);
+    }
     if (event === 'died') {
       die();
     } else if (event === 'ate') {
@@ -190,19 +262,7 @@ export function initSnakeGame(): void {
     clock += dt;
     shake = Math.max(0, shake - dt);
 
-    particles = particles.filter(p => {
-      p.life -= dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vx *= 1 - 2.5 * dt;
-      p.vy *= 1 - 2.5 * dt;
-      return p.life > 0;
-    });
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 28 * dt;
-      return f.life > 0;
-    });
+    fx.update(dt);
 
     if (phase === 'play' && !paused) {
       moveTimer += dt;
@@ -219,45 +279,121 @@ export function initSnakeGame(): void {
         phase = 'over';
         finalScoreEl.textContent = state.score.toString();
         gameOverOverlay.style.display = 'flex';
+        // The table commits only when initials land, so bank the score and
+        // show the fresh best in the HUD ourselves meanwhile.
+        const { best } = board.bank(state.score);
+        board.show(state.score);
+        highScoreEl.textContent = best.toString();
       }
     }
   }
 
   // --- Rendering ---
 
-  function drawBoard() {
-    ctx.fillStyle = '#101613';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+  function paintBoard(target: CanvasRenderingContext2D) {
+    target.fillStyle = '#101613';
+    target.fillRect(0, 0, WIDTH, HEIGHT);
+    target.fillStyle = 'rgba(255, 255, 255, 0.025)';
     for (let y = 0; y < ROWS; y++) {
       for (let x = (y % 2); x < COLS; x += 2) {
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        target.fillRect(x * CELL, y * CELL, CELL, CELL);
       }
     }
+    // Mossy vignette pulls the eye to the centre of the garden.
+    const vignette = target.createRadialGradient(
+      WIDTH / 2, HEIGHT / 2, HEIGHT * 0.42,
+      WIDTH / 2, HEIGHT / 2, HEIGHT * 0.85
+    );
+    vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vignette.addColorStop(1, 'rgba(2, 12, 6, 0.5)');
+    target.fillStyle = vignette;
+    target.fillRect(0, 0, WIDTH, HEIGHT);
+
+    for (const i of state.walls) drawWall(target, i);
   }
 
-  function drawApple(cx: number, cy: number) {
+  /**
+   * One block of arena wall: a hashed stone shade so a run of them never reads
+   * as one flat bar, a lit top rim, and a dark grounding edge — the arcade's
+   * outline recipe at Snake's cell size.
+   */
+  function drawWall(target: CanvasRenderingContext2D, i: number) {
+    const x = (i % COLS) * CELL;
+    const y = Math.floor(i / COLS) * CELL;
+    const shade = 0.88 + hash01(i, 31) * 0.24;
+    target.fillStyle = shadeColor(WALL_BASE, shade);
+    target.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+    target.fillStyle = shadeColor(WALL_BASE, shade * 1.5);
+    target.fillRect(x + 1, y + 1, CELL - 2, 2);
+    target.fillStyle = 'rgba(4, 12, 7, 0.75)';
+    target.fillRect(x + 1, y + CELL - 3, CELL - 2, 2);
+    // A mortar seam, offset per cell, so the coursing looks laid rather than
+    // stamped.
+    target.fillStyle = 'rgba(4, 12, 7, 0.35)';
+    target.fillRect(x + 4 + Math.floor(hash01(i, 7) * 10), y + 4, 1, CELL - 8);
+  }
+
+
+  /** Soft contact shadow under round pieces (apple, bonus, snake head). */
+  function drawShadow(cx: number, cy: number, r: number) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.75, r * 0.85, r * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // A short red palette so consecutive apples aren't stamped copies; the pick
+  // is hashed off the fruit's board cell, so it's stable while the apple sits.
+  const APPLE_REDS = ['#ef4444', '#e23a3a', '#f75555'];
+
+  // Precomputed scale-dot shades (0.40–0.72 alpha) so the hashed per-segment
+  // pick is an array index, not a per-frame string build.
+  const SCALE_SHADES = [
+    'rgba(6, 78, 59, 0.40)',
+    'rgba(6, 78, 59, 0.48)',
+    'rgba(6, 78, 59, 0.56)',
+    'rgba(6, 78, 59, 0.64)',
+    'rgba(6, 78, 59, 0.72)'
+  ];
+
+  function drawApple(cx: number, cy: number, seed: number) {
     const pulse = 1 + 0.07 * Math.sin(clock * 5);
     const r = (CELL / 2 - 3) * pulse;
-    ctx.fillStyle = '#ef4444';
+    drawShadow(cx, cy, r + 2);
+    const body = APPLE_REDS[Math.floor(hash01(seed, 1) * APPLE_REDS.length)];
+    ctx.fillStyle = body;
     ctx.beginPath();
     ctx.arc(cx, cy + 1, r, 0, Math.PI * 2);
     ctx.fill();
-    // Leaf
+    // Dark grounding rim across the lower belly, for outline discipline.
+    ctx.strokeStyle = shadeColor(body, 0.55);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy + 1, r - 0.75, 0.16 * Math.PI, 0.84 * Math.PI);
+    ctx.stroke();
+    // Leaf — hashed side and angle.
+    const side = hash01(seed, 2) < 0.5 ? 1 : -1;
+    const leafAngle = -0.6 * side + (hash01(seed, 4) - 0.5) * 0.5;
     ctx.fillStyle = '#4ade80';
     ctx.beginPath();
-    ctx.ellipse(cx + 2.5, cy - r, 3.5, 1.8, -0.6, 0, Math.PI * 2);
+    ctx.ellipse(cx + 2.5 * side, cy - r, 3.5, 1.8, leafAngle, 0, Math.PI * 2);
     ctx.fill();
-    // Shine
+    // Shine — a main highlight plus a hashed second speck on some apples.
     ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
     ctx.beginPath();
     ctx.arc(cx - r * 0.35, cy - r * 0.3, r * 0.22, 0, Math.PI * 2);
     ctx.fill();
+    if (hash01(seed, 3) < 0.5) {
+      ctx.beginPath();
+      ctx.arc(cx + r * 0.22, cy - r * 0.42, r * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
-  function drawBonus(cx: number, cy: number, ticksLeft: number) {
+  function drawBonus(cx: number, cy: number, ticksLeft: number, seed: number) {
     const pulse = 1 + 0.12 * Math.sin(clock * 7);
     const r = (CELL / 2 - 2) * pulse;
+    drawShadow(cx, cy, r + 1);
     // Timer ring counts down the bonus lifetime
     ctx.strokeStyle = 'rgba(250, 204, 21, 0.85)';
     ctx.lineWidth = 2;
@@ -268,10 +404,24 @@ export function initSnakeGame(): void {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
+    // Dark grounding rim on the lower belly.
+    ctx.strokeStyle = shadeColor('#facc15', 0.6);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 0.75, 0.16 * Math.PI, 0.84 * Math.PI);
+    ctx.stroke();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.beginPath();
     ctx.arc(cx - r * 0.3, cy - r * 0.3, r * 0.25, 0, Math.PI * 2);
     ctx.fill();
+    // Hashed sparkle specks so each bonus twinkles differently.
+    const sparkles = 2 + Math.floor(hash01(seed, 5) * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    for (let k = 0; k < sparkles; k++) {
+      const a = hash01(seed, k + 6) * Math.PI * 2;
+      const rr = r * (0.35 + hash01(seed, k + 9) * 0.4);
+      ctx.fillRect(cx + Math.cos(a) * rr - 0.5, cy + Math.sin(a) * rr - 0.5, 1, 1);
+    }
   }
 
   /** Interpolated pixel centre of segment i between the last two steps. */
@@ -291,15 +441,41 @@ export function initSnakeGame(): void {
     if (points.length > 1) {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      // Build the tube centreline once, then re-stroke it at each width — the
+      // path persists across stroke() calls, so a long snake doesn't pay to
+      // rebuild the polyline per layer.
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-      ctx.strokeStyle = flash ? '#fca5a5' : '#15803d';
-      ctx.lineWidth = CELL - 3;
-      ctx.stroke();
-      ctx.strokeStyle = flash ? '#fee2e2' : '#22c55e';
-      ctx.lineWidth = CELL - 9;
-      ctx.stroke();
+      if (flash) {
+        ctx.strokeStyle = '#fca5a5';
+        ctx.lineWidth = CELL - 3;
+        ctx.stroke();
+        ctx.strokeStyle = '#fee2e2';
+        ctx.lineWidth = CELL - 9;
+        ctx.stroke();
+      } else {
+        // A dark→mid→lit width ramp: a grounding outline edge, the body, and a
+        // lit core, so the tube reads with value contrast instead of two flats.
+        ctx.strokeStyle = '#052e16';
+        ctx.lineWidth = CELL - 1;
+        ctx.stroke();
+        ctx.strokeStyle = '#166534';
+        ctx.lineWidth = CELL - 3;
+        ctx.stroke();
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = CELL - 8;
+        ctx.stroke();
+        // Scale banding: a chevron dot on every other segment, its shade hashed
+        // off the head-distance index so the scales vary yet stay stable per
+        // body position (anchored to the head, not crawling).
+        for (let i = 2; i < points.length; i += 2) {
+          ctx.fillStyle = SCALE_SHADES[Math.floor(hash01(i, 3) * SCALE_SHADES.length)];
+          ctx.beginPath();
+          ctx.arc(points[i].x, points[i].y, CELL / 2 - 7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
     // Head with direction-facing eyes
@@ -309,6 +485,19 @@ export function initSnakeGame(): void {
     ctx.beginPath();
     ctx.arc(head.x, head.y, CELL / 2 - 1, 0, Math.PI * 2);
     ctx.fill();
+    if (!flash) {
+      // Dark grounding ring + a crown highlight so the head sits proud of the
+      // body instead of merging into the tube.
+      ctx.strokeStyle = '#052e16';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, CELL / 2 - 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+      ctx.beginPath();
+      ctx.arc(head.x - heading.x * 2, head.y - heading.y * 2 - 2, CELL / 2 - 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     const side = { x: -heading.y, y: heading.x };
     const eyeForward = 3.5;
@@ -330,34 +519,36 @@ export function initSnakeGame(): void {
   function render() {
     ctx.save();
     if (shake > 0) {
-      ctx.translate((Math.random() - 0.5) * shake * 14, (Math.random() - 0.5) * shake * 14);
+      // Whole-pixel jitter keeps the board blit on the device-pixel grid —
+      // a fractional offset would bilinear-blur the baked layer.
+      ctx.translate(
+        Math.round((Math.random() - 0.5) * shake * 14),
+        Math.round((Math.random() - 0.5) * shake * 14)
+      );
     }
 
-    drawBoard();
-    if (state.food.x >= 0) drawApple(px(state.food.x), px(state.food.y));
-    if (state.bonus) drawBonus(px(state.bonus.pos.x), px(state.bonus.pos.y), state.bonus.ticksLeft);
+    boardLayer.draw(ctx);
+    // Claimed-but-not-yet-solid cells pulse as ghosts, so the player can see
+    // where the walls are about to land and steer clear.
+    if (state.pendingWalls.size > 0) {
+      ctx.globalAlpha = 0.32 + 0.16 * Math.sin(clock * 6);
+      for (const i of state.pendingWalls) drawWall(ctx, i);
+      ctx.globalAlpha = 1;
+    }
+    if (state.food.x >= 0) {
+      drawApple(px(state.food.x), px(state.food.y), state.food.x * COLS + state.food.y);
+    }
+    if (state.bonus) {
+      const { pos, ticksLeft } = state.bonus;
+      drawBonus(px(pos.x), px(pos.y), ticksLeft, pos.x * COLS + pos.y);
+    }
 
     const interval = stepInterval(state.foodsEaten);
     const t = phase === 'play' && !paused ? Math.min(1, moveTimer / interval) : 1;
     drawSnake(t);
 
-    for (const p of particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    fx.draw(ctx);
 
     if (paused && phase === 'play') {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
@@ -374,7 +565,7 @@ export function initSnakeGame(): void {
 
   const gameKeys = new Set(Object.keys(KEY_DIRECTIONS));
 
-  document.addEventListener('keydown', e => {
+  const onKeydown = (e: KeyboardEvent) => {
     if (gameKeys.has(e.key)) e.preventDefault();
     if (phase !== 'play') return;
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
@@ -384,7 +575,15 @@ export function initSnakeGame(): void {
     if (paused) return;
     const dir = KEY_DIRECTIONS[e.key];
     if (dir) queueDirection(state, dir);
-  });
+  };
+  document.addEventListener('keydown', onKeydown);
+  // Document-level listeners outlive a ClientRouter swap; each wiring retires
+  // its own handler so re-inits don't stack keyboard handlers forever.
+  document.addEventListener(
+    'astro:before-swap',
+    () => document.removeEventListener('keydown', onKeydown),
+    { once: true }
+  );
 
   document.querySelectorAll<HTMLElement>('.control-btn').forEach(btn => {
     btn.addEventListener('click', () => {

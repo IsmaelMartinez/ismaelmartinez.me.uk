@@ -1,0 +1,34 @@
+---
+// The music and effects mute toggles shared by every arcade cabinet header.
+// The game's init() wires these by id (#music-btn / #sfx-btn) through
+// wireChannelButton, which reads the data-* attributes for glyph and aria text.
+import { useTranslations } from '../i18n/translations';
+
+interface Props {
+  lang: 'en' | 'es' | 'cat';
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<button
+  type="button"
+  id="music-btn"
+  class="btn sound-btn"
+  data-glyph-on="🎵"
+  data-glyph-off="🎵"
+  aria-label={t('fun.arcade.musicOn')}
+  data-music-on={t('fun.arcade.musicOn')}
+  data-music-off={t('fun.arcade.musicOff')}
+>🎵</button>
+<button
+  type="button"
+  id="sfx-btn"
+  class="btn sound-btn"
+  data-glyph-on="🔊"
+  data-glyph-off="🔇"
+  aria-label={t('fun.arcade.sfxOn')}
+  data-sfx-on={t('fun.arcade.sfxOn')}
+  data-sfx-off={t('fun.arcade.sfxOff')}
+>🔊</button>

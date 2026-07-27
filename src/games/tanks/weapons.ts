@@ -5,7 +5,7 @@
  */
 import type { Projectile } from './physics';
 
-export type WeaponId = 'missile' | 'heavy' | 'mirv';
+export type WeaponId = 'missile' | 'heavy' | 'mirv' | 'bounce';
 
 export interface WeaponDef {
   /** Blast radius of each warhead, in px. */
@@ -16,16 +16,22 @@ export interface WeaponDef {
   ammo: number;
   /** Warheads after the MIRV-style apex split; 1 means no split. */
   cluster: number;
+  /** Ground bounces before the shell detonates; 0/undefined for a normal shell. */
+  bounces?: number;
   emoji: string;
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   missile: { radius: 45, maxDamage: 55, ammo: Infinity, cluster: 1, emoji: '🚀' },
   heavy: { radius: 72, maxDamage: 85, ammo: 2, cluster: 1, emoji: '💣' },
-  mirv: { radius: 30, maxDamage: 32, ammo: 1, cluster: 5, emoji: '🎇' }
+  mirv: { radius: 30, maxDamage: 32, ammo: 1, cluster: 5, emoji: '🎇' },
+  // The Skipper: a low, flat shot that skips off dirt to reach around terrain,
+  // but is stopped dead by the bunker pillar (see the solid-column check in
+  // stepShot). Scarce, and lighter than the missile to pay for its reach.
+  bounce: { radius: 40, maxDamage: 46, ammo: 3, cluster: 1, bounces: 2, emoji: '🎾' }
 };
 
-export const WEAPON_IDS: WeaponId[] = ['missile', 'heavy', 'mirv'];
+export const WEAPON_IDS: WeaponId[] = ['missile', 'heavy', 'mirv', 'bounce'];
 
 export type Ammo = Record<WeaponId, number>;
 
@@ -33,7 +39,8 @@ export function freshAmmo(): Ammo {
   return {
     missile: WEAPONS.missile.ammo,
     heavy: WEAPONS.heavy.ammo,
-    mirv: WEAPONS.mirv.ammo
+    mirv: WEAPONS.mirv.ammo,
+    bounce: WEAPONS.bounce.ammo
   };
 }
 

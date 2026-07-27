@@ -1,5 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -14,10 +16,24 @@ const tools = [
   { id: 'path', emoji: '🟫', label: t('fun.park.toolPath'), cost: 10 },
   { id: 'carousel', emoji: '🎠', label: t('fun.park.toolCarousel'), cost: 250 },
   { id: 'ferris', emoji: '🎡', label: t('fun.park.toolFerris'), cost: 400 },
+  { id: 'flume', emoji: '🪵', label: t('fun.park.toolFlume'), cost: 350 },
+  { id: 'skytower', emoji: '🗼', label: t('fun.park.toolSkytower'), cost: 600 },
+  { id: 'pirateship', emoji: '🏴‍☠️', label: t('fun.park.toolPirateship'), cost: 500 },
+  { id: 'manor', emoji: '👻', label: t('fun.park.toolManor'), cost: 450 },
+  { id: 'bumper', emoji: '🚗', label: t('fun.park.toolBumper'), cost: 300 },
+  { id: 'helter', emoji: '🎪', label: t('fun.park.toolHelter'), cost: 350 },
   { id: 'food', emoji: '🌭', label: t('fun.park.toolFood'), cost: 150 },
   { id: 'drink', emoji: '🥤', label: t('fun.park.toolDrink'), cost: 100 },
   { id: 'toilet', emoji: '🚻', label: t('fun.park.toolToilet'), cost: 120 },
   { id: 'tree', emoji: '🌳', label: t('fun.park.toolTree'), cost: 25 },
+  { id: 'water', emoji: '💧', label: t('fun.park.toolWater'), cost: 15 },
+  { id: 'raiseLand', emoji: '⛰️', label: t('fun.park.toolRaiseLand'), cost: 20 },
+  { id: 'lowerLand', emoji: '⛏️', label: t('fun.park.toolLowerLand'), cost: 20 },
+  { id: 'digTunnel', emoji: '🕳️', label: t('fun.park.toolDigTunnel'), cost: 30 },
+  { id: 'gateFairytale', emoji: '🏰', label: t('fun.park.toolGateFairytale'), cost: 150 },
+  { id: 'gateAdventure', emoji: '🌴', label: t('fun.park.toolGateAdventure'), cost: 250 },
+  { id: 'gatePirate', emoji: '🏴‍☠️', label: t('fun.park.toolGatePirate'), cost: 350 },
+  { id: 'coaster', emoji: '🎢', label: t('fun.park.toolCoaster'), cost: 800 },
   { id: 'bulldoze', emoji: '🚜', label: t('fun.park.toolBulldoze'), cost: 0 }
 ];
 ---
@@ -35,16 +51,23 @@ const tools = [
         data-t-cant-afford={t('fun.park.cantAfford')}
         data-t-needs-path={t('fun.park.needsPath')}
         data-t-blocked={t('fun.park.blocked')}
+        data-t-needs-water={t('fun.park.needsWater')}
+        data-t-needs-height={t('fun.park.needsHeight')}
+        data-t-too-steep={t('fun.park.tooSteep')}
+        data-t-zone-locked={t('fun.park.zoneLocked')}
+        data-t-breakdown={t('fun.park.breakdown')}
+        data-t-repaired={t('fun.park.repaired')}
+        data-t-surge={t('fun.park.surge')}
+        data-t-new-record={t('fun.park.newRecord')}
+        data-t-obj-welcome={t('fun.park.objWelcome')}
+        data-t-obj-rating={t('fun.park.objRating')}
+        data-t-obj-crowd={t('fun.park.objCrowd')}
+        data-t-goal-reward={t('fun.park.goalReward')}
+        data-t-established={t('fun.park.established')}
       >
         <div class="game-header">
           <h1><span class="park-emoji">🎢</span> {t('fun.park.title')}</h1>
-          <button
-            id="sound-btn"
-            class="btn sound-btn"
-            aria-label={t('fun.arcade.soundOn')}
-            data-sound-on={t('fun.arcade.soundOn')}
-            data-sound-off={t('fun.arcade.soundOff')}
-          >🔊</button>
+          <SoundToggles lang={lang} />
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.park.money')}</span>
@@ -69,6 +92,11 @@ const tools = [
           </div>
         </div>
 
+        <div class="objective-bar">
+          <span class="objective-label">🎯 {t('fun.park.goal')}</span>
+          <span id="objective" class="objective-text" aria-live="polite"></span>
+        </div>
+
         <div class="game-area">
           <div class="canvas-scroll" id="canvas-scroll">
             <canvas id="game-canvas"></canvas>
@@ -88,8 +116,10 @@ const tools = [
               <p>{t('fun.park.gameOverDesc')}</p>
               <p class="final-stats">
                 {t('fun.park.daysOpen')}: <strong id="final-days">0</strong> ·
+                {t('fun.park.guestsWelcomed')}: <strong id="final-welcomed">0</strong> ·
                 {t('fun.park.peakGuests')}: <strong id="final-peak">0</strong>
               </p>
+              <HighScoreTable gameId="park" lang={lang} accent="#818cf8" />
               <button id="restart-btn" class="btn btn-primary btn-large">{t('fun.park.playAgain')}</button>
             </div>
           </div>
@@ -106,9 +136,11 @@ const tools = [
             ))}
           </div>
           <div class="speed-controls">
-            <button class="speed-btn" data-speed="0">⏸</button>
-            <button class="speed-btn active" data-speed="1">▶</button>
-            <button class="speed-btn" data-speed="3">⏩</button>
+            <button type="button" id="rotate-left" class="rotate-btn" aria-label={t('fun.park.rotateLeft')} title={t('fun.park.rotateLeft')}>↺</button>
+            <button type="button" id="rotate-right" class="rotate-btn" aria-label={t('fun.park.rotateRight')} title={t('fun.park.rotateRight')}>↻</button>
+            <button type="button" class="speed-btn" data-speed="0" aria-label={t('fun.park.speedPause')} title={t('fun.park.speedPause')}>⏸</button>
+            <button type="button" class="speed-btn active" data-speed="1" aria-label={t('fun.park.speedNormal')} title={t('fun.park.speedNormal')}>▶</button>
+            <button type="button" class="speed-btn" data-speed="3" aria-label={t('fun.park.speedFast')} title={t('fun.park.speedFast')}>⏩</button>
           </div>
         </div>
       </div>
@@ -117,8 +149,12 @@ const tools = [
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initParkGame no-ops on pages without a fresh game root.
   import { initParkGame } from '../../../games/park';
   initParkGame();
+  document.addEventListener('astro:after-swap', initParkGame);
 </script>
 
 <style>
@@ -189,11 +225,37 @@ const tools = [
   .score-value {
     font-size: 1.35rem;
     font-weight: 700;
-    color: #ec4899;
+    color: var(--color-accent);
   }
 
   .score-value.money {
     color: #4ade80;
+  }
+
+  .objective-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    font-size: 0.9rem;
+  }
+
+  .objective-label {
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+
+  .objective-text {
+    font-weight: 700;
+    color: var(--color-accent);
   }
 
   .game-area {
@@ -213,7 +275,10 @@ const tools = [
     display: block;
     width: 100%;
     height: auto;
-    aspect-ratio: 76 / 45;
+    /* Matches the logical canvas size (CANVAS_W / CANVAS_H in game.ts);
+       the game re-asserts the exact ratio on init. A mismatched ratio
+       stretches the bitmap and blurs the whole board. */
+    aspect-ratio: 760 / 498;
     cursor: pointer;
   }
 
@@ -257,14 +322,17 @@ const tools = [
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
   }
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
     max-width: 520px;
   }
@@ -325,12 +393,12 @@ const tools = [
   }
 
   .tool-btn:hover {
-    border-color: #ec4899;
+    border-color: var(--color-accent);
   }
 
   .tool-btn.active {
-    border-color: #ec4899;
-    background: rgba(236, 72, 153, 0.12);
+    border-color: var(--color-accent);
+    background: rgba(37, 99, 235, 0.14);
   }
 
   .tool-emoji {
@@ -355,7 +423,8 @@ const tools = [
     gap: var(--space-xs);
   }
 
-  .speed-btn {
+  .speed-btn,
+  .rotate-btn {
     width: 44px;
     height: 44px;
     font-size: 1.1rem;
@@ -368,9 +437,10 @@ const tools = [
   }
 
   .speed-btn:hover,
-  .speed-btn.active {
-    border-color: #ec4899;
-    background: rgba(236, 72, 153, 0.12);
+  .speed-btn.active,
+  .rotate-btn:hover {
+    border-color: var(--color-accent);
+    background: rgba(37, 99, 235, 0.14);
   }
 
   @media (max-width: 600px) {

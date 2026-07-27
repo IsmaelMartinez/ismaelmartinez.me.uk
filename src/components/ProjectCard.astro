@@ -1,5 +1,6 @@
 ---
 import type { Project } from '../data/projects';
+import { useTranslations } from '../i18n/translations';
 
 interface Props {
   project: Project;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 const { project, lang } = Astro.props;
+const t = useTranslations(lang);
 ---
 
 <article class="project-card card">
@@ -23,7 +25,7 @@ const { project, lang } = Astro.props;
   </div>
   {project.github && (
     <a href={project.github} class="project-link" target="_blank" rel="noopener noreferrer">
-      View on GitHub →
+      {t('common.viewOnGithub')} →
     </a>
   )}
 </article>

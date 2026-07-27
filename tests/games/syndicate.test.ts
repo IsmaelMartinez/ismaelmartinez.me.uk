@@ -23,15 +23,14 @@ import {
   followerCount,
   persuadedCivilians
 } from '../../src/games/syndicate/sim';
-import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus } from '../../src/games/syndicate/missions';
-
-function seededRandom(seed = 42): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
+import {
+  MISSIONS,
+  SQUAD_SIZE,
+  ESCORT_MIN_FROM_PAD,
+  spawnMission,
+  missionStatus
+} from '../../src/games/syndicate/missions';
+import { seededRandom } from './seeded-random';
 
 /** An all-walkable map for hand-built combat scenarios. */
 function openMap(): MapTile[] {
@@ -223,6 +222,65 @@ describe('simulation', () => {
     expect(firedAtEnemy).toBe(true);
   });
 
+  it('shields a pinned asset and exposes a collected one', () => {
+    // The load-bearing rule of the escort mould. Hostiles pick their marks
+    // from armed player units, so an unarmed asset would be unshootable and
+    // the mission could never be lost — collecting it is what puts it in the
+    // line of fire. Both halves run the same scenario, once each way.
+    const shoot = (collected: boolean) => {
+      const tiles = openMap();
+      // The agent is unarmed and out of the guard's sight, so the only mark
+      // on the street is the asset.
+      const agent = createUnit(1, 'agent', idx(30, 30), MAP_W, null);
+      const vip = createUnit(2, 'vip', idx(5, 5), MAP_W);
+      const guard = createUnit(3, 'guard', idx(7, 5), MAP_W, 'minigun');
+      if (collected) vip.faction = 'player';
+      const world = createWorld(tiles, [agent, vip, guard], seededRandom());
+      for (let step = 0; step < 120; step++) stepWorld(world, 1 / 60);
+      return vip.hp;
+    };
+    expect(shoot(false)).toBe(createUnit(0, 'vip', 0, MAP_W).maxHp);
+    expect(shoot(true)).toBeLessThan(createUnit(0, 'vip', 0, MAP_W).maxHp);
+  });
+
+  it('collects the asset an agent walks up to, and then it follows the squad', () => {
+    const tiles = openMap();
+    const agent = createUnit(1, 'agent', idx(10, 10), MAP_W, null);
+    const vip = createUnit(2, 'vip', idx(11, 10), MAP_W);
+    const world = createWorld(tiles, [agent, vip], seededRandom());
+
+    // Within the Persuadertron's reach, so one step collects it.
+    expect(Math.hypot(agent.x - vip.x, agent.y - vip.y)).toBeLessThanOrEqual(PERSUADE_RADIUS);
+    const events = stepWorld(world, 1 / 60);
+    expect(events.some(e => e.type === 'vipSecured')).toBe(true);
+    expect(vip.faction).toBe('player');
+    // It is collected, not persuaded — it never counts toward the follower
+    // crowd the Persuadertron needs for armed minds.
+    expect(vip.persuaded).toBe(false);
+    expect(followerCount(world)).toBe(0);
+
+    // Walk the agent away; the asset closes the gap on the shared follow
+    // routine rather than standing where the contract left it.
+    commandMove(world, idx(24, 10), [agent]);
+    for (let step = 0; step < 600; step++) stepWorld(world, 1 / 60);
+    expect(Math.hypot(agent.x - vip.x, agent.y - vip.y)).toBeLessThan(2);
+    expect(vip.x).toBeGreaterThan(20);
+  });
+
+  it('leaves an uncollected asset where the contract pinned it', () => {
+    const tiles = openMap();
+    const agent = createUnit(1, 'agent', idx(30, 30), MAP_W, null);
+    const vip = createUnit(2, 'vip', idx(5, 5), MAP_W);
+    const world = createWorld(tiles, [agent, vip], seededRandom());
+    const where = { x: vip.x, y: vip.y };
+    for (let step = 0; step < 600; step++) stepWorld(world, 1 / 60);
+    // Unlike a civilian it never wanders off — the squad always knows where
+    // to find it.
+    expect(vip.x).toBe(where.x);
+    expect(vip.y).toBe(where.y);
+    expect(vip.faction).toBe('neutral');
+  });
+
   it('moves commanded agents toward the ordered tile', () => {
     const tiles = openMap();
     const agent = createUnit(1, 'agent', idx(2, 2), MAP_W, null);
@@ -244,6 +302,7 @@ describe('missions', () => {
       expect(agents).toHaveLength(SQUAD_SIZE);
       expect(setup.units.filter(u => u.kind === 'civilian')).toHaveLength(spec.civilians);
       expect(setup.units.filter(u => u.kind === 'enemy')).toHaveLength(spec.enemies);
+      expect(setup.units.filter(u => u.kind === 'guard')).toHaveLength(spec.guards);
       expect(setup.units.filter(u => u.kind === 'target')).toHaveLength(
         spec.objective === 'assassinate' ? 1 : 0
       );
@@ -287,5 +346,162 @@ describe('missions', () => {
       if (u.kind === 'target') u.alive = false;
     });
     expect(missionStatus(spec, units, 0, false)).toBe('won');
+  });
+
+  it('fields a ten-mission campaign with escalating rewards and re-tiered weapons', () => {
+    expect(MISSIONS).toHaveLength(10);
+    for (let m = 1; m < MISSIONS.length; m++) {
+      expect(MISSIONS[m].reward).toBeGreaterThan(MISSIONS[m - 1].reward);
+    }
+    // The minigun / executive target land at the mid-campaign assassinate (3
+    // of 10), not the finale — no last-mission-only reveal.
+    expect(MISSIONS[2].objective).toBe('assassinate');
+    expect(MISSIONS[2].enemyWeapon).toBe('minigun');
+    // The back half escalates: guards graduate to uzis, and minigun rivals
+    // appear in a non-assassinate mission before the finale.
+    expect(MISSIONS.slice(3).every(m => m.guardWeapon === 'uzi')).toBe(true);
+    expect(MISSIONS[4].objective).toBe('persuade');
+    expect(MISSIONS[4].enemyWeapon).toBe('minigun');
+    // Mission 7 introduces the `secure` mould — a hold contract with a
+    // positive hold requirement.
+    expect(MISSIONS[6].objective).toBe('secure');
+    expect(MISSIONS[6].holdSeconds).toBeGreaterThan(0);
+    // Mission 8 is the heaviest kill-count contract of the campaign, and
+    // mission 9 escalates the secure mould: a longer hold behind a deeper LZ
+    // ring than mission 7 fielded.
+    expect(MISSIONS[7].objective).toBe('eliminate');
+    expect(MISSIONS[7].enemies).toBe(Math.max(...MISSIONS.map(m => m.enemies)));
+    expect(MISSIONS[8].objective).toBe('secure');
+    expect(MISSIONS[8].holdSeconds!).toBeGreaterThan(MISSIONS[6].holdSeconds!);
+    expect(MISSIONS[8].guards).toBeGreaterThan(MISSIONS[6].guards);
+    // The mission-10 finale is the escort mould, and it deliberately fields
+    // fewer rivals than the scorched-earth wipe: its difficulty is the thing
+    // it has to bring home, not the body count.
+    expect(MISSIONS[9].objective).toBe('escort');
+    expect(MISSIONS[9].enemies).toBeLessThan(MISSIONS[7].enemies);
+    // All five objective moulds are represented across the campaign.
+    const objectives = new Set(MISSIONS.map(m => m.objective));
+    expect(objectives).toEqual(
+      new Set(['eliminate', 'persuade', 'assassinate', 'secure', 'escort'])
+    );
+  });
+
+  it('contests the landing zone: every secure mission rings the LZ with its guards', () => {
+    const secures = MISSIONS.filter(m => m.objective === 'secure');
+    expect(secures.length).toBeGreaterThan(0);
+    for (const spec of secures) {
+      const tiles = generateCity(seededRandom(4));
+      const setup = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+      const guards = setup.units.filter(u => u.kind === 'guard');
+      expect(guards).toHaveLength(spec.guards);
+      // The guards dig in around the extraction pad (BFS-nearest tiles), not
+      // scattered across the map — so the squad must fight in and hold, not
+      // just reach the corner.
+      const ex = (setup.extraction % MAP_W) + 0.5;
+      const ey = Math.floor(setup.extraction / MAP_W) + 0.5;
+      for (const g of guards) {
+        expect(Math.hypot(g.x - ex, g.y - ey)).toBeLessThan(8);
+      }
+      // No `target` unit exists for a secure mission (the LZ is a tile, not a foe).
+      expect(setup.units.some(u => u.kind === 'target')).toBe(false);
+      // Losing the squad still ends it, whatever the hold count.
+      setup.units.forEach(u => {
+        if (u.kind === 'agent') u.alive = false;
+      });
+      expect(missionStatus(spec, setup.units, 0, false, spec.holdSeconds ?? 0)).toBe('lost');
+    }
+  });
+
+  it('pins the escort asset behind its own guard ring, far from the squad', () => {
+    const escorts = MISSIONS.filter(m => m.objective === 'escort');
+    expect(escorts.length).toBeGreaterThan(0);
+    // Several seeds, because the holding tile is rolled and re-rolled until it
+    // clears both ends — one seed would not prove the constraint holds.
+    const cases = escorts.flatMap(spec => [2, 4, 7, 11, 19].map(seed => ({ spec, seed })));
+    for (const { spec, seed } of cases) {
+      const tiles = generateCity(seededRandom(seed));
+      const setup = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom(seed));
+      const vips = setup.units.filter(u => u.kind === 'vip');
+      expect(vips).toHaveLength(1);
+      const vip = vips[0];
+      // Neutral and unarmed until an agent collects it.
+      expect(vip.faction).toBe('neutral');
+      expect(vip.weapon).toBeNull();
+      // Deep in the city, not next to the insertion corner.
+      const spawn = setup.squadSpawn[0];
+      const sx = (spawn % MAP_W) + 0.5;
+      const sy = Math.floor(spawn / MAP_W) + 0.5;
+      expect(Math.hypot(vip.x - sx, vip.y - sy)).toBeGreaterThanOrEqual(18);
+      // And clear of the pad, so the escort leg is a leg. Without this the
+      // asset can be pinned next to extraction and the half of the mission
+      // the mould exists for collapses to a couple of steps.
+      const ex = (setup.extraction % MAP_W) + 0.5;
+      const ey = Math.floor(setup.extraction / MAP_W) + 0.5;
+      expect(Math.hypot(vip.x - ex, vip.y - ey)).toBeGreaterThanOrEqual(ESCORT_MIN_FROM_PAD);
+      // Ringed by the spec's guards, the way the executive's lair is.
+      const guards = setup.units.filter(u => u.kind === 'guard');
+      expect(guards).toHaveLength(spec.guards);
+      for (const g of guards) {
+        expect(Math.hypot(g.x - vip.x, g.y - vip.y)).toBeLessThan(8);
+      }
+      // A dead asset ends the contract wherever the squad happens to be.
+      vip.alive = false;
+      expect(missionStatus(spec, setup.units, 0, true, 0, true)).toBe('lost');
+    }
+  });
+
+  it('never auto-wins an escort mission whose roster has no asset', () => {
+    // The mirror of the secure mould's missing-hold guard: a spec that fields
+    // no VIP must surface as unwon rather than winning the moment anything
+    // stands on the pad.
+    const tiles = generateCity(seededRandom(4));
+    const spec = MISSIONS[9];
+    const { units } = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+    const assetless = units.filter(u => u.kind !== 'vip');
+    expect(missionStatus(spec, assetless, 0, true, 999, true)).toBe('ongoing');
+  });
+
+  it('never auto-wins a secure mission that forgot to set a hold requirement', () => {
+    // A misconfigured secure mission (holdSeconds 0 or undefined) must not count
+    // as instantly won — the guard surfaces it as an unwon mission instead of
+    // silently skipping past it.
+    const tiles = generateCity(seededRandom(4));
+    const base = MISSIONS[6];
+    const { units } = spawnMission(base, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+    expect(missionStatus({ ...base, holdSeconds: 0 }, units, 0, false, 999)).toBe('ongoing');
+    expect(missionStatus({ ...base, holdSeconds: undefined }, units, 0, false, 999)).toBe('ongoing');
+  });
+
+  it('leaves each new mission winnable through its objective', () => {
+    const tiles = generateCity(seededRandom(9));
+    for (const spec of MISSIONS.slice(3)) {
+      const { units } = spawnMission(spec, tiles, ['pistol', 'pistol', 'pistol', 'pistol'], seededRandom());
+      expect(missionStatus(spec, units, 0, false)).toBe('ongoing');
+      if (spec.objective === 'eliminate') {
+        units.forEach(u => {
+          if (u.kind === 'enemy') u.alive = false;
+        });
+        expect(missionStatus(spec, units, 0, false)).toBe('won');
+      } else if (spec.objective === 'persuade') {
+        expect(missionStatus(spec, units, spec.persuadeQuota, false)).toBe('ongoing');
+        expect(missionStatus(spec, units, spec.persuadeQuota, true)).toBe('won');
+      } else if (spec.objective === 'secure') {
+        // Won by holding the LZ: below the required seconds it stays ongoing,
+        // and reaching them wins regardless of the kill count (mirrors the
+        // persuade quota probe).
+        expect(missionStatus(spec, units, 0, false, (spec.holdSeconds ?? 0) - 1)).toBe('ongoing');
+        expect(missionStatus(spec, units, 0, false, spec.holdSeconds ?? 0)).toBe('won');
+      } else if (spec.objective === 'escort') {
+        // Won by the asset reaching extraction, not an agent: a squad standing
+        // on the pad without it is still mid-contract.
+        expect(missionStatus(spec, units, 0, true, 0, false)).toBe('ongoing');
+        expect(missionStatus(spec, units, 0, false, 0, true)).toBe('won');
+      } else {
+        units.forEach(u => {
+          if (u.kind === 'target') u.alive = false;
+        });
+        expect(missionStatus(spec, units, 0, false)).toBe('won');
+      }
+    }
   });
 });

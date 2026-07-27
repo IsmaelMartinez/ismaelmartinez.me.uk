@@ -1,0 +1,1 @@
+export { initTowerDefenseGame } from './game';

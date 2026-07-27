@@ -2,9 +2,13 @@
 import Layout from '../../layouts/Layout.astro';
 import Hero from '../../components/Hero.astro';
 import ProjectCard from '../../components/ProjectCard.astro';
-import { useTranslations, locales } from '../../i18n/translations';
+import ArticleCard from '../../components/ArticleCard.astro';
+import ContactCTA from '../../components/ContactCTA.astro';
+import { useTranslations, locales, getLocalizedPath } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { getFeaturedProjects } from '../../data/projects';
+import { getCollection } from 'astro:content';
+import { personJsonLd, toJsonLd } from '../../data/person';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -13,22 +17,18 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 const featuredProjects = getFeaturedProjects().slice(0, 3);
+
+const articles = await getCollection('articles', ({ id, data }) => {
+  return id.startsWith(`${lang}/`) && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft);
+});
+
+const latestArticles = [...articles]
+  .sort((a, b) => b.data.publishedDate.valueOf() - a.data.publishedDate.valueOf())
+  .slice(0, 3);
 ---
 
-<Layout title="Home" lang={lang}>
-  <script slot="head" type="application/ld+json" set:html={JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "Person",
-    "name": "Ismael Martinez",
-    "url": "https://ismaelmartinez.me.uk",
-    "jobTitle": "Principal Software Developer",
-    "sameAs": [
-      "https://github.com/IsmaelMartinez",
-      "https://www.linkedin.com/in/ismaelmartinezramos",
-      "https://medium.com/@ismaelmartinez",
-      "https://dev.to/ismaelmartinez"
-    ]
-  })} />
+<Layout title={t('nav.home')} description={t('hero.description')} lang={lang}>
+  <script slot="head" type="application/ld+json" set:html={toJsonLd(personJsonLd)} />
   <Hero lang={lang} />
 
   <section class="section">
@@ -41,12 +41,42 @@ const featuredProjects = getFeaturedProjects().slice(0, 3);
         ))}
       </div>
       <div class="section-footer">
-        <a href={`/${lang}/projects`} class="btn btn-outline">
+        <a href={getLocalizedPath('/projects', lang)} class="btn btn-outline">
           {t('common.viewAll')} →
         </a>
       </div>
     </div>
   </section>
+
+  {latestArticles.length > 0 && (
+    <section class="section">
+      <div class="container">
+        <h2 class="section-title">{t('section.writing')}</h2>
+        <p class="section-description">{t('section.writing.description')}</p>
+        <div class="grid grid-3">
+          {latestArticles.map(article => (
+            <ArticleCard
+              title={article.data.title}
+              description={article.data.description}
+              publishedDate={article.data.publishedDate}
+              slug={article.id.replace(`${lang}/`, '')}
+              heroImage={article.data.heroImage}
+              tags={article.data.tags}
+              lang={lang}
+              originalPlatform={article.data.originalPlatform}
+            />
+          ))}
+        </div>
+        <div class="section-footer">
+          <a href={getLocalizedPath('/writing', lang)} class="btn btn-outline">
+            {t('common.viewAll')} →
+          </a>
+        </div>
+      </div>
+    </section>
+  )}
+
+  <ContactCTA lang={lang} />
 </Layout>
 
 <style>

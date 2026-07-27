@@ -6,11 +6,13 @@ export default [
     ignores: ['.astro/**', 'dist/**', 'node_modules/**'],
   },
   ...eslintPluginAstro.configs.recommended,
+  ...tseslint.configs.recommended.map(config => ({
+    ...config,
+    files: ['**/*.ts', '**/*.tsx']
+  })),
   {
     files: ['**/*.ts', '**/*.tsx'],
-    ...tseslint.configs.recommended[0],
     rules: {
-      ...tseslint.configs.recommended[0].rules,
       '@typescript-eslint/no-unused-vars': ['error', {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_'
@@ -30,6 +32,13 @@ export default [
   },
   {
     files: ['**/*.astro'],
+    rules: {
+      '@typescript-eslint/triple-slash-reference': 'off',
+    },
+  },
+  {
+    // Astro generates src/env.d.ts with a triple-slash reference by design.
+    files: ['**/*.d.ts'],
     rules: {
       '@typescript-eslint/triple-slash-reference': 'off',
     },

@@ -32,7 +32,12 @@ export function createGameLoop(
     render();
   }
 
-  return {
+  // An Astro ClientRouter navigation swaps the page DOM without unloading
+  // this module, so a loop left running would keep rendering to a detached
+  // canvas forever; every loop retires with the DOM it draws on.
+  const onSwap = () => loop.stop();
+
+  const loop: GameLoop = {
     get running() {
       return rafId !== null;
     },
@@ -41,12 +46,15 @@ export function createGameLoop(
       last = performance.now();
       accumulator = 0;
       rafId = requestAnimationFrame(frame);
+      document.addEventListener('astro:before-swap', onSwap);
     },
     stop() {
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
+      document.removeEventListener('astro:before-swap', onSwap);
     }
   };
+  return loop;
 }

@@ -1,6 +1,8 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { useTranslations, locales } from '../../../i18n/translations';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
 export function getStaticPaths() {
@@ -16,6 +18,8 @@ const agents = [0, 1, 2, 3];
 <Layout title="Syndicate" lang={lang}>
   <section class="syndicate-section">
     <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
       <div
         class="game-container"
         id="syndicate-root"
@@ -25,10 +29,28 @@ const agents = [0, 1, 2, 3];
         data-t-mission2-brief={t('fun.syndicate.mission2Brief')}
         data-t-mission3-name={t('fun.syndicate.mission3Name')}
         data-t-mission3-brief={t('fun.syndicate.mission3Brief')}
+        data-t-mission4-name={t('fun.syndicate.mission4Name')}
+        data-t-mission4-brief={t('fun.syndicate.mission4Brief')}
+        data-t-mission5-name={t('fun.syndicate.mission5Name')}
+        data-t-mission5-brief={t('fun.syndicate.mission5Brief')}
+        data-t-mission6-name={t('fun.syndicate.mission6Name')}
+        data-t-mission6-brief={t('fun.syndicate.mission6Brief')}
+        data-t-mission7-name={t('fun.syndicate.mission7Name')}
+        data-t-mission7-brief={t('fun.syndicate.mission7Brief')}
+        data-t-mission8-name={t('fun.syndicate.mission8Name')}
+        data-t-mission8-brief={t('fun.syndicate.mission8Brief')}
+        data-t-mission9-name={t('fun.syndicate.mission9Name')}
+        data-t-mission9-brief={t('fun.syndicate.mission9Brief')}
+        data-t-mission10-name={t('fun.syndicate.mission10Name')}
+        data-t-mission10-brief={t('fun.syndicate.mission10Brief')}
         data-t-objective-eliminate={t('fun.syndicate.objectiveEliminate')}
         data-t-objective-persuade={t('fun.syndicate.objectivePersuade')}
         data-t-objective-extract={t('fun.syndicate.objectiveExtract')}
         data-t-objective-assassinate={t('fun.syndicate.objectiveAssassinate')}
+        data-t-objective-secure={t('fun.syndicate.objectiveSecure')}
+        data-t-objective-reach-asset={t('fun.syndicate.objectiveReachAsset')}
+        data-t-objective-escort={t('fun.syndicate.objectiveEscort')}
+        data-t-vip-secured={t('fun.syndicate.vipSecured')}
         data-t-mission-complete={t('fun.syndicate.missionComplete')}
         data-t-next-mission={t('fun.syndicate.nextMission')}
         data-t-game-over={t('fun.syndicate.gameOver')}
@@ -38,6 +60,7 @@ const agents = [0, 1, 2, 3];
         data-t-play-again={t('fun.syndicate.playAgain')}
         data-t-agent-down={t('fun.syndicate.agentDown')}
         data-t-joined={t('fun.syndicate.joined')}
+        data-t-new-record={t('fun.syndicate.newRecord')}
         data-t-weapon-pistol={t('fun.syndicate.weaponPistol')}
         data-t-weapon-uzi={t('fun.syndicate.weaponUzi')}
         data-t-weapon-minigun={t('fun.syndicate.weaponMinigun')}
@@ -46,13 +69,7 @@ const agents = [0, 1, 2, 3];
       >
         <div class="game-header">
           <h1><span class="syndicate-emoji">🕶️</span> {t('fun.syndicate.title')}</h1>
-          <button
-            id="sound-btn"
-            class="btn sound-btn"
-            aria-label={t('fun.arcade.soundOn')}
-            data-sound-on={t('fun.arcade.soundOn')}
-            data-sound-off={t('fun.arcade.soundOff')}
-          >🔊</button>
+          <SoundToggles lang={lang} />
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.syndicate.funds')}</span>
@@ -101,6 +118,7 @@ const agents = [0, 1, 2, 3];
               <p class="final-stats">
                 {t('fun.syndicate.campaignFunds')}: <strong id="final-cash">£0</strong>
               </p>
+              <HighScoreTable gameId="syndicate" lang={lang} accent="#22d3ee" />
               <button id="next-btn" class="btn btn-primary btn-large"></button>
             </div>
           </div>
@@ -131,14 +149,29 @@ const agents = [0, 1, 2, 3];
 </Layout>
 
 <script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initSyndicateGame no-ops on pages without a fresh game root.
   import { initSyndicateGame } from '../../../games/syndicate';
   initSyndicateGame();
+  document.addEventListener('astro:after-swap', initSyndicateGame);
 </script>
 
 <style>
   .syndicate-section {
     min-height: calc(100vh - var(--nav-height) - 200px);
     padding: var(--space-2xl) 0;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
   }
 
   .game-container {
@@ -268,8 +301,10 @@ const agents = [0, 1, 2, 3];
     right: 0;
     bottom: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
     background: rgba(0, 0, 0, 0.82);
     backdrop-filter: blur(4px);
     z-index: 2;
@@ -277,6 +312,7 @@ const agents = [0, 1, 2, 3];
 
   .overlay-content {
     text-align: center;
+    margin: auto;
     padding: var(--space-xl);
     max-width: 560px;
   }
@@ -399,6 +435,8 @@ const agents = [0, 1, 2, 3];
     position: relative;
     overflow: hidden;
     min-width: 140px;
+    /* Keep a comfortable tap height on phones (was 34px tall) */
+    min-height: 44px;
     padding: var(--space-sm) var(--space-md);
     background: var(--color-bg-secondary);
     border: 2px solid var(--color-border);
@@ -413,7 +451,7 @@ const agents = [0, 1, 2, 3];
   }
 
   .boost-btn:not(:disabled):hover {
-    border-color: #fbbf24;
+    border-color: #22d3ee;
   }
 
   .boost-btn:disabled {
@@ -421,8 +459,8 @@ const agents = [0, 1, 2, 3];
   }
 
   .boost-btn.boosting {
-    border-color: #fbbf24;
-    box-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+    border-color: #22d3ee;
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
   }
 
   .boost-fill {
@@ -431,7 +469,7 @@ const agents = [0, 1, 2, 3];
     left: 0;
     bottom: 0;
     width: 100%;
-    background: rgba(251, 191, 36, 0.15);
+    background: rgba(34, 211, 238, 0.15);
     transition: width 0.2s linear;
   }
 
@@ -464,6 +502,22 @@ const agents = [0, 1, 2, 3];
 
     .squad-bar {
       justify-content: center;
+    }
+
+    /* The briefing overlay carries a lot of text; tighten it so the
+       "Accept Contract" button stays within the frame on phones. */
+    .overlay-content p {
+      margin-bottom: var(--space-sm);
+    }
+
+    .overlay-content .instructions {
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    .play-icon {
+      font-size: 2.25rem;
+      margin-bottom: var(--space-xs);
     }
   }
 </style>

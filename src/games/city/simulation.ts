@@ -1,30 +1,57 @@
 /**
- * Microcity growth simulation: power coverage, RCI demand, and the periodic
- * step where zones develop or decay.
+ * Microcity growth simulation: power coverage, service coverage (schools,
+ * fire stations), RCI demand, and the periodic step where zones develop or
+ * decay.
  */
 import { gridNeighbours, chebyshev } from '../engine/grid2d';
-import { CITY_W, CITY_H, MAX_LEVEL, isZone, type CityTile, type ZoneType } from './tiles';
+import { clamp } from '../engine/math';
+import { CITY_W, CITY_H, MAX_LEVEL, DENSE_LEVEL, isZone, isRoad, type CityTile, type ZoneType } from './tiles';
 
 export const POWER_RADIUS = 7;
+export const SCHOOL_RADIUS = 6;
+export const FIRE_RADIUS = 6;
+export const POLICE_RADIUS = 6;
+/** A developed district past this population starts to feel crime if it has no
+ *  police station in reach. Below it, the early game is left alone — the same
+ *  late-game-only philosophy as the per-capita service bill. */
+export const CRIME_ONSET_POP = 250;
+/** Per-tick chance an exposed developed zone loses a level to crime. */
+export const CRIME_DECAY_CHANCE = 0.05;
 export const RESIDENTS_PER_LEVEL = 8;
 export const COM_JOBS_PER_LEVEL = 6;
 export const IND_JOBS_PER_LEVEL = 8;
+/** Population at which zones may densify past MAX_LEVEL to DENSE_LEVEL. */
+export const DENSITY_UNLOCK_POP = 600;
+/** Densifying needs genuinely hot demand, not a merely positive bar. */
+export const DENSE_DEMAND_MIN = 20;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+function coverage(tiles: CityTile[], sourceType: CityTile['type'], radius: number): boolean[] {
+  const sources: number[] = [];
+  tiles.forEach((tile, i) => {
+    if (tile.type === sourceType) sources.push(i);
+  });
+  return tiles.map((_, i) => sources.some(s => chebyshev(i, s, CITY_W) <= radius));
 }
 
 /** A tile is powered when any power plant sits within POWER_RADIUS of it. */
 export function computePowered(tiles: CityTile[]): boolean[] {
-  const plants: number[] = [];
-  tiles.forEach((tile, i) => {
-    if (tile.type === 'power') plants.push(i);
-  });
-  return tiles.map((_, i) => plants.some(p => chebyshev(i, p, CITY_W) <= POWER_RADIUS));
+  return coverage(tiles, 'power', POWER_RADIUS);
+}
+
+/** Fire-station coverage: fires here ignite less, spread less, die faster, and
+ * are actively put out by the crews (see `stepFires`/`EXTINGUISH_CHANCE`). */
+export function computeFireCover(tiles: CityTile[]): boolean[] {
+  return coverage(tiles, 'firehouse', FIRE_RADIUS);
+}
+
+/** Police coverage: a developed zone within POLICE_RADIUS of a station is safe
+ * from the crime decay in `growthStep`. */
+export function computePoliceCover(tiles: CityTile[]): boolean[] {
+  return coverage(tiles, 'police', POLICE_RADIUS);
 }
 
 export function roadAdjacent(tiles: CityTile[], i: number): boolean {
-  return gridNeighbours(i, CITY_W, CITY_H).some(n => tiles[n].type === 'road');
+  return gridNeighbours(i, CITY_W, CITY_H).some(n => isRoad(tiles[n].type));
 }
 
 export interface CityStats {
@@ -51,34 +78,73 @@ export type Demand = Record<ZoneType, number>;
 /**
  * Classic coupled RCI demand, clamped to ±50. People move in where there are
  * jobs; shops want customers; industry wants workers. The +16 base keeps a
- * fresh city bootstrappable.
+ * fresh city bootstrappable. `modifier` layers temporary event effects
+ * (festivals, strikes…) on top before clamping.
  */
-export function computeDemand(stats: CityStats): Demand {
+export function computeDemand(stats: CityStats, modifier: Partial<Demand> = {}): Demand {
   return {
-    res: clamp(stats.jobs + 16 - stats.population, -50, 50),
-    com: clamp(stats.population * 0.35 - stats.comJobs, -50, 50),
-    ind: clamp(stats.population * 0.55 - stats.indJobs, -50, 50)
+    res: clamp(stats.jobs + 16 - stats.population + (modifier.res ?? 0), -50, 50),
+    com: clamp(stats.population * 0.35 - stats.comJobs + (modifier.com ?? 0), -50, 50),
+    ind: clamp(stats.population * 0.55 - stats.indJobs + (modifier.ind ?? 0), -50, 50)
   };
 }
 
-export function hasParkNearby(tiles: CityTile[], i: number, radius = 3): boolean {
-  return tiles.some((tile, j) => tile.type === 'park' && chebyshev(i, j, CITY_W) <= radius);
+/**
+ * Parks, forests, and riverfront all count as desirable nature. Bridges
+ * still sit over water, so building one doesn't cost homes their river view.
+ */
+export function hasNatureNearby(tiles: CityTile[], i: number, radius = 3): boolean {
+  return tiles.some(
+    (tile, j) =>
+      (tile.type === 'park' || tile.type === 'tree' || tile.type === 'water' || tile.type === 'bridge') &&
+      chebyshev(i, j, CITY_W) <= radius
+  );
+}
+
+export function hasSchoolNearby(tiles: CityTile[], i: number, radius = SCHOOL_RADIUS): boolean {
+  return tiles.some((tile, j) => tile.type === 'school' && chebyshev(i, j, CITY_W) <= radius);
+}
+
+/**
+ * The level zones may currently grow to: MAX_LEVEL for most of a city's
+ * life, DENSE_LEVEL once the population clears DENSITY_UNLOCK_POP — the
+ * late-game "denser zones" reward for a thriving metropolis.
+ */
+export function maxZoneLevel(stats: CityStats): number {
+  return stats.population >= DENSITY_UNLOCK_POP ? DENSE_LEVEL : MAX_LEVEL;
 }
 
 /**
  * One growth tick. Serviced zones (powered + next to a road) develop while
  * demand for their type is positive; unserviced developed zones decay.
- * Residential needs a park nearby to reach the top level. Returns the tile
- * indices that changed so the UI can celebrate (or mourn) them.
+ * Residential needs nature (park, forest, or riverfront) nearby to pass
+ * level 1 and a school nearby to reach the top levels. Densifying beyond
+ * MAX_LEVEL additionally needs a big city (maxZoneLevel) and hot demand.
+ *
+ * `congested` (per-tile, from traffic.ts) throttles the late game: a zone
+ * *all* of whose adjacent roads are congested grows slower and is barred from
+ * densifying past MAX_LEVEL — one uncongested road frontage relieves it, so a
+ * dense district needs a road grid, not a single choked spine. Omitted (the
+ * default empty array) means no congestion, i.e. every existing caller's
+ * behaviour is unchanged.
+ *
+ * Returns the tile indices that changed so the UI can celebrate (or mourn)
+ * them.
  */
 export function growthStep(
   tiles: CityTile[],
-  random: () => number = Math.random
-): { grown: number[]; decayed: number[] } {
+  random: () => number = Math.random,
+  demandModifier: Partial<Demand> = {},
+  congested: boolean[] = []
+): { grown: number[]; decayed: number[]; crimeDecayed: number[] } {
   const powered = computePowered(tiles);
-  const demand = computeDemand(cityStats(tiles));
+  const policed = computePoliceCover(tiles);
+  const stats = cityStats(tiles);
+  const demand = computeDemand(stats, demandModifier);
+  const cap = maxZoneLevel(stats);
   const grown: number[] = [];
   const decayed: number[] = [];
+  const crimeDecayed: number[] = [];
 
   tiles.forEach((tile, i) => {
     if (!isZone(tile.type)) return;
@@ -90,13 +156,38 @@ export function growthStep(
       }
       return;
     }
-    if (tile.level >= MAX_LEVEL || demand[tile.type] <= 0) return;
-    if (tile.type === 'res' && tile.level === MAX_LEVEL - 1 && !hasParkNearby(tiles, i)) return;
-    if (random() < Math.min(0.45, demand[tile.type] / 70)) {
+    // Crime: a developed district with no police station in reach hollows out
+    // once the city is large. A "hold what you built" pressure, distinct from
+    // the school gate on growth — an exposed zone still grows, it just bleeds a
+    // level now and then until it is policed. Gated on population and level so
+    // the early and mid game are never touched.
+    if (
+      tile.level >= 2 &&
+      !policed[i] &&
+      stats.population >= CRIME_ONSET_POP &&
+      random() < CRIME_DECAY_CHANCE
+    ) {
+      tile.level--;
+      decayed.push(i);
+      crimeDecayed.push(i);
+      return;
+    }
+    // Traffic-choked: every road serving this zone is congested, with no
+    // relief route. Throttles growth and caps development at MAX_LEVEL.
+    const roads = gridNeighbours(i, CITY_W, CITY_H).filter(n => isRoad(tiles[n].type));
+    const choked = roads.length > 0 && roads.every(n => congested[n] === true);
+    if (tile.level >= cap || demand[tile.type] <= 0) return;
+    if (tile.level >= MAX_LEVEL && demand[tile.type] < DENSE_DEMAND_MIN) return;
+    if (choked && tile.level >= MAX_LEVEL) return;
+    if (tile.type === 'res') {
+      if (tile.level === 1 && !hasNatureNearby(tiles, i)) return;
+      if (tile.level >= MAX_LEVEL - 1 && !hasSchoolNearby(tiles, i)) return;
+    }
+    if (random() < Math.min(0.45, demand[tile.type] / 70) * (choked ? 0.4 : 1)) {
       tile.level++;
       grown.push(i);
     }
   });
 
-  return { grown, decayed };
+  return { grown, decayed, crimeDecayed };
 }

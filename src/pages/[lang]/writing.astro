@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import ArticleCard from '../../components/ArticleCard.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
+import { feedLink } from '../../data/links';
 import { getCollection } from 'astro:content';
 
 export function getStaticPaths() {
@@ -21,7 +22,7 @@ const sortedArticles = articles.sort((a, b) =>
 );
 ---
 
-<Layout title="Writing" lang={lang}>
+<Layout title={t('nav.writing')} description={t('section.writing.description')} lang={lang}>
   <section class="section">
     <div class="container">
       <header class="page-header">
@@ -49,6 +50,12 @@ const sortedArticles = articles.sort((a, b) =>
         </div>
       )}
 
+      <div class="subscribe-section">
+        <h2 class="section-title">{t('writing.subscribeTitle')}</h2>
+        <p class="platform-description">{feedLink.description[lang]}</p>
+        <a href={`/${lang}/rss.xml`} class="btn btn-primary">{t('cta.rss')} →</a>
+      </div>
+
       <div class="platforms-section">
         <h2 class="section-title">{t('article.externalPlatforms')}</h2>
         <div class="writing-platforms">
@@ -58,7 +65,7 @@ const sortedArticles = articles.sort((a, b) =>
               Medium
             </h3>
             <p class="platform-description">
-              In-depth articles about software development, architecture, and technology.
+              {t('article.mediumBlurb')}
             </p>
             <a href="https://medium.com/@ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
               {t('common.viewOnMedium')} →
@@ -71,7 +78,7 @@ const sortedArticles = articles.sort((a, b) =>
               Dev.to
             </h3>
             <p class="platform-description">
-              Technical tutorials, tips, and community discussions.
+              {t('article.devtoBlurb')}
             </p>
             <a href="https://dev.to/ismaelmartinez" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
               {t('common.viewOnDevto')} →
@@ -116,6 +123,22 @@ const sortedArticles = articles.sort((a, b) =>
     gap: var(--space-lg);
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     margin-bottom: var(--space-xl);
+  }
+
+  .subscribe-section {
+    margin-bottom: var(--space-2xl);
+    padding: var(--space-xl);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+  }
+
+  .subscribe-section .section-title {
+    margin-bottom: var(--space-sm);
+  }
+
+  .subscribe-section .platform-description {
+    margin-bottom: var(--space-lg);
   }
 
   .platforms-section {

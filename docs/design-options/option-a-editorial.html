@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Option A — Editorial / Ink &amp; Paper</title>
+<style>
+  :root {
+    --paper: #f7f2e9;
+    --paper-dark: #efe7d8;
+    --ink: #1c1917;
+    --ink-soft: #57534e;
+    --accent: #c2410c;
+    --rule: #d6cdbb;
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: 'Avenir Next', 'Helvetica Neue', Arial, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); line-height: 1.65; }
+  a { color: inherit; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 0 2rem; }
+
+  nav { border-bottom: 3px double var(--ink); padding: 1.4rem 0; }
+  .nav-inner { display: flex; justify-content: space-between; align-items: baseline; }
+  .masthead { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.02em; }
+  .masthead em { color: var(--accent); font-style: normal; }
+  .nav-links { display: flex; gap: 1.8rem; font-family: var(--sans); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.14em; }
+  .nav-links a { text-decoration: none; color: var(--ink-soft); }
+  .nav-links a:hover, .nav-links a.active { color: var(--accent); }
+
+  .hero { padding: 6rem 0 5rem; border-bottom: 1px solid var(--rule); }
+  .kicker { font-family: var(--sans); font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.4rem; }
+  h1 { font-size: clamp(2.6rem, 6.5vw, 4.6rem); line-height: 1.06; font-weight: 600; max-width: 17ch; letter-spacing: -0.015em; }
+  h1 .underline { box-shadow: inset 0 -0.18em 0 rgba(194, 65, 12, 0.28); }
+  .hero p.lede { font-size: 1.25rem; color: var(--ink-soft); max-width: 56ch; margin-top: 1.8rem; font-style: italic; }
+  .hero-actions { margin-top: 2.6rem; display: flex; gap: 1.6rem; align-items: center; font-family: var(--sans); }
+  .btn-ink { background: var(--ink); color: var(--paper); padding: 0.85rem 1.7rem; text-decoration: none; font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .btn-ink:hover { background: var(--accent); }
+  .link-quiet { font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; border-bottom: 1px solid var(--ink); padding-bottom: 2px; }
+  .link-quiet:hover { color: var(--accent); border-color: var(--accent); }
+
+  section { padding: 4.5rem 0; border-bottom: 1px solid var(--rule); }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2.6rem; }
+  .section-head h2 { font-size: 1.9rem; font-weight: 600; }
+  .section-head .num { font-family: var(--sans); color: var(--accent); font-size: 0.8rem; letter-spacing: 0.2em; margin-right: 0.8rem; }
+  .section-head a { font-family: var(--sans); font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); text-decoration: none; }
+  .section-head a:hover { color: var(--accent); }
+
+  .proj-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0; border-top: 1px solid var(--rule); }
+  .proj { padding: 1.8rem 1.6rem 2rem; border-bottom: 1px solid var(--rule); border-right: 1px solid var(--rule); background: transparent; transition: background 0.2s; }
+  .proj:hover { background: var(--paper-dark); }
+  .proj h3 { font-family: var(--sans); font-size: 1.02rem; margin-bottom: 0.6rem; }
+  .proj h3 a { text-decoration: none; }
+  .proj h3 a:hover { color: var(--accent); }
+  .proj p { font-size: 0.96rem; color: var(--ink-soft); }
+  .proj .tags { margin-top: 1rem; font-family: var(--sans); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+
+  .article-list { border-top: 1px solid var(--rule); }
+  .article-row { display: grid; grid-template-columns: 7.5rem 1fr auto; gap: 2rem; align-items: baseline; padding: 1.6rem 0; border-bottom: 1px solid var(--rule); text-decoration: none; }
+  .article-row:hover h3 { color: var(--accent); }
+  .article-row time { font-family: var(--sans); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
+  .article-row h3 { font-size: 1.35rem; font-weight: 600; transition: color 0.15s; }
+  .article-row p { color: var(--ink-soft); font-size: 0.98rem; margin-top: 0.3rem; }
+  .article-row .arrow { font-family: var(--sans); color: var(--accent); font-size: 1.2rem; }
+
+  .cta { text-align: center; padding: 5.5rem 0; }
+  .cta h2 { font-size: 2.4rem; font-weight: 600; }
+  .cta h2 em { color: var(--accent); }
+  .cta p { color: var(--ink-soft); font-style: italic; max-width: 50ch; margin: 1.2rem auto 2.4rem; font-size: 1.1rem; }
+
+  footer { padding: 2.2rem 0 3rem; font-family: var(--sans); font-size: 0.78rem; color: var(--ink-soft); display: flex; justify-content: space-between; }
+  footer .container { display: flex; justify-content: space-between; width: 100%; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+  <nav>
+    <div class="container nav-inner">
+      <div class="masthead">Ismael <em>Martinez</em></div>
+      <div class="nav-links">
+        <a href="#" class="active">Home</a><a href="#">About</a><a href="#">Projects</a><a href="#">Writing</a><a href="#">Health</a><a href="#">Connect</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <p class="kicker">Principal Software Developer · Open Source · Responsible AI</p>
+      <h1>Building software that's <span class="underline">reliable</span>, open, and worth writing about.</h1>
+      <p class="lede">I care deeply about responsible AI — and about how this technology lets us explore problems in entirely new ways.</p>
+      <div class="hero-actions">
+        <a class="btn-ink" href="#">Read my writing</a>
+        <a class="link-quiet" href="#">Get in touch →</a>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <h2><span class="num">01</span>Open Source Projects</h2>
+        <a href="#">All projects →</a>
+      </div>
+      <div class="proj-grid">
+        <div class="proj">
+          <h3><a href="#">teams-for-linux</a></h3>
+          <p>Unofficial Microsoft Teams client for Linux. A community-driven project bringing Teams to Linux users.</p>
+          <div class="tags">Electron · JavaScript · Linux</div>
+        </div>
+        <div class="proj">
+          <h3><a href="#">repo-butler</a></h3>
+          <p>A portfolio-health agent that analyses GitHub repositories, generates dashboards, and proposes improvements.</p>
+          <div class="tags">AI Agent · Automation</div>
+        </div>
+        <div class="proj">
+          <h3><a href="#">sound3fy</a></h3>
+          <p>Sonification for D3.js visualisations — charts made accessible to blind and low-vision users.</p>
+          <div class="tags">D3.js · Accessibility</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <h2><span class="num">02</span>Latest Writing</h2>
+        <a href="#">All articles →</a>
+      </div>
+      <div class="article-list">
+        <a class="article-row" href="#">
+          <time>Jun 2026</time>
+          <div><h3>The AI Automation Trap</h3><p>Why automating everything is the wrong goal — and what to aim for instead.</p></div>
+          <span class="arrow">→</span>
+        </a>
+        <a class="article-row" href="#">
+          <time>May 2026</time>
+          <div><h3>Integrating Agentic Systems into Event-Driven Architectures</h3><p>Patterns for letting agents participate in your event mesh without losing control.</p></div>
+          <span class="arrow">→</span>
+        </a>
+        <a class="article-row" href="#">
+          <time>Apr 2026</time>
+          <div><h3>System Thinking, Governance and GreenOps in the Age of AI</h3><p>A wider lens on what we're really building, and at what cost.</p></div>
+          <span class="arrow">→</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" style="border-bottom: 3px double var(--ink);">
+    <div class="container">
+      <h2>Let's build something <em>together</em>.</h2>
+      <p>Whether it's responsible AI, event-driven systems, open source, or just a good problem worth exploring — I'd love to hear from you.</p>
+      <a class="btn-ink" href="#">Contact me</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <span>© 2026 Ismael Martinez — built with Astro &amp; ☕</span>
+      <span><a href="#">GitHub</a> · <a href="#">LinkedIn</a> · <a href="#">RSS</a></span>
+    </div>
+  </footer>
+</body>
+</html>

@@ -8,18 +8,25 @@
  */
 import {
   createGameLoop,
-  loadScore,
-  recordHighScore,
+  createStaticLayer,
+  initScoreboard,
+  setupHiDpiCanvas,
   isoProject,
   isoTileFromPoint,
   fillTile,
   strokeTile,
+  blockFaceCorners,
+  faceBandPath,
   drawBlock,
   forEachTileBackToFront,
   shadeColor,
   createGameAudio,
-  wireSoundButton,
-  type IsoView
+  wireChannelButton,
+  createToaster,
+  createEffects,
+  blink,
+  type IsoView,
+  hash01 as hash
 } from '../engine';
 import { MAP_W, MAP_H, generateCity, type MapTile } from './map';
 import type { Unit, WeaponId } from './units';
@@ -30,6 +37,8 @@ import {
   livingAgents,
   followerCount,
   persuadedCivilians,
+  vipOf,
+  escorting,
   type World
 } from './sim';
 import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus, type MissionSpec } from './missions';
@@ -37,13 +46,12 @@ import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus, type MissionSpec } f
 const VIEW: IsoView = { halfW: 16, halfH: 8, originX: MAP_H * 16, originY: 70 };
 const CANVAS_W = (MAP_W + MAP_H) * VIEW.halfW;
 const CANVAS_H = (MAP_W + MAP_H) * VIEW.halfH + VIEW.originY + 12;
-const RECORD_KEY = 'syndicate-record-cash';
 const BOOST_DURATION = 4;
 const BOOST_COOLDOWN = 14;
 const EXTRACTION_RADIUS = 1.5;
 
-const FACADES = ['#3c4566', '#46395c', '#35495c', '#4a3f55'];
-const NEON = ['#22d3ee', '#f472b6', '#a3e635', '#fbbf24'];
+const FACADES = ['#313853', '#3a2e4c', '#2b3c4c', '#3d3446'];
+const NEON = ['#22d3ee', '#38bdf8', '#818cf8', '#2dd4bf'];
 const CIVILIAN_TINTS = ['#d8b4fe', '#86efac', '#fca5a5', '#fde68a', '#93c5fd', '#f9a8d4'];
 const KILL_BOUNTY: Partial<Record<Unit['kind'], number>> = {
   enemy: 300,
@@ -58,18 +66,13 @@ const PERSUADE_BONUS: Partial<Record<Unit['kind'], number>> = {
 const SHOT_LIFE = 0.12;
 const RAIN_DROPS = 90;
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-  color: string;
-  gravity: number;
-  glow: boolean;
-}
+/**
+ * Deterministic facade patterns, module-scope so drawWindows allocates no
+ * closures per building per frame (it runs for every facade every frame).
+ */
+const facadeStrip = (i: number, f: number, r: number) => (i * 13 + f * 29 + r * 11) % 7 === 0;
+const facadeLit = (i: number, f: number, r: number, c: number) =>
+  (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
 
 interface Decal {
   x: number;
@@ -80,22 +83,22 @@ interface Decal {
   maxLife: number;
 }
 
-/** Cheap deterministic 0–1 hash so building props stay stable per tile. */
-function hash(i: number, salt: number): number {
-  const n = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
-  return n - Math.floor(n);
-}
-
 type Phase = 'idle' | 'play' | 'debrief' | 'over';
 
 export function initSyndicateGame(): void {
   const root = document.getElementById('syndicate-root');
   const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
   if (!root || !canvasEl) return;
+  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
+  // re-entry on a root this module has already wired.
+  if (root.dataset.gameWired) return;
   const canvas: HTMLCanvasElement = canvasEl;
   const context = canvas.getContext('2d');
   if (!context) return;
   const ctx: CanvasRenderingContext2D = context;
+  // Stamped only once wiring is certain to proceed — a root marked wired on
+  // a failed getContext would block the after-swap retry for good.
+  root.dataset.gameWired = 'true';
 
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const startOverlay = el('start-overlay');
@@ -115,17 +118,44 @@ export function initSyndicateGame(): void {
   const objectiveEl = el('objective-text');
   const boostBtn = el('boost-btn') as HTMLButtonElement;
   const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea);
   const chips = Array.from(root.querySelectorAll<HTMLButtonElement>('.agent-chip'));
   const allBtn = el('select-all') as HTMLButtonElement;
 
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
   const strings = {
-    missionNames: [s('tMission1Name', 'Hostile Takeover'), s('tMission2Name', 'Hearts & Minds'), s('tMission3Name', 'Regicide')],
-    missionBriefs: [s('tMission1Brief', ''), s('tMission2Brief', ''), s('tMission3Brief', '')],
+    missionNames: [
+      s('tMission1Name', 'Hostile Takeover'),
+      s('tMission2Name', 'Hearts & Minds'),
+      s('tMission3Name', 'Regicide'),
+      s('tMission4Name', 'Reinforcements'),
+      s('tMission5Name', 'Ground War'),
+      s('tMission6Name', 'Endgame'),
+      s('tMission7Name', 'Hold the Line'),
+      s('tMission8Name', 'Scorched Earth'),
+      s('tMission9Name', 'Total Control'),
+      s('tMission10Name', 'Safe Passage')
+    ],
+    missionBriefs: [
+      s('tMission1Brief', ''),
+      s('tMission2Brief', ''),
+      s('tMission3Brief', ''),
+      s('tMission4Brief', ''),
+      s('tMission5Brief', ''),
+      s('tMission6Brief', ''),
+      s('tMission7Brief', ''),
+      s('tMission8Brief', ''),
+      s('tMission9Brief', ''),
+      s('tMission10Brief', '')
+    ],
     objectiveEliminate: s('tObjectiveEliminate', 'Eliminate the rival agents'),
     objectivePersuade: s('tObjectivePersuade', 'Persuade civilians'),
     objectiveExtract: s('tObjectiveExtract', 'Reach the extraction point'),
     objectiveAssassinate: s('tObjectiveAssassinate', 'Assassinate the rival executive'),
+    objectiveSecure: s('tObjectiveSecure', 'Hold the landing zone'),
+    objectiveReachAsset: s('tObjectiveReachAsset', 'Reach the asset'),
+    objectiveEscort: s('tObjectiveEscort', 'Escort the asset to extraction'),
+    vipSecured: s('tVipSecured', 'Asset secured — get it out'),
     missionComplete: s('tMissionComplete', 'Mission complete'),
     nextMission: s('tNextMission', 'Next contract'),
     gameOver: s('tGameOver', 'Squad eliminated'),
@@ -135,6 +165,7 @@ export function initSyndicateGame(): void {
     playAgain: s('tPlayAgain', 'New campaign'),
     agentDown: s('tAgentDown', 'Agent down!'),
     joined: s('tJoined', 'joined your syndicate'),
+    newRecord: s('tNewRecord', 'New cash record!'),
     weaponNames: {
       pistol: s('tWeaponPistol', 'Pistol'),
       uzi: s('tWeaponUzi', 'Uzi'),
@@ -146,39 +177,87 @@ export function initSyndicateGame(): void {
     } as Partial<Record<Unit['kind'], string>>
   };
 
-  canvas.width = CANVAS_W;
-  canvas.height = CANVAS_H;
+  // Declared ahead of the static layers: the ground bake's paint closure
+  // reads it, and onApply rebuilds the layers during setup below.
+  let tiles: MapTile[] = generateCity(Math.random);
+
+  // Pre-rendered scanlines + vignette overlay (both are static, so drawing
+  // them every frame would waste a full-canvas gradient fill), rebuilt at
+  // device resolution whenever the DPR changes so the 1px CRT lines stay
+  // crisp instead of being blur-upscaled from a 1:1 bitmap.
+  const atmosphere = createStaticLayer(CANVAS_W, CANVAS_H, target => {
+    target.fillStyle = 'rgba(0, 0, 0, 0.12)';
+    for (let y = 0; y < CANVAS_H; y += 3) target.fillRect(0, y, CANVAS_W, 1);
+    const vig = target.createRadialGradient(
+      CANVAS_W / 2,
+      CANVAS_H / 2,
+      CANVAS_H * 0.35,
+      CANVAS_W / 2,
+      CANVAS_H / 2,
+      CANVAS_H * 0.85
+    );
+    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    target.fillStyle = vig;
+    target.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  });
+  // The flat city floor — roads with their dashes and lamps, pavement
+  // checkerboard, plazas, and the dark ground under buildings — never
+  // changes within a mission, so it bakes once instead of ~680 fills and
+  // dashed strokes per frame. Drawn first each frame, it sits behind
+  // everything; buildings and units still paint over it in painter order.
+  const ground = createStaticLayer(CANVAS_W, CANVAS_H, g => {
+    for (let i = 0; i < tiles.length; i++) {
+      const x = i % MAP_W;
+      const y = Math.floor(i / MAP_W);
+      const tile = tiles[i];
+      if (tile.kind === 'road') {
+        drawRoad(g, i, x, y);
+        if (hash(i, 7) < 0.05) drawLampPool(g, x, y);
+      } else if (tile.kind === 'pavement') {
+        fillTile(g, VIEW, x, y, (x + y) % 2 === 0 ? '#272d3c' : '#2a303e');
+      } else if (tile.kind === 'plaza') {
+        fillTile(g, VIEW, x, y, '#212939');
+      } else {
+        fillTile(g, VIEW, x, y, '#0b0e17');
+      }
+    }
+  });
+  const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, {
+    onApply: dpr => {
+      atmosphere.rebuild(dpr);
+      ground.rebuild(dpr);
+    }
+  });
   const scroller = document.getElementById('canvas-scroll');
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
-  // Pre-rendered scanline overlay (cheaper than drawing lines every frame).
-  let scanlines: HTMLCanvasElement | null = null;
-  const scan = document.createElement('canvas');
-  scan.width = CANVAS_W;
-  scan.height = CANVAS_H;
-  const scanCtx = scan.getContext('2d');
-  if (scanCtx) {
-    scanCtx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-    for (let y = 0; y < CANVAS_H; y += 3) scanCtx.fillRect(0, y, CANVAS_W, 1);
-    scanlines = scan;
-  }
-
   let phase: Phase = 'idle';
-  let tiles: MapTile[] = generateCity(Math.random);
   let world: World = createWorld(tiles, [], Math.random);
   let missionIdx = 0;
   let spec: MissionSpec = MISSIONS[0];
   let extraction = -1;
   let money = 0;
-  let record = loadScore(RECORD_KEY);
+  const board = initScoreboard(document.getElementById('highscores'));
   let agentWeapons: WeaponId[] = Array(SQUAD_SIZE).fill('pistol');
   let selected = new Set<number>([0, 1, 2, 3]);
   let boostCooldown = 0;
   let clock = 0;
   let moveMarker: { tile: number; t: number } | null = null;
   let extractionAnnounced = false;
-  let floaters: { x: number; y: number; text: string; color: string; life: number }[] = [];
-  let particles: Particle[] = [];
+  // Seconds the squad has controlled the landing zone on a `secure` mission
+  // (cumulative occupied-time — one living agent at the LZ ticks it up).
+  let holdProgress = 0;
+  const fx = createEffects({
+    gravityScale: 120,
+    launchKick: 20,
+    burstSpeed: 60,
+    burstSize: 1.6,
+    glowBlur: 4,
+    floaterSize: 10,
+    floaterRise: 16,
+    floaterLife: 1.1
+  });
   let decals: Decal[] = [];
   // Last screen position per unit id, so the renderer can face them and the
   // gun points the way they walk.
@@ -191,86 +270,93 @@ export function initSyndicateGame(): void {
     speed: 320 + Math.random() * 220
   }));
 
-  recordEl.textContent = `£${record}`;
+  // The record readout shows the table's best, beaten live by the current campaign.
+  recordEl.textContent = `£${board.best()}`;
 
-  // Dark, brooding cyber-noir bassline in E minor.
+  // Blade-Runner dread in E minor: a brooding low pad bed under a sparse,
+  // menacing lead, pricked by an occasional ad-screen bleep, all trailing
+  // through a feedback delay. Slow and cinematic.
   const audio = createGameAudio({
-    tempo: 96,
-    wave: 'sawtooth',
+    tempo: 88,
     volume: 0.1,
-    melody: [
-      { freq: 164.81, beats: 1 },
-      { freq: 196.0, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 246.94, beats: 1 },
-      { freq: 196.0, beats: 1 },
-      { freq: 130.81, beats: 1 },
-      { freq: 146.83, beats: 0.5 },
-      { freq: 164.81, beats: 0.5 },
-      { freq: 123.47, beats: 1 }
+    echo: { time: 0.33, feedback: 0.38, mix: 0.32 },
+    tracks: [
+      {
+        // Sustained sawtooth drone: E minor tonic, its fifth, then sixth.
+        wave: 'sawtooth',
+        envelope: 'pad',
+        detune: 10,
+        volume: 0.4,
+        melody: [
+          { freq: 82.41, beats: 4 }, // E2
+          { freq: 123.47, beats: 4 }, // B2
+          { freq: 130.81, beats: 4 }, // C3
+          { freq: 123.47, beats: 4 } // B2
+        ]
+      },
+      {
+        // Sparse, spacious lead — a few minor notes with rests between.
+        wave: 'sawtooth',
+        detune: 6,
+        volume: 0.9,
+        melody: [
+          { freq: 329.63, beats: 2 }, // E4
+          { freq: 0, beats: 2 },
+          { freq: 392.0, beats: 1 }, // G4
+          { freq: 329.63, beats: 1 }, // E4
+          { freq: 0, beats: 2 },
+          { freq: 493.88, beats: 2 }, // B4
+          { freq: 0, beats: 2 },
+          { freq: 440.0, beats: 1 }, // A4
+          { freq: 392.0, beats: 1 }, // G4
+          { freq: 0, beats: 2 }
+        ]
+      },
+      {
+        // Ad-screen flicker: mostly silence, an occasional high square blip.
+        wave: 'square',
+        volume: 0.5,
+        melody: [
+          { freq: 0, beats: 5 },
+          { freq: 1046.5, beats: 0.5 }, // C6
+          { freq: 0, beats: 7 },
+          { freq: 783.99, beats: 0.5 }, // G5
+          { freq: 0, beats: 3 }
+        ]
+      }
     ]
   });
-  wireSoundButton(document.getElementById('sound-btn'), audio);
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const squad = (): Unit[] => world.units.filter(u => u.kind === 'agent');
 
-  function spawnBurst(
-    sx: number,
-    sy: number,
-    count: number,
-    color: string,
-    opts: { speed?: number; life?: number; size?: number; gravity?: number; glow?: boolean } = {}
-  ) {
-    const speed = opts.speed ?? 60;
-    for (let n = 0; n < count; n++) {
-      const a = Math.random() * Math.PI * 2;
-      const v = speed * (0.4 + Math.random() * 0.6);
-      particles.push({
-        x: sx,
-        y: sy,
-        vx: Math.cos(a) * v,
-        vy: Math.sin(a) * v - (opts.gravity ? 20 : 0),
-        life: opts.life ?? 0.5,
-        maxLife: opts.life ?? 0.5,
-        size: opts.size ?? 1.6,
-        color,
-        gravity: opts.gravity ?? 0,
-        glow: opts.glow ?? false
-      });
-    }
-  }
+  const spawnBurst = fx.burst;
 
   function spawnDeath(wx: number, wy: number, kind: Unit['kind']) {
     const p = isoProject(VIEW, wx, wy);
     const blood = kind === 'agent' ? '#67e8f9' : kind === 'civilian' ? '#fca5a5' : '#f87171';
-    spawnBurst(p.x, p.y - 7, 14, blood, { speed: 90, life: 0.6, size: 1.8, gravity: 1, glow: true });
-    spawnBurst(p.x, p.y - 7, 6, '#fde68a', { speed: 50, life: 0.35, size: 1.2, glow: true });
-    decals.push({ x: wx, y: wy, r: 3.5 + Math.random() * 1.5, color: blood, life: 9, maxLife: 9 });
+    spawnBurst(p.x, p.y - 12, 14, blood, { speed: 90, life: 0.6, size: 1.8, gravity: 1, glow: true });
+    spawnBurst(p.x, p.y - 12, 6, '#fde68a', { speed: 50, life: 0.35, size: 1.2, glow: true });
+    decals.push({ x: wx, y: wy, r: 5 + Math.random() * 2, color: blood, life: 9, maxLife: 9 });
   }
 
   function spawnSparkle(wx: number, wy: number, color = '#67e8f9') {
     const p = isoProject(VIEW, wx, wy);
-    spawnBurst(p.x, p.y - 10, 10, color, { speed: 40, life: 0.7, size: 1.4, glow: true });
-  }
-
-  function showToast(text: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = text;
-    toastArea.appendChild(toast);
-    while (toastArea.children.length > 3) toastArea.removeChild(toastArea.firstChild!);
-    setTimeout(() => toast.remove(), 2400);
+    spawnBurst(p.x, p.y - 15, 10, color, { speed: 40, life: 0.7, size: 1.4, glow: true });
   }
 
   function addFloater(x: number, y: number, text: string, color: string) {
     const p = isoProject(VIEW, x, y);
-    floaters.push({ x: p.x, y: p.y - 18, text, color, life: 1.1 });
+    fx.floater(p.x, p.y - 18, text, color);
   }
 
   function startMission(index: number) {
     missionIdx = index;
     spec = MISSIONS[index];
     tiles = generateCity(Math.random);
+    // Content changed, resolution didn't: re-bake at the last-known dpr.
+    ground.rebuild();
     const setup = spawnMission(spec, tiles, agentWeapons, Math.random);
     world = createWorld(tiles, setup.units, Math.random);
     extraction = setup.extraction;
@@ -278,8 +364,8 @@ export function initSyndicateGame(): void {
     boostCooldown = 0;
     moveMarker = null;
     extractionAnnounced = false;
-    floaters = [];
-    particles = [];
+    holdProgress = 0;
+    fx.clear();
     decals = [];
     facing.clear();
     missionEl.textContent = `${index + 1}/${MISSIONS.length}`;
@@ -293,18 +379,26 @@ export function initSyndicateGame(): void {
     });
   }
 
+  /** Banks the takings; announces (once per campaign) a beaten table best. */
+  function bankTakings() {
+    const { best, newRecord } = board.bank(Math.floor(money));
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+    recordEl.textContent = `£${best}`;
+  }
+
   function endCampaign(victory: boolean) {
     phase = 'over';
     audio.playSfx('gameover');
     audio.stop();
-    record = recordHighScore(RECORD_KEY, Math.floor(money));
-    recordEl.textContent = `£${record}`;
+    bankTakings();
     overIcon.textContent = victory ? '🏆' : '☠️';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
     overDesc.textContent = victory ? strings.victoryDesc : strings.gameOverDesc;
     finalCashEl.textContent = `£${Math.floor(money)}`;
     nextBtn.textContent = strings.playAgain;
     overOverlay.style.display = 'flex';
+    // After the overlay is visible, so the initials input can take focus.
+    board.show(Math.floor(money));
   }
 
   function completeMission() {
@@ -315,8 +409,9 @@ export function initSyndicateGame(): void {
       return;
     }
     phase = 'debrief';
-    record = recordHighScore(RECORD_KEY, Math.floor(money));
-    recordEl.textContent = `£${record}`;
+    // Banking persists the campaign's takings at each debrief, like the old
+    // record key did, so quitting mid-campaign keeps the run on the table.
+    bankTakings();
     overIcon.textContent = '💼';
     overTitle.textContent = `${strings.missionComplete} · +£${spec.reward}`;
     overDesc.textContent = `${strings.missionNames[missionIdx + 1]} — ${strings.missionBriefs[missionIdx + 1]}`;
@@ -350,6 +445,9 @@ export function initSyndicateGame(): void {
         addFloater(event.x, event.y, `+£${bonus}`, '#67e8f9');
         const kindName = strings.kinds[event.kind];
         if (kindName) showToast(`🧠 ${kindName} ${strings.joined}`);
+      } else if (event.type === 'vipSecured') {
+        spawnSparkle(event.x, event.y, '#fcd34d');
+        showToast(`🎓 ${strings.vipSecured}`);
       } else if (event.type === 'pickup') {
         spawnSparkle(event.x, event.y, '#fde68a');
         if (event.role === 'follower') {
@@ -371,20 +469,23 @@ export function initSyndicateGame(): void {
     return livingAgents(world).some(a => Math.hypot(a.x - ex, a.y - ey) <= EXTRACTION_RADIUS);
   }
 
+  /**
+   * The escort's win test. Deliberately about the asset and not the squad: an
+   * agent alone on the pad must not extract a mission whose whole point is
+   * what it brought with it.
+   */
+  function vipAtExtraction(): boolean {
+    if (extraction < 0) return false;
+    const vip = vipOf(world);
+    if (!vip || !vip.alive || !escorting(vip)) return false;
+    const ex = (extraction % MAP_W) + 0.5;
+    const ey = Math.floor(extraction / MAP_W) + 0.5;
+    return Math.hypot(vip.x - ex, vip.y - ey) <= EXTRACTION_RADIUS;
+  }
+
   function update(dt: number) {
     clock += dt;
-    floaters = floaters.filter(f => {
-      f.life -= dt;
-      f.y -= 16 * dt;
-      return f.life > 0;
-    });
-    particles = particles.filter(part => {
-      part.life -= dt;
-      part.x += part.vx * dt;
-      part.y += part.vy * dt;
-      part.vy += part.gravity * 120 * dt;
-      return part.life > 0;
-    });
+    fx.update(dt);
     decals = decals.filter(d => (d.life -= dt) > 0);
     for (const drop of rain) {
       drop.y += drop.speed * dt;
@@ -408,8 +509,8 @@ export function initSyndicateGame(): void {
       const from = isoProject(VIEW, shot.fx, shot.fy);
       const to = isoProject(VIEW, shot.tx, shot.ty);
       const flash = shot.faction === 'player' ? '#a5f3fc' : '#fecaca';
-      spawnBurst(from.x, from.y - 8, 4, flash, { speed: 70, life: 0.1, size: 1.4, glow: true });
-      spawnBurst(to.x, to.y - 8, 5, '#fde68a', { speed: 80, life: 0.18, size: 1.3, glow: true });
+      spawnBurst(from.x, from.y - 13, 4, flash, { speed: 70, life: 0.1, size: 1.4, glow: true });
+      spawnBurst(to.x, to.y - 13, 5, '#fde68a', { speed: 80, life: 0.18, size: 1.3, glow: true });
       if (shot.faction === 'player') firedThisStep = true;
     }
     // One blip per step keeps rapid-fire weapons from machine-gunning the mixer.
@@ -424,18 +525,38 @@ export function initSyndicateGame(): void {
       showToast(`🚁 ${strings.objectiveExtract}`);
     }
 
-    const status = missionStatus(spec, world.units, persuadedCivilians(world), agentAtExtraction());
+    // Computed once per tick and reused below — it scans living agents and does
+    // distance math, and both the secure hold and missionStatus want the same
+    // value for this frame.
+    const atExtraction = agentAtExtraction();
+
+    // A `secure` mission is won by holding the landing zone: bank the seconds a
+    // living agent stands on the LZ (clamped to the target). The completed hold
+    // is the win itself — completeMission below signals it, and the HUD readout
+    // already shows the count climbing — so there is no separate toast here.
+    if (spec.objective === 'secure' && atExtraction) {
+      holdProgress = Math.min(spec.holdSeconds ?? 0, holdProgress + dt);
+    }
+
+    const status = missionStatus(
+      spec,
+      world.units,
+      persuadedCivilians(world),
+      atExtraction,
+      holdProgress,
+      vipAtExtraction()
+    );
     if (status === 'won') completeMission();
     else if (status === 'lost') endCampaign(false);
   }
 
   // --- Rendering ---
 
-  function drawRoad(i: number, x: number, y: number) {
-    fillTile(ctx, VIEW, x, y, '#262c3a');
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.22)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 5]);
+  function drawRoad(g: CanvasRenderingContext2D, i: number, x: number, y: number) {
+    fillTile(g, VIEW, x, y, '#1f242f');
+    g.strokeStyle = 'rgba(250, 204, 21, 0.22)';
+    g.lineWidth = 1.5;
+    g.setLineDash([3, 5]);
     const centre = isoProject(VIEW, x + 0.5, y + 0.5);
     const links: Array<[boolean, number, number]> = [
       [x > 0 && tiles[i - 1].kind === 'road', x, y + 0.5],
@@ -446,44 +567,153 @@ export function initSyndicateGame(): void {
     for (const [connected, tx, ty] of links) {
       if (!connected) continue;
       const edge = isoProject(VIEW, tx, ty);
-      ctx.beginPath();
-      ctx.moveTo(centre.x, centre.y);
-      ctx.lineTo(edge.x, edge.y);
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(centre.x, centre.y);
+      g.lineTo(edge.x, edge.y);
+      g.stroke();
     }
-    ctx.setLineDash([]);
+    g.setLineDash([]);
   }
 
   function drawWindows(x: number, y: number, i: number, height: number) {
-    const inset = 0.08;
-    const w = isoProject(VIEW, x + inset, y + 1 - inset);
-    const sCorner = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
-    const e = isoProject(VIEW, x + 1 - inset, y + inset);
+    const { w, s: sCorner, e } = blockFaceCorners(VIEW, x, y);
     const rows = Math.floor(height / 8);
     const faces: [{ x: number; y: number }, { x: number; y: number }][] = [
       [w, sCorner],
       [sCorner, e]
     ];
+    // Batched passes: every window's category accumulates into one path,
+    // one fill/stroke per category per building instead of per window —
+    // Syndicate draws ~300 facades a frame, so draw-call count, not the
+    // arithmetic, is the budget. (Positions are recomputed per pass; the
+    // math is cheap, the state changes are not.)
+
+    // Frames go only under lit windows — a dark frame on a dark facade
+    // paints pixels nobody sees, and the facades are the frame budget.
+    ctx.fillStyle = 'rgba(5, 8, 18, 0.7)';
+    ctx.beginPath();
     faces.forEach(([a, b], f) => {
       for (let r = 0; r < rows; r++) {
+        if (facadeStrip(i, f, r)) continue;
         for (let c = 0; c < 2; c++) {
+          if (!facadeLit(i, f, r, c)) continue;
           const t = 0.3 + c * 0.4;
           const bx = a.x + (b.x - a.x) * t;
           const by = a.y + (b.y - a.y) * t - height * ((r + 0.5) / rows);
-          const lit = (i * 31 + f * 17 + r * 7 + c * 13) % 5 < 3;
-          ctx.fillStyle = lit ? 'rgba(165, 243, 252, 0.5)' : 'rgba(5, 8, 18, 0.6)';
-          ctx.fillRect(bx - 1, by - 1.5, 2, 3);
+          ctx.rect(bx - 1.3, by - 1.9, 2.6, 3.8);
         }
       }
     });
+    ctx.fill();
+
+    // Panes: lit glass as two half-panes (the gap reads as a mullion
+    // without a third pass), unlit as a single dark pane.
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.fillStyle = pass === 0 ? 'rgba(165, 243, 252, 0.45)' : 'rgba(24, 33, 51, 0.65)';
+      ctx.beginPath();
+      faces.forEach(([a, b], f) => {
+        for (let r = 0; r < rows; r++) {
+          if (facadeStrip(i, f, r)) continue;
+          for (let c = 0; c < 2; c++) {
+            const on = facadeLit(i, f, r, c);
+            if (pass === 0 ? !on : on) continue;
+            const t = 0.3 + c * 0.4;
+            const bx = a.x + (b.x - a.x) * t;
+            const by = a.y + (b.y - a.y) * t - height * ((r + 0.5) / rows);
+            if (pass === 0) {
+              ctx.rect(bx - 1, by - 1.5, 0.8, 3);
+              ctx.rect(bx + 0.2, by - 1.5, 0.8, 3);
+            } else {
+              ctx.rect(bx - 1, by - 1.5, 2, 3);
+            }
+          }
+        }
+      });
+      ctx.fill();
+    }
+
+    // Late-shift floors: one wide lit office strip instead of panes.
+    ctx.fillStyle = 'rgba(165, 243, 252, 0.28)';
+    ctx.beginPath();
+    faces.forEach(([a, b], f) => {
+      for (let r = 0; r < rows; r++) {
+        if (!facadeStrip(i, f, r)) continue;
+        const sy = height * ((r + 0.5) / rows);
+        faceBandPath(ctx, a, b, 0.18, 0.82, sy + 1.5, sy - 1.5);
+      }
+    });
+    ctx.fill();
+  }
+
+  /**
+   * Warm shopfront glow at the base of low-rise faces that meet a street
+   * tile — a lit doorway with a neon sign dot. Hashed so only some blocks
+   * trade.
+   */
+  function drawStorefront(x: number, y: number, i: number, height: number, palette: number) {
+    // Only a minority of low-rise blocks trade — most of the city sleeps.
+    if (height >= 24 || hash(i, 8) < 0.65) return;
+    const { w, s: sCorner, e } = blockFaceCorners(VIEW, x, y);
+    for (let f = 0; f < 2; f++) {
+      const open =
+        f === 0
+          ? y + 1 < MAP_H && tiles[i + MAP_W].kind !== 'building'
+          : x + 1 < MAP_W && tiles[i + 1].kind !== 'building';
+      if (!open) continue;
+      const a = f === 0 ? w : sCorner;
+      const b = f === 0 ? sCorner : e;
+      ctx.fillStyle = 'rgba(253, 224, 130, 0.22)';
+      ctx.beginPath();
+      faceBandPath(ctx, a, b, 0.15, 0.85, 0.5, 4);
+      ctx.fill();
+      // Doorway and a neon sign dot beside it.
+      const dx = a.x + (b.x - a.x) * 0.5;
+      const dy = a.y + (b.y - a.y) * 0.5;
+      ctx.fillStyle = 'rgba(255, 236, 180, 0.6)';
+      ctx.fillRect(dx - 1, dy - 4.2, 2, 4.2);
+      ctx.fillStyle = NEON[palette];
+      ctx.fillRect(dx + 2.2, dy - 5.2, 1, 1);
+    }
+  }
+
+  /**
+   * Huge glowing ad-screen high on the SE face of tall towers — the
+   * Syndicate-Wars signage read (Round 6 mood pass). Hashed so only half the
+   * tall band advertises; a slow shimmer plus a blink-gated scan strip make
+   * the screens read animated without strobing. The glow is a second, wider
+   * low-alpha band rather than shadowBlur — the blur variant measured +50%
+   * on the whole sweep's CPU cost, the band is noise. Drawn in the sweep
+   * with its building so occlusion holds.
+   */
+  function drawAdScreen(x: number, y: number, i: number, height: number) {
+    if (height < 30 || hash(i, 9) >= 0.5) return;
+    const { s: sCorner, e } = blockFaceCorners(VIEW, x, y);
+    const palette = Math.floor(hash(i, 10) * NEON.length);
+    const shimmer = 0.4 + 0.18 * Math.sin(clock * 1.3 + i);
+    ctx.fillStyle = NEON[palette];
+    ctx.globalAlpha = shimmer * 0.35;
+    ctx.beginPath();
+    faceBandPath(ctx, sCorner, e, 0.1, 0.9, height - 25, height - 3);
+    ctx.fill();
+    ctx.globalAlpha = shimmer;
+    ctx.beginPath();
+    faceBandPath(ctx, sCorner, e, 0.18, 0.82, height - 22, height - 6);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // A pale scan-line drifts up the screen while the beacon cadence blinks.
+    if (blink(clock, i)) {
+      const sy = height - 21 + ((clock * 5 + i * 0.7) % 1) * 13;
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      faceBandPath(ctx, sCorner, e, 0.18, 0.82, sy, sy + 1.4);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawNeonTrim(x: number, y: number, height: number, palette: number) {
-    const inset = 0.08;
-    const n = isoProject(VIEW, x + inset, y + inset);
-    const e = isoProject(VIEW, x + 1 - inset, y + inset);
-    const sCorner = isoProject(VIEW, x + 1 - inset, y + 1 - inset);
-    const w = isoProject(VIEW, x + inset, y + 1 - inset);
+    const { n, e, s: sCorner, w } = blockFaceCorners(VIEW, x, y);
     ctx.strokeStyle = NEON[palette];
     ctx.lineWidth = 1.2;
     ctx.globalAlpha = 0.85;
@@ -509,23 +739,40 @@ export function initSyndicateGame(): void {
     return dir;
   }
 
+  /**
+   * Units at Syndicate-Wars scale — the Round 6 art pass. Figures stand
+   * ~26 px (2× the original skeleton) so coat swing, stance, and carried
+   * hardware read at a glance; pointer math is untouched (selection is
+   * tile-based through toLogical), only the drawing grew.
+   */
   function drawUnit(u: Unit) {
     const p = isoProject(VIEW, u.x, u.y);
     const dir = headingOf(u, p.x, p.y);
     const moving = u.path.length > 0;
-    const stride = moving ? Math.sin(clock * 11 + u.id) * 1.4 : 0;
+    const stride = moving ? Math.sin(clock * 11 + u.id) * 2.8 : 0;
 
     // Contact shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y + 1, 4.5, 2.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y + 1, 8, 3.8, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (u.kind === 'agent' && selected.has(squad().indexOf(u))) {
       ctx.strokeStyle = `rgba(103, 232, 249, ${0.65 + 0.25 * Math.sin(clock * 6)})`;
-      ctx.lineWidth = 1.3;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y + 1, 7, 3.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y + 1, 11.5, 5.4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (escorting(u)) {
+      // A collected asset gets its own ground ring: it was never persuaded, so
+      // it carries no follower mote, and it is the one unit on the field the
+      // player cannot afford to lose track of.
+      ctx.strokeStyle = `rgba(252, 211, 77, ${0.6 + 0.25 * Math.sin(clock * 5)})`;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 1, 11.5, 5.4, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -553,6 +800,12 @@ export function initSyndicateGame(): void {
       coat = '#9a7b22';
       trim = '#f5c84b';
       head = '#caa07a';
+    } else if (u.kind === 'vip') {
+      // The asset wears a technician's pale coat: the only bright silhouette
+      // on a street of dark chrome, so it never gets lost in a crowd.
+      coat = '#d5dae6';
+      trim = '#f6f8fc';
+      head = '#caa07a';
     } else {
       coat = CIVILIAN_TINTS[u.tint % CIVILIAN_TINTS.length];
       trim = shadeColor(coat, 0.8);
@@ -561,80 +814,217 @@ export function initSyndicateGame(): void {
 
     // Legs (stride animates when walking)
     ctx.strokeStyle = shadeColor(coat, 0.55);
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 2.6;
     ctx.beginPath();
-    ctx.moveTo(p.x - 1.3, p.y - 3);
-    ctx.lineTo(p.x - 1.3 + stride * 0.4, p.y);
-    ctx.moveTo(p.x + 1.3, p.y - 3);
-    ctx.lineTo(p.x + 1.3 - stride * 0.4, p.y);
+    ctx.moveTo(p.x - 2.4, p.y - 6);
+    ctx.lineTo(p.x - 2.4 + stride * 0.5, p.y);
+    ctx.moveTo(p.x + 2.4, p.y - 6);
+    ctx.lineTo(p.x + 2.4 - stride * 0.5, p.y);
     ctx.stroke();
 
-    // Torso / coat — a tapered silhouette
+    // Torso — each kind cuts a distinct silhouette on the shared skeleton,
+    // grounded by a dark outline stroke around the fill.
     ctx.fillStyle = coat;
     ctx.beginPath();
-    ctx.moveTo(p.x - 3, p.y - 3.5);
-    ctx.lineTo(p.x + 3, p.y - 3.5);
-    ctx.lineTo(p.x + 2.4, p.y - 9.5);
-    ctx.lineTo(p.x - 2.4, p.y - 9.5);
+    if (u.kind === 'agent') {
+      // Long trench coat: shoulders in, hem flaring wide past the knee, and a
+      // walk-swing kick at the hem's facing corner.
+      ctx.moveTo(p.x - 6 - Math.max(0, -dir * stride) * 0.4, p.y - 3.6);
+      ctx.lineTo(p.x + 6 + Math.max(0, dir * stride) * 0.4, p.y - 3.6);
+      ctx.lineTo(p.x + 4.4, p.y - 19);
+      ctx.lineTo(p.x - 4.4, p.y - 19);
+    } else if (u.kind === 'enemy') {
+      // Broader rival build with armoured shoulders.
+      ctx.moveTo(p.x - 6.6, p.y - 6.4);
+      ctx.lineTo(p.x + 6.6, p.y - 6.4);
+      ctx.lineTo(p.x + 5.8, p.y - 18.4);
+      ctx.lineTo(p.x - 5.8, p.y - 18.4);
+    } else if (u.kind === 'civilian' || u.kind === 'vip') {
+      // Slighter frame; coat length varies with the tint roll.
+      const hem = p.y - 5.8 - (u.tint % 3) * 1;
+      ctx.moveTo(p.x - 5, hem);
+      ctx.lineTo(p.x + 5, hem);
+      ctx.lineTo(p.x + 4, p.y - 18.6);
+      ctx.lineTo(p.x - 4, p.y - 18.6);
+    } else {
+      ctx.moveTo(p.x - 5.8, p.y - 6.4);
+      ctx.lineTo(p.x + 5.8, p.y - 6.4);
+      ctx.lineTo(p.x + 4.6, p.y - 19);
+      ctx.lineTo(p.x - 4.6, p.y - 19);
+    }
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = shadeColor(coat, 0.35);
+    ctx.lineWidth = 1;
+    ctx.stroke();
     // Lit edge down the facing side
     ctx.fillStyle = trim;
-    ctx.fillRect(p.x + dir * 2 - 0.5, p.y - 9.5, 1, 6);
+    ctx.fillRect(p.x + dir * 4 - 0.8, p.y - 19, 1.6, 12);
+    if (u.kind === 'agent') {
+      // Belt and a raised collar over the trench coat.
+      ctx.fillStyle = shadeColor(coat, 0.45);
+      ctx.fillRect(p.x - 5, p.y - 11.2, 10, 1.8);
+      ctx.fillStyle = shadeColor(coat, 1.35);
+      ctx.fillRect(p.x - 4.6, p.y - 19.8, 9.2, 1.6);
+    } else if (u.kind === 'enemy') {
+      // Shoulder spikes silhouette the rivals even at a glance.
+      ctx.fillStyle = shadeColor(coat, 1.5);
+      ctx.beginPath();
+      ctx.moveTo(p.x - 7.2, p.y - 18);
+      ctx.lineTo(p.x - 3.8, p.y - 18);
+      ctx.lineTo(p.x - 6.4, p.y - 22.8);
+      ctx.closePath();
+      ctx.moveTo(p.x + 7.2, p.y - 18);
+      ctx.lineTo(p.x + 3.8, p.y - 18);
+      ctx.lineTo(p.x + 6.4, p.y - 22.8);
+      ctx.closePath();
+      ctx.fill();
+      // Chest plate seam
+      ctx.strokeStyle = shadeColor(coat, 0.5);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 18);
+      ctx.lineTo(p.x, p.y - 10);
+      ctx.stroke();
+    } else if (u.kind === 'guard') {
+      // Cross-strap and a baton on the off-hand hip.
+      ctx.strokeStyle = shadeColor(coat, 0.5);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 4.2, p.y - 18);
+      ctx.lineTo(p.x + dir * 3.4, p.y - 10.4);
+      ctx.stroke();
+      ctx.strokeStyle = '#1b2230';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 4.8, p.y - 8.4);
+      ctx.lineTo(p.x - dir * 6.8, p.y - 3.2);
+      ctx.stroke();
+    } else if (u.kind === 'target') {
+      // Pinstripe suit: shirt wedge, jacket stripes, a briefcase in hand.
+      ctx.fillStyle = '#e8e4da';
+      ctx.beginPath();
+      ctx.moveTo(p.x + dir * 0.4, p.y - 18);
+      ctx.lineTo(p.x + dir * 3.2, p.y - 17.2);
+      ctx.lineTo(p.x + dir * 0.8, p.y - 12.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = shadeColor(coat, 1.3);
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      for (const sx of [-3.4, -1.8, 1.8, 3.4]) {
+        ctx.moveTo(p.x + sx, p.y - 17.6);
+        ctx.lineTo(p.x + sx * 1.2, p.y - 7);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#3a2c18';
+      ctx.fillRect(p.x + dir * 5.2 - 2.6, p.y - 7.2, 5.2, 4);
+      ctx.fillStyle = '#c9a227';
+      ctx.fillRect(p.x + dir * 5.2 - 0.5, p.y - 6.4, 1, 1);
+    } else if (u.kind === 'vip') {
+      // Coat placket down the front and a courier satchel slung across it —
+      // whatever the contract is really for is in that bag.
+      ctx.strokeStyle = shadeColor(coat, 0.6);
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 18.2);
+      ctx.lineTo(p.x, p.y - 6.6);
+      ctx.stroke();
+      ctx.strokeStyle = '#6b5233';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(p.x - dir * 4.2, p.y - 18.2);
+      ctx.lineTo(p.x + dir * 3.6, p.y - 11);
+      ctx.stroke();
+      ctx.fillStyle = '#8a6a41';
+      ctx.fillRect(p.x + dir * 3.6 - 2.4, p.y - 11.4, 4.8, 4.2);
+      ctx.fillStyle = shadeColor('#8a6a41', 1.45);
+      ctx.fillRect(p.x + dir * 3.6 - 2.4, p.y - 11.4, 4.8, 1);
+    }
 
-    // Weapon arm — armed units level a gun in their heading
+    // Weapon arm — armed units level their actual hardware in their heading.
     if (u.weapon) {
       ctx.strokeStyle = '#1b2230';
-      ctx.lineWidth = 2.2;
+      ctx.lineWidth = 2.6;
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - 7);
-      ctx.lineTo(p.x + dir * 5, p.y - 6.5);
+      ctx.moveTo(p.x, p.y - 14);
+      ctx.lineTo(p.x + dir * 8, p.y - 13.2);
       ctx.stroke();
-      ctx.fillStyle = '#11161f';
-      ctx.fillRect(dir > 0 ? p.x + 4 : p.x - 6.5, p.y - 7.4, 2.5, 1.8);
+      if (u.weapon === 'pistol') {
+        ctx.fillStyle = '#11161f';
+        ctx.fillRect(dir > 0 ? p.x + 7.2 : p.x - 11.6, p.y - 14.8, 4.4, 2.4);
+        // Grip drop
+        ctx.fillRect(dir > 0 ? p.x + 7.4 : p.x - 9.2, p.y - 13, 1.8, 2.6);
+      } else if (u.weapon === 'uzi') {
+        ctx.fillStyle = '#11161f';
+        ctx.fillRect(dir > 0 ? p.x + 6.4 : p.x - 13.2, p.y - 15.2, 6.8, 3);
+        // Hanging magazine
+        ctx.fillRect(dir > 0 ? p.x + 8.8 : p.x - 10.4, p.y - 12.2, 2.4, 4);
+      } else {
+        // Minigun: heavy receiver, twin barrels, and a muzzle block
+        ctx.fillStyle = '#0d1119';
+        ctx.fillRect(dir > 0 ? p.x + 5.2 : p.x - 10.8, p.y - 16.8, 5.6, 5.6);
+        ctx.fillStyle = '#2a3242';
+        ctx.fillRect(dir > 0 ? p.x + 10.4 : p.x - 18.8, p.y - 16.4, 8.4, 1.8);
+        ctx.fillRect(dir > 0 ? p.x + 10.4 : p.x - 18.8, p.y - 13.6, 8.4, 1.8);
+        ctx.fillStyle = '#3a4456';
+        ctx.fillRect(dir > 0 ? p.x + 17.6 : p.x - 19.8, p.y - 16.8, 2.2, 5.4);
+      }
     }
 
     // Head
     ctx.fillStyle = head;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 11, 2.3, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y - 22, 4.2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = shadeColor(head, 0.5);
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
     if (cap) {
       ctx.fillStyle = cap;
-      ctx.fillRect(p.x - 2.3, p.y - 12.6, 4.6, 1.6);
+      ctx.fillRect(p.x - 4.4, p.y - 25.4, 8.8, 2.8);
+      // Cap brim on the facing side
+      ctx.fillRect(dir > 0 ? p.x + 4.4 : p.x - 6.8, p.y - 24.6, 2.4, 1.4);
     }
     if (visor) {
       ctx.save();
       ctx.shadowColor = visor;
-      ctx.shadowBlur = 5;
+      ctx.shadowBlur = 6;
       ctx.fillStyle = visor;
-      ctx.fillRect(p.x - 1.6, p.y - 11.6, 3.2, 1.3);
+      ctx.fillRect(p.x - 3.2, p.y - 23.4, 6.4, 2.2);
       ctx.restore();
     }
 
     if (u.persuaded) {
-      const bob = Math.sin(clock * 5 + u.id) * 1.1;
+      const bob = Math.sin(clock * 5 + u.id) * 1.6;
       ctx.save();
       ctx.shadowColor = '#67e8f9';
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = 7;
       ctx.fillStyle = '#a5f3fc';
       ctx.beginPath();
-      ctx.arc(p.x, p.y - 16 + bob, 1.5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y - 30 + bob, 2.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
 
     if (u.kind === 'target') {
-      ctx.font = '8px serif';
-      ctx.fillText('👑', p.x, p.y - 16 + Math.sin(clock * 3) * 1);
+      ctx.font = '13px serif';
+      ctx.fillText('👑', p.x, p.y - 30 + Math.sin(clock * 3) * 1.4);
+    }
+
+    if (u.kind === 'vip') {
+      // Marks the asset in both states — pinned across the city, so the squad
+      // can find it, and in tow, so the squad can keep it.
+      ctx.font = '13px serif';
+      ctx.fillText('🎓', p.x, p.y - 30 + Math.sin(clock * 3) * 1.4);
     }
 
     if (u.hp < u.maxHp && u.alive) {
       const frac = Math.max(0, u.hp / u.maxHp);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(p.x - 5, p.y - 17, 10, 1.8);
+      ctx.fillRect(p.x - 8, p.y - 31, 16, 2.4);
       ctx.fillStyle = frac > 0.5 ? '#4ade80' : frac > 0.25 ? '#fbbf24' : '#f87171';
-      ctx.fillRect(p.x - 5, p.y - 17, 10 * frac, 1.8);
+      ctx.fillRect(p.x - 8, p.y - 31, 16 * frac, 2.4);
     }
   }
 
@@ -642,22 +1032,51 @@ export function initSyndicateGame(): void {
     const p = isoProject(VIEW, pickup.x, pickup.y);
     const bob = Math.sin(clock * 4 + pickup.x * 3) * 1.3;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 5 + pickup.y);
-    const halo = ctx.createRadialGradient(p.x, p.y - 3, 0, p.x, p.y - 3, 9);
+    const halo = ctx.createRadialGradient(p.x, p.y - 4, 0, p.x, p.y - 4, 11);
     halo.addColorStop(0, `rgba(253, 230, 138, ${0.35 + pulse * 0.25})`);
     halo.addColorStop(1, 'rgba(253, 230, 138, 0)');
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 3, 9, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y - 4, 11, 0, Math.PI * 2);
     ctx.fill();
-    ctx.font = '10px serif';
-    ctx.fillText('🔫', p.x, p.y - 6 + bob);
+    ctx.font = '13px serif';
+    ctx.fillText('🔫', p.x, p.y - 7 + bob);
   }
 
   function drawRooftop(x: number, y: number, i: number, height: number, palette: number) {
     if (height < 18) return;
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
     const ty = c.y - height;
-    const variant = Math.floor(hash(i, 1) * 3);
+    // Two extra clutter variants over the original three; the helipad is
+    // reserved for the tall band so it reads at scale.
+    const variant = Math.floor(hash(i, 1) * (height >= 30 ? 5 : 4));
+    if (variant === 3) {
+      // Vent cluster with a stub exhaust pipe
+      ctx.fillStyle = shadeColor(FACADES[palette], 0.55);
+      ctx.fillRect(c.x - 4.5, ty - 2, 3, 2);
+      ctx.fillRect(c.x - 0.5, ty - 2.6, 2.6, 2.6);
+      ctx.fillRect(c.x + 3, ty - 1.8, 2.2, 1.8);
+      ctx.strokeStyle = shadeColor(FACADES[palette], 0.8);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x + 0.8, ty - 2.6);
+      ctx.lineTo(c.x + 0.8, ty - 5.5);
+      ctx.stroke();
+      return;
+    }
+    if (variant === 4) {
+      // Helipad ring with an H
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(c.x, ty, 6.5, 3.2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
+      ctx.fillRect(c.x - 2, ty - 1.6, 1, 3.2);
+      ctx.fillRect(c.x + 1, ty - 1.6, 1, 3.2);
+      ctx.fillRect(c.x - 1, ty - 0.5, 2, 1);
+      return;
+    }
     if (variant === 0) {
       // Antenna with a blinking aircraft light
       ctx.strokeStyle = '#0b0f17';
@@ -666,7 +1085,7 @@ export function initSyndicateGame(): void {
       ctx.moveTo(c.x, ty);
       ctx.lineTo(c.x, ty - 7);
       ctx.stroke();
-      if (Math.floor(clock * 1.5 + i) % 2 === 0) {
+      if (blink(clock, i)) {
         ctx.save();
         ctx.shadowColor = '#f87171';
         ctx.shadowBlur = 5;
@@ -681,27 +1100,40 @@ export function initSyndicateGame(): void {
       ctx.fillStyle = shadeColor(FACADES[palette], 0.5);
       ctx.fillRect(c.x - 3, ty - 3, 6, 3);
     } else {
-      // Glowing holo-billboard
+      // Glowing holo-billboard — a size step on the tall band so the skyline
+      // carries light where the ad-screens live.
+      const big = height >= 30;
       ctx.save();
       ctx.shadowColor = NEON[palette];
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = big ? 8 : 6;
       ctx.fillStyle = NEON[palette];
       ctx.globalAlpha = 0.55 + 0.2 * Math.sin(clock * 2 + i);
-      ctx.fillRect(c.x - 2.5, ty - 8, 5, 6);
+      if (big) ctx.fillRect(c.x - 4, ty - 11, 8, 8.5);
+      else ctx.fillRect(c.x - 2.5, ty - 8, 5, 6);
       ctx.restore();
       ctx.globalAlpha = 1;
     }
   }
 
-  function drawLamp(x: number, y: number) {
+  /** The lamp's flat light pool — ground content, safe to bake. */
+  function drawLampPool(g: CanvasRenderingContext2D, x: number, y: number) {
     const c = isoProject(VIEW, x + 0.5, y + 0.5);
-    const pool = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, VIEW.halfW * 1.3);
+    const pool = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, VIEW.halfW * 1.3);
     pool.addColorStop(0, 'rgba(253, 224, 130, 0.16)');
     pool.addColorStop(1, 'rgba(253, 224, 130, 0)');
-    ctx.fillStyle = pool;
-    ctx.beginPath();
-    ctx.ellipse(c.x, c.y, VIEW.halfW * 1.3, VIEW.halfH * 1.3, 0, 0, Math.PI * 2);
-    ctx.fill();
+    g.fillStyle = pool;
+    g.beginPath();
+    g.ellipse(c.x, c.y, VIEW.halfW * 1.3, VIEW.halfH * 1.3, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  /**
+   * The standing post and bulb — vertical scenery, so it draws in the
+   * back-to-front sweep (NOT the ground bake) to keep painter occlusion:
+   * a building south-east of the lamp must still paint over the post.
+   */
+  function drawLampPost(x: number, y: number) {
+    const c = isoProject(VIEW, x + 0.5, y + 0.5);
     ctx.strokeStyle = '#0b0f17';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -719,10 +1151,22 @@ export function initSyndicateGame(): void {
   }
 
   function drawExtraction() {
-    if (extraction < 0 || spec.objective !== 'persuade' || phase !== 'play') return;
+    // The pad marks the persuade escape route and doubles as the `secure`
+    // landing zone and the `escort` drop-off (same functional marker, no new
+    // art) — lit green while the squad actually controls it.
+    const marked =
+      spec.objective === 'persuade' ||
+      spec.objective === 'secure' ||
+      spec.objective === 'escort';
+    if (extraction < 0 || !marked || phase !== 'play') return;
     const x = extraction % MAP_W;
     const y = Math.floor(extraction / MAP_W);
-    const open = persuadedCivilians(world) >= spec.persuadeQuota;
+    const open =
+      spec.objective === 'secure'
+        ? agentAtExtraction()
+        : spec.objective === 'escort'
+          ? vipAtExtraction()
+          : persuadedCivilians(world) >= spec.persuadeQuota;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 4);
     const colour = open ? '#4ade80' : '#94a3b8';
 
@@ -744,12 +1188,16 @@ export function initSyndicateGame(): void {
     ctx.fillText('🚁', p.x, p.y - beamH - 6 - pulse * 3);
   }
 
+  // The sky fill doubles as the frame clear; the gradient itself never
+  // changes, so build it once instead of once per frame.
+  const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+  sky.addColorStop(0, '#04060d');
+  sky.addColorStop(1, '#070a14');
+
   function render() {
-    const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    sky.addColorStop(0, '#070a14');
-    sky.addColorStop(1, '#0b0f1c');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ground.draw(ctx);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -768,6 +1216,21 @@ export function initSyndicateGame(): void {
       pickupsByDiag[d].push(pickup);
     }
 
+    // Group decals by the tile they fell on up front — scanning the whole
+    // decal list once per tile turns a bloody mission into an
+    // O(tiles × decals) render. Per-tile insertion order matches the array,
+    // so the composite is unchanged.
+    const decalsByTile = new Map<number, Decal[]>();
+    for (const d of decals) {
+      const dx = Math.floor(d.x);
+      const dy = Math.floor(d.y);
+      if (dx < 0 || dx >= MAP_W || dy < 0 || dy >= MAP_H) continue;
+      const tile = dy * MAP_W + dx;
+      const group = decalsByTile.get(tile);
+      if (group) group.push(d);
+      else decalsByTile.set(tile, [d]);
+    }
+
     let lastDiag = -1;
     forEachTileBackToFront(MAP_W, MAP_H, (x, y, i, diag) => {
       if (diag !== lastDiag) {
@@ -777,31 +1240,33 @@ export function initSyndicateGame(): void {
         }
         lastDiag = diag;
       }
+      // Flat ground (roads, pavement, plazas, lamp light pools) comes
+      // pre-baked from the `ground` layer — buildings and standing lamp
+      // posts still paint in the sweep so occlusion stays correct.
       const tile = tiles[i];
       if (tile.kind === 'road') {
-        drawRoad(i, x, y);
-        if (hash(i, 7) < 0.05) drawLamp(x, y);
-      } else if (tile.kind === 'pavement') {
-        fillTile(ctx, VIEW, x, y, (x + y) % 2 === 0 ? '#30374a' : '#343b4d');
-      } else if (tile.kind === 'plaza') {
-        fillTile(ctx, VIEW, x, y, '#283148');
-      } else {
-        fillTile(ctx, VIEW, x, y, '#10141f');
+        if (hash(i, 7) < 0.05) drawLampPost(x, y);
+      } else if (tile.kind === 'building') {
         drawBlock(ctx, VIEW, x, y, tile.height, FACADES[tile.palette]);
         drawWindows(x, y, i, tile.height);
+        drawStorefront(x, y, i, tile.height, tile.palette);
         drawNeonTrim(x, y, tile.height, tile.palette);
+        drawAdScreen(x, y, i, tile.height);
         drawRooftop(x, y, i, tile.height, tile.palette);
       }
-      // Ground decals (blood/scorch) sit on the tile they fell on
-      for (const d of decals) {
-        if (Math.floor(d.x) !== x || Math.floor(d.y) !== y) continue;
-        const dp = isoProject(VIEW, d.x, d.y);
-        ctx.globalAlpha = Math.min(0.5, (d.life / d.maxLife) * 0.5);
-        ctx.fillStyle = d.color;
-        ctx.beginPath();
-        ctx.ellipse(dp.x, dp.y, d.r, d.r * 0.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
+      // Ground decals (blood/scorch) sit on the tile they fell on. The
+      // no-decal path must stay allocation-free — it runs per tile per frame.
+      const tileDecals = decalsByTile.get(i);
+      if (tileDecals) {
+        for (const d of tileDecals) {
+          const dp = isoProject(VIEW, d.x, d.y);
+          ctx.globalAlpha = Math.min(0.5, (d.life / d.maxLife) * 0.5);
+          ctx.fillStyle = d.color;
+          ctx.beginPath();
+          ctx.ellipse(dp.x, dp.y, d.r, d.r * 0.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
       }
       if (moveMarker && moveMarker.tile === i) {
         ctx.globalAlpha = Math.min(1, moveMarker.t / 0.4);
@@ -825,43 +1290,18 @@ export function initSyndicateGame(): void {
       ctx.strokeStyle = shot.faction === 'player' ? '#67e8f9' : '#f87171';
       ctx.lineWidth = shot.weapon === 'minigun' ? 2 : 1.4;
       ctx.beginPath();
-      ctx.moveTo(from.x, from.y - 8);
-      ctx.lineTo(to.x, to.y - 8);
+      ctx.moveTo(from.x, from.y - 13);
+      ctx.lineTo(to.x, to.y - 13);
       ctx.stroke();
       ctx.fillStyle = '#fef9c3';
       ctx.beginPath();
-      ctx.arc(from.x, from.y - 8, 1.6, 0, Math.PI * 2);
+      ctx.arc(from.x, from.y - 13, 2, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    // Particles — sparks, blood, muzzle flashes
-    for (const part of particles) {
-      const a = Math.max(0, part.life / part.maxLife);
-      ctx.globalAlpha = a;
-      if (part.glow) {
-        ctx.save();
-        ctx.shadowColor = part.color;
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = part.color;
-        ctx.beginPath();
-        ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.fillStyle = part.color;
-        ctx.fillRect(part.x - part.size, part.y - part.size, part.size * 2, part.size * 2);
-      }
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.font = 'bold 10px monospace';
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x, f.y);
-    }
-    ctx.globalAlpha = 1;
+    // Particles (sparks, blood, muzzle flashes), then floaters over them.
+    fx.draw(ctx);
 
     drawAtmosphere();
     refreshHud();
@@ -878,22 +1318,8 @@ export function initSyndicateGame(): void {
     }
     ctx.stroke();
 
-    // Scanlines for the CRT-arcade feel
-    if (scanlines) ctx.drawImage(scanlines, 0, 0);
-
-    // Vignette
-    const vig = ctx.createRadialGradient(
-      CANVAS_W / 2,
-      CANVAS_H / 2,
-      CANVAS_H * 0.35,
-      CANVAS_W / 2,
-      CANVAS_H / 2,
-      CANVAS_H * 0.85
-    );
-    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    vig.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    // Scanlines + vignette for the CRT-arcade feel.
+    atmosphere.draw(ctx);
   }
 
   function refreshHud() {
@@ -912,6 +1338,15 @@ export function initSyndicateGame(): void {
           count >= spec.persuadeQuota
             ? `🚁 ${strings.objectiveExtract}`
             : `🧠 ${strings.objectivePersuade} (${count}/${spec.persuadeQuota})`;
+      } else if (spec.objective === 'secure') {
+        const target = spec.holdSeconds ?? 0;
+        objectiveEl.textContent = `🚁 ${strings.objectiveSecure} (${Math.floor(holdProgress)}/${target}s)`;
+      } else if (spec.objective === 'escort') {
+        const vip = vipOf(world);
+        objectiveEl.textContent =
+          vip && escorting(vip)
+            ? `🚁 ${strings.objectiveEscort}`
+            : `🎓 ${strings.objectiveReachAsset}`;
       } else {
         objectiveEl.textContent = `🎯 ${strings.objectiveAssassinate}`;
       }
@@ -944,10 +1379,10 @@ export function initSyndicateGame(): void {
   // --- Input wiring ---
 
   function tileFromEvent(e: MouseEvent): number {
-    const rect = canvas.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const sy = (e.clientY - rect.top) * (canvas.height / rect.height);
-    return isoTileFromPoint(VIEW, sx, sy, MAP_W, MAP_H);
+    // Logical (not backing-store) coordinates: the backing store is
+    // DPR-scaled, so canvas.width/rect.width would land tiles wide.
+    const p = hiDpi.toLogical(e);
+    return isoTileFromPoint(VIEW, p.x, p.y, MAP_W, MAP_H);
   }
 
   canvas.addEventListener('click', e => {
@@ -979,7 +1414,7 @@ export function initSyndicateGame(): void {
   }
   boostBtn.addEventListener('click', triggerBoost);
 
-  window.addEventListener('keydown', e => {
+  const onKeydown = (e: KeyboardEvent) => {
     if (phase !== 'play') return;
     if (e.key >= '1' && e.key <= '4') selectAgent(parseInt(e.key, 10) - 1);
     else if (e.key === '0' || e.key.toLowerCase() === 'a') selectAgent('all');
@@ -987,22 +1422,33 @@ export function initSyndicateGame(): void {
       e.preventDefault();
       triggerBoost();
     }
-  });
+  };
+  window.addEventListener('keydown', onKeydown);
+  // Window-level listeners outlive a ClientRouter swap; each wiring retires
+  // its own handler so re-inits don't stack keyboard handlers forever.
+  document.addEventListener(
+    'astro:before-swap',
+    () => window.removeEventListener('keydown', onKeydown),
+    { once: true }
+  );
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';
     money = 0;
     agentWeapons = Array(SQUAD_SIZE).fill('pistol');
+    board.beginRun();
     startMission(0);
   });
 
   nextBtn.addEventListener('click', () => {
     overOverlay.style.display = 'none';
+    board.hide();
     if (phase === 'debrief') {
       startMission(missionIdx + 1);
     } else {
       money = 0;
       agentWeapons = Array(SQUAD_SIZE).fill('pistol');
+      board.beginRun();
       startMission(0);
     }
   });

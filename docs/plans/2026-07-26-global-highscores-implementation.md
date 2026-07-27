@@ -199,8 +199,16 @@ sleep for real rather than against a faked clock.
 A score could vanish from the World tab moments after being posted. `loadWorld` applied its reply
 unconditionally, so a fetch issued before a submission and answered after it (reads are cached for
 half a minute, which is ample) put the pre-submission board back on screen, taking the player's own
-entry off it in front of them. Every fetch and every landed submission now stamps a monotonic
-`worldFetch`, and a reply whose stamp has been overtaken stands down instead of applying.
+entry off it in front of them.
+
+The panel now tracks one generation number, `worldGen`, for the newest board that has landed. Only
+a submission's own reply bumps it, because that is the one answer guaranteed to contain the score
+just written; a fetch is served from whatever the CDN holds and can be older than the moment it was
+issued, so issue order alone is not a freshness order. Both paths note the generation when they
+start and stand down if it moved while they were out. That covers a fetch overtaken by a submission
+and, equally, an older submission's reply arriving after a newer one, which the first version of
+this guard let through: it dropped the stale rank but still applied the stale table, so a board
+missing the newest run could sit in memory until something else replaced it.
 
 Separately, the board only ever loaded once. `loadWorld` was gated on `!world`, so a session that
 opened the World tab kept that one snapshot until the page was reloaded, and nobody else's runs
@@ -211,11 +219,7 @@ refresh button: tapping across from the device board is the gesture. Flipping ta
 free because the response's `max-age` answers the repeats from the browser cache, and a refresh
 that fails keeps the board already on screen rather than downgrading it to "unavailable".
 
-Neither is covered by a test. `scoreboard.ts` is DOM-wired and the suite has no jsdom, which is a
-repo-wide decision left open.
-
-Still open, from the same review: two submissions can be in flight at once (the client allows five
-seconds and a short run ends well inside that), and `commit` patches `world` with a reply's table
-before checking its run token, so a late reply from the earlier run can overwrite the later run's
-board with a pre-write view. The rank is discarded correctly; only the table is not. The fix is to
-put both behind one issue-order guard rather than the two counters there now.
+None of it is covered by a test. `scoreboard.ts` is DOM-wired and the suite has no jsdom, which is
+a repo-wide decision left open. The refresh and the failed-refresh fallback were instead checked in
+a real browser against the dev server, which reads the production board over CORS and cannot write
+to it, confirming one request per switch to the tab and a retained board when `fetch` rejects.

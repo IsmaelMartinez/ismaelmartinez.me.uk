@@ -151,9 +151,13 @@ export function initScoreboard(
   // in the data and must not read the same on screen.
   let world: Record<string, ScoreEntry[]> | null = null;
   let worldPending = false;
-  // Bumped by every world fetch and by every landed submission, so a reply
-  // that has been overtaken can tell and stand down.
-  let worldFetch = 0;
+  // Generation of the newest world board that has landed. Only a submission's
+  // own reply bumps it, because that is the one answer guaranteed to include
+  // the score just written; a fetch is served from whatever the CDN holds and
+  // so can be older than the moment it was issued. Both paths note the
+  // generation when they start and stand down if it moved while they were out,
+  // so an overtaken or out-of-order reply can never put an older board back.
+  let worldGen = 0;
   // Kept per scope so switching tabs highlights the row that scope ranked.
   let deviceRank = 0;
   let worldRank = 0;
@@ -234,7 +238,7 @@ export function initScoreboard(
   function loadWorld() {
     if (worldPending) return;
     worldPending = true;
-    const token = ++worldFetch;
+    const gen = worldGen;
     render();
     fetchGlobal().then(boards => {
       worldPending = false;
@@ -243,7 +247,7 @@ export function initScoreboard(
       // are CDN-cached for half a minute, which is easily long enough for the
       // answer here to predate the score the player just posted, and applying
       // it would take their own entry back off the board in front of them.
-      if (token !== worldFetch) return;
+      if (gen !== worldGen) return;
       // A refresh that fails keeps whatever was already on screen: a flaky
       // network should not turn a loaded board into "unavailable". The first
       // fetch has nothing to keep, so a failure there still reads as one.
@@ -286,14 +290,20 @@ export function initScoreboard(
     // `submitGlobal` no-ops away from production and never rejects.
     if (score > 0) {
       const token = runToken;
+      const gen = worldGen;
       submitGlobal(gameId!, initials, score).then(result => {
         if (!result) return;
-        // The board itself is never stale, so it lands whichever run it came
-        // from; only the rank belongs to one run and is dropped once past.
+        // Two runs can have submissions out at once (five seconds are allowed
+        // for one and a short run ends well inside that), and replies can
+        // arrive in either order. A newer one landing first has already put a
+        // board on screen that this older answer predates, so it stands down.
+        if (gen !== worldGen) return;
+        // Otherwise this is the freshest board there is: it came back from the
+        // write itself, so it supersedes any fetch still in flight too.
+        worldGen++;
         world = { ...world, [gameId!]: result.table };
-        // Supersede any fetch already in flight: its reply can only be older
-        // than this one, which came back from the write itself.
-        worldFetch++;
+        // The board lands whichever run it came from; only the rank belongs to
+        // one run and is dropped once that run is past.
         if (token !== runToken) return;
         worldRank = result.rank;
         render();

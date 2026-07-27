@@ -193,3 +193,29 @@ Both are covered by tests that fail without the fix: one drives a rival write in
 and the write to prove the board is merged rather than replaced, and one proves a genuinely
 absent board is still created. The cost is about six seconds on the suite, since those retries
 sleep for real rather than against a faked clock.
+
+### World board freshness (2026-07-26 and 2026-07-27)
+
+A score could vanish from the World tab moments after being posted. `loadWorld` applied its reply
+unconditionally, so a fetch issued before a submission and answered after it (reads are cached for
+half a minute, which is ample) put the pre-submission board back on screen, taking the player's own
+entry off it in front of them. Every fetch and every landed submission now stamps a monotonic
+`worldFetch`, and a reply whose stamp has been overtaken stands down instead of applying.
+
+Separately, the board only ever loaded once. `loadWorld` was gated on `!world`, so a session that
+opened the World tab kept that one snapshot until the page was reloaded, and nobody else's runs
+appeared. Worse, a submission populates `world` on its own, so a player who finished a run before
+ever opening the tab never fetched at all and spent the session on a board frozen at their own
+submission. Every switch to the World tab now refetches, which is what a player has instead of a
+refresh button: tapping across from the device board is the gesture. Flipping tabs repeatedly is
+free because the response's `max-age` answers the repeats from the browser cache, and a refresh
+that fails keeps the board already on screen rather than downgrading it to "unavailable".
+
+Neither is covered by a test. `scoreboard.ts` is DOM-wired and the suite has no jsdom, which is a
+repo-wide decision left open.
+
+Still open, from the same review: two submissions can be in flight at once (the client allows five
+seconds and a short run ends well inside that), and `commit` patches `world` with a reply's table
+before checking its run token, so a late reply from the earlier run can overwrite the later run's
+board with a pre-write view. The rank is discarded correctly; only the table is not. The fix is to
+put both behind one issue-order guard rather than the two counters there now.

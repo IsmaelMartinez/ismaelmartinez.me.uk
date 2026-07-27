@@ -11,8 +11,10 @@
  *
  * The panel shows two boards through one list: the device table above, and
  * the board every visitor shares behind the World tab. The world board is
- * fetched lazily (nobody pays for it until they ask) and every committed
- * score is offered to it, so the two tabs are written by the same commit.
+ * fetched lazily (nobody pays for it until they ask) and refetched on every
+ * switch to that tab, which is what a player has instead of a refresh
+ * button. Every committed score is offered to it, so the two tabs are
+ * written by the same commit.
  */
 import {
   loadTable,
@@ -221,7 +223,14 @@ export function initScoreboard(
     }
   }
 
-  /** One fetch per panel, on the first visit to the World tab. */
+  /**
+   * Fetches the shared board. Runs on every switch to the World tab, so
+   * tapping across from the device board is how a player refreshes it:
+   * without that, a session that loaded the board once would show that one
+   * snapshot until the page was reloaded, and nobody else's runs would ever
+   * appear. Flipping tabs repeatedly costs nothing, because the response's
+   * own `max-age` answers the repeats from the browser's cache.
+   */
   function loadWorld() {
     if (worldPending) return;
     worldPending = true;
@@ -235,7 +244,10 @@ export function initScoreboard(
       // answer here to predate the score the player just posted, and applying
       // it would take their own entry back off the board in front of them.
       if (token !== worldFetch) return;
-      world = boards;
+      // A refresh that fails keeps whatever was already on screen: a flaky
+      // network should not turn a loaded board into "unavailable". The first
+      // fetch has nothing to keep, so a failure there still reads as one.
+      if (boards) world = boards;
       render();
     });
   }
@@ -246,7 +258,7 @@ export function initScoreboard(
       if (next === scope) return;
       scope = next;
       syncTabs();
-      if (scope === 'world' && !world) loadWorld();
+      if (scope === 'world') loadWorld();
       render();
     });
   }

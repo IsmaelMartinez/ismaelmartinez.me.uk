@@ -454,8 +454,6 @@ export const translations = {
     'fun.cascade.hint': '← → move · ↑ rotate · ↓ soft drop · space hard drop · tap the well to rotate',
     'fun.backToFun': 'Back to Fun Stuff',
 
-    // Poo Poo Land
-
     // Mobile Menu
     'nav.menuToggle': 'Toggle menu',
 
@@ -952,8 +950,6 @@ export const translations = {
     'fun.cascade.hint': '← → mover · ↑ girar · ↓ caída suave · espacio caída dura · toca el pozo para girar',
     'fun.backToFun': 'Volver a Diversión',
 
-    // Poo Poo Land
-
     // Mobile Menu
     'nav.menuToggle': 'Alternar menú',
 
@@ -1449,8 +1445,6 @@ export const translations = {
     'fun.cascade.hardDrop': 'Caiguda dura',
     'fun.cascade.hint': '← → moure · ↑ girar · ↓ caiguda suau · espai caiguda dura · toca el pou per girar',
     'fun.backToFun': 'Tornar a Diversió',
-
-    // Poo Poo Land
 
     // Mobile Menu
     'nav.menuToggle': 'Alternar menú',

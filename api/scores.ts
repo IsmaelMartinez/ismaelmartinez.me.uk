@@ -95,6 +95,13 @@ const MAX_SCORE = 10_000_000;
 const INITIALS = /^[A-Z0-9]{1,3}$/;
 
 /**
+ * Nonces exist only for replay dedupe, but they are stored verbatim in a
+ * world-readable blob: bound them to a UUID-sized safe alphabet so the blob
+ * cannot carry free-text graffiti. The client sends crypto.randomUUID().
+ */
+const NONCE = /^[A-Za-z0-9-]{1,64}$/;
+
+/**
  * Three letters of A-Z0-9 reach a handful of slurs and obscenities, and this
  * board is public, shared and has no admin endpoint: anything that lands here
  * shows on every cabinet in three locales until someone hand-edits the blob.
@@ -238,7 +245,7 @@ export async function GET(request: Request): Promise<Response> {
       tables[gameId] = board ? rankTop(board.all) : [];
     });
     return Response.json(tables, {
-      headers: { ...cors, 'Cache-Control': 'public, max-age=30' }
+      headers: { ...cors, 'Cache-Control': 'public, max-age=30, s-maxage=30, stale-while-revalidate=60' }
     });
   } catch {
     return fail(503, 'scores unavailable', cors);
@@ -267,7 +274,7 @@ export async function POST(request: Request): Promise<Response> {
   if (typeof score !== 'number' || !Number.isSafeInteger(score) || score <= 0 || score >= MAX_SCORE) {
     return fail(400, 'bad score', cors);
   }
-  if (typeof nonce !== 'string' || nonce === '') return fail(400, 'bad nonce', cors);
+  if (typeof nonce !== 'string' || !NONCE.test(nonce)) return fail(400, 'bad nonce', cors);
 
   try {
     return await record(request, cors, { game, initials, score, nonce });

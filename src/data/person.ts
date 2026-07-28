@@ -6,8 +6,8 @@ import { socialLinks } from './links';
 export const personJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'Person',
-  name: 'Ismael Martinez',
-  alternateName: 'Ismael Martinez Ramos',
+  name: 'Ismael Martinez Ramos',
+  alternateName: 'Ismael Martinez',
   url: 'https://ismaelmartinez.me.uk',
   jobTitle: 'Principal Software Developer',
   worksFor: {

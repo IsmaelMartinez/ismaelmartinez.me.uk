@@ -206,7 +206,9 @@ describe('GET', () => {
 
   it('sets the agreed Cache-Control header', async () => {
     const response = await GET(getRequest());
-    expect(response.headers.get('cache-control')).toBe('public, max-age=30');
+    expect(response.headers.get('cache-control')).toBe(
+      'public, max-age=30, s-maxage=30, stale-while-revalidate=60'
+    );
   });
 
   it('reads through the blob cache, which the blobs own short max-age bounds', async () => {
@@ -277,6 +279,13 @@ describe('POST rejections', () => {
 
   it('rejects a missing or empty nonce', async () => {
     for (const nonce of ['', undefined, 7]) {
+      const response = await POST(postRequest(submission({ nonce })));
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it('rejects an oversized or unsafe nonce', async () => {
+    for (const nonce of ['x'.repeat(65), 'not a nonce!', '<script>alert(1)</script>']) {
       const response = await POST(postRequest(submission({ nonce })));
       expect(response.status).toBe(400);
     }

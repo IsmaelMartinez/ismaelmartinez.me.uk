@@ -48,6 +48,14 @@ The write budgets have a second edge that only shows once real people play. Alon
 
 Scores are also unauthenticated, and that is a property of the architecture rather than a gap left to close later. Any request to `POST /api/scores` can be forged by anyone with developer tools open, and CORS gates who can read a response, not who can post one: a browser enforces the origin check before handing a response back to page script, but a direct `curl` never goes through a browser and reaches the Function regardless. The only defences available are server-side validation (an initials pattern, a score ceiling, a blocklist) and the write budgets described above. Replay-validating submitted runs against the deterministic game modules would be the real anti-cheat option, and it is deliberately out of scope for a personal site.
 
+The published GET is additionally cached at the CDN edge (`s-maxage=30,
+stale-while-revalidate=60`, added 2026-07-28): a burst of first visits costs
+one function invocation per edge region per half-minute rather than one per
+visitor, and each invocation is what fans out nine blob reads. Submitters
+still see their own write immediately because the POST response carries the
+new table; the World tab may lag a write by up to the same 30 seconds the
+browser cache already allowed.
+
 ## References
 
 The reasoning that led here originated in `docs/plans/2026-07-26-global-highscores-plan.md`, since retired; its content is fully absorbed by this ADR. The frozen data model, HTTP surface, and lane breakdown that implement this decision live in `docs/plans/2026-07-26-global-highscores-implementation.md`.

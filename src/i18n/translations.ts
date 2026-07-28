@@ -26,7 +26,7 @@ export const translations = {
     'nav.themeToggle': 'Toggle dark/light mode',
 
     // Hero
-    'hero.name': 'Ismael Martinez',
+    'hero.name': 'Ismael Martinez Ramos',
     'hero.tagline': 'Principal Software Developer & Open Source Enthusiast',
     'hero.headline1': 'Building software that\'s ',
     'hero.headlineAccent': 'reliable',
@@ -64,7 +64,7 @@ export const translations = {
     'common.viewOnDevto': 'View on Dev.to',
 
     // 404
-    'notFound.title': '404: Page Not Found | Ismael Martinez',
+    'notFound.title': '404: Page Not Found | Ismael Martinez Ramos',
     'notFound.message': "This page doesn't exist, but these do:",
 
     // Articles
@@ -475,7 +475,7 @@ export const translations = {
     'about.title': 'About',
     'about.description': 'Principal software developer in Edinburgh, working on AI enablement, event-driven systems, and open source',
     'about.bioTitle': 'Hello!',
-    'about.bio': "I'm Ismael Martinez, a principal software developer in Edinburgh, Scotland, at People's Postcode Lottery. Nearly three decades in, I've gone from building servers and wrangling networks to designing event-driven systems on AWS, and lately to helping teams adopt AI without losing the plot. I maintain teams-for-linux, an open source Teams client used by around half a million people a month, and I write about what I learn.",
+    'about.bio': "I'm Ismael Martinez Ramos, a principal software developer in Edinburgh, Scotland, at People's Postcode Lottery. Nearly three decades in, I've gone from building servers and wrangling networks to designing event-driven systems on AWS, and lately to helping teams adopt AI without losing the plot. I maintain teams-for-linux, an open source Teams client used by around half a million people a month, and I write about what I learn.",
     'about.focusTitle': "What I'm working on now",
     'about.focus1Title': 'AI enablement',
     'about.focus1': 'I lead AI adoption where I work, developer-first: the people building these systems need to understand them before anyone else can rely on them. Part of that is routing between local and hosted models, so teams reach for the right one rather than the biggest.',
@@ -520,7 +520,7 @@ export const translations = {
     'nav.themeToggle': 'Cambiar modo oscuro/claro',
 
     // Hero
-    'hero.name': 'Ismael Martinez',
+    'hero.name': 'Ismael Martinez Ramos',
     'hero.tagline': 'Desarrollador de Software Principal y Entusiasta del Open Source',
     'hero.headline1': 'Construyo software ',
     'hero.headlineAccent': 'fiable',
@@ -558,7 +558,7 @@ export const translations = {
     'common.viewOnDevto': 'Ver en Dev.to',
 
     // 404
-    'notFound.title': '404: Página no encontrada | Ismael Martinez',
+    'notFound.title': '404: Página no encontrada | Ismael Martinez Ramos',
     'notFound.message': 'Esta página no existe, pero estas sí:',
 
     // Articles
@@ -971,7 +971,7 @@ export const translations = {
     'about.title': 'Sobre mí',
     'about.description': 'Desarrollador de software principal en Edimburgo, centrado en la adopción de IA, los sistemas orientados a eventos y el código abierto',
     'about.bioTitle': '¡Hola!',
-    'about.bio': 'Soy Ismael Martinez, desarrollador de software principal en Edimburgo (Escocia), en People\'s Postcode Lottery. Casi tres décadas después, he pasado de montar servidores y pelearme con redes a diseñar sistemas orientados a eventos sobre AWS, y últimamente a ayudar a los equipos a adoptar la IA sin perder el norte. Mantengo teams-for-linux, un cliente de Teams de código abierto que usan cerca de medio millón de personas al mes, y escribo sobre lo que voy aprendiendo.',
+    'about.bio': 'Soy Ismael Martinez Ramos, desarrollador de software principal en Edimburgo (Escocia), en People\'s Postcode Lottery. Casi tres décadas después, he pasado de montar servidores y pelearme con redes a diseñar sistemas orientados a eventos sobre AWS, y últimamente a ayudar a los equipos a adoptar la IA sin perder el norte. Mantengo teams-for-linux, un cliente de Teams de código abierto que usan cerca de medio millón de personas al mes, y escribo sobre lo que voy aprendiendo.',
     'about.focusTitle': 'En qué trabajo ahora',
     'about.focus1Title': 'Adopción de IA',
     'about.focus1': 'Lidero la adopción de IA donde trabajo, empezando por quien desarrolla: quienes construyen estos sistemas necesitan entenderlos antes de que nadie más pueda confiar en ellos. Parte de eso es enrutar entre modelos locales y en la nube, para que los equipos usen el adecuado y no el más grande.',
@@ -1016,7 +1016,7 @@ export const translations = {
     'nav.themeToggle': 'Canviar mode fosc/clar',
 
     // Hero
-    'hero.name': 'Ismael Martinez',
+    'hero.name': 'Ismael Martinez Ramos',
     'hero.tagline': 'Desenvolupador de Software Principal i Entusiasta de l\'Open Source',
     'hero.headline1': 'Construeixo software ',
     'hero.headlineAccent': 'fiable',
@@ -1054,7 +1054,7 @@ export const translations = {
     'common.viewOnDevto': 'Veure a Dev.to',
 
     // 404
-    'notFound.title': '404: Pàgina no trobada | Ismael Martinez',
+    'notFound.title': '404: Pàgina no trobada | Ismael Martinez Ramos',
     'notFound.message': 'Aquesta pàgina no existeix, però aquestes sí:',
 
     // Articles
@@ -1467,7 +1467,7 @@ export const translations = {
     'about.title': 'Sobre mi',
     'about.description': "Desenvolupador de software principal a Edimburg, centrat en l'adopció d'IA, els sistemes orientats a esdeveniments i el codi obert",
     'about.bioTitle': 'Hola!',
-    'about.bio': "Sóc Ismael Martinez, desenvolupador de software principal a Edimburg (Escòcia), a People's Postcode Lottery. Gairebé tres dècades després, he passat de muntar servidors i barallar-me amb xarxes a dissenyar sistemes orientats a esdeveniments sobre AWS, i darrerament a ajudar els equips a adoptar la IA sense perdre el nord. Mantinc teams-for-linux, un client de Teams de codi obert que fan servir prop de mig milió de persones al mes, i escric sobre el que vaig aprenent.",
+    'about.bio': "Sóc Ismael Martinez Ramos, desenvolupador de software principal a Edimburg (Escòcia), a People's Postcode Lottery. Gairebé tres dècades després, he passat de muntar servidors i barallar-me amb xarxes a dissenyar sistemes orientats a esdeveniments sobre AWS, i darrerament a ajudar els equips a adoptar la IA sense perdre el nord. Mantinc teams-for-linux, un client de Teams de codi obert que fan servir prop de mig milió de persones al mes, i escric sobre el que vaig aprenent.",
     'about.focusTitle': 'En què treballo ara',
     'about.focus1Title': "Adopció d'IA",
     'about.focus1': "Lidero l'adopció d'IA on treballo, començant per qui desenvolupa: qui construeix aquests sistemes necessita entendre'ls abans que ningú altre hi pugui confiar. Part d'això és encaminar entre models locals i al núvol, perquè els equips facin servir l'adequat i no el més gran.",

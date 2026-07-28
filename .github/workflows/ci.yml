@@ -8,6 +8,12 @@ on:
   pull_request:
     branches:
       - main
+  schedule:
+    # Six-hourly rebuild: the health dashboard's data is fetched at build
+    # time, so a scheduled run keeps it fresh. Deploy is not triggered here;
+    # gh-pages.yml listens for this workflow's success, so a red scheduled
+    # run refreshes nothing and blocks the deploy instead of shipping it.
+    - cron: '0 */6 * * *'
 
 permissions:
   contents: read

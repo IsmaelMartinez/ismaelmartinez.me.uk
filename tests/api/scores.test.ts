@@ -206,7 +206,9 @@ describe('GET', () => {
 
   it('sets the agreed Cache-Control header', async () => {
     const response = await GET(getRequest());
-    expect(response.headers.get('cache-control')).toBe('public, max-age=30');
+    expect(response.headers.get('cache-control')).toBe(
+      'public, max-age=30, s-maxage=30, stale-while-revalidate=60'
+    );
   });
 
   it('reads through the blob cache, which the blobs own short max-age bounds', async () => {

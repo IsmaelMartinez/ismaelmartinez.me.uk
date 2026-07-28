@@ -245,7 +245,7 @@ export async function GET(request: Request): Promise<Response> {
       tables[gameId] = board ? rankTop(board.all) : [];
     });
     return Response.json(tables, {
-      headers: { ...cors, 'Cache-Control': 'public, max-age=30' }
+      headers: { ...cors, 'Cache-Control': 'public, max-age=30, s-maxage=30, stale-while-revalidate=60' }
     });
   } catch {
     return fail(503, 'scores unavailable', cors);

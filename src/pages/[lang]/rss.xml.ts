@@ -18,7 +18,7 @@ export async function GET(context: APIContext) {
   );
 
   return rss({
-    title: 'Ismael Martinez',
+    title: 'Ismael Martinez Ramos',
     description: 'Principal Software Developer & Open Source Enthusiast — articles on software development, architecture, and technology.',
     site: context.site!,
     items: sortedArticles.map((article) => ({

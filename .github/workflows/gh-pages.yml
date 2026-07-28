@@ -1,8 +1,9 @@
+# Deploys only after a green CI run on main. The six-hourly
+# dashboard-refresh cron lives in ci.yml, so scheduled rebuilds pass the
+# same lint/typecheck/test/link gates as pushes before anything ships.
 name: Deploy Astro site to GitHub Pages
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
   workflow_run:
     workflows: ["CI"]
     types:
@@ -18,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: ${{ github.event_name == 'schedule' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

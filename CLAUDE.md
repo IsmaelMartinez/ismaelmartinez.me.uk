@@ -46,7 +46,7 @@ Vitest tests live under `tests/` (unit tests for i18n and reading-time, the arca
 
 ### Deployment
 
-The deploy workflow (`.github/workflows/gh-pages.yml`) runs after a successful CI on `main` (and on a six-hourly cron) to build and publish to GitHub Pages. Output goes to `./dist`. A `vercel.json` also exists as a fallback/mirror configuration.
+The deploy workflow (`.github/workflows/gh-pages.yml`) runs after a successful CI on `main` (and on a six-hourly cron) to build and publish to GitHub Pages. Output goes to `./dist`. The Vercel deployment (configured by `vercel.json`) mirrors the site and is the production host for the global-scores Function at `api/scores.ts` (see ADR 002).
 
 ## Repo Butler
 

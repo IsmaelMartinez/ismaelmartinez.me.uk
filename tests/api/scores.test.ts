@@ -282,6 +282,13 @@ describe('POST rejections', () => {
     }
   });
 
+  it('rejects an oversized or unsafe nonce', async () => {
+    for (const nonce of ['x'.repeat(65), 'not a nonce!', '<script>alert(1)</script>']) {
+      const response = await POST(postRequest(submission({ nonce })));
+      expect(response.status).toBe(400);
+    }
+  });
+
   it('answers with a plain message, never a stack trace', async () => {
     const response = await POST(postRequest(submission({ game: 'nope' })));
     const body = (await response.json()) as { error: string };

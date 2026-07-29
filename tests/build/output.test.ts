@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 
-describe('build output', () => {
-  beforeAll(() => {
-    if (!existsSync('dist/en/index.html')) {
-      throw new Error('dist/ not found. Run "npm run build" before running build tests.');
-    }
-  });
+// Build tests assert on ./dist and skip when no build exists. CI always
+// builds first, so there they always run; locally, `npm run build` first
+// to include them (a stale dist means stale assertions).
+const hasDist = existsSync('dist/en/index.html');
+
+describe.skipIf(!hasDist)('build output', () => {
 
   const locales = ['en', 'es', 'cat'];
 

@@ -8,6 +8,12 @@
 
 **Tech Stack:** Astro 7 static site, Vitest 4, GitHub Actions, Vercel Functions + Blob, jsdom (new dev dependency, Task 9 only).
 
+## Status
+
+Shipped 2026-07-29. All thirteen tasks are merged: PR A as #223, PR B as #224, PR C as #226, PR D as #225. Two deviations were accepted during implementation, neither changing what the plan asked for. Task 7's `vercel.json` edit was placed by matching content rather than the line numbers quoted here, which had shifted. Task 9's suite needed an in-memory `localStorage` stand-in installed via `vi.stubGlobal`, following the existing convention in `tests/games/highscores.test.ts`, because Node's own experimental `localStorage` global shadows jsdom's and leaves the real one unreachable; every behavioural assertion in the plan passed unchanged against it, which also confirmed `scoreboard.ts`'s double-commit guard empirically.
+
+The Deferred backlog at the end of this document is still open and is the natural source of the next round of work.
+
 ## Global Constraints
 
 - CI's `validate` job (lint, typecheck, build, test, check-links) must stay green after every task; run the relevant commands before each commit.
@@ -49,7 +55,7 @@ The health dashboard's data is fetched at build time, so a six-hourly cron rebui
 **Interfaces:**
 - Produces: CI runs on `schedule`; `gh-pages.yml` fires only via `workflow_run` on CI success. Nothing else consumes these.
 
-- [ ] **Step 1: Add the schedule trigger to ci.yml**
+- [x] **Step 1: Add the schedule trigger to ci.yml**
 
 Replace lines 3–10 of `.github/workflows/ci.yml`:
 
@@ -70,7 +76,7 @@ on:
     - cron: '0 */6 * * *'
 ```
 
-- [ ] **Step 2: Make gh-pages.yml workflow_run-only**
+- [x] **Step 2: Make gh-pages.yml workflow_run-only**
 
 Replace lines 1–21 of `.github/workflows/gh-pages.yml` (the `steps:` of `build-deploy` and below are unchanged):
 
@@ -99,12 +105,12 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 ```
 
-- [ ] **Step 3: Verify both workflows parse**
+- [x] **Step 3: Verify both workflows parse**
 
 Run: `node -e "const y=require('js-yaml'),f=require('fs');['.github/workflows/ci.yml','.github/workflows/gh-pages.yml'].forEach(p=>y.load(f.readFileSync(p,'utf8')));console.log('yaml ok')"`
 Expected: `yaml ok`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/ci.yml .github/workflows/gh-pages.yml
@@ -120,7 +126,7 @@ The only unpinned action in the repo. `v3` currently resolves to `v3.1.0` at com
 **Files:**
 - Modify: `.github/workflows/dependabot-auto-merge.yml:16`
 
-- [ ] **Step 1: Pin the action**
+- [x] **Step 1: Pin the action**
 
 Replace line 16:
 
@@ -128,7 +134,7 @@ Replace line 16:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add .github/workflows/dependabot-auto-merge.yml
@@ -142,7 +148,7 @@ Today any non-major update auto-merges on green CI and deploys, so a compromised
 **Files:**
 - Modify: `.github/workflows/dependabot-auto-merge.yml:20-21`
 
-- [ ] **Step 1: Tighten the auto-merge condition**
+- [x] **Step 1: Tighten the auto-merge condition**
 
 Replace lines 20–21 (`- name: Enable auto-merge on non-major updates` and its `if:`):
 
@@ -156,12 +162,12 @@ Replace lines 20–21 (`- name: Enable auto-merge on non-major updates` and its 
           steps.metadata.outputs.dependency-type == 'direct:development'
 ```
 
-- [ ] **Step 2: Verify the workflow parses**
+- [x] **Step 2: Verify the workflow parses**
 
 Run: `node -e "const y=require('js-yaml'),f=require('fs');y.load(f.readFileSync('.github/workflows/dependabot-auto-merge.yml','utf8'));console.log('yaml ok')"`
 Expected: `yaml ok`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/dependabot-auto-merge.yml
@@ -175,7 +181,7 @@ Dependabot is the active updater (`.github/dependabot.yml`, weekly npm + actions
 **Files:**
 - Delete: `renovate.json`
 
-- [ ] **Step 1: Delete and commit**
+- [x] **Step 1: Delete and commit**
 
 ```bash
 git rm renovate.json
@@ -197,7 +203,7 @@ git commit -m "chore: drop renovate.json, Dependabot is the active updater"
 **Interfaces:**
 - Produces: `POST` rejects nonces longer than 64 chars or outside `[A-Za-z0-9-]` with the existing `400 'bad nonce'`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add after the `rejects a missing or empty nonce` test (`tests/api/scores.test.ts:278-283`):
 
@@ -210,12 +216,12 @@ Add after the `rejects a missing or empty nonce` test (`tests/api/scores.test.ts
   });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx vitest run tests/api/scores.test.ts -t "oversized or unsafe nonce"`
 Expected: FAIL (current code accepts all three, responses are not 400)
 
-- [ ] **Step 3: Implement the bound**
+- [x] **Step 3: Implement the bound**
 
 In `api/scores.ts`, add below `const INITIALS = /^[A-Z0-9]{1,3}$/;` (line 95):
 
@@ -234,12 +240,12 @@ Replace line 261:
   if (typeof nonce !== 'string' || !NONCE.test(nonce)) return fail(400, 'bad nonce', cors);
 ```
 
-- [ ] **Step 4: Run the full API suite**
+- [x] **Step 4: Run the full API suite**
 
 Run: `npx vitest run tests/api/scores.test.ts`
 Expected: all pass (the existing short readable nonces all match the new pattern)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/scores.ts tests/api/scores.test.ts
@@ -255,7 +261,7 @@ git commit -m "fix(api): bound nonce to a UUID-sized safe alphabet"
 - Test: `tests/api/scores.test.ts:207-209`
 - Modify: `docs/adr/002-global-arcade-high-scores.md` (Consequences section)
 
-- [ ] **Step 1: Update the header test to the new value**
+- [x] **Step 1: Update the header test to the new value**
 
 Replace the assertion at `tests/api/scores.test.ts:209`:
 
@@ -265,12 +271,12 @@ Replace the assertion at `tests/api/scores.test.ts:209`:
     );
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx vitest run tests/api/scores.test.ts -t "Cache-Control"`
 Expected: FAIL (header is still `public, max-age=30`)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace `api/scores.ts:232`:
 
@@ -278,12 +284,12 @@ Replace `api/scores.ts:232`:
       headers: { ...cors, 'Cache-Control': 'public, max-age=30, s-maxage=30, stale-while-revalidate=60' }
 ```
 
-- [ ] **Step 4: Run the suite**
+- [x] **Step 4: Run the suite**
 
 Run: `npx vitest run tests/api/scores.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Record the decision in ADR 002**
+- [x] **Step 5: Record the decision in ADR 002**
 
 Append as a new final paragraph of the `## Consequences` section of `docs/adr/002-global-arcade-high-scores.md` (before `## References`):
 
@@ -297,7 +303,7 @@ new table; the World tab may lag a write by up to the same 30 seconds the
 browser cache already allowed.
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add api/scores.ts tests/api/scores.test.ts docs/adr/002-global-arcade-high-scores.md
@@ -311,7 +317,7 @@ Astro's `/_astro/*` files are content-hashed, but Vercel's default `max-age=0, m
 **Files:**
 - Modify: `vercel.json:5-35` (append a second headers block)
 
-- [ ] **Step 1: Append the headers block**
+- [x] **Step 1: Append the headers block**
 
 In `vercel.json`, after the existing `"/(.*)"` object inside the `headers` array (insert a comma after its closing `}` on line 34):
 
@@ -327,12 +333,12 @@ In `vercel.json`, after the existing `"/(.*)"` object inside the `headers` array
     }
 ```
 
-- [ ] **Step 2: Verify the JSON parses**
+- [x] **Step 2: Verify the JSON parses**
 
 Run: `node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8'));console.log('json ok')"`
 Expected: `json ok`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add vercel.json
@@ -350,7 +356,7 @@ git commit -m "perf: immutable cache headers for hashed assets on Vercel"
 **Files:**
 - Modify: `tests/build/output.test.ts:1-9`
 
-- [ ] **Step 1: Replace the throw with a skip**
+- [x] **Step 1: Replace the throw with a skip**
 
 Replace lines 1–9:
 
@@ -368,17 +374,17 @@ describe.skipIf(!hasDist)('build output', () => {
 
 (The `beforeAll` import and block are removed; everything from `const locales` down is unchanged.)
 
-- [ ] **Step 2: Verify the skip path**
+- [x] **Step 2: Verify the skip path**
 
 Run: `mv dist dist.bak && npm test; mv dist.bak dist`
 Expected: all suites pass, `build output` reported as skipped, exit 0
 
-- [ ] **Step 3: Verify the run path**
+- [x] **Step 3: Verify the run path**
 
 Run: `npm test`
 Expected: all pass including `build output` (dist restored)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/build/output.test.ts
@@ -396,12 +402,12 @@ git commit -m "test: skip build-output suite when dist is absent"
 **Interfaces:**
 - Consumes: `initScoreboard(panel, options)` from `src/games/engine/scoreboard.ts`; `tableKey(gameId)` from `src/games/engine/highscores.ts`; mocks `fetchGlobal`/`submitGlobal` from `src/games/engine/globalScores.ts`.
 
-- [ ] **Step 1: Install jsdom**
+- [x] **Step 1: Install jsdom**
 
 Run: `npm install --save-dev jsdom`
 (Vitest 4 supports per-file environments via docblock pragma; no vitest.config.ts change needed, other suites stay on node.)
 
-- [ ] **Step 2: Write the suite**
+- [x] **Step 2: Write the suite**
 
 Create `tests/games/scoreboard-dom.test.ts`:
 
@@ -552,17 +558,17 @@ describe('initScoreboard commit()', () => {
 });
 ```
 
-- [ ] **Step 3: Run the suite**
+- [x] **Step 3: Run the suite**
 
 Run: `npx vitest run tests/games/scoreboard-dom.test.ts`
 Expected: PASS (6 tests). If `commits at most once` fails on the double-commit guard, that is a real finding, not a test bug: `commit()` nulls `pendingScore` first, so a second commit must no-op.
 
-- [ ] **Step 4: Run everything**
+- [x] **Step 4: Run everything**
 
 Run: `npm test && npm run lint && npm run typecheck`
 Expected: all green
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json package-lock.json tests/games/scoreboard-dom.test.ts
@@ -582,12 +588,12 @@ Fixes the MIT-vs-"personal use" contradiction (the one item flagged as fix-befor
 **Files:**
 - Modify: `README.md` (full rewrite, content below)
 
-- [ ] **Step 1: Verify the badge slug**
+- [x] **Step 1: Verify the badge slug**
 
 Run: `gh repo view --json nameWithOwner -q .nameWithOwner`
 Expected: `IsmaelMartinez/ismaelmartinez.me.uk` (if different, substitute in the badge URLs below)
 
-- [ ] **Step 2: Replace README.md wholesale**
+- [x] **Step 2: Replace README.md wholesale**
 
 ````markdown
 # ismaelmartinez.me.uk
@@ -634,12 +640,12 @@ The site ships twice from `main`:
 [MIT](LICENSE)
 ````
 
-- [ ] **Step 3: Verify the licence file matches**
+- [x] **Step 3: Verify the licence file matches**
 
 Run: `head -3 LICENSE`
 Expected: MIT licence header (it is; this step guards against the README and LICENSE diverging again)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md
@@ -651,7 +657,7 @@ git commit -m "docs: fix licence statement, document the arcade and dual deploym
 **Files:**
 - Modify: `CONTRIBUTING.md:20-21` (insert section), `CONTRIBUTING.md:60-80` (structure tree)
 
-- [ ] **Step 1: Add the local-dev scores note**
+- [x] **Step 1: Add the local-dev scores note**
 
 Insert after step 3 of "Running the Project Locally" (after line 20's browser instruction):
 
@@ -668,7 +674,7 @@ for normal site work; to exercise the function itself, use `vercel dev` after
 `vercel env pull`.
 ```
 
-- [ ] **Step 2: Add the missing directories to the structure tree**
+- [x] **Step 2: Add the missing directories to the structure tree**
 
 In the Project Structure block, insert between the `data/` and `i18n/` lines:
 
@@ -682,7 +688,7 @@ and insert above the `tests/` line:
 api/                    # Vercel Function: global arcade scores (deployed by Vercel, not Astro)
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add CONTRIBUTING.md
@@ -694,7 +700,7 @@ git commit -m "docs: document the scores API and arcade in CONTRIBUTING"
 **Files:**
 - Modify: `CLAUDE.md:49`
 
-- [ ] **Step 1: Reword the Vercel sentence**
+- [x] **Step 1: Reword the Vercel sentence**
 
 In `CLAUDE.md` line 49, replace the final sentence ``A `vercel.json` also exists as a fallback/mirror configuration.`` with:
 
@@ -702,7 +708,7 @@ In `CLAUDE.md` line 49, replace the final sentence ``A `vercel.json` also exists
 The Vercel deployment (configured by `vercel.json`) mirrors the site and is the production host for the global-scores Function at `api/scores.ts` (see ADR 002).
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add CLAUDE.md
@@ -716,7 +722,7 @@ Three empty `// Poo Poo Land` comment headers survive in `src/i18n/translations.
 **Files:**
 - Modify: `src/i18n/translations.ts:457,955,1453`
 
-- [ ] **Step 1: Delete the three markers**
+- [x] **Step 1: Delete the three markers**
 
 Each locale block ends its Cascade section the same way. Apply this edit three times, once per locale (the `'fun.backToFun'` values differ per locale, which keeps each edit unique). English, before:
 
@@ -738,12 +744,12 @@ after:
 
 Spanish: the same around `'fun.backToFun': 'Volver a Diversión',`. Catalan: the same around `'fun.backToFun': 'Tornar a Diversió',`.
 
-- [ ] **Step 2: Verify nothing else changed**
+- [x] **Step 2: Verify nothing else changed**
 
 Run: `git diff --stat && npm test && npm run typecheck`
 Expected: `src/i18n/translations.ts | 6 ------`, all tests pass (the key-parity test in `tests/i18n/translations.test.ts` guards the locales)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/i18n/translations.ts

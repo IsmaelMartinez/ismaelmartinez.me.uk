@@ -11,7 +11,7 @@ Built with [Astro](https://astro.build/) for fast, modern static site generation
 - Multi-language support (English, Spanish, Catalan)
 - Showcase of open source projects
 - Articles as MDX content collections, syndicated to Medium and Dev.to, with per-locale RSS feeds
-- A retro arcade of eight canvas games with per-device and global high-score boards
+- A retro arcade of eight canvas games sharing a global high-score board
 - Open-source portfolio health dashboard, rebuilt on a six-hourly schedule
 - Professional and social links
 - Dark/light mode support (via system preference)

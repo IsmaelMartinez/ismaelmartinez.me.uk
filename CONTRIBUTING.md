@@ -30,6 +30,17 @@ so local experiments cannot pollute the shared board. The function's
 for normal site work; to exercise the function itself, use `vercel dev` after
 `vercel env pull`.
 
+**Per-commit preview deployments do not submit either.** Their hostnames look
+like `ismaelmartinezme-<hash>-…vercel.app`, which is not the
+`ismaelmartinezmeuk.vercel.app` on the allowlist, so a preview behaves exactly
+like localhost. This is easy to mistake for a bug, because nothing on screen
+says so: a finished run still opens the initials prompt, still accepts your
+initials, and then simply never appears on the board. That silence is
+deliberate (`submitGlobal` reports `skipped` rather than `failed`, so dev play
+is not reported to the player as a lost score), but it means **the only place
+a leaderboard write can be verified end to end is the live site**,
+`https://ismaelmartinez.me.uk`. Test scoring there, not on a preview link.
+
 ## Available Commands
 
 | Command               | Action                                                    |

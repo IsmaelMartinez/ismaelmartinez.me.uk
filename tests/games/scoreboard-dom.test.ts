@@ -2,11 +2,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initScoreboard } from '../../src/games/engine/scoreboard';
 import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
-import { tableKey } from '../../src/games/engine/highscores';
+import { bestKey } from '../../src/games/engine/highscores';
+import { fullBoard } from './board-fixtures';
 
 vi.mock('../../src/games/engine/globalScores', () => ({
   fetchGlobal: vi.fn(async () => null),
-  submitGlobal: vi.fn(async () => null)
+  submitGlobal: vi.fn(async () => ({ status: 'failed' }))
 }));
 
 /**
@@ -17,15 +18,12 @@ const PANEL_HTML = `
   <div class="hs-panel" id="highscores" data-hs-game="snake" hidden
        data-t-world-loading="Loading world board"
        data-t-world-unavailable="World board unavailable"
-       data-t-world-rank="World rank #{rank}">
+       data-t-world-rank="World rank #{rank}"
+       data-t-score-not-saved="Score not saved. Try again later">
     <form class="hs-entry" hidden>
       <input class="hs-input" type="text" maxlength="3" />
       <button type="submit" class="hs-ok">OK</button>
     </form>
-    <div class="hs-tabs">
-      <button type="button" class="hs-tab" data-hs-scope="device" aria-selected="true">This device</button>
-      <button type="button" class="hs-tab" data-hs-scope="world" aria-selected="false">World</button>
-    </div>
     <ol class="hs-list"></ol>
     <p class="hs-empty" hidden></p>
     <p class="hs-note" hidden></p>
@@ -63,14 +61,15 @@ function installLocalStorage(): void {
 beforeEach(() => {
   installLocalStorage();
   vi.clearAllMocks();
+  vi.mocked(fetchGlobal).mockResolvedValue(null);
+  vi.mocked(submitGlobal).mockResolvedValue({ status: 'failed' });
   // jsdom does not implement scrollIntoView; commit(true) calls it.
   Element.prototype.scrollIntoView = vi.fn();
 });
 
 describe('initScoreboard commit()', () => {
-  it('writes the device table and offers the shown score to the world board', async () => {
-    const onSave = vi.fn();
-    const board = initScoreboard(buildPanel(), { onSave });
+  it('offers the shown score to the world board and records it as a personal best', async () => {
+    const board = initScoreboard(buildPanel());
     board.show(4210);
 
     const form = document.querySelector<HTMLFormElement>('.hs-entry')!;
@@ -81,15 +80,56 @@ describe('initScoreboard commit()', () => {
     form.dispatchEvent(new Event('submit', { cancelable: true }));
     await flush();
 
-    expect(JSON.parse(localStorage.getItem(tableKey('snake'))!)).toEqual([
-      { initials: 'IMR', score: 4210 }
-    ]);
-    expect(onSave).toHaveBeenCalledWith({ initials: 'IMR', score: 4210 }, 1);
-    // The number submitted globally is exactly the number shown to the player.
+    // The number submitted is exactly the number shown to the player.
     expect(submitGlobal).toHaveBeenCalledWith('snake', 'IMR', 4210);
-    const row = document.querySelector('.hs-current');
-    expect(row?.querySelector('.hs-score')?.textContent).toBe('004210');
-    expect(row?.querySelector('.hs-initials')?.textContent?.trim()).toBe('IMR');
+    expect(localStorage.getItem(bestKey('snake'))).toBe('4210');
+    expect(localStorage.getItem('arcade-initials')).toBe('IMR');
+  });
+
+  /**
+   * The regression this change exists for. The panel used to keep a per-device
+   * top ten and gate the world submission on the score charting *there*, so a
+   * player whose own ten-row table had filled up stopped reaching the shared
+   * board entirely — including, as here, with a run the shared board itself
+   * had ample room for. Every finished run is offered now; charting only
+   * decides whether the player is interrupted for initials.
+   */
+  it('submits a run that cannot chart, without prompting for initials', async () => {
+    vi.mocked(fetchGlobal).mockResolvedValue({ snake: fullBoard() });
+    const board = initScoreboard(buildPanel());
+    await flush(); // let the init fetch land, so the board is known to be full
+
+    board.show(5); // beaten by all ten rows
+    const form = document.querySelector<HTMLFormElement>('.hs-entry')!;
+    expect(form.hidden).toBe(true);
+
+    board.hide();
+    await flush();
+    expect(submitGlobal).toHaveBeenCalledWith('snake', 'AAA', 5);
+  });
+
+  it('prompts for initials while the board still has room', async () => {
+    vi.mocked(fetchGlobal).mockResolvedValue({ snake: [{ initials: 'AAA', score: 10 }] });
+    const board = initScoreboard(buildPanel());
+    await flush();
+
+    board.show(5);
+    expect(document.querySelector<HTMLFormElement>('.hs-entry')!.hidden).toBe(false);
+  });
+
+  it('gives an unreachable board the benefit of the doubt and still prompts', async () => {
+    const board = initScoreboard(buildPanel());
+    await flush(); // the init fetch resolves null
+    board.show(5);
+    expect(document.querySelector<HTMLFormElement>('.hs-entry')!.hidden).toBe(false);
+  });
+
+  it('never submits a scoreless run', async () => {
+    const board = initScoreboard(buildPanel());
+    board.show(0);
+    board.hide();
+    await flush();
+    expect(submitGlobal).not.toHaveBeenCalled();
   });
 
   it('auto-commits a pending entry on pagehide with the last-used initials', async () => {
@@ -99,9 +139,6 @@ describe('initScoreboard commit()', () => {
     window.dispatchEvent(new Event('pagehide'));
     await flush();
 
-    expect(JSON.parse(localStorage.getItem(tableKey('snake'))!)).toEqual([
-      { initials: 'ZZZ', score: 900 }
-    ]);
     expect(submitGlobal).toHaveBeenCalledWith('snake', 'ZZZ', 900);
   });
 
@@ -114,16 +151,13 @@ describe('initScoreboard commit()', () => {
     board.hide();
     await flush();
 
-    expect(JSON.parse(localStorage.getItem(tableKey('snake'))!)).toHaveLength(1);
     expect(submitGlobal).toHaveBeenCalledTimes(1);
   });
+});
 
-  it('fetches the world board lazily on the first World-tab visit', async () => {
+describe('initScoreboard board rendering', () => {
+  it('fetches the board when the panel initialises', async () => {
     initScoreboard(buildPanel());
-    expect(fetchGlobal).not.toHaveBeenCalled();
-
-    const worldTab = document.querySelector<HTMLButtonElement>('[data-hs-scope="world"]')!;
-    worldTab.click();
     expect(fetchGlobal).toHaveBeenCalledTimes(1);
     await flush();
     // The mock resolves null: the panel must say unavailable, not show an
@@ -133,33 +167,155 @@ describe('initScoreboard commit()', () => {
     expect(note.textContent).toBe('World board unavailable');
   });
 
-  it('renders world rows from a fetched board', async () => {
-    vi.mocked(fetchGlobal).mockResolvedValueOnce({
+  it('refetches at every run end, which is what a player has instead of a refresh button', async () => {
+    const board = initScoreboard(buildPanel());
+    await flush();
+    expect(fetchGlobal).toHaveBeenCalledTimes(1);
+
+    board.show(100);
+    await flush();
+    expect(fetchGlobal).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders rows from a fetched board', async () => {
+    vi.mocked(fetchGlobal).mockResolvedValue({
       snake: [
         { initials: 'AAA', score: 9000 },
         { initials: 'BBB', score: 100 }
       ]
     });
     initScoreboard(buildPanel());
-    document.querySelector<HTMLButtonElement>('[data-hs-scope="world"]')!.click();
     await flush();
 
-    const rows = [...document.querySelectorAll('.hs-row .hs-initials')].map(
-      el => el.textContent?.trim()
+    const rows = [...document.querySelectorAll('.hs-row .hs-initials')].map(el =>
+      el.textContent?.trim()
     );
     expect(rows).toEqual(['AAA', 'BBB']);
   });
 
+  it('lights the submitted row and reports its rank', async () => {
+    const onSave = vi.fn();
+    vi.mocked(submitGlobal).mockResolvedValue({
+      status: 'ok',
+      rank: 2,
+      table: [
+        { initials: 'AAA', score: 9000 },
+        { initials: 'IMR', score: 4210 }
+      ]
+    });
+    const board = initScoreboard(buildPanel(), { onSave });
+    board.show(4210);
+    document.querySelector<HTMLInputElement>('.hs-input')!.value = 'IMR';
+    document
+      .querySelector<HTMLFormElement>('.hs-entry')!
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await flush();
+
+    const row = document.querySelector('.hs-current');
+    expect(row?.querySelector('.hs-score')?.textContent).toBe('004210');
+    expect(row?.querySelector('.hs-initials')?.textContent?.trim()).toBe('IMR');
+    expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).toBe('World rank #2');
+    expect(onSave).toHaveBeenCalledWith({ initials: 'IMR', score: 4210 }, 2);
+  });
+
+  /*
+   * Removing the per-device table removed the fallback a failed submission
+   * used to land on, so a run that does not reach the shared board now leaves
+   * no trace at all. Saying nothing would mean a rate-limited or offline
+   * player watches their score quietly disappear.
+   */
+  it('tells the player when a submission did not land', async () => {
+    const board = initScoreboard(buildPanel());
+    board.show(4210);
+    board.hide();
+    await flush();
+
+    const note = document.querySelector<HTMLElement>('.hs-note')!;
+    expect(note.hidden).toBe(false);
+    expect(note.textContent).toBe('Score not saved. Try again later');
+  });
+
+  it('says nothing where a submission was never attempted', async () => {
+    // Local dev and preview deployments read the real board but never write to
+    // it, so reporting an unsaved score there would be a lie.
+    vi.mocked(submitGlobal).mockResolvedValue({ status: 'skipped' });
+    const board = initScoreboard(buildPanel());
+    await flush();
+    board.show(4210);
+    board.hide();
+    await flush();
+
+    expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).toBe(
+      'World board unavailable'
+    );
+  });
+
+  it('clears a previous run\'s failure notice when the next run ends', async () => {
+    const board = initScoreboard(buildPanel());
+    board.show(4210);
+    board.hide();
+    await flush();
+    expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).toBe(
+      'Score not saved. Try again later'
+    );
+
+    vi.mocked(submitGlobal).mockResolvedValue({
+      status: 'ok',
+      rank: 1,
+      table: [{ initials: 'IMR', score: 50 }]
+    });
+    board.show(50);
+    await flush();
+    expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).not.toBe(
+      'Score not saved. Try again later'
+    );
+  });
+
+  /*
+   * `onSave` is the hook a game refreshes its HUD from, so skipping it when
+   * the network is down would leave the readout stale for the rest of the
+   * session. A run that could not be saved is still a finished run.
+   */
+  it('reports every committed run to onSave, landed or not', async () => {
+    const onSave = vi.fn();
+    const board = initScoreboard(buildPanel(), { onSave });
+    board.show(4210);
+    board.hide();
+    await flush();
+    expect(onSave).toHaveBeenCalledWith({ initials: 'AAA', score: 4210 }, 0);
+  });
+
+  /*
+   * Tank Duel never calls bank(), so before this the commit wrote the personal
+   * best straight to storage and left the record's cached value behind until a
+   * reload, leaving two answers to the same question inside one session.
+   */
+  it('keeps best() and stored best in step for a game that never banks', async () => {
+    const board = initScoreboard(buildPanel());
+    expect(board.best()).toBe(0);
+    board.show(4210);
+    board.hide();
+    await flush();
+
+    expect(board.best()).toBe(4210);
+    expect(localStorage.getItem(bestKey('snake'))).toBe('4210');
+  });
+
   it('degrades to inert no-ops without a panel', () => {
     const board = initScoreboard(null);
+    expect(board.best()).toBe(0);
     expect(() => {
       board.show(100);
       board.hide();
-      board.stash(50);
       board.beginRun();
       board.bank(10);
     }).not.toThrow();
-    expect(board.top()).toBeNull();
+    // The run record still tracks a best in memory, so a game's HUD keeps
+    // working; what a panel-less board must not do is touch storage or the
+    // network on the way there.
+    expect(board.best()).toBe(10);
+    expect(localStorage.getItem(bestKey('snake'))).toBeNull();
     expect(submitGlobal).not.toHaveBeenCalled();
+    expect(fetchGlobal).not.toHaveBeenCalled();
   });
 });

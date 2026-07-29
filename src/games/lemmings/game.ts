@@ -566,8 +566,10 @@ export function initLemmingsGame(): void {
       cleared = Math.max(cleared, levelIndex + 1);
       saveClearedLevels(cleared);
       bestLevel.textContent = cleared.toString();
-      // Keep the run's points safe even if the tab closes mid-run.
-      board.stash(runScore);
+      // Keep the run's points safe even if the tab closes mid-run. This
+      // cabinet never calls beginRun, so the record celebration is never armed
+      // and banking here cannot fire a mid-run record toast.
+      board.bank(runScore);
     }
     const victory = won && last;
     // One outcome chain sets both faces of the result, so emoji and title can

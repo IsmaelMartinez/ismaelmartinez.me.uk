@@ -172,19 +172,21 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
 </Layout>
 
 <script>
-  // Fill each cabinet's attract screen with the top of the game's high-score
-  // table, initials and all (loading a table migrates the game's pre-table
-  // best automatically). Re-runs after ClientRouter swaps so scores earned
-  // in a game show up when navigating back to the arcade.
-  import { topEntry, formatScore } from '../../../games/engine/highscores';
+  // Fill each cabinet's attract screen with this device's best run at the
+  // game, under the initials the player last entered (loading a best migrates
+  // it from the retired per-device table, or from the game's pre-table key,
+  // automatically). Re-runs after ClientRouter swaps so scores earned in a
+  // game show up when navigating back to the arcade.
+  import { loadBest, loadInitials, formatScore } from '../../../games/engine/highscores';
 
   function showBestScores() {
     const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-game-id]');
+    // One set of initials serves the whole floor: they are the last ones the
+    // player typed, not per-cabinet, so reading them once is enough.
+    const initials = loadInitials();
     for (const readout of readouts) {
-      const top = readout.dataset.gameId ? topEntry(readout.dataset.gameId) : null;
-      readout.textContent = top
-        ? `${top.initials} ${formatScore(top.score)}`
-        : formatScore(0);
+      const best = readout.dataset.gameId ? loadBest(readout.dataset.gameId) : 0;
+      readout.textContent = best > 0 ? `${initials} ${formatScore(best)}` : formatScore(0);
     }
   }
 

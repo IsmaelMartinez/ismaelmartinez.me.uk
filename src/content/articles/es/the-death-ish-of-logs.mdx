@@ -109,7 +109,7 @@ Los microservicios son la nueva norma, aumentando la complejidad de nuestros sis
 
 Realmente necesitábamos saber qué llamó a qué y cuándo, pero confiar en las marcas de tiempo ya no era adecuado, ya que los servicios podían ejecutarse dentro del mismo microsegundo (o el reloj del hardware podía estar ligeramente "desajustado").
 
-Todos usamos logs contextuales e IDs de correlación — o al menos, sabemos que deberíamos. El cubo de la deuda técnica se está llenando, así que le ponemos nombres diferentes.
+Todos usamos logs contextuales e IDs de correlación, o al menos sabemos que deberíamos. El cubo de la deuda técnica se está llenando, así que le ponemos nombres diferentes.
 
 Nuestros logs empezaron a capturar todo lo que posiblemente podían, y más:
 
@@ -150,7 +150,7 @@ Al final de la década, OpenTelemetry finalmente se consolidó, trayendo algo de
 
 ## ¿Y ahora qué?
 
-Pues bien, en OpenTelemetry tenemos traces, métricas, logs — y pronto, eventos y perfiles también.
+Pues bien, en OpenTelemetry tenemos traces, métricas, logs, y pronto eventos y perfiles también.
 
 Algunos dicen que los eventos son logs simples. Similares al original:
 
@@ -162,10 +162,10 @@ Entonces... ¿deberíamos matar los logs? ¿Por qué no depender únicamente de 
 
 Personalmente, creo que no. Pero los logs sí necesitan evolucionar.
 
-Los sistemas modernos exigen claridad. Cada señal — ya sea un trace, una métrica o un evento — tiene un propósito específico. Combinadas, nos dan mejor visibilidad, como se analiza en el artículo [Observabilidad con OpenTelemetry](/es/articles/observability-with-opentelemetry).
+Los sistemas modernos exigen claridad. Cada señal, ya sea un trace, una métrica o un evento, tiene un propósito específico. Combinadas, nos dan mejor visibilidad, como se analiza en el artículo [Observabilidad con OpenTelemetry](/es/articles/observability-with-opentelemetry).
 
 ¿Los logs? Necesitan encontrar su lugar de nuevo.
 
-Aun así, creo que los logs no desaparecerán. Evolucionarán — como siempre lo han hecho — para ayudarnos a dar sentido a toda esta locura distribuida.
+Aun así, creo que los logs no desaparecerán. Evolucionarán, como siempre lo han hecho, para ayudarnos a dar sentido a toda esta locura distribuida.
 
 ¿Qué opinas? ¿Deberíamos matar los logs?

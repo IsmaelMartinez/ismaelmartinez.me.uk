@@ -42,7 +42,7 @@ Let's explore the benefits of choreography.
 
 ## Orchestration
 
-In contrast, orchestration is like a conductor directing an orchestra — a central service manages the interactions between components, ensuring that each service knows what to do and when.
+In contrast, orchestration is like a conductor directing an orchestra: a central service manages the interactions between components, ensuring that each service knows what to do and when.
 
 A controller understands the entire system and manages all interactions, enforcing the correct execution of workflows.
 
@@ -56,7 +56,7 @@ A controller understands the entire system and manages all interactions, enforci
 
 1. **Single Point of Failure:** A central controller can become a bottleneck and/or a single point of failure. If the orchestrator goes down, it can disrupt the entire workflow.
 2. **Scalability**: The orchestrator must manage all interactions, which can lead to performance issues under heavy load. Scaling the orchestrator itself can be challenging.
-3. **Complexity:** As the system grows, the orchestrator can become overly complex, leading to what I call architectural debt — where teams avoid making changes because the system has become too rigid.
+3. **Complexity:** As the system grows, the orchestrator can become overly complex, leading to what I call architectural debt, where teams avoid making changes because the system has become too rigid.
 4. **Flexibility**: Modifying the workflow often requires updating the orchestrator, which can be more time-consuming than modifying individual services in a choreographed system.
 
 ## Choosing the Right Approach
@@ -74,7 +74,7 @@ The choice between choreography and orchestration depends on multiple factors, i
 
 ## Why not both?
 
-You don't have to choose just one approach — many systems benefit from a hybrid model.
+You don't have to choose just one approach. Many systems benefit from a hybrid model.
 
 Personally, I lean towards orchestration for internal flows that require robust control, such as payment processing or user onboarding.
 

@@ -101,7 +101,7 @@ Companies that focus on this problem and providing a solution emerged; like Splu
 
 ## Big Data and Observability decade
 
-From 2010 onwards, the amount of data we generated exploded, and is only increasing by the second. IoT is going to change our lives but we soon realise it is going to take a few more years and focus on the important things — having ambient lights you can shout at, surveillance speakers that tell you the weather, plays a song and that you can shout at, and doorbells… that you will definitely shout at if your Internet is down and you can't get home.
+From 2010 onwards, the amount of data we generated exploded, and is only increasing by the second. IoT is going to change our lives but we soon realise it is going to take a few more years and focus on the important things: having ambient lights you can shout at, surveillance speakers that tell you the weather, plays a song and that you can shout at, and doorbells… that you will definitely shout at if your Internet is down and you can't get home.
 
 Jokes aside, we had to start looking into how to query large amounts of data. Storage was so cheap that non-relational database technology made more sense. We had other usage patterns to cater for.
 
@@ -109,7 +109,7 @@ Microservices are the new norm, increasing the complexity of our systems. We all
 
 We really need to know what called what and when, but relying on timestamps was no longer suitable, as services could run within the same microsecond (or the hardware clock might be slightly "off")
 
-We all use contextual logs and correlation IDs — or at least, we know we should. The tech debt bucket is starting to get full so we give it different names.
+We all use contextual logs and correlation IDs, or at least we know we should. The tech debt bucket is starting to get full so we give it different names.
 
 Our logs started to capture everything they possibly could, and more:
 
@@ -150,7 +150,7 @@ By the end of the decade, OpenTelemetry finally took hold, bringing some sense t
 
 ## What now?
 
-Well, in OpenTelemetry we have traces, metrics, logs — soon, events and profiles too.
+Well, in OpenTelemetry we have traces, metrics, logs, and soon events and profiles too.
 
 Some say events are simple logs. Similar to the original:
 
@@ -162,10 +162,10 @@ So… should we kill the logs? Why not rely solely on events, traces, and metric
 
 Personally, I don't think so. But logs do need to evolve.
 
-Modern systems demand clarity. Each signal — be it a trace, a metric, or an event — has a specific purpose. Combined, they give us better visibility, as discussed in the [Observability with OpenTelemetry](/en/articles/observability-with-opentelemetry) post.
+Modern systems demand clarity. Each signal, be it a trace, a metric, or an event, has a specific purpose. Combined, they give us better visibility, as discussed in the [Observability with OpenTelemetry](/en/articles/observability-with-opentelemetry) post.
 
 Logs? They need to find their place again.
 
-Still, I believe logs won't disappear. They will evolve — as they always have — to help us make sense of all this distributed madness.
+Still, I believe logs won't disappear. They will evolve, as they always have, to help us make sense of all this distributed madness.
 
 What do you think? Should we kill the logs?

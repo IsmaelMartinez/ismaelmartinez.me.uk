@@ -98,7 +98,14 @@ const ALLOWED_ORIGINS = [
   'http://localhost:4321'
 ];
 
-const MAX_TOP = 10;
+/**
+ * Rows the board keeps. The client's `MAX_ENTRIES` must agree: it decides
+ * whether a finished run is worth interrupting the player for initials, and
+ * measures that against this board. Exported so a test can hold the two in
+ * step, since importing across the client/server seam would pull server code
+ * into the browser bundle.
+ */
+export const MAX_TOP = 10;
 const MAX_BODY_CHARS = 1024;
 const MAX_SCORE = 10_000_000;
 const INITIALS = /^[A-Z0-9]{1,3}$/;
@@ -186,14 +193,19 @@ const rankOf = (top: BoardEntry[], nonce: string): number => {
   return index >= 0 ? index + 1 : 0;
 };
 
-const isBoardEntry = (value: unknown): value is Partial<BoardEntry> =>
+/**
+ * The guards narrow to exactly the fields they establish, leaving `t` and `n`
+ * unknown for the coercions below to settle. Narrowing to `Partial<BoardEntry>`
+ * instead would claim less than was proved and put the invariant back on
+ * non-null assertions, where a future edit to a guard could not be caught.
+ */
+const isBoardEntry = (value: unknown): value is { i: string; s: number; t?: unknown; n?: unknown } =>
   typeof value === 'object' &&
   value !== null &&
   typeof (value as BoardEntry).i === 'string' &&
-  typeof (value as BoardEntry).s === 'number' &&
   Number.isFinite((value as BoardEntry).s);
 
-const isRecentEntry = (value: unknown): value is Partial<RecentEntry> =>
+const isRecentEntry = (value: unknown): value is { h: string; t: number; n?: unknown } =>
   typeof value === 'object' &&
   value !== null &&
   typeof (value as RecentEntry).h === 'string' &&
@@ -223,10 +235,8 @@ export function normalizeBoard(raw: unknown): StoredBoard {
   const top = Array.isArray(board.top) ? board.top : [];
   const recent = Array.isArray(board.recent) ? board.recent : [];
   return {
-    top: top
-      .filter(isBoardEntry)
-      .map(e => ({ i: e.i!, s: e.s!, t: asTime(e.t), n: asNonce(e.n) })),
-    recent: recent.filter(isRecentEntry).map(e => ({ h: e.h!, t: e.t!, n: asNonce(e.n) }))
+    top: top.filter(isBoardEntry).map(e => ({ i: e.i, s: e.s, t: asTime(e.t), n: asNonce(e.n) })),
+    recent: recent.filter(isRecentEntry).map(e => ({ h: e.h, t: e.t, n: asNonce(e.n) }))
   };
 }
 

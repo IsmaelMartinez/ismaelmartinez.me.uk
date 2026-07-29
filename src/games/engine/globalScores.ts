@@ -51,24 +51,50 @@ function toEntries(wire: unknown): ScoreEntry[] {
   return wire.filter(isWireEntry).map(e => ({ initials: e.i, score: e.s }));
 }
 
-/**
- * Whether a write would even be attempted from here. Exported because the
- * panel has to tell "the board refused this score" apart from "we never
- * offered it": reporting a run as unsaved in local dev, where submission is
- * deliberately a no-op, would be a lie.
- */
-export function canSubmit(): boolean {
+function canSubmit(): boolean {
   return typeof location !== 'undefined' && SUBMIT_HOSTS.includes(location.hostname);
 }
 
 /**
+ * What became of a submission.
+ *
+ * `skipped` and `failed` both mean the score is not on the board, but only one
+ * of them is worth telling the player about: away from production the write is
+ * deliberately never attempted, and reporting that as a failed save would be a
+ * lie. Keeping them apart here rather than collapsing both to a null is what
+ * spares the panel from having to ask a second question to recover the
+ * difference.
+ */
+export type SubmitResult =
+  | { status: 'ok'; rank: number; table: ScoreEntry[] }
+  | { status: 'skipped' }
+  | { status: 'failed' };
+
+/**
+ * Shared by callers that ask while a request is already out. One response
+ * carries every game's board, so a second asker wants exactly what the first
+ * is already waiting for. HTTP caching does not cover this: the pages that
+ * field two panels (Cascade) construct both scoreboards on consecutive lines,
+ * so both ask before either reply exists and there is nothing cached yet.
+ * Cleared as soon as the request settles, so this only ever collapses
+ * genuinely concurrent asks and never serves a stale board.
+ */
+let inFlight: Promise<Record<string, ScoreEntry[]> | null> | null = null;
+
+/**
  * Every game's global top ten in one request, keyed by game id. Resolves
  * `null` when the board cannot be reached, which the panel shows as
- * "unavailable" rather than as an empty leaderboard. One request covers a
- * page's every table, and the response's own cache headers spare the second
- * panel on the pages that field two.
+ * "unavailable" rather than as an empty leaderboard.
  */
-export async function fetchGlobal(): Promise<Record<string, ScoreEntry[]> | null> {
+export function fetchGlobal(): Promise<Record<string, ScoreEntry[]> | null> {
+  if (inFlight) return inFlight;
+  inFlight = requestBoards().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function requestBoards(): Promise<Record<string, ScoreEntry[]> | null> {
   try {
     const res = await fetch(SCORES_ENDPOINT, { signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!res.ok) return null;
@@ -97,8 +123,8 @@ export async function submitGlobal(
   gameId: string,
   initials: string,
   score: number
-): Promise<{ rank: number; table: ScoreEntry[] } | null> {
-  if (!canSubmit()) return null;
+): Promise<SubmitResult> {
+  if (!canSubmit()) return { status: 'skipped' };
   try {
     const res = await fetch(SCORES_ENDPOINT, {
       method: 'POST',
@@ -112,13 +138,14 @@ export async function submitGlobal(
       keepalive: true,
       signal: AbortSignal.timeout(TIMEOUT_MS)
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { status: 'failed' };
     const data = (await res.json()) as { rank?: unknown; table?: unknown };
     return {
+      status: 'ok',
       rank: typeof data.rank === 'number' && Number.isFinite(data.rank) ? data.rank : 0,
       table: toEntries(data.table)
     };
   } catch {
-    return null;
+    return { status: 'failed' };
   }
 }

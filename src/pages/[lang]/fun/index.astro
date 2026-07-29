@@ -181,11 +181,12 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
 
   function showBestScores() {
     const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-game-id]');
+    // One set of initials serves the whole floor: they are the last ones the
+    // player typed, not per-cabinet, so reading them once is enough.
+    const initials = loadInitials();
     for (const readout of readouts) {
       const best = readout.dataset.gameId ? loadBest(readout.dataset.gameId) : 0;
-      readout.textContent = best > 0
-        ? `${loadInitials()} ${formatScore(best)}`
-        : formatScore(0);
+      readout.textContent = best > 0 ? `${initials} ${formatScore(best)}` : formatScore(0);
     }
   }
 

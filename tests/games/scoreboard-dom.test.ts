@@ -1,13 +1,13 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initScoreboard } from '../../src/games/engine/scoreboard';
-import { fetchGlobal, submitGlobal, canSubmit } from '../../src/games/engine/globalScores';
-import { bestKey, MAX_ENTRIES, type ScoreEntry } from '../../src/games/engine/highscores';
+import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
+import { bestKey } from '../../src/games/engine/highscores';
+import { fullBoard } from './board-fixtures';
 
 vi.mock('../../src/games/engine/globalScores', () => ({
   fetchGlobal: vi.fn(async () => null),
-  submitGlobal: vi.fn(async () => null),
-  canSubmit: vi.fn(() => true)
+  submitGlobal: vi.fn(async () => ({ status: 'failed' }))
 }));
 
 /**
@@ -37,13 +37,6 @@ function buildPanel(): HTMLElement {
 
 const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
-/** A board with no room left: ten entries, none of them cheap. */
-const fullBoard = (): ScoreEntry[] =>
-  Array.from({ length: MAX_ENTRIES }, (_, i) => ({
-    initials: 'AAA',
-    score: (MAX_ENTRIES - i) * 1000
-  }));
-
 /**
  * Minimal in-memory localStorage stand-in, as in highscores.test.ts: Node's
  * own experimental `localStorage` global (undefined without
@@ -69,8 +62,7 @@ beforeEach(() => {
   installLocalStorage();
   vi.clearAllMocks();
   vi.mocked(fetchGlobal).mockResolvedValue(null);
-  vi.mocked(submitGlobal).mockResolvedValue(null);
-  vi.mocked(canSubmit).mockReturnValue(true);
+  vi.mocked(submitGlobal).mockResolvedValue({ status: 'failed' });
   // jsdom does not implement scrollIntoView; commit(true) calls it.
   Element.prototype.scrollIntoView = vi.fn();
 });
@@ -204,6 +196,7 @@ describe('initScoreboard board rendering', () => {
   it('lights the submitted row and reports its rank', async () => {
     const onSave = vi.fn();
     vi.mocked(submitGlobal).mockResolvedValue({
+      status: 'ok',
       rank: 2,
       table: [
         { initials: 'AAA', score: 9000 },
@@ -245,7 +238,7 @@ describe('initScoreboard board rendering', () => {
   it('says nothing where a submission was never attempted', async () => {
     // Local dev and preview deployments read the real board but never write to
     // it, so reporting an unsaved score there would be a lie.
-    vi.mocked(canSubmit).mockReturnValue(false);
+    vi.mocked(submitGlobal).mockResolvedValue({ status: 'skipped' });
     const board = initScoreboard(buildPanel());
     await flush();
     board.show(4210);
@@ -266,7 +259,11 @@ describe('initScoreboard board rendering', () => {
       'Score not saved. Try again later'
     );
 
-    vi.mocked(submitGlobal).mockResolvedValue({ rank: 1, table: [{ initials: 'IMR', score: 50 }] });
+    vi.mocked(submitGlobal).mockResolvedValue({
+      status: 'ok',
+      rank: 1,
+      table: [{ initials: 'IMR', score: 50 }]
+    });
     board.show(50);
     await flush();
     expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).not.toBe(
@@ -310,7 +307,6 @@ describe('initScoreboard board rendering', () => {
     expect(() => {
       board.show(100);
       board.hide();
-      board.stash(50);
       board.beginRun();
       board.bank(10);
     }).not.toThrow();

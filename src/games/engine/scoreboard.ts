@@ -29,19 +29,13 @@ import {
   INITIALS_LENGTH,
   type ScoreEntry
 } from './highscores';
-import { fetchGlobal, submitGlobal, canSubmit } from './globalScores';
+import { fetchGlobal, submitGlobal } from './globalScores';
 
 export interface Scoreboard {
   /** Present a finished run's score on the game-over screen. */
   show(score: number): void;
   /** Hide the panel (call when a new game starts); commits any pending entry. */
   hide(): void;
-  /**
-   * Record the current run's score as a personal best if it beats the stored
-   * one. Call whenever a long run's score grows, so a mid-run tab close can't
-   * lose a number the HUD already displayed.
-   */
-  stash(score: number): void;
   /**
    * Snapshot the current best as the starting run's baseline and re-arm the
    * one-time record celebration. Call from the game's startRun.
@@ -65,10 +59,15 @@ export interface RunRecordBank {
 }
 
 /**
- * Pure run-record state machine behind `beginRun`/`bank`/`best`, kept
- * separate from the DOM wiring so it can be unit-tested. `stash` is only
- * invoked when the run's own best grows, which spares a storage write per
- * bank call.
+ * Pure run-record state machine behind `beginRun`/`bank`/`best`, kept separate
+ * from the DOM wiring so it can be unit-tested. `stash` is the injected
+ * storage seam and is the only write path to the persisted best, so the number
+ * in memory and the one on disk cannot drift apart.
+ *
+ * It is invoked exactly when the best actually moves. That is also the only
+ * time it could achieve anything: the persisted value is a maximum, so
+ * stashing anything lower is a no-op that costs a storage round trip, and
+ * long-running cabinets bank on every gain.
  */
 export function createRunRecord(
   initialBest: number,
@@ -78,19 +77,16 @@ export function createRunRecord(
   let baseline = 0;
   // Armed by beginRun; banking before the first run never celebrates.
   let celebrated = true;
-  let runBest = 0;
   return {
     beginRun() {
       baseline = best;
       celebrated = false;
-      runBest = 0;
     },
     bank(score: number): RunRecordBank {
-      if (score > runBest) {
-        runBest = score;
+      if (score > best) {
+        best = score;
         stash(score);
       }
-      if (score > best) best = score;
       const newRecord = !celebrated && baseline > 0 && score > baseline;
       if (newRecord) celebrated = true;
       return { best, newRecord };
@@ -154,7 +150,6 @@ export function initScoreboard(
     return {
       show() {},
       hide() {},
-      stash() {},
       ...createRunRecord(0, () => {})
     };
   }
@@ -178,8 +173,8 @@ export function initScoreboard(
   // Declared up here because `commit` records a finished run through the
   // record rather than writing storage behind its back: the personal best the
   // HUD reads and the one on disk are then the same number by construction.
-  const stash = (score: number) => saveBest(gameId, score);
-  const runRecord = createRunRecord(loadBest(gameId), stash);
+  // `bank` is the only way in, so there is no second write path to keep honest.
+  const runRecord = createRunRecord(loadBest(gameId), score => saveBest(gameId, score));
 
   let pendingScore: number | null = null;
   // The board as last known. Empty until a fetch or a submission answers,
@@ -288,32 +283,30 @@ export function initScoreboard(
 
     const token = runToken;
     const gen = worldGen;
-    // Whether a write is even attempted: `submitGlobal` no-ops away from
-    // production, and calling that a failed save would be a lie in local dev.
-    const attempted = canSubmit();
-    // `submitGlobal` never rejects; it resolves null for both a refusal and
-    // an unreachable board.
+    // `submitGlobal` never rejects; it reports whether the score landed, was
+    // refused, or was deliberately never offered.
     submitGlobal(gameId, initials, score).then(result => {
       // Two runs can have submissions out at once (five seconds are allowed
       // for one and a short run ends well inside that), and replies can arrive
       // in either order. A newer one landing first has already put a board on
-      // screen that this older answer predates, so it stands down.
-      const landed = result !== null && gen === worldGen;
-      if (landed) {
+      // screen that this older answer predates, so it stands down. Binding the
+      // value rather than a flag keeps the narrowing below.
+      const fresh = result.status === 'ok' && gen === worldGen ? result : null;
+      if (fresh) {
         // The freshest board there is: it came back from the write itself, so
         // it supersedes any fetch still in flight too.
         worldGen++;
-        table = result!.table;
+        table = fresh.table;
         loaded = true;
       }
       // The board lands whichever run it came from; the rank and the failure
       // notice belong to one run and are dropped once that run is past.
       if (token === runToken) {
-        if (landed) rank = result!.rank;
-        else if (result === null && attempted) failed = true;
+        if (fresh) rank = fresh.rank;
+        else if (result.status === 'failed') failed = true;
       }
       render();
-      if (landed && focusResult && token === runToken && rank > 0) {
+      if (fresh && focusResult && token === runToken && rank > 0) {
         const row = list?.querySelector<HTMLElement>('.hs-current');
         row?.scrollIntoView({ block: 'nearest' });
       }
@@ -322,7 +315,7 @@ export function initScoreboard(
       // a consumer refreshing a HUD from it must not be skipped just because
       // the network was down. Rank 0 means "did not chart", including when
       // there was no answer to chart against.
-      options.onSave?.({ initials, score }, result?.rank ?? 0);
+      options.onSave?.({ initials, score }, result.status === 'ok' ? result.rank : 0);
     });
   }
 
@@ -363,7 +356,6 @@ export function initScoreboard(
   loadWorld();
 
   return {
-    stash,
     ...runRecord,
     show(score: number) {
       panel.hidden = false;

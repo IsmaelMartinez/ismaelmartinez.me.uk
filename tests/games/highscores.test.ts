@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  MAX_ENTRIES,
   sanitizeInitials,
   filterInitials,
   formatScore,
@@ -12,6 +11,7 @@ import {
   bestKey,
   type ScoreEntry
 } from '../../src/games/engine/highscores';
+import { fullBoard } from './board-fixtures';
 
 /** Minimal in-memory localStorage stand-in (the suite runs under node by default). */
 function installLocalStorage(): Record<string, string> {
@@ -32,8 +32,6 @@ function installLocalStorage(): Record<string, string> {
 }
 
 const entry = (initials: string, score: number): ScoreEntry => ({ initials, score });
-const fullTable = (): ScoreEntry[] =>
-  Array.from({ length: MAX_ENTRIES }, (_, i) => entry('AAA', (MAX_ENTRIES - i) * 100));
 
 describe('sanitizeInitials', () => {
   it('uppercases and trims to three characters', () => {
@@ -79,7 +77,7 @@ describe('qualifies', () => {
   });
 
   it('requires beating the last entry once the board is full', () => {
-    const table = fullTable(); // scores 1000..100
+    const table = fullBoard(); // scores 1000..100
     expect(qualifies(table, 100)).toBe(false);
     expect(qualifies(table, 101)).toBe(true);
   });

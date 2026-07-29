@@ -1,6 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fetchGlobal, submitGlobal, SCORES_ENDPOINT } from '../../src/games/engine/globalScores';
-import { mergeTop, publish, type BoardEntry } from '../../api/scores';
 
 function stubFetchOk(body: unknown): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -92,11 +91,13 @@ describe('fetchGlobal', () => {
 });
 
 describe('submitGlobal production-host guard', () => {
-  it('returns null without calling fetch on localhost', async () => {
+  it('reports a skipped submission without calling fetch on localhost', async () => {
     stubLocation('localhost');
     const fetchMock = stubFetchOk({});
     const result = await submitGlobal('snake', 'ISM', 300);
-    expect(result).toBeNull();
+    // Distinct from 'failed': nothing was offered, so nothing was refused, and
+    // the panel must not tell a local player their score was lost.
+    expect(result).toEqual({ status: 'skipped' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -144,112 +145,36 @@ describe('submitGlobal request shape', () => {
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ rank: 4, table: [{ i: 'ISM', s: 300 }] });
     const result = await submitGlobal('snake', 'ISM', 300);
-    expect(result).toEqual({ rank: 4, table: [{ initials: 'ISM', score: 300 }] });
+    expect(result).toEqual({
+      status: 'ok',
+      rank: 4,
+      table: [{ initials: 'ISM', score: 300 }]
+    });
   });
 
   it('returns rank 0 when the response omits or malforms rank', async () => {
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ table: [] });
-    expect((await submitGlobal('snake', 'ISM', 300))?.rank).toBe(0);
+    expect(await submitGlobal('snake', 'ISM', 300)).toMatchObject({ status: 'ok', rank: 0 });
 
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ rank: 'first', table: [] });
-    expect((await submitGlobal('snake', 'ISM', 300))?.rank).toBe(0);
+    expect(await submitGlobal('snake', 'ISM', 300)).toMatchObject({ status: 'ok', rank: 0 });
 
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ rank: NaN, table: [] });
-    expect((await submitGlobal('snake', 'ISM', 300))?.rank).toBe(0);
+    expect(await submitGlobal('snake', 'ISM', 300)).toMatchObject({ status: 'ok', rank: 0 });
   });
 
-  it('resolves null on a non-ok response', async () => {
+  it('reports a refusal as failed, which the panel does tell the player about', async () => {
     stubLocation('ismaelmartinez.me.uk');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
-    expect(await submitGlobal('snake', 'ISM', 300)).toBeNull();
+    expect(await submitGlobal('snake', 'ISM', 300)).toEqual({ status: 'failed' });
   });
 
-  it('resolves null on a network rejection rather than throwing', async () => {
+  it('reports a network rejection as failed rather than throwing', async () => {
     stubLocation('ismaelmartinez.me.uk');
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
-    await expect(submitGlobal('snake', 'ISM', 300)).resolves.toBeNull();
-  });
-});
-
-describe('mergeTop', () => {
-  /**
-   * The board is maintained incrementally now: each accepted submission is
-   * merged into a persisted top ten, rather than the whole table being
-   * re-derived from a rolling history that the oldest entries fall out of.
-   * Folding runs in arrival order must therefore give exactly what one sort of
-   * the same runs would, ties included — the arcade rule keeps the OLDER entry
-   * higher, so equal scores break on ascending timestamp.
-   */
-  const run = (i: string, s: number, t: number): BoardEntry => ({ i, s, t, n: `n-${i}` });
-  const fold = (runs: BoardEntry[]): BoardEntry[] =>
-    runs.reduce<BoardEntry[]>((top, entry) => mergeTop(top, entry), []);
-
-  it('orders by score and keeps the earlier submission above a tie', () => {
-    const runs = [
-      run('AAA', 100, 1),
-      run('BBB', 300, 2),
-      run('CCC', 300, 3), // ties BBB, arrived later
-      run('DDD', 250, 4),
-      run('EEE', 300, 5), // ties BBB/CCC too
-      run('FFF', 50, 6),
-      run('GGG', 400, 7),
-      run('HHH', 250, 8) // ties DDD, arrived later
-    ];
-    expect(fold(runs).map(e => e.i)).toEqual([
-      'GGG',
-      'BBB',
-      'CCC',
-      'EEE',
-      'DDD',
-      'HHH',
-      'AAA',
-      'FFF'
-    ]);
-  });
-
-  /**
-   * Server timestamps have one-second resolution, so two submissions
-   * contending for the same board routinely share a `t`. That is precisely
-   * when the arcade rule matters and the sort has no timestamp left to
-   * separate them, so it falls back to arrival order: the incoming entry is
-   * appended before a stable sort, which leaves the one already on the board
-   * above it.
-   */
-  it('keeps the earlier of two same-second, same-score entries higher', () => {
-    const sameSecond = [run('ERL', 5000, 1785000000), run('LTE', 5000, 1785000000)];
-    expect(fold(sameSecond).map(e => e.i)).toEqual(['ERL', 'LTE']);
-  });
-
-  it('caps the board at ten, dropping the weakest entry', () => {
-    const full = fold(Array.from({ length: 10 }, (_, i) => run(`E${i}`, (10 - i) * 100, i + 1)));
-    const merged = mergeTop(full, run('NEW', 950, 11));
-    expect(merged).toHaveLength(10);
-    expect(merged.map(e => e.i)[1]).toBe('NEW');
-    expect(merged.some(e => e.s === 100)).toBe(false);
-  });
-
-  it('leaves the board it merges into untouched', () => {
-    const board = [run('AAA', 300, 1)];
-    const snapshot = board.map(e => ({ ...e }));
-    mergeTop(board, run('BBB', 400, 2));
-    expect(board).toEqual(snapshot);
-  });
-
-  /**
-   * Rows written before the top ten was persisted carry no timestamp, and
-   * `normalizeBoard` defaults them to 0. They are genuinely the oldest scores
-   * the board holds, so ranking them as such is the right outcome rather than
-   * a quirk to work around.
-   */
-  it('ranks a pre-upgrade row with no timestamp above a later tie', () => {
-    const legacy: BoardEntry = { i: 'OLD', s: 500, t: 0, n: '' };
-    expect(mergeTop([legacy], run('NEW', 500, 1785000000)).map(e => e.i)).toEqual(['OLD', 'NEW']);
-  });
-
-  it('publishes only the initials and score, never the timestamp or nonce', () => {
-    expect(publish([run('IMR', 420, 99)])).toEqual([{ i: 'IMR', s: 420 }]);
+    await expect(submitGlobal('snake', 'ISM', 300)).resolves.toEqual({ status: 'failed' });
   });
 });

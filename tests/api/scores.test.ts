@@ -3,13 +3,17 @@ import { createHash } from 'node:crypto';
 import { get, put } from '@vercel/blob';
 import {
   GAMES,
+  MAX_TOP,
+  mergeTop,
   normalizeBoard,
+  publish,
   GET,
   POST,
   OPTIONS,
   type BoardEntry,
-  type RecentEntry
+  type StoredBoard
 } from '../../api/scores';
+import { MAX_ENTRIES } from '../../src/games/engine/highscores';
 
 /**
  * An in-memory stand-in for the blob store. It has to be built inside
@@ -62,6 +66,9 @@ const NOW_SECONDS = 1785000000;
 const AN_HOUR = 60 * 60;
 const A_DAY = 24 * 60 * 60;
 const TOKEN = 'vercel_blob_rw_test_token';
+const ADDRESS_LIMIT = 20;
+const GAME_LIMIT = 300;
+const MAX_RECENT = 400;
 const ADDRESS = '203.0.113.5';
 
 /** What the handler derives for the test address, so the salt stays its own business. */
@@ -69,11 +76,6 @@ const ADDRESS_HASH = createHash('sha256')
   .update(`${TOKEN}${ADDRESS}`)
   .digest('hex')
   .slice(0, 16);
-
-interface StoredBoard {
-  top: BoardEntry[];
-  recent: RecentEntry[];
-}
 
 const entry = (i: string, s: number, t: number, n: string): BoardEntry => ({ i, s, t, n });
 
@@ -103,6 +105,32 @@ function seedBoard(
     etag
   );
 }
+
+/**
+ * Seeds a board's submission history directly, for the rate-limit tests. Each
+ * entry gets a distinct nonce so none of them collide with the submission
+ * under test; `from` decides whose allowance they spend and `at` how long ago
+ * they landed, which is the whole of what separates these cases.
+ */
+function seedTraffic(
+  gameId: string,
+  count: number,
+  from: (index: number) => string,
+  at: (index: number) => number
+): void {
+  seed(gameId, {
+    recent: Array.from({ length: count }, (_, index) => ({
+      h: from(index),
+      t: at(index),
+      n: `seeded-${index}`
+    }))
+  });
+}
+
+/** Every entry credited to the test's own address, so they share its quota. */
+const sameAddress = () => ADDRESS_HASH;
+/** A distinct address per entry, so no single one hits the per-address cap. */
+const manyAddresses = (index: number) => `flooder-${index}`;
 
 function stored(gameId: string): StoredBoard {
   const found = blob.store.get(`scores/${gameId}.json`);
@@ -449,26 +477,14 @@ describe('POST writes', () => {
   });
 
   it('prunes submissions older than the longest rate-limit window', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 40 }, (_, index) => ({
-        h: `hash-${index}`,
-        t: NOW_SECONDS - A_DAY - index,
-        n: `old-${index}`
-      }))
-    });
+    seedTraffic('snake', 40, manyAddresses, index => NOW_SECONDS - A_DAY - index);
     await POST(postRequest(submission({ nonce: 'fresh' })));
     const board = stored('snake');
     expect(board.recent).toEqual([{ h: ADDRESS_HASH, t: NOW_SECONDS, n: 'fresh' }]);
   });
 
   it('bounds `recent` above the daily cap, so pruning never evicts a countable write', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 400 }, (_, index) => ({
-        h: `hash-${index}`,
-        t: NOW_SECONDS - index,
-        n: `live-${index}`
-      }))
-    });
+    seedTraffic('snake', MAX_RECENT, manyAddresses, index => NOW_SECONDS - index);
     // 400 live writes is past the 300/day cap, so this is refused rather than
     // written — which is the point: the cap bites before the bound does.
     const response = await POST(postRequest(submission({ nonce: 'fresh' })));
@@ -571,77 +587,136 @@ describe('POST conditional writes', () => {
 });
 
 describe('POST rate limits', () => {
-  it('rejects a twenty-first write from the same address within the hour', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 20 }, (_, index) => ({
-        h: ADDRESS_HASH,
-        t: NOW_SECONDS - 60 * index,
-        n: `mine-${index}`
-      }))
-    });
-    const response = await POST(postRequest(submission({ nonce: 'twenty-first' })));
+  it('rejects one write past the per-address hourly allowance', async () => {
+    seedTraffic('snake', ADDRESS_LIMIT, sameAddress, index => NOW_SECONDS - 60 * index);
+    const response = await POST(postRequest(submission({ nonce: 'past-the-cap' })));
     expect(response.status).toBe(429);
     expect(vi.mocked(put)).not.toHaveBeenCalled();
   });
 
   it('lets the same address back in once its writes age out of the hour', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 20 }, (_, index) => ({
-        h: ADDRESS_HASH,
-        t: NOW_SECONDS - AN_HOUR - index,
-        n: `mine-${index}`
-      }))
-    });
+    seedTraffic('snake', ADDRESS_LIMIT, sameAddress, index => NOW_SECONDS - AN_HOUR - index);
     const response = await POST(postRequest(submission({ nonce: 'later' })));
     expect(response.status).toBe(200);
   });
 
   it('does not count another address against the limit', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 20 }, (_, index) => ({
-        h: 'somebodyelse00',
-        t: NOW_SECONDS - index,
-        n: `theirs-${index}`
-      }))
-    });
+    seedTraffic('snake', ADDRESS_LIMIT, () => 'somebodyelse00', index => NOW_SECONDS - index);
     const response = await POST(postRequest(submission({ nonce: 'mine' })));
     expect(response.status).toBe(200);
   });
 
-  it('freezes a board after three hundred writes in twenty-four hours', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 300 }, (_, index) => ({
-        h: `flooder-${index}`,
-        t: NOW_SECONDS - 60 * index,
-        n: `flood-${index}`
-      }))
-    });
-    const response = await POST(postRequest(submission({ nonce: 'three-hundred-and-first' })));
+  it('freezes a board once the daily cap is reached', async () => {
+    seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - 60 * index);
+    const response = await POST(postRequest(submission({ nonce: 'past-the-cap' })));
     expect(response.status).toBe(429);
     expect(vi.mocked(put)).not.toHaveBeenCalled();
   });
 
   it('caps each board separately, so one flood cannot freeze the arcade', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 300 }, (_, index) => ({
-        h: `flooder-${index}`,
-        t: NOW_SECONDS - 60 * index,
-        n: `flood-${index}`
-      }))
-    });
+    seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - 60 * index);
     const response = await POST(postRequest(submission({ game: 'cascade', nonce: 'elsewhere' })));
     expect(response.status).toBe(200);
   });
 
   it('lets a board thaw once its writes age past a day', async () => {
-    seed('snake', {
-      recent: Array.from({ length: 300 }, (_, index) => ({
-        h: `flooder-${index}`,
-        t: NOW_SECONDS - A_DAY - index,
-        n: `flood-${index}`
-      }))
-    });
+    seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - A_DAY - index);
     const response = await POST(postRequest(submission({ nonce: 'tomorrow' })));
     expect(response.status).toBe(200);
+  });
+});
+
+describe('mergeTop', () => {
+  /**
+   * The board is maintained incrementally now: each accepted submission is
+   * merged into a persisted top ten, rather than the whole table being
+   * re-derived from a rolling history that the oldest entries fall out of.
+   * Folding runs in arrival order must therefore give exactly what one sort of
+   * the same runs would, ties included — the arcade rule keeps the OLDER entry
+   * higher, so equal scores break on ascending timestamp.
+   */
+  const run = (i: string, s: number, t: number): BoardEntry => ({ i, s, t, n: `n-${i}` });
+  const fold = (runs: BoardEntry[]): BoardEntry[] =>
+    runs.reduce<BoardEntry[]>((top, entry) => mergeTop(top, entry), []);
+
+  it('orders by score and keeps the earlier submission above a tie', () => {
+    const runs = [
+      run('AAA', 100, 1),
+      run('BBB', 300, 2),
+      run('CCC', 300, 3), // ties BBB, arrived later
+      run('DDD', 250, 4),
+      run('EEE', 300, 5), // ties BBB/CCC too
+      run('FFF', 50, 6),
+      run('GGG', 400, 7),
+      run('HHH', 250, 8) // ties DDD, arrived later
+    ];
+    expect(fold(runs).map(e => e.i)).toEqual([
+      'GGG',
+      'BBB',
+      'CCC',
+      'EEE',
+      'DDD',
+      'HHH',
+      'AAA',
+      'FFF'
+    ]);
+  });
+
+  /**
+   * Server timestamps have one-second resolution, so two submissions
+   * contending for the same board routinely share a `t`. That is precisely
+   * when the arcade rule matters and the sort has no timestamp left to
+   * separate them, so it falls back to arrival order: the incoming entry is
+   * appended before a stable sort, which leaves the one already on the board
+   * above it.
+   */
+  it('keeps the earlier of two same-second, same-score entries higher', () => {
+    const sameSecond = [run('ERL', 5000, 1785000000), run('LTE', 5000, 1785000000)];
+    expect(fold(sameSecond).map(e => e.i)).toEqual(['ERL', 'LTE']);
+  });
+
+  it('caps the board at ten, dropping the weakest entry', () => {
+    const full = fold(Array.from({ length: 10 }, (_, i) => run(`E${i}`, (10 - i) * 100, i + 1)));
+    const merged = mergeTop(full, run('NEW', 950, 11));
+    expect(merged).toHaveLength(10);
+    expect(merged.map(e => e.i)[1]).toBe('NEW');
+    expect(merged.some(e => e.s === 100)).toBe(false);
+  });
+
+  it('leaves the board it merges into untouched', () => {
+    const board = [run('AAA', 300, 1)];
+    const snapshot = board.map(e => ({ ...e }));
+    mergeTop(board, run('BBB', 400, 2));
+    expect(board).toEqual(snapshot);
+  });
+
+  /**
+   * Rows written before the top ten was persisted carry no timestamp, and
+   * `normalizeBoard` defaults them to 0. They are genuinely the oldest scores
+   * the board holds, so ranking them as such is the right outcome rather than
+   * a quirk to work around.
+   */
+  it('ranks a pre-upgrade row with no timestamp above a later tie', () => {
+    const legacy: BoardEntry = { i: 'OLD', s: 500, t: 0, n: '' };
+    expect(mergeTop([legacy], run('NEW', 500, 1785000000)).map(e => e.i)).toEqual(['OLD', 'NEW']);
+  });
+
+  it('publishes only the initials and score, never the timestamp or nonce', () => {
+    expect(publish([run('IMR', 420, 99)])).toEqual([{ i: 'IMR', s: 420 }]);
+  });
+});
+
+/*
+ * `qualifies` on the client measures a finished run against this board to
+ * decide whether to interrupt the player for initials, using its own
+ * `MAX_ENTRIES`. Before the per-device table was retired the two described
+ * different boards and could drift freely; they describe the same one now, and
+ * raising only `MAX_TOP` would silently stop the panel prompting for runs that
+ * chart. Importing across the seam would pull server code into the browser
+ * bundle, so the constants stay separate and this holds them together.
+ */
+describe('client and server board sizes', () => {
+  it('keeps MAX_TOP and the client MAX_ENTRIES in step', () => {
+    expect(MAX_TOP).toBe(MAX_ENTRIES);
   });
 });

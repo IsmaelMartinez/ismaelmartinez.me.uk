@@ -106,26 +106,35 @@ describe('createRunRecord', () => {
     expect(record.bank(999).newRecord).toBe(false);
   });
 
-  it('stashes only when the run best grows', () => {
+  it('stashes only when the persisted best actually moves', () => {
     const stash = vi.fn();
     const record = createRunRecord(100, stash);
     record.beginRun();
     record.bank(0); // score 0 never stashes (it can't chart)
+    record.bank(90); // below the stored best: writing it would be a no-op
     expect(stash).not.toHaveBeenCalled();
-    record.bank(10);
-    record.bank(10);
-    record.bank(5);
-    record.bank(20);
-    expect(stash.mock.calls.map(([s]) => s)).toEqual([10, 20]);
+    record.bank(110);
+    record.bank(110);
+    record.bank(105);
+    record.bank(120);
+    expect(stash.mock.calls.map(([s]) => s)).toEqual([110, 120]);
   });
 
-  it('resets the stash gate each run', () => {
+  /*
+   * The persisted best is a maximum, so a later run scoring under it has
+   * nothing to persist. The gate is the best itself rather than a per-run
+   * high-water mark, which means no storage round trip is spent discovering
+   * that a write would have changed nothing.
+   */
+  it('does not stash a new run whose score is under the standing best', () => {
     const stash = vi.fn();
     const record = createRunRecord(0, stash);
     record.beginRun();
     record.bank(30);
     record.beginRun();
-    record.bank(10); // lower than last run's 30, but this run's first growth
-    expect(stash.mock.calls.map(([s]) => s)).toEqual([30, 10]);
+    record.bank(10);
+    expect(stash.mock.calls.map(([s]) => s)).toEqual([30]);
+    // The record still reports the standing best, untouched by the lesser run.
+    expect(record.best()).toBe(30);
   });
 });

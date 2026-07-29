@@ -60,10 +60,12 @@ const arcadeGames: ArcadeGame[] = [
     color: '#84cc16',
     path: '/fun/lemmings'
   },
-  // Pixel Park is parked off the floor for now: its ride graphics need more
-  // work before it ships, so we're stabilising the other cabinets first. The
-  // game and its /fun/park page stay in the repo — re-add an entry here to
-  // bring it back to the floor for a future release.
+  // Pixel Park is parked: its ride graphics need more work before it ships, so
+  // we're stabilising the other cabinets first. Its cabinet is off the floor
+  // AND its page is unpublished — renamed to the unrouted
+  // src/pages/[lang]/fun/_park.astro, so no /fun/park route is built. The game
+  // under src/games/park/ stays in the repo. To bring it back for a future
+  // release: rename _park.astro back to park.astro and re-add an entry here.
   {
     id: 'cascade',
     shelf: 'featured',
@@ -170,19 +172,21 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
 </Layout>
 
 <script>
-  // Fill each cabinet's attract screen with the top of the game's high-score
-  // table, initials and all (loading a table migrates the game's pre-table
-  // best automatically). Re-runs after ClientRouter swaps so scores earned
-  // in a game show up when navigating back to the arcade.
-  import { topEntry, formatScore } from '../../../games/engine/highscores';
+  // Fill each cabinet's attract screen with this device's best run at the
+  // game, under the initials the player last entered (loading a best migrates
+  // it from the retired per-device table, or from the game's pre-table key,
+  // automatically). Re-runs after ClientRouter swaps so scores earned in a
+  // game show up when navigating back to the arcade.
+  import { loadBest, loadInitials, formatScore } from '../../../games/engine/highscores';
 
   function showBestScores() {
     const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-game-id]');
+    // One set of initials serves the whole floor: they are the last ones the
+    // player typed, not per-cabinet, so reading them once is enough.
+    const initials = loadInitials();
     for (const readout of readouts) {
-      const top = readout.dataset.gameId ? topEntry(readout.dataset.gameId) : null;
-      readout.textContent = top
-        ? `${top.initials} ${formatScore(top.score)}`
-        : formatScore(0);
+      const best = readout.dataset.gameId ? loadBest(readout.dataset.gameId) : 0;
+      readout.textContent = best > 0 ? `${initials} ${formatScore(best)}` : formatScore(0);
     }
   }
 

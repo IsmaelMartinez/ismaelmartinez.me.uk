@@ -19,6 +19,28 @@ This site is built with [Astro](https://astro.build/). To run it locally:
 3. **View the site**
    Open [http://localhost:4321/](http://localhost:4321/) in your browser.
 
+### The global arcade leaderboard in local dev
+
+The world high-score board is served by a Vercel Function (`api/scores.ts`)
+that is not part of the Astro dev server. A local `npm run dev` reads the
+real world board from production and never writes to it: only production
+hostnames may submit (see `SUBMIT_HOSTS` in `src/games/engine/globalScores.ts`),
+so local experiments cannot pollute the shared board. The function's
+`BLOB_READ_WRITE_TOKEN` secret is provisioned on Vercel and is never needed
+for normal site work; to exercise the function itself, use `vercel dev` after
+`vercel env pull`.
+
+**Per-commit preview deployments do not submit either.** Their hostnames look
+like `ismaelmartinezme-<hash>-…vercel.app`, which is not the
+`ismaelmartinezmeuk.vercel.app` on the allowlist, so a preview behaves exactly
+like localhost. This is easy to mistake for a bug, because nothing on screen
+says so: a finished run still opens the initials prompt, still accepts your
+initials, and then simply never appears on the board. That silence is
+deliberate (`submitGlobal` reports `skipped` rather than `failed`, so dev play
+is not reported to the player as a lost score), but it means **the only place
+a leaderboard write can be verified end to end is the live site**,
+`https://ismaelmartinez.me.uk`. Test scoring there, not on a preview link.
+
 ## Available Commands
 
 | Command               | Action                                                    |
@@ -70,10 +92,12 @@ src/
 ├── content/articles/   # MDX articles per locale (en/, es/, cat/)
 ├── content.config.ts   # Astro content collection schema
 ├── data/               # Static data (projects, links, uses, health, fun)
+├── games/              # Arcade cabinets: DOM-free game logic + shared engine/
 ├── i18n/               # Translation system
 ├── utils/              # Small helpers (reading-time, …)
 └── styles/             # Global CSS design tokens
 
+api/                    # Vercel Function: global arcade scores (deployed by Vercel, not Astro)
 tests/                  # Vitest unit and build-output tests
 scripts/                # Build-time scripts (e.g. check-links.js)
 docs/                   # ADRs and design/implementation plans

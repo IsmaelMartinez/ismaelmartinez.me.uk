@@ -1,15 +1,21 @@
 /**
  * Global arcade high-score tables, one blob per cabinet.
  *
- * Every cabinet already keeps a per-device top ten in localStorage; this
- * endpoint is the shared board behind them. A game's entire state lives in a
- * single JSON blob at `scores/<gameId>.json`, so a submission costs one read
- * and one write however much bookkeeping the abuse rules need:
+ * A game's entire state lives in a single JSON blob at `scores/<gameId>.json`,
+ * so a submission costs one read and one write however much bookkeeping the
+ * abuse rules need:
  *
- *   top     the derived top ten, recomputed on every write
- *   all     the 500 newest submissions, which `top` is derived from
- *   recent  the 50 newest accepted writes as salted address hashes, kept
- *           only for rate limiting
+ *   top     the all-time top ten, merged on every write
+ *   recent  every submission inside the rate-limit window, kept for replay
+ *           dedupe and for the two caps below
+ *
+ * `top` used to be re-derived on each write from a rolling history of the 500
+ * newest submissions. That quietly made the board a *recent* top ten rather
+ * than an all-time one: once a busy game passed five hundred runs, the oldest
+ * entries fell out of the history and their scores vanished off the board even
+ * if they were still the best ever posted. Merging each new entry into a
+ * persisted `top` instead means a record leaves the board only when ten better
+ * ones have pushed it off.
  *
  * Because that state is per blob, the per-address limit is per address per
  * game, not per address overall: one address can spend it on each of the nine
@@ -31,8 +37,12 @@
 import { createHash } from 'node:crypto';
 import { get, put, BlobPreconditionFailedError } from '@vercel/blob';
 
-/** A single submission as stored. Short keys because the blob is read whole. */
-export interface HistoryEntry {
+/**
+ * A row of the board as stored. Short keys because the blob is read whole.
+ * `t` and `n` never leave the server: `t` settles ties, `n` identifies a
+ * resent submission so it cannot chart twice.
+ */
+export interface BoardEntry {
   i: string;
   s: number;
   t: number;
@@ -45,15 +55,16 @@ export interface TopEntry {
   s: number;
 }
 
-interface RecentWrite {
+/** A submission inside the rate-limit window: when, from whom, and which one. */
+export interface RecentEntry {
   h: string;
   t: number;
+  n: string;
 }
 
-interface StoredBoard {
-  top: TopEntry[];
-  all: HistoryEntry[];
-  recent: RecentWrite[];
+export interface StoredBoard {
+  top: BoardEntry[];
+  recent: RecentEntry[];
 }
 
 interface LoadedBoard {
@@ -87,19 +98,30 @@ const ALLOWED_ORIGINS = [
   'http://localhost:4321'
 ];
 
-const MAX_TOP = 10;
-const MAX_HISTORY = 500;
-const MAX_RECENT = 50;
+/**
+ * Rows the board keeps. The client's `MAX_ENTRIES` must agree: it decides
+ * whether a finished run is worth interrupting the player for initials, and
+ * measures that against this board. Exported so a test can hold the two in
+ * step, since importing across the client/server seam would pull server code
+ * into the browser bundle.
+ */
+export const MAX_TOP = 10;
 const MAX_BODY_CHARS = 1024;
 const MAX_SCORE = 10_000_000;
 const INITIALS = /^[A-Z0-9]{1,3}$/;
 
 /**
+ * Nonces exist only for replay dedupe, but they are stored verbatim in a
+ * world-readable blob: bound them to a UUID-sized safe alphabet so the blob
+ * cannot carry free-text graffiti. The client sends crypto.randomUUID().
+ */
+const NONCE = /^[A-Za-z0-9-]{1,64}$/;
+
+/**
  * Three letters of A-Z0-9 reach a handful of slurs and obscenities, and this
  * board is public, shared and has no admin endpoint: anything that lands here
  * shows on every cabinet in three locales until someone hand-edits the blob.
- * Rejected rather than rewritten, so a client that sends one sees the failure
- * and falls back to its device table.
+ * Rejected rather than rewritten, so a client that sends one sees the failure.
  */
 const BLOCKED_INITIALS = new Set([
   'ASS', 'CNT', 'COK', 'CUM', 'DIC', 'DIK', 'FAG', 'FUC', 'FUK', 'FUX',
@@ -107,10 +129,23 @@ const BLOCKED_INITIALS = new Set([
   'SLT', 'SPS', 'TIT', 'TWT', 'VAG', 'WOG'
 ]);
 
-const ADDRESS_LIMIT = 5;
+/**
+ * Every finished run is offered to the board now, not just the ones that
+ * charted on a player's own device table, so these caps see roughly one
+ * submission per game played rather than one per personal best. Sized for
+ * that: a long session on one cabinet fits inside the hourly allowance, and
+ * the daily cap is loose enough to survive the traffic of being linked
+ * somewhere busy while still bounding the blob write quota, whose worst case
+ * is one board frozen for a day. CORS gates who can read the response, not
+ * who can post, so anyone with curl is inside the per-address limit's reach.
+ */
+const ADDRESS_LIMIT = 20;
 const ADDRESS_WINDOW = 60 * 60;
-const GAME_LIMIT = 30;
+const GAME_LIMIT = 300;
 const GAME_WINDOW = 24 * 60 * 60;
+
+/** Headroom over the daily cap, so pruning never evicts a countable entry. */
+const MAX_RECENT = 400;
 
 const WRITE_ATTEMPTS = 3;
 
@@ -134,38 +169,75 @@ const BLOB_CACHE_SECONDS = 60;
 const boardPath = (gameId: string): string => `scores/${gameId}.json`;
 
 /**
- * Highest score first; equal scores keep the earlier submission above, which
- * is the rule the per-device tables follow so the two tabs cannot disagree.
+ * Adds an entry to the all-time top ten. Highest score first; equal scores
+ * keep the earlier submission above.
  *
- * Precondition: `all` is newest-first, which is how `record` writes it. Two
- * entries can tie on score AND on second (likely, in fact, since contending
- * writes retry within a second of each other), and at that point the only
- * remaining signal for which came first is position in the array. Reversing
- * to oldest-first before a stable sort therefore leaves the older of a full
- * tie above. Sorting the newest-first array directly would rank the later
- * submission higher, inverting the arcade rule exactly in the case where it
- * is most likely to be seen.
+ * The new entry is appended before sorting, so a stable sort leaves an
+ * existing entry above one that ties it on both score and second — likely, in
+ * fact, since contending writes retry within a second of each other, and at
+ * that point arrival order is the only remaining signal for which came first.
  */
-const sortByRank = (all: HistoryEntry[]): HistoryEntry[] =>
-  [...all].reverse().sort((a, b) => b.s - a.s || a.t - b.t);
-
-/**
- * The published table. Always derived from `all`, never read back off
- * storage, so a hand-edited or half-written `top` cannot poison the board.
- */
-export function rankTop(all: HistoryEntry[]): TopEntry[] {
-  return sortByRank(all)
-    .slice(0, MAX_TOP)
-    .map(({ i, s }) => ({ i, s }));
+export function mergeTop(top: BoardEntry[], entry: BoardEntry): BoardEntry[] {
+  return [...top, entry].sort((a, b) => b.s - a.s || a.t - b.t).slice(0, MAX_TOP);
 }
 
+/** The wire form of a board: the private columns are dropped here, once. */
+export const publish = (top: BoardEntry[]): TopEntry[] => top.map(({ i, s }) => ({ i, s }));
+
 /**
- * A submission's place on the global board: 1-based when it charted in the
- * top ten, 0 when it did not, matching what the per-device tables report.
+ * A submission's place on the board: 1-based when it charted, 0 when it did
+ * not.
  */
-function rankOf(all: HistoryEntry[], nonce: string): number {
-  const index = sortByRank(all).findIndex(e => e.n === nonce);
-  return index >= 0 && index < MAX_TOP ? index + 1 : 0;
+const rankOf = (top: BoardEntry[], nonce: string): number => {
+  const index = top.findIndex(e => e.n === nonce);
+  return index >= 0 ? index + 1 : 0;
+};
+
+/**
+ * The guards narrow to exactly the fields they establish, leaving `t` and `n`
+ * unknown for the coercions below to settle. Narrowing to `Partial<BoardEntry>`
+ * instead would claim less than was proved and put the invariant back on
+ * non-null assertions, where a future edit to a guard could not be caught.
+ */
+const isBoardEntry = (value: unknown): value is { i: string; s: number; t?: unknown; n?: unknown } =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as BoardEntry).i === 'string' &&
+  Number.isFinite((value as BoardEntry).s);
+
+const isRecentEntry = (value: unknown): value is { h: string; t: number; n?: unknown } =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as RecentEntry).h === 'string' &&
+  Number.isFinite((value as RecentEntry).t);
+
+/**
+ * Timestamps are sort keys, so a NaN or an Infinity read back off storage
+ * would make the board's comparator inconsistent rather than merely wrong.
+ * Anything unusable is treated as the oldest possible entry.
+ */
+const asTime = (value: unknown): number => (Number.isFinite(value) ? (value as number) : 0);
+
+/** Nonces are written back into a world-readable blob, so only strings pass. */
+const asNonce = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/**
+ * Re-establishes the blob's shape on read.
+ *
+ * Boards written before `top` was persisted carry an extra `all` history and
+ * `top` rows without `t`/`n`; those rows are the oldest the board has, and
+ * defaulting their timestamp to 0 ranks them accordingly, so the upgrade needs
+ * no migration pass. The retired history is simply dropped, which resets the
+ * daily counter once and nothing else.
+ */
+export function normalizeBoard(raw: unknown): StoredBoard {
+  const board = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<StoredBoard>;
+  const top = Array.isArray(board.top) ? board.top : [];
+  const recent = Array.isArray(board.recent) ? board.recent : [];
+  return {
+    top: top.filter(isBoardEntry).map(e => ({ i: e.i, s: e.s, t: asTime(e.t), n: asNonce(e.n) })),
+    recent: recent.filter(isRecentEntry).map(e => ({ h: e.h, t: e.t, n: asNonce(e.n) }))
+  };
 }
 
 /**
@@ -213,8 +285,8 @@ function clientAddress(request: Request): string {
 async function readBoard(gameId: string, fresh: boolean): Promise<LoadedBoard | null> {
   const result = await get(boardPath(gameId), { access: 'public', useCache: !fresh });
   if (!result || result.statusCode !== 200) return null;
-  const board = JSON.parse(await new Response(result.stream).text()) as StoredBoard;
-  return { board, etag: result.blob.etag };
+  const raw: unknown = JSON.parse(await new Response(result.stream).text());
+  return { board: normalizeBoard(raw), etag: result.blob.etag };
 }
 
 export function OPTIONS(request: Request): Response {
@@ -234,11 +306,10 @@ export async function GET(request: Request): Promise<Response> {
     const loaded = await Promise.all(GAMES.map(gameId => readBoard(gameId, false)));
     const tables: Record<string, TopEntry[]> = {};
     GAMES.forEach((gameId, index) => {
-      const board = loaded[index]?.board;
-      tables[gameId] = board ? rankTop(board.all) : [];
+      tables[gameId] = publish(loaded[index]?.board.top ?? []);
     });
     return Response.json(tables, {
-      headers: { ...cors, 'Cache-Control': 'public, max-age=30' }
+      headers: { ...cors, 'Cache-Control': 'public, max-age=30, s-maxage=30, stale-while-revalidate=60' }
     });
   } catch {
     return fail(503, 'scores unavailable', cors);
@@ -267,12 +338,12 @@ export async function POST(request: Request): Promise<Response> {
   if (typeof score !== 'number' || !Number.isSafeInteger(score) || score <= 0 || score >= MAX_SCORE) {
     return fail(400, 'bad score', cors);
   }
-  if (typeof nonce !== 'string' || nonce === '') return fail(400, 'bad nonce', cors);
+  if (typeof nonce !== 'string' || !NONCE.test(nonce)) return fail(400, 'bad nonce', cors);
 
   try {
     return await record(request, cors, { game, initials, score, nonce });
   } catch {
-    // Blob trouble. The cabinets fall back to their per-device tables.
+    // Blob trouble. The cabinets keep playing; the run just doesn't chart.
     return fail(503, 'scores unavailable', cors);
   }
 }
@@ -302,32 +373,36 @@ async function record(
      */
     if (!loaded && attempt < WRITE_ATTEMPTS - 1) continue;
 
-    const board = loaded?.board ?? { top: [], all: [], recent: [] };
+    const board = loaded?.board ?? { top: [], recent: [] };
     const now = Math.floor(Date.now() / 1000);
 
     // A resent submission (flaky network, double tap) must not chart twice.
-    if (board.all.some(e => e.n === nonce)) {
-      return Response.json({ rank: rankOf(board.all, nonce), table: rankTop(board.all) }, { headers: cors });
+    if (board.recent.some(r => r.n === nonce)) {
+      return Response.json(
+        { rank: rankOf(board.top, nonce), table: publish(board.top) },
+        { headers: cors }
+      );
     }
+
+    // Everything older than the longest window is dead weight, so one prune
+    // serves both counts below and keeps the blob a bounded size.
+    const live = board.recent.filter(r => r.t > now - GAME_WINDOW).slice(0, MAX_RECENT);
 
     // Per address per game per hour: `recent` lives in this game's blob and
     // sees no other board's traffic. See the note at the top of the file.
-    const fromAddress = board.recent.filter(r => r.h === hash && r.t > now - ADDRESS_WINDOW).length;
-    if (fromAddress >= ADDRESS_LIMIT) return fail(429, 'too many submissions', cors);
+    if (live.filter(r => r.h === hash && r.t > now - ADDRESS_WINDOW).length >= ADDRESS_LIMIT) {
+      return fail(429, 'too many submissions', cors);
+    }
 
-    // The cost cap. Its worst case is one board frozen for a day; without it
-    // a scripted flood burns the Blob quota, and an over-quota Hobby store is
-    // disabled for thirty days. CORS gates who can read the response, not who
-    // can post, so anyone with curl is inside the per-address limit's reach.
-    const forGame = board.all.filter(e => e.t > now - GAME_WINDOW).length;
-    if (forGame >= GAME_LIMIT) return fail(429, 'board is full for today', cors);
+    // The cost cap: without it a scripted flood burns the Blob quota, and an
+    // over-quota Hobby store is disabled for thirty days.
+    if (live.length >= GAME_LIMIT) return fail(429, 'board is full for today', cors);
 
-    // Newest first, so capping is a plain slice off the tail.
-    const all = [{ i: initials, s: score, t: now, n: nonce }, ...board.all].slice(0, MAX_HISTORY);
+    const entry: BoardEntry = { i: initials, s: score, t: now, n: nonce };
     const next: StoredBoard = {
-      top: rankTop(all),
-      all,
-      recent: [{ h: hash, t: now }, ...board.recent].slice(0, MAX_RECENT)
+      top: mergeTop(board.top, entry),
+      // Newest first, so pruning is a plain slice off the tail.
+      recent: [{ h: hash, t: now, n: nonce }, ...live].slice(0, MAX_RECENT)
     };
 
     try {
@@ -346,7 +421,7 @@ async function record(
       throw error;
     }
 
-    return Response.json({ rank: rankOf(all, nonce), table: next.top }, { headers: cors });
+    return Response.json({ rank: rankOf(next.top, nonce), table: publish(next.top) }, { headers: cors });
   }
 
   return fail(503, 'board busy, try again', cors);

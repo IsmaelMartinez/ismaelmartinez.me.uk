@@ -4,26 +4,36 @@ import { createRunRecord, worldNoteText } from '../../src/games/engine/scoreboar
 const TEXT = {
   loading: 'Loading...',
   unavailable: 'World scores unavailable',
-  rank: 'World rank #{rank}'
+  rank: 'World rank #{rank}',
+  notSaved: 'Score not saved. Try again later'
 };
+
+const state = (over: Partial<Parameters<typeof worldNoteText>[0]> = {}) => ({
+  loaded: false,
+  pending: false,
+  rank: 0,
+  count: 0,
+  failed: false,
+  ...over
+});
 
 describe('worldNoteText', () => {
   it('shows the loading text while a first fetch is in flight', () => {
-    expect(worldNoteText({ loaded: false, pending: true, rank: 0, count: 0 }, TEXT)).toBe('Loading...');
+    expect(worldNoteText(state({ pending: true }), TEXT)).toBe('Loading...');
   });
 
   it('shows unavailable when no board loaded and nothing is pending', () => {
-    expect(worldNoteText({ loaded: false, pending: false, rank: 0, count: 0 }, TEXT)).toBe(
+    expect(worldNoteText(state(), TEXT)).toBe(
       'World scores unavailable'
     );
   });
 
   it('shows nothing for a loaded board the run did not chart on', () => {
-    expect(worldNoteText({ loaded: true, pending: false, rank: 0, count: 5 }, TEXT)).toBe('');
+    expect(worldNoteText(state({ loaded: true, count: 5 }), TEXT)).toBe('');
   });
 
   it('shows the placed rank when it points at a real row', () => {
-    expect(worldNoteText({ loaded: true, pending: false, rank: 2, count: 5 }, TEXT)).toBe('World rank #2');
+    expect(worldNoteText(state({ loaded: true, rank: 2, count: 5 }), TEXT)).toBe('World rank #2');
   });
 
   // Regression: a submission sets the rank alongside the board it charted on,
@@ -31,8 +41,23 @@ describe('worldNoteText', () => {
   // rank stays put. The note must not claim "World rank #1" over a board that
   // simultaneously reads "No scores yet".
   it('hides a rank that no longer indexes a row on the board being shown', () => {
-    expect(worldNoteText({ loaded: true, pending: false, rank: 1, count: 0 }, TEXT)).toBe('');
-    expect(worldNoteText({ loaded: true, pending: false, rank: 4, count: 3 }, TEXT)).toBe('');
+    expect(worldNoteText(state({ loaded: true, rank: 1 }), TEXT)).toBe('');
+    expect(worldNoteText(state({ loaded: true, rank: 4, count: 3 }), TEXT)).toBe('');
+  });
+
+  /*
+   * With no per-device table behind it, a score that does not reach the shared
+   * board leaves no trace at all, so the panel has to say so. The notice
+   * outranks every other state: it is the only line here a player can act on.
+   */
+  it('reports a failed save ahead of anything else the board might say', () => {
+    expect(worldNoteText(state({ failed: true }), TEXT)).toBe('Score not saved. Try again later');
+    expect(worldNoteText(state({ failed: true, pending: true }), TEXT)).toBe(
+      'Score not saved. Try again later'
+    );
+    expect(worldNoteText(state({ failed: true, loaded: true, rank: 1, count: 3 }), TEXT)).toBe(
+      'Score not saved. Try again later'
+    );
   });
 });
 

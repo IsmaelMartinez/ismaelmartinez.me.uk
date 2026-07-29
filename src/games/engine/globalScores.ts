@@ -51,7 +51,13 @@ function toEntries(wire: unknown): ScoreEntry[] {
   return wire.filter(isWireEntry).map(e => ({ initials: e.i, score: e.s }));
 }
 
-function canSubmit(): boolean {
+/**
+ * Whether a write would even be attempted from here. Exported because the
+ * panel has to tell "the board refused this score" apart from "we never
+ * offered it": reporting a run as unsaved in local dev, where submission is
+ * deliberately a no-op, would be a lie.
+ */
+export function canSubmit(): boolean {
   return typeof location !== 'undefined' && SUBMIT_HOSTS.includes(location.hostname);
 }
 

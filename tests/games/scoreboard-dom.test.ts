@@ -1,12 +1,13 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initScoreboard } from '../../src/games/engine/scoreboard';
-import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
+import { fetchGlobal, submitGlobal, canSubmit } from '../../src/games/engine/globalScores';
 import { bestKey, MAX_ENTRIES, type ScoreEntry } from '../../src/games/engine/highscores';
 
 vi.mock('../../src/games/engine/globalScores', () => ({
   fetchGlobal: vi.fn(async () => null),
-  submitGlobal: vi.fn(async () => null)
+  submitGlobal: vi.fn(async () => null),
+  canSubmit: vi.fn(() => true)
 }));
 
 /**
@@ -17,7 +18,8 @@ const PANEL_HTML = `
   <div class="hs-panel" id="highscores" data-hs-game="snake" hidden
        data-t-world-loading="Loading world board"
        data-t-world-unavailable="World board unavailable"
-       data-t-world-rank="World rank #{rank}">
+       data-t-world-rank="World rank #{rank}"
+       data-t-score-not-saved="Score not saved. Try again later">
     <form class="hs-entry" hidden>
       <input class="hs-input" type="text" maxlength="3" />
       <button type="submit" class="hs-ok">OK</button>
@@ -68,6 +70,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchGlobal).mockResolvedValue(null);
   vi.mocked(submitGlobal).mockResolvedValue(null);
+  vi.mocked(canSubmit).mockReturnValue(true);
   // jsdom does not implement scrollIntoView; commit(true) calls it.
   Element.prototype.scrollIntoView = vi.fn();
 });
@@ -220,6 +223,85 @@ describe('initScoreboard board rendering', () => {
     expect(row?.querySelector('.hs-initials')?.textContent?.trim()).toBe('IMR');
     expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).toBe('World rank #2');
     expect(onSave).toHaveBeenCalledWith({ initials: 'IMR', score: 4210 }, 2);
+  });
+
+  /*
+   * Removing the per-device table removed the fallback a failed submission
+   * used to land on, so a run that does not reach the shared board now leaves
+   * no trace at all. Saying nothing would mean a rate-limited or offline
+   * player watches their score quietly disappear.
+   */
+  it('tells the player when a submission did not land', async () => {
+    const board = initScoreboard(buildPanel());
+    board.show(4210);
+    board.hide();
+    await flush();
+
+    const note = document.querySelector<HTMLElement>('.hs-note')!;
+    expect(note.hidden).toBe(false);
+    expect(note.textContent).toBe('Score not saved. Try again later');
+  });
+
+  it('says nothing where a submission was never attempted', async () => {
+    // Local dev and preview deployments read the real board but never write to
+    // it, so reporting an unsaved score there would be a lie.
+    vi.mocked(canSubmit).mockReturnValue(false);
+    const board = initScoreboard(buildPanel());
+    await flush();
+    board.show(4210);
+    board.hide();
+    await flush();
+
+    expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).toBe(
+      'World board unavailable'
+    );
+  });
+
+  it('clears a previous run\'s failure notice when the next run ends', async () => {
+    const board = initScoreboard(buildPanel());
+    board.show(4210);
+    board.hide();
+    await flush();
+    expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).toBe(
+      'Score not saved. Try again later'
+    );
+
+    vi.mocked(submitGlobal).mockResolvedValue({ rank: 1, table: [{ initials: 'IMR', score: 50 }] });
+    board.show(50);
+    await flush();
+    expect(document.querySelector<HTMLElement>('.hs-note')!.textContent).not.toBe(
+      'Score not saved. Try again later'
+    );
+  });
+
+  /*
+   * `onSave` is the hook a game refreshes its HUD from, so skipping it when
+   * the network is down would leave the readout stale for the rest of the
+   * session. A run that could not be saved is still a finished run.
+   */
+  it('reports every committed run to onSave, landed or not', async () => {
+    const onSave = vi.fn();
+    const board = initScoreboard(buildPanel(), { onSave });
+    board.show(4210);
+    board.hide();
+    await flush();
+    expect(onSave).toHaveBeenCalledWith({ initials: 'AAA', score: 4210 }, 0);
+  });
+
+  /*
+   * Tank Duel never calls bank(), so before this the commit wrote the personal
+   * best straight to storage and left the record's cached value behind until a
+   * reload, leaving two answers to the same question inside one session.
+   */
+  it('keeps best() and stored best in step for a game that never banks', async () => {
+    const board = initScoreboard(buildPanel());
+    expect(board.best()).toBe(0);
+    board.show(4210);
+    board.hide();
+    await flush();
+
+    expect(board.best()).toBe(4210);
+    expect(localStorage.getItem(bestKey('snake'))).toBe('4210');
   });
 
   it('degrades to inert no-ops without a panel', () => {

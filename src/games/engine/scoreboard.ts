@@ -29,7 +29,7 @@ import {
   INITIALS_LENGTH,
   type ScoreEntry
 } from './highscores';
-import { fetchGlobal, submitGlobal } from './globalScores';
+import { fetchGlobal, submitGlobal, canSubmit } from './globalScores';
 
 export interface Scoreboard {
   /** Present a finished run's score on the game-over screen. */
@@ -104,12 +104,20 @@ export interface WorldNoteText {
   loading: string;
   unavailable: string;
   rank: string;
+  notSaved: string;
 }
 
 /**
  * The panel's status line, kept pure so it can be unit-tested apart from the
- * DOM wiring. Three states: a board still loading, a board that could not be
- * reached, or a placed rank.
+ * DOM wiring. Four states: a run whose submission did not land, a board still
+ * loading, a board that could not be reached, or a placed rank.
+ *
+ * A failed submission speaks first and regardless of the board's own state,
+ * because it is the only thing on this panel the player might act on. It is
+ * also the only trace such a run leaves: with no per-device table behind it
+ * any more, a score that does not reach the shared board is gone, so saying
+ * nothing would mean a rate-limited or offline player simply watching their
+ * run disappear.
  *
  * The rank is shown only when it points at a real row of the board being drawn
  * (`count`). A submission sets the rank alongside the board it charted on, but
@@ -121,9 +129,10 @@ export interface WorldNoteText {
  * row.
  */
 export function worldNoteText(
-  state: { loaded: boolean; pending: boolean; rank: number; count: number },
+  state: { loaded: boolean; pending: boolean; rank: number; count: number; failed: boolean },
   text: WorldNoteText
 ): string {
+  if (state.failed) return text.notSaved;
   if (!state.loaded) return state.pending ? text.loading : text.unavailable;
   return state.rank > 0 && state.rank <= state.count
     ? text.rank.replace('{rank}', String(state.rank))
@@ -162,8 +171,15 @@ export function initScoreboard(
   const worldText = {
     loading: panel.dataset.tWorldLoading ?? '',
     unavailable: panel.dataset.tWorldUnavailable ?? '',
-    rank: panel.dataset.tWorldRank ?? ''
+    rank: panel.dataset.tWorldRank ?? '',
+    notSaved: panel.dataset.tScoreNotSaved ?? ''
   };
+
+  // Declared up here because `commit` records a finished run through the
+  // record rather than writing storage behind its back: the personal best the
+  // HUD reads and the one on disk are then the same number by construction.
+  const stash = (score: number) => saveBest(gameId, score);
+  const runRecord = createRunRecord(loadBest(gameId), stash);
 
   let pendingScore: number | null = null;
   // The board as last known. Empty until a fetch or a submission answers,
@@ -186,6 +202,9 @@ export function initScoreboard(
   // one. Responses can also arrive out of order, so the check is against the
   // token the submit was issued under, not a plain "is newer".
   let runToken = 0;
+  // Set when this run's submission was attempted and did not land. Cleared by
+  // the next run and by any submission that succeeds.
+  let failed = false;
 
   function render() {
     if (!list) return;
@@ -213,7 +232,10 @@ export function initScoreboard(
     if (note) {
       // The rank rides on the board actually drawn, so a stale refetch that
       // empties the board can't leave "World rank #1" over it.
-      const message = worldNoteText({ loaded, pending: fetching, rank, count: table.length }, worldText);
+      const message = worldNoteText(
+        { loaded, pending: fetching, rank, count: table.length, failed },
+        worldText
+      );
       note.textContent = message;
       note.hidden = message === '';
     }
@@ -256,39 +278,51 @@ export function initScoreboard(
     const score = pendingScore;
     pendingScore = null;
     saveInitials(initials);
-    // A finished run is a personal best candidate even in a game that never
-    // banks mid-run, so the attract-screen readouts stay honest.
-    saveBest(gameId, score);
+    // A finished run is a personal-best candidate even in a game that never
+    // banks mid-run, so the attract-screen readouts stay honest. Routed
+    // through the record so `best()` cannot fall behind what is on disk.
+    runRecord.bank(score);
     if (form) form.hidden = true;
+    failed = false;
     render();
+
     const token = runToken;
     const gen = worldGen;
-    // `submitGlobal` no-ops away from production and never rejects.
+    // Whether a write is even attempted: `submitGlobal` no-ops away from
+    // production, and calling that a failed save would be a lie in local dev.
+    const attempted = canSubmit();
+    // `submitGlobal` never rejects; it resolves null for both a refusal and
+    // an unreachable board.
     submitGlobal(gameId, initials, score).then(result => {
-      if (!result) return;
       // Two runs can have submissions out at once (five seconds are allowed
       // for one and a short run ends well inside that), and replies can arrive
       // in either order. A newer one landing first has already put a board on
       // screen that this older answer predates, so it stands down.
-      if (gen !== worldGen) return;
-      // Otherwise this is the freshest board there is: it came back from the
-      // write itself, so it supersedes any fetch still in flight too.
-      worldGen++;
-      table = result.table;
-      loaded = true;
-      // The board lands whichever run it came from; only the rank belongs to
-      // one run and is dropped once that run is past.
-      if (token !== runToken) {
-        render();
-        return;
+      const landed = result !== null && gen === worldGen;
+      if (landed) {
+        // The freshest board there is: it came back from the write itself, so
+        // it supersedes any fetch still in flight too.
+        worldGen++;
+        table = result!.table;
+        loaded = true;
       }
-      rank = result.rank;
+      // The board lands whichever run it came from; the rank and the failure
+      // notice belong to one run and are dropped once that run is past.
+      if (token === runToken) {
+        if (landed) rank = result!.rank;
+        else if (result === null && attempted) failed = true;
+      }
       render();
-      if (focusResult) {
+      if (landed && focusResult && token === runToken && rank > 0) {
         const row = list?.querySelector<HTMLElement>('.hs-current');
         row?.scrollIntoView({ block: 'nearest' });
       }
-      options.onSave?.({ initials, score }, rank);
+      // Fires once per committed run whatever became of it, which is the
+      // contract: a run that could not be saved is still a finished run, and
+      // a consumer refreshing a HUD from it must not be skipped just because
+      // the network was down. Rank 0 means "did not chart", including when
+      // there was no answer to chart against.
+      options.onSave?.({ initials, score }, result?.rank ?? 0);
     });
   }
 
@@ -326,16 +360,15 @@ export function initScoreboard(
   window.addEventListener('pagehide', commitPending);
   document.addEventListener('astro:before-swap', onSwap);
 
-  const stash = (score: number) => saveBest(gameId, score);
-
   loadWorld();
 
   return {
     stash,
-    ...createRunRecord(loadBest(gameId), stash),
+    ...runRecord,
     show(score: number) {
       panel.hidden = false;
       rank = 0;
+      failed = false;
       runToken++;
       // Every run counts, whether or not the player is asked for initials:
       // an unanswered form is committed with the remembered ones.

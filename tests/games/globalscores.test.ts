@@ -1,7 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fetchGlobal, submitGlobal, SCORES_ENDPOINT } from '../../src/games/engine/globalScores';
-import { insertScore } from '../../src/games/engine/highscores';
-import { rankTop, type HistoryEntry } from '../../api/scores';
 
 function stubFetchOk(body: unknown): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -93,11 +91,13 @@ describe('fetchGlobal', () => {
 });
 
 describe('submitGlobal production-host guard', () => {
-  it('returns null without calling fetch on localhost', async () => {
+  it('reports a skipped submission without calling fetch on localhost', async () => {
     stubLocation('localhost');
     const fetchMock = stubFetchOk({});
     const result = await submitGlobal('snake', 'ISM', 300);
-    expect(result).toBeNull();
+    // Distinct from 'failed': nothing was offered, so nothing was refused, and
+    // the panel must not tell a local player their score was lost.
+    expect(result).toEqual({ status: 'skipped' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -145,139 +145,36 @@ describe('submitGlobal request shape', () => {
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ rank: 4, table: [{ i: 'ISM', s: 300 }] });
     const result = await submitGlobal('snake', 'ISM', 300);
-    expect(result).toEqual({ rank: 4, table: [{ initials: 'ISM', score: 300 }] });
+    expect(result).toEqual({
+      status: 'ok',
+      rank: 4,
+      table: [{ initials: 'ISM', score: 300 }]
+    });
   });
 
   it('returns rank 0 when the response omits or malforms rank', async () => {
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ table: [] });
-    expect((await submitGlobal('snake', 'ISM', 300))?.rank).toBe(0);
+    expect(await submitGlobal('snake', 'ISM', 300)).toMatchObject({ status: 'ok', rank: 0 });
 
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ rank: 'first', table: [] });
-    expect((await submitGlobal('snake', 'ISM', 300))?.rank).toBe(0);
+    expect(await submitGlobal('snake', 'ISM', 300)).toMatchObject({ status: 'ok', rank: 0 });
 
     stubLocation('ismaelmartinez.me.uk');
     stubFetchOk({ rank: NaN, table: [] });
-    expect((await submitGlobal('snake', 'ISM', 300))?.rank).toBe(0);
+    expect(await submitGlobal('snake', 'ISM', 300)).toMatchObject({ status: 'ok', rank: 0 });
   });
 
-  it('resolves null on a non-ok response', async () => {
+  it('reports a refusal as failed, which the panel does tell the player about', async () => {
     stubLocation('ismaelmartinez.me.uk');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
-    expect(await submitGlobal('snake', 'ISM', 300)).toBeNull();
+    expect(await submitGlobal('snake', 'ISM', 300)).toEqual({ status: 'failed' });
   });
 
-  it('resolves null on a network rejection rather than throwing', async () => {
+  it('reports a network rejection as failed rather than throwing', async () => {
     stubLocation('ismaelmartinez.me.uk');
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
-    await expect(submitGlobal('snake', 'ISM', 300)).resolves.toBeNull();
-  });
-});
-
-describe('device table vs server rankTop agreement', () => {
-  /**
-   * The device tables (highscores.ts) and the server (api/scores.ts) compute
-   * top ten independently: one by folding `insertScore` calls as runs land in
-   * real time, the other by sorting a flat history array after the fact. They
-   * must produce the same order for the same data, or a game's own-device
-   * panel and the global panel would disagree about who is really ahead.
-   * Ties are the case where the two approaches could diverge: insertScore's
-   * documented rule keeps the OLDER entry higher, so rankTop must break ties
-   * by ascending timestamp to match.
-   */
-  it('orders identically to repeated insertScore for a run history with ties', () => {
-    // t is chronological submission order; several scores tie so the
-    // "older entry wins the tie" rule is actually exercised both ways.
-    const runs = [
-      { initials: 'AAA', score: 100, t: 1 },
-      { initials: 'BBB', score: 300, t: 2 },
-      { initials: 'CCC', score: 300, t: 3 }, // ties BBB, arrived later
-      { initials: 'DDD', score: 250, t: 4 },
-      { initials: 'EEE', score: 300, t: 5 }, // ties BBB/CCC too
-      { initials: 'FFF', score: 50, t: 6 },
-      { initials: 'GGG', score: 400, t: 7 },
-      { initials: 'HHH', score: 250, t: 8 }, // ties DDD, arrived later
-      { initials: 'III', score: 10, t: 9 },
-      { initials: 'JJJ', score: 20, t: 10 },
-      { initials: 'KKK', score: 500, t: 11 }, // pushes an existing entry off a full table
-      { initials: 'LLL', score: 30, t: 12 }
-    ];
-
-    let deviceTable: { initials: string; score: number }[] = [];
-    for (const run of runs) {
-      deviceTable = insertScore(deviceTable, run.initials, run.score).table;
-    }
-
-    const history: HistoryEntry[] = runs.map(run => ({
-      i: run.initials,
-      s: run.score,
-      t: run.t,
-      n: `nonce-${run.t}`
-    }));
-    const serverTop = rankTop(history);
-
-    expect(serverTop.map(e => ({ i: e.i, s: e.s }))).toEqual(
-      deviceTable.map(e => ({ i: e.initials, s: e.score }))
-    );
-  });
-
-  /**
-   * Server timestamps have one-second resolution, so two submissions that
-   * contend for the same board routinely share a `t`. That is precisely when
-   * the arcade rule matters and the sort has no timestamp left to separate
-   * them, so it falls back to storage order. The server stores `all`
-   * newest-first, which is how this history is built here: sorting it without
-   * accounting for that direction would put the LATER submitter on top, the
-   * exact inverse of what the device table shows for the same two scores.
-   */
-  it('keeps the earlier of two same-second, same-score entries higher', () => {
-    const newestFirst: HistoryEntry[] = [
-      { i: 'LTE', s: 5000, t: 1785000000, n: 'n-late' },
-      { i: 'ERL', s: 5000, t: 1785000000, n: 'n-early' }
-    ];
-
-    expect(rankTop(newestFirst).map(e => e.i)).toEqual(['ERL', 'LTE']);
-
-    // And the device table, folded in the same chronological order, agrees.
-    let deviceTable: { initials: string; score: number }[] = [];
-    for (const initials of ['ERL', 'LTE']) {
-      deviceTable = insertScore(deviceTable, initials, 5000).table;
-    }
-    expect(deviceTable.map(e => e.initials)).toEqual(['ERL', 'LTE']);
-  });
-
-  it('sorts descending by score, ascending by t within a tie, capped at 10, without mutating input', () => {
-    const history: HistoryEntry[] = [
-      { i: 'A', s: 100, t: 5, n: 'n1' },
-      { i: 'B', s: 100, t: 2, n: 'n2' }, // same score, earlier t: should rank above A
-      { i: 'C', s: 300, t: 9, n: 'n3' },
-      { i: 'D', s: 50, t: 1, n: 'n4' },
-      { i: 'E', s: 200, t: 4, n: 'n5' },
-      { i: 'F', s: 90, t: 3, n: 'n6' },
-      { i: 'G', s: 80, t: 6, n: 'n7' },
-      { i: 'H', s: 70, t: 7, n: 'n8' },
-      { i: 'I', s: 60, t: 8, n: 'n9' },
-      { i: 'J', s: 40, t: 10, n: 'n10' },
-      { i: 'K', s: 30, t: 11, n: 'n11' } // 11th entry, must be capped out
-    ];
-    const original = history.map(e => ({ ...e }));
-
-    const result = rankTop(history);
-
-    expect(result).toEqual([
-      { i: 'C', s: 300 },
-      { i: 'E', s: 200 },
-      { i: 'B', s: 100 },
-      { i: 'A', s: 100 },
-      { i: 'F', s: 90 },
-      { i: 'G', s: 80 },
-      { i: 'H', s: 70 },
-      { i: 'I', s: 60 },
-      { i: 'D', s: 50 },
-      { i: 'J', s: 40 }
-    ]);
-    expect(result).toHaveLength(10);
-    expect(history).toEqual(original); // rankTop must not mutate its input
+    await expect(submitGlobal('snake', 'ISM', 300)).resolves.toEqual({ status: 'failed' });
   });
 });

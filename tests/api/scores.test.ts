@@ -162,6 +162,28 @@ describe('normalizeBoard', () => {
     }
   });
 
+  /*
+   * The blob is world-readable and, with the token, hand-editable, so the
+   * columns read back off it are treated as untrusted input. A non-finite
+   * timestamp is the sharp one: it is a sort key, so it would make the
+   * board's comparator inconsistent rather than merely misorder one row.
+   */
+  it('coerces unusable timestamps and nonces rather than sorting on them', () => {
+    const board = normalizeBoard({
+      top: [
+        { i: 'AAA', s: 10, t: Number.NaN, n: { evil: true } },
+        { i: 'BBB', s: 20, t: 'soon', n: 5 }
+      ],
+      recent: [{ h: 'h', t: Number.POSITIVE_INFINITY, n: 1 }]
+    });
+    expect(board.top).toEqual([
+      { i: 'AAA', s: 10, t: 0, n: '' },
+      { i: 'BBB', s: 20, t: 0, n: '' }
+    ]);
+    // A non-finite timestamp is not a submission time, so the row is dropped.
+    expect(board.recent).toEqual([]);
+  });
+
   it('drops malformed rows rather than trusting them', () => {
     const raw = {
       top: [entry('AAA', 10, 1, 'a'), { i: 'BBB' }, { s: 5 }, null, 'x'],

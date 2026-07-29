@@ -197,7 +197,17 @@ const isRecentEntry = (value: unknown): value is Partial<RecentEntry> =>
   typeof value === 'object' &&
   value !== null &&
   typeof (value as RecentEntry).h === 'string' &&
-  typeof (value as RecentEntry).t === 'number';
+  Number.isFinite((value as RecentEntry).t);
+
+/**
+ * Timestamps are sort keys, so a NaN or an Infinity read back off storage
+ * would make the board's comparator inconsistent rather than merely wrong.
+ * Anything unusable is treated as the oldest possible entry.
+ */
+const asTime = (value: unknown): number => (Number.isFinite(value) ? (value as number) : 0);
+
+/** Nonces are written back into a world-readable blob, so only strings pass. */
+const asNonce = (value: unknown): string => (typeof value === 'string' ? value : '');
 
 /**
  * Re-establishes the blob's shape on read.
@@ -215,10 +225,8 @@ export function normalizeBoard(raw: unknown): StoredBoard {
   return {
     top: top
       .filter(isBoardEntry)
-      .map(e => ({ i: e.i!, s: e.s!, t: typeof e.t === 'number' ? e.t : 0, n: e.n ?? '' })),
-    recent: recent
-      .filter(isRecentEntry)
-      .map(e => ({ h: e.h!, t: e.t!, n: e.n ?? '' }))
+      .map(e => ({ i: e.i!, s: e.s!, t: asTime(e.t), n: asNonce(e.n) })),
+    recent: recent.filter(isRecentEntry).map(e => ({ h: e.h!, t: e.t!, n: asNonce(e.n) }))
   };
 }
 

@@ -1,0 +1,1 @@
+import{i as e,n as t,r as n}from"./highscores.Ctf3ecQr.js";function r(){let r=document.querySelectorAll(`.best-value[data-game-id]`),i=e();for(let e of r){let r=e.dataset.gameId?n(e.dataset.gameId):0;e.textContent=r>0?`${i} ${t(r)}`:t(0)}}r(),document.addEventListener(`astro:after-swap`,r);

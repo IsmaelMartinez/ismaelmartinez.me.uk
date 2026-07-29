@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { get, put } from '@vercel/blob';
-import { GAMES, rankTop, GET, POST, OPTIONS, type HistoryEntry } from '../../api/scores';
+import {
+  GAMES,
+  normalizeBoard,
+  GET,
+  POST,
+  OPTIONS,
+  type BoardEntry,
+  type RecentEntry
+} from '../../api/scores';
 
 /**
  * An in-memory stand-in for the blob store. It has to be built inside
@@ -63,16 +71,37 @@ const ADDRESS_HASH = createHash('sha256')
   .slice(0, 16);
 
 interface StoredBoard {
-  top: { i: string; s: number }[];
-  all: HistoryEntry[];
-  recent: { h: string; t: number }[];
+  top: BoardEntry[];
+  recent: RecentEntry[];
 }
 
-const entry = (i: string, s: number, t: number, n: string): HistoryEntry => ({ i, s, t, n });
+const entry = (i: string, s: number, t: number, n: string): BoardEntry => ({ i, s, t, n });
 
 function seed(gameId: string, board: Partial<StoredBoard>, etag = `etag-${gameId}`): void {
-  const full: StoredBoard = { top: [], all: [], recent: [], ...board };
+  const full: StoredBoard = { top: [], recent: [], ...board };
   blob.store.set(`scores/${gameId}.json`, { json: JSON.stringify(full), etag });
+}
+
+/**
+ * Seeds a board from its rows, deriving the matching `recent` submissions so a
+ * test can keep describing a board by the scores on it. Each row is credited
+ * to its own address unless `sameAddress` is set, so seeding a board does not
+ * accidentally spend one address's hourly allowance.
+ */
+function seedBoard(
+  gameId: string,
+  entries: BoardEntry[],
+  etag?: string,
+  sameAddress?: string
+): void {
+  seed(
+    gameId,
+    {
+      top: entries,
+      recent: entries.map(e => ({ h: sameAddress ?? `hash-${e.n}`, t: e.t, n: e.n }))
+    },
+    etag
+  );
 }
 
 function stored(gameId: string): StoredBoard {
@@ -121,33 +150,44 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('rankTop', () => {
-  it('sorts by score descending', () => {
-    const all = [entry('AAA', 10, 1, 'a'), entry('BBB', 30, 2, 'b'), entry('CCC', 20, 3, 'c')];
-    expect(rankTop(all)).toEqual([
-      { i: 'BBB', s: 30 },
-      { i: 'CCC', s: 20 },
-      { i: 'AAA', s: 10 }
-    ]);
+describe('normalizeBoard', () => {
+  it('keeps a well-formed board as it is', () => {
+    const board = { top: [entry('AAA', 10, 1, 'a')], recent: [{ h: 'h', t: 1, n: 'a' }] };
+    expect(normalizeBoard(board)).toEqual(board);
   });
 
-  it('breaks ties by timestamp ascending, so the older entry stays higher', () => {
-    const all = [entry('NEW', 100, 500, 'a'), entry('OLD', 100, 100, 'b'), entry('MID', 100, 300, 'c')];
-    expect(rankTop(all).map(e => e.i)).toEqual(['OLD', 'MID', 'NEW']);
+  it('returns an empty board for anything that is not one', () => {
+    for (const raw of [null, undefined, 42, 'nope', [], {}]) {
+      expect(normalizeBoard(raw)).toEqual({ top: [], recent: [] });
+    }
   });
 
-  it('caps the table at ten and drops timestamps and nonces', () => {
-    const all = Array.from({ length: 25 }, (_, index) => entry('AAA', index + 1, index, `n${index}`));
-    const table = rankTop(all);
-    expect(table).toHaveLength(10);
-    expect(table[0]).toEqual({ i: 'AAA', s: 25 });
-    expect(Object.keys(table[0])).toEqual(['i', 's']);
+  it('drops malformed rows rather than trusting them', () => {
+    const raw = {
+      top: [entry('AAA', 10, 1, 'a'), { i: 'BBB' }, { s: 5 }, null, 'x'],
+      recent: [{ h: 'h', t: 1, n: 'a' }, { h: 'h' }, { t: 2 }, null]
+    };
+    const board = normalizeBoard(raw);
+    expect(board.top).toEqual([entry('AAA', 10, 1, 'a')]);
+    expect(board.recent).toEqual([{ h: 'h', t: 1, n: 'a' }]);
   });
 
-  it('does not mutate the history it was given', () => {
-    const all = [entry('AAA', 10, 1, 'a'), entry('BBB', 30, 2, 'b')];
-    rankTop(all);
-    expect(all.map(e => e.i)).toEqual(['AAA', 'BBB']);
+  /*
+   * Boards written before the top ten was persisted carry a rolling `all`
+   * history and `top` rows with no `t`/`n`. Those rows are the oldest scores
+   * the board holds, so defaulting the timestamp to 0 ranks them accordingly
+   * and the upgrade needs no migration pass. The retired history is dropped,
+   * which resets the daily counter once and nothing else.
+   */
+  it('upgrades a pre-persisted-top board without losing its scores', () => {
+    const board = normalizeBoard({
+      top: [{ i: 'IMR', s: 4210 }],
+      all: [{ i: 'IMR', s: 4210, t: 99, n: 'old' }],
+      recent: [{ h: 'h', t: 99 }]
+    });
+    expect(board.top).toEqual([{ i: 'IMR', s: 4210, t: 0, n: '' }]);
+    expect(board.recent).toEqual([{ h: 'h', t: 99, n: '' }]);
+    expect(board).not.toHaveProperty('all');
   });
 });
 
@@ -192,16 +232,24 @@ describe('GET', () => {
     expect(Object.values(body).every(table => table.length === 0)).toBe(true);
   });
 
-  it('derives each table from the stored history rather than trusting `top`', async () => {
-    seed('snake', {
-      top: [{ i: 'HAX', s: 999999 }],
-      all: [entry('AAA', 100, 1, 'a'), entry('BBB', 300, 2, 'b')]
-    });
+  it('publishes the stored board without its private columns', async () => {
+    seedBoard('snake', [entry('BBB', 300, 2, 'b'), entry('AAA', 100, 1, 'a')]);
     const body = (await (await GET(getRequest())).json()) as Record<string, unknown[]>;
     expect(body.snake).toEqual([
       { i: 'BBB', s: 300 },
       { i: 'AAA', s: 100 }
     ]);
+    // Timestamps and nonces are server-side bookkeeping and never ship.
+    expect(Object.keys(body.snake[0] as object)).toEqual(['i', 's']);
+  });
+
+  it('still publishes a board written before the top ten was persisted', async () => {
+    seed('snake', {
+      top: [{ i: 'IMR', s: 4210 }] as unknown as BoardEntry[],
+      recent: []
+    });
+    const body = (await (await GET(getRequest())).json()) as Record<string, unknown[]>;
+    expect(body.snake).toEqual([{ i: 'IMR', s: 4210 }]);
   });
 
   it('sets the agreed Cache-Control header', async () => {
@@ -303,13 +351,14 @@ describe('POST writes', () => {
     const response = await POST(postRequest(submission()));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ rank: 1, table: [{ i: 'IMR', s: 4210 }] });
-    expect(stored('snake').all).toHaveLength(1);
+    expect(stored('snake').top).toHaveLength(1);
   });
 
   it('reports the global rank, and 0 when the score misses the top ten', async () => {
-    seed('snake', {
-      all: Array.from({ length: 12 }, (_, index) => entry('AAA', 1000 + index, index, `seed-${index}`))
-    });
+    seedBoard(
+      'snake',
+      Array.from({ length: 12 }, (_, index) => entry('AAA', 1000 + index, index, `seed-${index}`))
+    );
 
     const missed = await POST(postRequest(submission({ score: 1, nonce: 'low' })));
     expect(await missed.json()).toMatchObject({ rank: 0 });
@@ -342,13 +391,13 @@ describe('POST writes', () => {
 
   it('assigns the timestamp itself and ignores a client-supplied one', async () => {
     await POST(postRequest(submission({ t: 1, s: 999999, i: 'HAX' })));
-    expect(stored('snake').all[0]).toEqual({ i: 'IMR', s: 4210, t: NOW_SECONDS, n: 'nonce-1' });
+    expect(stored('snake').top[0]).toEqual({ i: 'IMR', s: 4210, t: NOW_SECONDS, n: 'nonce-1' });
   });
 
   it('stores the address as a salted hash, never in the clear', async () => {
     await POST(postRequest(submission()));
     const [recent] = stored('snake').recent;
-    expect(recent).toEqual({ h: ADDRESS_HASH, t: NOW_SECONDS });
+    expect(recent).toEqual({ h: ADDRESS_HASH, t: NOW_SECONDS, n: 'nonce-1' });
     expect(JSON.stringify(stored('snake'))).not.toContain(ADDRESS);
   });
 
@@ -363,42 +412,54 @@ describe('POST writes', () => {
     expect(stored('snake').recent[0].h).not.toBe(ADDRESS_HASH);
   });
 
-  it('keeps `all` at the 500 newest', async () => {
-    seed('snake', {
-      all: Array.from({ length: 500 }, (_, index) =>
-        entry('OLD', 100 + index, NOW_SECONDS - A_DAY - index, `old-${index}`)
-      )
-    });
-    await POST(postRequest(submission({ nonce: 'fresh' })));
+  /**
+   * A record leaves the board only when ten better ones push it off. It used
+   * to leave when five hundred newer submissions pushed it out of the rolling
+   * history the table was re-derived from, which quietly made an all-time
+   * board a recent one.
+   */
+  it('keeps an old record on the board however much newer traffic arrives', async () => {
+    seedBoard('snake', [entry('OLD', 9_000_000, NOW_SECONDS - A_DAY - 5, 'ancient')]);
+    await POST(postRequest(submission({ score: 10, nonce: 'fresh' })));
     const board = stored('snake');
-    expect(board.all).toHaveLength(500);
-    expect(board.all[0].n).toBe('fresh');
-    expect(board.all.some(e => e.n === 'old-499')).toBe(false);
+    expect(board.top[0]).toMatchObject({ i: 'OLD', s: 9_000_000 });
+    expect(board.top.map(e => e.n)).toContain('fresh');
   });
 
-  it('keeps `recent` at the 50 newest', async () => {
+  it('prunes submissions older than the longest rate-limit window', async () => {
     seed('snake', {
-      recent: Array.from({ length: 50 }, (_, index) => ({
+      recent: Array.from({ length: 40 }, (_, index) => ({
         h: `hash-${index}`,
-        t: NOW_SECONDS - AN_HOUR - index
+        t: NOW_SECONDS - A_DAY - index,
+        n: `old-${index}`
       }))
     });
     await POST(postRequest(submission({ nonce: 'fresh' })));
     const board = stored('snake');
-    expect(board.recent).toHaveLength(50);
-    expect(board.recent[0]).toEqual({ h: ADDRESS_HASH, t: NOW_SECONDS });
-    expect(board.recent.some(r => r.h === 'hash-49')).toBe(false);
+    expect(board.recent).toEqual([{ h: ADDRESS_HASH, t: NOW_SECONDS, n: 'fresh' }]);
+  });
+
+  it('bounds `recent` above the daily cap, so pruning never evicts a countable write', async () => {
+    seed('snake', {
+      recent: Array.from({ length: 400 }, (_, index) => ({
+        h: `hash-${index}`,
+        t: NOW_SECONDS - index,
+        n: `live-${index}`
+      }))
+    });
+    // 400 live writes is past the 300/day cap, so this is refused rather than
+    // written — which is the point: the cap bites before the bound does.
+    const response = await POST(postRequest(submission({ nonce: 'fresh' })));
+    expect(response.status).toBe(429);
   });
 });
 
 describe('POST idempotency', () => {
   it('treats a repeated nonce as a no-op and returns the current table', async () => {
-    seed('snake', {
-      all: [
-        entry('AAA', 900, NOW_SECONDS - 10, 'nonce-1'),
-        entry('BBB', 100, NOW_SECONDS - 5, 'other')
-      ]
-    });
+    seedBoard('snake', [
+      entry('AAA', 900, NOW_SECONDS - 10, 'nonce-1'),
+      entry('BBB', 100, NOW_SECONDS - 5, 'other')
+    ]);
     vi.mocked(put).mockClear();
 
     const response = await POST(postRequest(submission({ score: 4210 })));
@@ -416,16 +477,14 @@ describe('POST idempotency', () => {
 
 describe('POST conditional writes', () => {
   it('re-reads and merges when a rival write invalidates the ETag', async () => {
-    seed('snake', { all: [entry('AAA', 900, NOW_SECONDS - 10, 'rival-0')] }, 'etag-first');
+    seedBoard('snake', [entry('AAA', 900, NOW_SECONDS - 10, 'rival-0')], 'etag-first');
     blob.state.onRead = () => {
-      seed(
+      seedBoard(
         'snake',
-        {
-          all: [
-            entry('BBB', 800, NOW_SECONDS - 5, 'rival-1'),
-            entry('AAA', 900, NOW_SECONDS - 10, 'rival-0')
-          ]
-        },
+        [
+          entry('AAA', 900, NOW_SECONDS - 10, 'rival-0'),
+          entry('BBB', 800, NOW_SECONDS - 5, 'rival-1')
+        ],
         'etag-second'
       );
     };
@@ -436,7 +495,7 @@ describe('POST conditional writes', () => {
     expect(vi.mocked(get)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(put)).toHaveBeenCalledTimes(2);
     // The rival's entry survived, which only holds if the retry re-read.
-    expect(stored('snake').all.map(e => e.n).sort()).toEqual(['mine', 'rival-0', 'rival-1']);
+    expect(stored('snake').top.map(e => e.n).sort()).toEqual(['mine', 'rival-0', 'rival-1']);
     expect(await response.json()).toMatchObject({ rank: 1 });
   });
 
@@ -444,9 +503,9 @@ describe('POST conditional writes', () => {
     let rival = 0;
     const interlope = () => {
       blob.state.onRead = interlope;
-      seed('snake', { all: [] }, `etag-rival-${rival++}`);
+      seed('snake', {}, `etag-rival-${rival++}`);
     };
-    seed('snake', { all: [] }, 'etag-first');
+    seed('snake', {}, 'etag-first');
     blob.state.onRead = interlope;
 
     const response = await POST(postRequest(submission({ nonce: 'doomed' })));
@@ -463,14 +522,14 @@ describe('POST conditional writes', () => {
    */
   it('retries rather than overwriting when a read trails a just-created board', async () => {
     blob.state.onRead = () => {
-      seed('snake', { all: [entry('AAA', 900, NOW_SECONDS - 5, 'rival-0')] }, 'etag-created');
+      seedBoard('snake', [entry('AAA', 900, NOW_SECONDS - 5, 'rival-0')], 'etag-created');
     };
 
     const response = await POST(postRequest(submission({ score: 4210, nonce: 'mine' })));
 
     expect(response.status).toBe(200);
     // The rival survived, which only holds if the absent read was not believed.
-    expect(stored('snake').all.map(e => e.n).sort()).toEqual(['mine', 'rival-0']);
+    expect(stored('snake').top.map(e => e.n).sort()).toEqual(['mine', 'rival-0']);
     // Every write that landed was conditional, so none could have clobbered.
     const conditional = vi
       .mocked(put)
@@ -482,7 +541,7 @@ describe('POST conditional writes', () => {
     const response = await POST(postRequest(submission({ score: 100, nonce: 'first' })));
 
     expect(response.status).toBe(200);
-    expect(stored('snake').all.map(e => e.n)).toEqual(['first']);
+    expect(stored('snake').top.map(e => e.n)).toEqual(['first']);
     // Absence is only accepted once the retries have given storage time to settle.
     expect(vi.mocked(get)).toHaveBeenCalledTimes(3);
     expect(vi.mocked(put)).toHaveBeenCalledTimes(1);
@@ -490,23 +549,25 @@ describe('POST conditional writes', () => {
 });
 
 describe('POST rate limits', () => {
-  it('rejects a sixth write from the same address within the hour', async () => {
+  it('rejects a twenty-first write from the same address within the hour', async () => {
     seed('snake', {
-      recent: Array.from({ length: 5 }, (_, index) => ({
+      recent: Array.from({ length: 20 }, (_, index) => ({
         h: ADDRESS_HASH,
-        t: NOW_SECONDS - 60 * index
+        t: NOW_SECONDS - 60 * index,
+        n: `mine-${index}`
       }))
     });
-    const response = await POST(postRequest(submission({ nonce: 'sixth' })));
+    const response = await POST(postRequest(submission({ nonce: 'twenty-first' })));
     expect(response.status).toBe(429);
     expect(vi.mocked(put)).not.toHaveBeenCalled();
   });
 
   it('lets the same address back in once its writes age out of the hour', async () => {
     seed('snake', {
-      recent: Array.from({ length: 5 }, (_, index) => ({
+      recent: Array.from({ length: 20 }, (_, index) => ({
         h: ADDRESS_HASH,
-        t: NOW_SECONDS - AN_HOUR - index
+        t: NOW_SECONDS - AN_HOUR - index,
+        n: `mine-${index}`
       }))
     });
     const response = await POST(postRequest(submission({ nonce: 'later' })));
@@ -515,31 +576,36 @@ describe('POST rate limits', () => {
 
   it('does not count another address against the limit', async () => {
     seed('snake', {
-      recent: Array.from({ length: 5 }, (_, index) => ({
+      recent: Array.from({ length: 20 }, (_, index) => ({
         h: 'somebodyelse00',
-        t: NOW_SECONDS - index
+        t: NOW_SECONDS - index,
+        n: `theirs-${index}`
       }))
     });
     const response = await POST(postRequest(submission({ nonce: 'mine' })));
     expect(response.status).toBe(200);
   });
 
-  it('freezes a board after thirty writes in twenty-four hours', async () => {
+  it('freezes a board after three hundred writes in twenty-four hours', async () => {
     seed('snake', {
-      all: Array.from({ length: 30 }, (_, index) =>
-        entry('AAA', 100, NOW_SECONDS - 60 * index, `flood-${index}`)
-      )
+      recent: Array.from({ length: 300 }, (_, index) => ({
+        h: `flooder-${index}`,
+        t: NOW_SECONDS - 60 * index,
+        n: `flood-${index}`
+      }))
     });
-    const response = await POST(postRequest(submission({ nonce: 'thirty-first' })));
+    const response = await POST(postRequest(submission({ nonce: 'three-hundred-and-first' })));
     expect(response.status).toBe(429);
     expect(vi.mocked(put)).not.toHaveBeenCalled();
   });
 
   it('caps each board separately, so one flood cannot freeze the arcade', async () => {
     seed('snake', {
-      all: Array.from({ length: 30 }, (_, index) =>
-        entry('AAA', 100, NOW_SECONDS - 60 * index, `flood-${index}`)
-      )
+      recent: Array.from({ length: 300 }, (_, index) => ({
+        h: `flooder-${index}`,
+        t: NOW_SECONDS - 60 * index,
+        n: `flood-${index}`
+      }))
     });
     const response = await POST(postRequest(submission({ game: 'cascade', nonce: 'elsewhere' })));
     expect(response.status).toBe(200);
@@ -547,9 +613,11 @@ describe('POST rate limits', () => {
 
   it('lets a board thaw once its writes age past a day', async () => {
     seed('snake', {
-      all: Array.from({ length: 30 }, (_, index) =>
-        entry('AAA', 100, NOW_SECONDS - A_DAY - index, `flood-${index}`)
-      )
+      recent: Array.from({ length: 300 }, (_, index) => ({
+        h: `flooder-${index}`,
+        t: NOW_SECONDS - A_DAY - index,
+        n: `flood-${index}`
+      }))
     });
     const response = await POST(postRequest(submission({ nonce: 'tomorrow' })));
     expect(response.status).toBe(200);

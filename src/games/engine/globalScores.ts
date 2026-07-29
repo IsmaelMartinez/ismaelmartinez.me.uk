@@ -1,14 +1,15 @@
 /**
  * Client seam for the shared arcade leaderboard.
  *
- * The per-device tables in `highscores.ts` stay the source of truth for a
- * player's own board. This module talks to the Vercel Function at
- * `api/scores.ts`, which keeps one blob per game so every visitor sees the
+ * This is the board a cabinet shows: the module talks to the Vercel Function
+ * at `api/scores.ts`, which keeps one blob per game so every visitor sees the
  * same top ten. Both calls resolve `null` instead of throwing: a leaderboard
  * that cannot be reached must never break a game, so callers read `null` as
- * "world board unavailable" and fall back to the device table. That is the
- * same graceful-degradation contract `src/data/health.ts` uses for its
- * build-time fetches.
+ * "world board unavailable" and say so rather than drawing an empty board.
+ * That is the same graceful-degradation contract `src/data/health.ts` uses
+ * for its build-time fetches. A player's own progress does not ride on this
+ * either way: `highscores.ts` keeps their personal best on the device, which
+ * is what the HUD readouts and the record toast are driven from.
  */
 import type { ScoreEntry } from './highscores';
 

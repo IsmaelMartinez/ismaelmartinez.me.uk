@@ -1,29 +1,26 @@
 /**
  * Wires the HighScoreTable.astro panel to a game's run-end flow.
  *
- * A game calls `show(score)` from its game-over screen (after making the
- * overlay visible, so the input can take focus): if the score charts, the
- * "enter your initials" form appears; confirming writes the entry and
- * renders the top-10 with the new row lit up. A score is never lost —
- * restarting, navigating away, or closing the tab commits a pending entry
- * with the last-used initials, and long-running games can `stash()` the
- * current run's best as they go so a mid-run tab close keeps it too.
+ * There is one board: the shared one every visitor sees, served by
+ * `api/scores.ts` through `globalScores.ts`. The panel used to show a second,
+ * per-device table behind a pair of tabs, and gate the world submission on the
+ * score charting *there* — so once a player's own ten-row table filled up,
+ * their later runs stopped reaching the shared board entirely, however good
+ * they were. Removing the device table removes that gate with it: every
+ * finished run worth more than nothing is now offered to the world board.
  *
- * The panel shows two boards through one list: the device table above, and
- * the board every visitor shares behind the World tab. The world board is
- * fetched lazily (nobody pays for it until they ask) and refetched on every
- * switch to that tab, which is what a player has instead of a refresh
- * button. Every committed score is offered to it, so the two tabs are
- * written by the same commit.
+ * A score is never lost on the way there. Restarting, navigating away, or
+ * closing the tab commits a pending run with the last-used initials, so the
+ * only thing the initials form decides is whether the player is interrupted
+ * to type them — never whether the run counts.
+ *
+ * The board is refetched when the panel initialises and again at every run
+ * end, which is what a player has instead of a refresh button.
  */
 import {
-  loadTable,
-  saveTable,
   qualifies,
-  insertScore,
-  removeEntry,
-  submitScore,
-  topEntry,
+  loadBest,
+  saveBest,
   loadInitials,
   saveInitials,
   sanitizeInitials,
@@ -34,38 +31,31 @@ import {
 } from './highscores';
 import { fetchGlobal, submitGlobal } from './globalScores';
 
-/** Which board the panel is currently drawing into its single list. */
-type Scope = 'device' | 'world';
-
 export interface Scoreboard {
   /** Present a finished run's score on the game-over screen. */
   show(score: number): void;
   /** Hide the panel (call when a new game starts); commits any pending entry. */
   hide(): void;
   /**
-   * Persist the current run's best immediately, as a provisional entry under
-   * the last-used initials. Call whenever a long run's score grows (it
-   * no-ops unless the score charts); the entry is upgraded in place as the
-   * run continues and replaced by the final `show()`/commit entry, so a
-   * mid-run tab close can't lose a record the HUD already displayed.
+   * Record the current run's score as a personal best if it beats the stored
+   * one. Call whenever a long run's score grows, so a mid-run tab close can't
+   * lose a number the HUD already displayed.
    */
   stash(score: number): void;
-  /** Current #1 entry, for "best" HUD readouts. */
-  top(): ScoreEntry | null;
   /**
    * Snapshot the current best as the starting run's baseline and re-arm the
    * one-time record celebration. Call from the game's startRun.
    */
   beginRun(): void;
   /**
-   * Bank a run's score as it grows: stash it (a closed tab keeps it), fold
-   * it into the tracked best, and report whether the run just beat its
-   * baseline. `best` drives the HUD "Best" readout; `newRecord` is true
-   * exactly once per run — never for a zero baseline, since a first-ever
-   * score is not a beaten record — and drives the one-time record toast.
+   * Bank a run's score as it grows: keep it (a closed tab keeps it), fold it
+   * into the tracked best, and report whether the run just beat its baseline.
+   * `best` drives the HUD "Best" readout; `newRecord` is true exactly once per
+   * run — never for a zero baseline, since a first-ever score is not a beaten
+   * record — and drives the one-time record toast.
    */
   bank(score: number): RunRecordBank;
-  /** Stash-aware current best, for init-time HUD seeding. */
+  /** Current personal best, for init-time HUD seeding. */
   best(): number;
 }
 
@@ -77,8 +67,8 @@ export interface RunRecordBank {
 /**
  * Pure run-record state machine behind `beginRun`/`bank`/`best`, kept
  * separate from the DOM wiring so it can be unit-tested. `stash` is only
- * invoked when the run's own best grows (stashing a non-improved score is
- * a no-op anyway, and the guard spares a table load per bank call).
+ * invoked when the run's own best grows, which spares a storage write per
+ * bank call.
  */
 export function createRunRecord(
   initialBest: number,
@@ -109,7 +99,7 @@ export function createRunRecord(
   };
 }
 
-/** The text templates the world tab's status line draws from. */
+/** The text templates the panel's status line draws from. */
 export interface WorldNoteText {
   loading: string;
   unavailable: string;
@@ -117,13 +107,13 @@ export interface WorldNoteText {
 }
 
 /**
- * The world tab's status line, kept pure so it can be unit-tested apart from
- * the DOM wiring. Three states: a board still loading, a board that could not
- * be reached, or a placed rank.
+ * The panel's status line, kept pure so it can be unit-tested apart from the
+ * DOM wiring. Three states: a board still loading, a board that could not be
+ * reached, or a placed rank.
  *
  * The rank is shown only when it points at a real row of the board being drawn
  * (`count`). A submission sets the rank alongside the board it charted on, but
- * a later `loadWorld()` can swap in a CDN-cached read taken before that score
+ * a later refetch can swap in a CDN-cached read taken before that score
  * propagated — a board that no longer holds the entry, often empty — while the
  * rank stays put. Drawing "World rank #1" over that board is the bug where the
  * panel reads "No scores yet" and "World rank #1" at once, so a rank past the
@@ -141,7 +131,7 @@ export function worldNoteText(
 }
 
 export interface ScoreboardOptions {
-  /** Called after an entry lands on the table (including auto-commits). */
+  /** Called after a finished run has been committed, with its world rank. */
   onSave?: (entry: ScoreEntry, rank: number) => void;
 }
 
@@ -149,24 +139,24 @@ export function initScoreboard(
   panel: HTMLElement | null,
   options: ScoreboardOptions = {}
 ): Scoreboard {
-  // Games stay functional if the panel (or its table identity) is missing.
-  const gameId = panel?.dataset.hsGame;
-  if (!panel || !gameId) {
+  // Games stay functional if the panel (or its board identity) is missing.
+  const hsGame = panel?.dataset.hsGame;
+  if (!panel || !hsGame) {
     return {
       show() {},
       hide() {},
       stash() {},
-      top: () => null,
       ...createRunRecord(0, () => {})
     };
   }
+  // Narrowed once here, so the closures below need no non-null assertions.
+  const gameId: string = hsGame;
 
   const form = panel.querySelector<HTMLFormElement>('.hs-entry');
   const input = panel.querySelector<HTMLInputElement>('.hs-input');
   const list = panel.querySelector<HTMLOListElement>('.hs-list');
   const empty = panel.querySelector<HTMLElement>('.hs-empty');
   const note = panel.querySelector<HTMLElement>('.hs-note');
-  const tabs = [...panel.querySelectorAll<HTMLButtonElement>('.hs-tab')];
   // Runtime-composed strings ride in on data attributes, the repo's channel
   // for copy that server-side `useTranslations` cannot render.
   const worldText = {
@@ -176,51 +166,33 @@ export function initScoreboard(
   };
 
   let pendingScore: number | null = null;
-  let scope: Scope = 'device';
-  // Null until a world fetch resolves. Null after a failed one too, which is
-  // why `worldPending` exists: "not loaded" and "unreachable" look the same
-  // in the data and must not read the same on screen.
-  let world: Record<string, ScoreEntry[]> | null = null;
-  let worldPending = false;
-  // Generation of the newest world board that has landed. Only a submission's
-  // own reply bumps it, because that is the one answer guaranteed to include
-  // the score just written; a fetch is served from whatever the CDN holds and
-  // so can be older than the moment it was issued. Both paths note the
-  // generation when they start and stand down if it moved while they were out,
-  // so an overtaken or out-of-order reply can never put an older board back.
+  // The board as last known. Empty until a fetch or a submission answers,
+  // which is why `loaded` exists separately: "not loaded" and "loaded and
+  // empty" look identical in the data and must not read the same on screen.
+  let table: ScoreEntry[] = [];
+  let loaded = false;
+  let fetching = false;
+  // Generation of the newest board that has landed. Only a submission's own
+  // reply bumps it, because that is the one answer guaranteed to include the
+  // score just written; a fetch is served from whatever the CDN holds and so
+  // can be older than the moment it was issued. Both paths note the generation
+  // when they start and stand down if it moved while they were out, so an
+  // overtaken or out-of-order reply can never put an older board back.
   let worldGen = 0;
-  // Kept per scope so switching tabs highlights the row that scope ranked.
-  let deviceRank = 0;
-  let worldRank = 0;
-  // Bumped by every `show()`. A global submit can still be in flight when the
+  let rank = 0;
+  // Bumped by every `show()`. A submission can still be in flight when the
   // next run ends (the POST allows five seconds, a short run takes less), and
-  // without this its reply would pin the previous run's world rank onto the
-  // current one. Responses can also arrive out of order, so the check is
-  // against the token the submit was issued under, not a plain "is newer".
+  // without this its reply would pin the previous run's rank onto the current
+  // one. Responses can also arrive out of order, so the check is against the
+  // token the submit was issued under, not a plain "is newer".
   let runToken = 0;
-  // This run's provisional entry already written to the table — kept whole
-  // (not just the score) so it is still found if the saved initials change
-  // in the meantime, e.g. via a commit in another tab.
-  let stashed: ScoreEntry | null = null;
 
-  /** Lifts this run's provisional entry back out of a loaded table. */
-  function unstash(table: ScoreEntry[]): ScoreEntry[] {
-    return stashed === null ? table : removeEntry(table, stashed.initials, stashed.score);
-  }
-
-  /**
-   * Draws the active scope into the one list. `deviceTable` lets `show()`
-   * hand over the table it has already unstashed rather than re-reading it.
-   */
-  function render(deviceTable?: ScoreEntry[]) {
+  function render() {
     if (!list) return;
-    const worldScope = scope === 'world';
-    const table = worldScope ? (world?.[gameId!] ?? []) : (deviceTable ?? loadTable(gameId!));
-    const highlightRank = worldScope ? worldRank : deviceRank;
     list.textContent = '';
     table.forEach((entry, i) => {
       const row = document.createElement('li');
-      row.className = 'hs-row' + (i + 1 === highlightRank ? ' hs-current' : '');
+      row.className = 'hs-row' + (i + 1 === rank ? ' hs-current' : '');
       for (const [cls, text] of [
         ['hs-rank', `${i + 1}.`],
         ['hs-initials', entry.initials.padEnd(INITIALS_LENGTH, ' ')],
@@ -234,45 +206,31 @@ export function initScoreboard(
       list.appendChild(row);
     });
     // The "no scores yet" nudge makes no sense under an open initials form,
-    // nor on a world board that has not answered yet: the note speaks there.
+    // nor on a board that has not answered yet: the note speaks there.
     if (empty) {
-      empty.hidden = (worldScope && !world) || table.length > 0 || !(form?.hidden ?? true);
+      empty.hidden = !loaded || table.length > 0 || !(form?.hidden ?? true);
     }
     if (note) {
-      // The rank rides on the board actually drawn (`table`), so a stale refetch
-      // that empties the world board can't leave "World rank #1" over it.
-      const message = worldScope
-        ? worldNoteText(
-            { loaded: !!world, pending: worldPending, rank: worldRank, count: table.length },
-            worldText
-          )
-        : '';
+      // The rank rides on the board actually drawn, so a stale refetch that
+      // empties the board can't leave "World rank #1" over it.
+      const message = worldNoteText({ loaded, pending: fetching, rank, count: table.length }, worldText);
       note.textContent = message;
       note.hidden = message === '';
     }
   }
 
-  function syncTabs() {
-    for (const tab of tabs) {
-      tab.setAttribute('aria-selected', String((tab.dataset.hsScope ?? 'device') === scope));
-    }
-  }
-
   /**
-   * Fetches the shared board. Runs on every switch to the World tab, so
-   * tapping across from the device board is how a player refreshes it:
-   * without that, a session that loaded the board once would show that one
-   * snapshot until the page was reloaded, and nobody else's runs would ever
-   * appear. Flipping tabs repeatedly costs nothing, because the response's
-   * own `max-age` answers the repeats from the browser's cache.
+   * Fetches the shared board. Runs at init and again at every run end, so the
+   * board a player is shown after a game is the board as it stood then, not a
+   * snapshot from whenever the page happened to load.
    */
   function loadWorld() {
-    if (worldPending) return;
-    worldPending = true;
+    if (fetching) return;
+    fetching = true;
     const gen = worldGen;
     render();
     fetchGlobal().then(boards => {
-      worldPending = false;
+      fetching = false;
       // A submission that landed while this was in flight has already written
       // a fresher board, so this reply is dropped rather than applied. Reads
       // are CDN-cached for half a minute, which is easily long enough for the
@@ -282,18 +240,10 @@ export function initScoreboard(
       // A refresh that fails keeps whatever was already on screen: a flaky
       // network should not turn a loaded board into "unavailable". The first
       // fetch has nothing to keep, so a failure there still reads as one.
-      if (boards) world = boards;
-      render();
-    });
-  }
-
-  for (const tab of tabs) {
-    tab.addEventListener('click', () => {
-      const next: Scope = tab.dataset.hsScope === 'world' ? 'world' : 'device';
-      if (next === scope) return;
-      scope = next;
-      syncTabs();
-      if (scope === 'world') loadWorld();
+      if (boards) {
+        table = boards[gameId] ?? [];
+        loaded = true;
+      }
       render();
     });
   }
@@ -304,42 +254,42 @@ export function initScoreboard(
       input && input.value.trim() ? input.value : loadInitials()
     );
     const score = pendingScore;
-    const rank = submitScore(gameId!, initials, score);
     pendingScore = null;
-    deviceRank = rank;
     saveInitials(initials);
+    // A finished run is a personal best candidate even in a game that never
+    // banks mid-run, so the attract-screen readouts stay honest.
+    saveBest(gameId, score);
     if (form) form.hidden = true;
     render();
-    if (focusResult) {
-      const row = list?.querySelector<HTMLElement>('.hs-current');
-      row?.scrollIntoView({ block: 'nearest' });
-    }
-    if (rank > 0) options.onSave?.({ initials, score }, rank);
-    // Offered to the world board even when it missed the device top ten: a
-    // device already holding ten better runs can still take a world place,
-    // so global submission is gated on the score existing, not on its rank.
+    const token = runToken;
+    const gen = worldGen;
     // `submitGlobal` no-ops away from production and never rejects.
-    if (score > 0) {
-      const token = runToken;
-      const gen = worldGen;
-      submitGlobal(gameId!, initials, score).then(result => {
-        if (!result) return;
-        // Two runs can have submissions out at once (five seconds are allowed
-        // for one and a short run ends well inside that), and replies can
-        // arrive in either order. A newer one landing first has already put a
-        // board on screen that this older answer predates, so it stands down.
-        if (gen !== worldGen) return;
-        // Otherwise this is the freshest board there is: it came back from the
-        // write itself, so it supersedes any fetch still in flight too.
-        worldGen++;
-        world = { ...world, [gameId!]: result.table };
-        // The board lands whichever run it came from; only the rank belongs to
-        // one run and is dropped once that run is past.
-        if (token !== runToken) return;
-        worldRank = result.rank;
+    submitGlobal(gameId, initials, score).then(result => {
+      if (!result) return;
+      // Two runs can have submissions out at once (five seconds are allowed
+      // for one and a short run ends well inside that), and replies can arrive
+      // in either order. A newer one landing first has already put a board on
+      // screen that this older answer predates, so it stands down.
+      if (gen !== worldGen) return;
+      // Otherwise this is the freshest board there is: it came back from the
+      // write itself, so it supersedes any fetch still in flight too.
+      worldGen++;
+      table = result.table;
+      loaded = true;
+      // The board lands whichever run it came from; only the rank belongs to
+      // one run and is dropped once that run is past.
+      if (token !== runToken) {
         render();
-      });
-    }
+        return;
+      }
+      rank = result.rank;
+      render();
+      if (focusResult) {
+        const row = list?.querySelector<HTMLElement>('.hs-current');
+        row?.scrollIntoView({ block: 'nearest' });
+      }
+      options.onSave?.({ initials, score }, rank);
+    });
   }
 
   if (form) {
@@ -376,51 +326,41 @@ export function initScoreboard(
   window.addEventListener('pagehide', commitPending);
   document.addEventListener('astro:before-swap', onSwap);
 
-  function stash(score: number) {
-    if (stashed !== null && score <= stashed.score) return;
-    const table = unstash(loadTable(gameId!));
-    if (!qualifies(table, score)) return;
-    const initials = loadInitials();
-    saveTable(gameId!, insertScore(table, initials, score).table);
-    stashed = { initials, score };
-  }
+  const stash = (score: number) => saveBest(gameId, score);
+
+  loadWorld();
 
   return {
     stash,
-    ...createRunRecord(topEntry(gameId)?.score ?? 0, stash),
+    ...createRunRecord(loadBest(gameId), stash),
     show(score: number) {
-      pendingScore = null;
       panel.hidden = false;
-      // A finished run always lands on the device tab: that is where the
-      // initials form sits and where the freshly lit row will appear.
-      scope = 'device';
-      deviceRank = 0;
-      worldRank = 0;
+      rank = 0;
       runToken++;
-      syncTabs();
-      // The final entry replaces any provisional one from this run.
-      const table = unstash(loadTable(gameId!));
-      if (stashed !== null) saveTable(gameId!, table);
-      stashed = null;
-      if (qualifies(table, score) && form && input) {
-        pendingScore = score;
+      // Every run counts, whether or not the player is asked for initials:
+      // an unanswered form is committed with the remembered ones.
+      pendingScore = score > 0 ? score : null;
+      // Interrupt for initials only when the run would actually chart. A board
+      // that has not loaded gets the benefit of the doubt, since guessing
+      // wrong here costs nothing but a prompt.
+      const charts = pendingScore !== null && (!loaded || qualifies(table, score));
+      if (charts && form && input) {
         form.hidden = false;
         input.value = loadInitials();
-        render(table);
+        render();
         input.focus();
         input.select();
       } else {
         if (form) form.hidden = true;
-        render(table);
+        render();
       }
+      // Refreshed after rendering, so the panel appears instantly with the
+      // board it already had rather than blanking while the fetch is out.
+      loadWorld();
     },
     hide() {
       commit(false);
-      // A provisional entry from the ending run stays in the table as-is;
-      // the next run must not claim (and later replace) it.
-      stashed = null;
       panel.hidden = true;
-    },
-    top: () => topEntry(gameId!)
+    }
   };
 }

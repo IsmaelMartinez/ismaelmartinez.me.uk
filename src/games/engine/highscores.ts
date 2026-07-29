@@ -1,31 +1,44 @@
 /**
- * Old-school arcade high-score tables, one per game, kept on this device.
+ * Arcade scoring rules, plus the little state a device genuinely owns.
  *
- * Each table is a localStorage JSON array of up to MAX_ENTRIES entries sorted
- * by score (ties keep the older entry higher, like the arcades did). Pure
- * helpers (sanitise/qualify/insert) are separated from the guarded storage
- * layer so the rules are unit-testable without a DOM.
+ * Every cabinet used to keep its own ten-row table in localStorage alongside
+ * the shared board. That second table is gone (see ADR 002): the panel now
+ * shows one board, the world one in `globalScores.ts`, so a score means the
+ * same thing wherever it is read. What stays on the device is only what is
+ * local by nature — the initials the player last typed, and their personal
+ * best per game, which drives the HUD "best" readouts, the one-time record
+ * toast, and the attract-screen numbers on the arcade floor.
+ *
+ * The pure rules (sanitise, qualify, format) are separated from the guarded
+ * storage layer so they stay unit-testable without a DOM.
  */
 
-import { loadScore } from './storage';
+import { loadScore, saveScore } from './storage';
 
 export interface ScoreEntry {
   initials: string;
   score: number;
 }
 
+/** Rows on the published board. `qualifies` measures against this. */
 export const MAX_ENTRIES = 10;
 export const INITIALS_LENGTH = 3;
 export const DEFAULT_INITIALS = 'AAA';
 
-const TABLE_PREFIX = 'arcade-hs-';
+const BEST_PREFIX = 'arcade-best-';
 const INITIALS_KEY = 'arcade-initials';
 
 /**
- * Single-number keys the games used before tables existed. A missing table
- * is seeded from these so an old personal best becomes entry #1 ("---").
- * Tank Duel is absent on purpose: its legacy key counted matches won, which
- * is not comparable with the new per-match score.
+ * The retired per-device tables. Still read once, to seed a personal best for
+ * players who have one, and deliberately not deleted: leaving the rows in
+ * place keeps this change reversible and costs a few hundred bytes.
+ */
+const TABLE_PREFIX = 'arcade-hs-';
+
+/**
+ * Single-number keys the games used before either board existed. Tank Duel is
+ * absent on purpose: its legacy key counted matches won, which is not
+ * comparable with the per-match score it reports now.
  */
 const LEGACY_KEYS: Record<string, string> = {
   snake: 'snake-high-score',
@@ -35,7 +48,7 @@ const LEGACY_KEYS: Record<string, string> = {
   syndicate: 'syndicate-record-cash'
 };
 
-export const tableKey = (gameId: string): string => `${TABLE_PREFIX}${gameId}`;
+export const bestKey = (gameId: string): string => `${BEST_PREFIX}${gameId}`;
 
 /** Classic six-digit arcade readout, e.g. 340 → "000340". */
 export const formatScore = (score: number): string => score.toString().padStart(6, '0');
@@ -53,98 +66,53 @@ export function sanitizeInitials(raw: string): string {
   return filterInitials(raw) || DEFAULT_INITIALS;
 }
 
-/** True when `score` would earn a spot on the table. */
+/**
+ * True when `score` would earn a spot on `table`, which is now always the
+ * world board. Used only to decide whether to interrupt the player for
+ * initials — a run is offered to the board either way, so a stale or
+ * unreachable board can never cost someone a score.
+ */
 export function qualifies(table: ScoreEntry[], score: number): boolean {
   if (score <= 0) return false;
   return table.length < MAX_ENTRIES || score > table[table.length - 1].score;
 }
 
-/**
- * Pure insertion: returns the new table (capped at MAX_ENTRIES) and the
- * 1-based rank of the inserted entry, or rank 0 when it didn't qualify.
- */
-export function insertScore(
-  table: ScoreEntry[],
-  initials: string,
-  score: number
-): { table: ScoreEntry[]; rank: number } {
-  if (!qualifies(table, score)) return { table, rank: 0 };
-  const entry: ScoreEntry = { initials: sanitizeInitials(initials), score };
-  let index = table.findIndex(e => score > e.score);
-  if (index === -1) index = table.length;
-  const next = [...table.slice(0, index), entry, ...table.slice(index)].slice(0, MAX_ENTRIES);
-  return { table: next, rank: index + 1 };
-}
-
-/**
- * Pure removal of the highest-ranked entry matching `initials`/`score`;
- * returns the same table when no entry matches. Used to lift a provisional
- * mid-run entry back out before replacing it with a better one.
- */
-export function removeEntry(table: ScoreEntry[], initials: string, score: number): ScoreEntry[] {
-  const index = table.findIndex(e => e.initials === initials && e.score === score);
-  return index === -1 ? table : [...table.slice(0, index), ...table.slice(index + 1)];
-}
-
-function isEntry(value: unknown): value is ScoreEntry {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as ScoreEntry).initials === 'string' &&
-    typeof (value as ScoreEntry).score === 'number' &&
-    Number.isFinite((value as ScoreEntry).score)
-  );
-}
-
-/**
- * Re-establishes the module's invariants on data read back from storage
- * (which the player can hand-edit): entries well-formed, initials at most
- * three characters, sorted by score with older entries above ties.
- */
-function normalizeTable(parsed: unknown): ScoreEntry[] {
-  if (!Array.isArray(parsed)) return [];
-  return parsed
-    .filter(isEntry)
-    .map(e => ({ initials: e.initials.slice(0, INITIALS_LENGTH), score: e.score }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_ENTRIES);
-}
-
-/** Loads a game's table, seeding it from the pre-table high-score key once. */
-export function loadTable(gameId: string): ScoreEntry[] {
+/** The best score a retired per-device table holds, or 0 if there is none. */
+function retiredTableBest(gameId: string): number {
   try {
-    const raw = localStorage.getItem(tableKey(gameId));
-    if (raw) return normalizeTable(JSON.parse(raw));
-    const legacyKey = LEGACY_KEYS[gameId];
-    const legacy = legacyKey ? loadScore(legacyKey) : 0;
-    if (legacy > 0) {
-      const seeded = [{ initials: '---', score: legacy }];
-      saveTable(gameId, seeded);
-      return seeded;
-    }
-    return [];
+    const raw = localStorage.getItem(`${TABLE_PREFIX}${gameId}`);
+    if (!raw) return 0;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return 0;
+    return parsed.reduce<number>((best, entry) => {
+      const score = (entry as ScoreEntry | null)?.score;
+      return typeof score === 'number' && Number.isFinite(score) && score > best ? score : best;
+    }, 0);
   } catch {
-    return [];
+    return 0;
   }
 }
 
-export function saveTable(gameId: string, table: ScoreEntry[]): void {
-  try {
-    localStorage.setItem(tableKey(gameId), JSON.stringify(table.slice(0, MAX_ENTRIES)));
-  } catch {
-    // Storage unavailable; the table simply won't persist.
-  }
+/**
+ * This device's best run at a game.
+ *
+ * Migrates on first read, newest source first: the dedicated key, then the
+ * retired table's best row, then the single-number key that predated both. A
+ * migrated value is written through, so the older sources are consulted once
+ * per game and never again.
+ */
+export function loadBest(gameId: string): number {
+  const stored = loadScore(bestKey(gameId));
+  if (stored > 0) return stored;
+  const legacyKey = LEGACY_KEYS[gameId];
+  const migrated = Math.max(retiredTableBest(gameId), legacyKey ? loadScore(legacyKey) : 0);
+  if (migrated > 0) saveScore(bestKey(gameId), migrated);
+  return migrated;
 }
 
-/** Records a finished run. Returns the 1-based rank, or 0 if it didn't chart. */
-export function submitScore(gameId: string, initials: string, score: number): number {
-  const { table, rank } = insertScore(loadTable(gameId), initials, score);
-  if (rank > 0) saveTable(gameId, table);
-  return rank;
-}
-
-export function topEntry(gameId: string): ScoreEntry | null {
-  return loadTable(gameId)[0] ?? null;
+/** Records a personal best, ignoring anything that does not beat the old one. */
+export function saveBest(gameId: string, score: number): void {
+  if (score > loadBest(gameId)) saveScore(bestKey(gameId), score);
 }
 
 /** Last initials entered on this device, for prefilling the entry form. */

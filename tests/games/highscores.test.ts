@@ -4,16 +4,12 @@ import {
   sanitizeInitials,
   filterInitials,
   formatScore,
-  removeEntry,
   qualifies,
-  insertScore,
-  loadTable,
-  saveTable,
-  submitScore,
-  topEntry,
+  loadBest,
+  saveBest,
   loadInitials,
   saveInitials,
-  tableKey,
+  bestKey,
   type ScoreEntry
 } from '../../src/games/engine/highscores';
 
@@ -66,72 +62,30 @@ describe('formatScore', () => {
   });
 });
 
+/**
+ * `qualifies` is measured against the world board now, and only decides
+ * whether the player is interrupted for initials — never whether the run is
+ * offered to the board. The rule itself is unchanged.
+ */
 describe('qualifies', () => {
   it('rejects non-positive scores', () => {
     expect(qualifies([], 0)).toBe(false);
     expect(qualifies([], -5)).toBe(false);
   });
 
-  it('accepts any positive score while the table has room', () => {
+  it('accepts any positive score while the board has room', () => {
     expect(qualifies([], 1)).toBe(true);
     expect(qualifies([entry('AAA', 999)], 1)).toBe(true);
   });
 
-  it('requires beating the last entry once the table is full', () => {
+  it('requires beating the last entry once the board is full', () => {
     const table = fullTable(); // scores 1000..100
     expect(qualifies(table, 100)).toBe(false);
     expect(qualifies(table, 101)).toBe(true);
   });
 });
 
-describe('insertScore', () => {
-  it('places the entry by score and reports its 1-based rank', () => {
-    const table = [entry('AAA', 300), entry('BBB', 100)];
-    const result = insertScore(table, 'ccc', 200);
-    expect(result.rank).toBe(2);
-    expect(result.table.map(e => e.initials)).toEqual(['AAA', 'CCC', 'BBB']);
-  });
-
-  it('keeps older entries above ties', () => {
-    const table = [entry('OLD', 200)];
-    const result = insertScore(table, 'NEW', 200);
-    expect(result.rank).toBe(2);
-    expect(result.table[0].initials).toBe('OLD');
-  });
-
-  it('drops the last entry when a full table gains a better score', () => {
-    const result = insertScore(fullTable(), 'ZZZ', 950);
-    expect(result.rank).toBe(2);
-    expect(result.table).toHaveLength(MAX_ENTRIES);
-    expect(result.table.some(e => e.score === 100)).toBe(false);
-  });
-
-  it('returns rank 0 and the untouched table for a non-qualifying score', () => {
-    const table = fullTable();
-    const result = insertScore(table, 'ZZZ', 50);
-    expect(result.rank).toBe(0);
-    expect(result.table).toBe(table);
-  });
-});
-
-describe('removeEntry', () => {
-  it('removes only the highest-ranked matching entry', () => {
-    const table = [entry('AAA', 300), entry('ISM', 200), entry('ISM', 200), entry('BBB', 100)];
-    expect(removeEntry(table, 'ISM', 200)).toEqual([
-      entry('AAA', 300),
-      entry('ISM', 200),
-      entry('BBB', 100)
-    ]);
-  });
-
-  it('returns the table untouched when nothing matches', () => {
-    const table = [entry('AAA', 300)];
-    expect(removeEntry(table, 'ISM', 300)).toBe(table);
-    expect(removeEntry(table, 'AAA', 299)).toBe(table);
-  });
-});
-
-describe('storage-backed tables', () => {
+describe('personal best', () => {
   let store: Record<string, string>;
 
   beforeEach(() => {
@@ -142,70 +96,72 @@ describe('storage-backed tables', () => {
     vi.unstubAllGlobals();
   });
 
-  it('returns an empty table when nothing is stored', () => {
-    expect(loadTable('snake')).toEqual([]);
+  it('is zero until something is recorded', () => {
+    expect(loadBest('snake')).toBe(0);
   });
 
-  it('round-trips a table through save and load', () => {
-    saveTable('snake', [entry('ISM', 420)]);
-    expect(loadTable('snake')).toEqual([entry('ISM', 420)]);
+  it('round-trips through save and load', () => {
+    saveBest('snake', 420);
+    expect(loadBest('snake')).toBe(420);
   });
 
-  it('migrates the legacy single-number high score as entry #1', () => {
-    store['snake-high-score'] = '340';
-    expect(loadTable('snake')).toEqual([entry('---', 340)]);
-    // Seeding persists, so it survives the legacy key being cleared later.
-    delete store['snake-high-score'];
-    expect(loadTable('snake')).toEqual([entry('---', 340)]);
+  it('ignores a score that does not beat the stored best', () => {
+    saveBest('snake', 420);
+    saveBest('snake', 419);
+    expect(loadBest('snake')).toBe(420);
+    saveBest('snake', 421);
+    expect(loadBest('snake')).toBe(421);
   });
 
-  it('keeps a cabinet\'s two mode tables apart', () => {
+  it('keeps a cabinet\'s two mode bests apart', () => {
     // Cascade fields one board per mode, so the ids must not share storage:
     // a countdown score has no business ranking against a marathon one.
-    submitScore('cascade', 'ISM', 5000);
-    submitScore('cascade-countdown', 'ISM', 900);
-    expect(loadTable('cascade')).toEqual([entry('ISM', 5000)]);
-    expect(loadTable('cascade-countdown')).toEqual([entry('ISM', 900)]);
-    expect(topEntry('cascade')?.score).toBe(5000);
-    expect(topEntry('cascade-countdown')?.score).toBe(900);
+    saveBest('cascade', 5000);
+    saveBest('cascade-countdown', 900);
+    expect(loadBest('cascade')).toBe(5000);
+    expect(loadBest('cascade-countdown')).toBe(900);
+  });
+
+  it('migrates the best row of a retired per-device table', () => {
+    store['arcade-hs-snake'] = JSON.stringify([entry('ISM', 900), entry('BBB', 300)]);
+    expect(loadBest('snake')).toBe(900);
+    // The migration is written through, so it survives the old table going.
+    delete store['arcade-hs-snake'];
+    expect(loadBest('snake')).toBe(900);
+  });
+
+  it('migrates the legacy single-number high score', () => {
+    store['snake-high-score'] = '340';
+    expect(loadBest('snake')).toBe(340);
+    delete store['snake-high-score'];
+    expect(loadBest('snake')).toBe(340);
+  });
+
+  it('prefers whichever retired source is higher', () => {
+    store['arcade-hs-city'] = JSON.stringify([entry('ISM', 200)]);
+    store['city-record-pop'] = '750';
+    expect(loadBest('city')).toBe(750);
   });
 
   it('does not migrate a legacy key for tanks (different metric)', () => {
     store['tanks-victories'] = '7';
-    expect(loadTable('tanks')).toEqual([]);
+    expect(loadBest('tanks')).toBe(0);
   });
 
-  it('survives corrupt stored JSON', () => {
-    store[tableKey('snake')] = '{nope';
-    expect(loadTable('snake')).toEqual([]);
+  it('survives a corrupt retired table', () => {
+    store['arcade-hs-snake'] = '{nope';
+    expect(loadBest('snake')).toBe(0);
   });
 
-  it('filters malformed entries out of stored tables', () => {
-    store[tableKey('snake')] = JSON.stringify([entry('ISM', 10), { initials: 5 }, 'x', null]);
-    expect(loadTable('snake')).toEqual([entry('ISM', 10)]);
+  it('ignores malformed rows inside a retired table', () => {
+    store['arcade-hs-snake'] = JSON.stringify([{ initials: 5 }, 'x', null, entry('ISM', 10)]);
+    expect(loadBest('snake')).toBe(10);
   });
 
-  it('re-sorts and bounds hand-edited stored tables', () => {
-    store[tableKey('snake')] = JSON.stringify([
-      entry('LOW', 10),
-      entry('CHEATER', 900),
-      entry('TOP', 900)
-    ]);
-    expect(loadTable('snake')).toEqual([entry('CHE', 900), entry('TOP', 900), entry('LOW', 10)]);
-  });
-
-  it('submitScore records qualifying runs and reports the rank', () => {
-    expect(submitScore('snake', 'ism', 200)).toBe(1);
-    expect(submitScore('snake', 'bbb', 300)).toBe(1);
-    expect(submitScore('snake', 'ccc', 250)).toBe(2);
-    expect(loadTable('snake').map(e => e.score)).toEqual([300, 250, 200]);
-    expect(topEntry('snake')).toEqual(entry('BBB', 300));
-  });
-
-  it('submitScore ignores non-qualifying runs', () => {
-    saveTable('snake', fullTable());
-    expect(submitScore('snake', 'ZZZ', 5)).toBe(0);
-    expect(loadTable('snake')).toEqual(fullTable());
+  it('does not consult the retired sources once a best is stored', () => {
+    store[bestKey('snake')] = '10';
+    store['snake-high-score'] = '999';
+    expect(loadBest('snake')).toBe(10);
   });
 
   it('remembers the last initials used, sanitised', () => {
@@ -217,8 +173,8 @@ describe('storage-backed tables', () => {
   it('works without localStorage at all', () => {
     vi.unstubAllGlobals();
     vi.stubGlobal('localStorage', undefined);
-    expect(loadTable('snake')).toEqual([]);
-    expect(submitScore('snake', 'ISM', 100)).toBe(1); // insert works, persistence is skipped
+    expect(loadBest('snake')).toBe(0);
+    expect(() => saveBest('snake', 100)).not.toThrow();
     expect(loadInitials()).toBe('AAA');
     expect(() => saveInitials('ISM')).not.toThrow();
   });

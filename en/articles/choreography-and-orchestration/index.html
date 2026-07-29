@@ -34,7 +34,7 @@
 <li><strong>Consistency</strong>: Ensuring data consistency across services can be trickier, particularly in distributed environments where network latency and failures are common.</li>
 </ol>
 <h2 id="orchestration">Orchestration</h2>
-<p>In contrast, orchestration is like a conductor directing an orchestra — a central service manages the interactions between components, ensuring that each service knows what to do and when.</p>
+<p>In contrast, orchestration is like a conductor directing an orchestra: a central service manages the interactions between components, ensuring that each service knows what to do and when.</p>
 <p>A controller understands the entire system and manages all interactions, enforcing the correct execution of workflows.</p>
 <h3 id="benefits-of-orchestration">Benefits of Orchestration</h3>
 <ol>
@@ -46,7 +46,7 @@
 <ol>
 <li><strong>Single Point of Failure:</strong> A central controller can become a bottleneck and/or a single point of failure. If the orchestrator goes down, it can disrupt the entire workflow.</li>
 <li><strong>Scalability</strong>: The orchestrator must manage all interactions, which can lead to performance issues under heavy load. Scaling the orchestrator itself can be challenging.</li>
-<li><strong>Complexity:</strong> As the system grows, the orchestrator can become overly complex, leading to what I call architectural debt — where teams avoid making changes because the system has become too rigid.</li>
+<li><strong>Complexity:</strong> As the system grows, the orchestrator can become overly complex, leading to what I call architectural debt, where teams avoid making changes because the system has become too rigid.</li>
 <li><strong>Flexibility</strong>: Modifying the workflow often requires updating the orchestrator, which can be more time-consuming than modifying individual services in a choreographed system.</li>
 </ol>
 <h2 id="choosing-the-right-approach">Choosing the Right Approach</h2>
@@ -93,7 +93,7 @@
 </tbody>
 </table>
 <h2 id="why-not-both">Why not both?</h2>
-<p>You don’t have to choose just one approach — many systems benefit from a hybrid model.</p>
+<p>You don’t have to choose just one approach. Many systems benefit from a hybrid model.</p>
 <p>Personally, I lean towards orchestration for internal flows that require robust control, such as payment processing or user onboarding.</p>
 <p>On the other hand, I prefer choreography for asynchronous system-wide communication, since it offers better resilience and scalability.</p>
 <p>By strategically combining both approaches, you can maximise their strengths and build a more resilient system.</p>

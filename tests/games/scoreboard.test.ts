@@ -6,7 +6,7 @@ const TEXT = {
   unavailable: 'World scores unavailable',
   rank: 'World rank #{rank}',
   notSaved: 'Score not saved. Try again later',
-  rateLimited: 'Too many scores submitted. Try again in an hour'
+  rateLimited: 'Too many scores submitted. Try again later'
 };
 
 const state = (over: Partial<Parameters<typeof worldNoteText>[0]> = {}) => ({
@@ -71,13 +71,13 @@ describe('worldNoteText', () => {
    */
   it('reports a rate-limited save ahead of a generic failure and everything else', () => {
     expect(worldNoteText(state({ rateLimited: true }), TEXT)).toBe(
-      'Too many scores submitted. Try again in an hour'
+      'Too many scores submitted. Try again later'
     );
     expect(worldNoteText(state({ rateLimited: true, failed: true }), TEXT)).toBe(
-      'Too many scores submitted. Try again in an hour'
+      'Too many scores submitted. Try again later'
     );
     expect(worldNoteText(state({ rateLimited: true, loaded: true, rank: 1, count: 3 }), TEXT)).toBe(
-      'Too many scores submitted. Try again in an hour'
+      'Too many scores submitted. Try again later'
     );
   });
 });

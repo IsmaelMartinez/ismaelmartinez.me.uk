@@ -5,7 +5,8 @@ const TEXT = {
   loading: 'Loading...',
   unavailable: 'World scores unavailable',
   rank: 'World rank #{rank}',
-  notSaved: 'Score not saved. Try again later'
+  notSaved: 'Score not saved. Try again later',
+  rateLimited: 'Too many scores submitted. Try again later'
 };
 
 const state = (over: Partial<Parameters<typeof worldNoteText>[0]> = {}) => ({
@@ -14,6 +15,7 @@ const state = (over: Partial<Parameters<typeof worldNoteText>[0]> = {}) => ({
   rank: 0,
   count: 0,
   failed: false,
+  rateLimited: false,
   ...over
 });
 
@@ -57,6 +59,25 @@ describe('worldNoteText', () => {
     );
     expect(worldNoteText(state({ failed: true, loaded: true, rank: 1, count: 3 }), TEXT)).toBe(
       'Score not saved. Try again later'
+    );
+  });
+
+  /*
+   * A rate limit means "try again later", not "something is broken" — a
+   * grinding session can hit the API's hourly submission cap well before ten
+   * distinct scores have charted. It gets its own copy rather than sharing
+   * `notSaved`'s, and outranks it the same way `failed` outranks everything
+   * else on this line.
+   */
+  it('reports a rate-limited save ahead of a generic failure and everything else', () => {
+    expect(worldNoteText(state({ rateLimited: true }), TEXT)).toBe(
+      'Too many scores submitted. Try again later'
+    );
+    expect(worldNoteText(state({ rateLimited: true, failed: true }), TEXT)).toBe(
+      'Too many scores submitted. Try again later'
+    );
+    expect(worldNoteText(state({ rateLimited: true, loaded: true, rank: 1, count: 3 }), TEXT)).toBe(
+      'Too many scores submitted. Try again later'
     );
   });
 });

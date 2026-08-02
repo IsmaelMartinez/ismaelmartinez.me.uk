@@ -537,7 +537,18 @@ describe('POST conditional writes', () => {
     expect(await response.json()).toMatchObject({ rank: 1 });
   });
 
-  it('gives up with a 503 rather than retrying forever', async () => {
+  /*
+   * Regression: this used to give up with a 503 and drop the player's score
+   * entirely once every conditional attempt lost the ETag race. But Vercel
+   * Blob documents up to sixty seconds for an overwrite to reach every
+   * reader — far longer than this function's own retry budget — so a read
+   * that keeps looking stale is at least as likely to be that propagation lag
+   * as a genuine rival. The final attempt now writes unconditionally instead
+   * of surrendering, on the same reasoning already applied to a board's first
+   * write: the player's own score must land, even if the read it merged
+   * against was not the very latest.
+   */
+  it('falls back to an unconditional write on the final attempt instead of giving up', async () => {
     let rival = 0;
     const interlope = () => {
       blob.state.onRead = interlope;
@@ -546,9 +557,14 @@ describe('POST conditional writes', () => {
     seed('snake', {}, 'etag-first');
     blob.state.onRead = interlope;
 
-    const response = await POST(postRequest(submission({ nonce: 'doomed' })));
-    expect(response.status).toBe(503);
+    const response = await POST(postRequest(submission({ nonce: 'survives' })));
+
+    expect(response.status).toBe(200);
     expect(vi.mocked(put)).toHaveBeenCalledTimes(3);
+    // The final call is the one that actually lands, and it must not carry an
+    // ETag: nothing here would ever match a store whose ETag changes on every read.
+    expect(vi.mocked(put).mock.calls[2][2]).not.toHaveProperty('ifMatch');
+    expect(stored('snake').top.map(e => e.n)).toEqual(['survives']);
   });
 
   /*

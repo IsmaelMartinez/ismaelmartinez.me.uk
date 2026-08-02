@@ -64,10 +64,18 @@ function canSubmit(): boolean {
  * lie. Keeping them apart here rather than collapsing both to a null is what
  * spares the panel from having to ask a second question to recover the
  * difference.
+ *
+ * `limited` is its own case rather than folding into `failed`: the API's 429
+ * (per-address-per-hour or per-game-per-day cap, see `api/scores.ts`) means
+ * "try again later", not "something is broken". A grinding session on a short
+ * cabinet can hit the hourly cap well before ten distinct scores have charted,
+ * and telling that player the same "not saved, try again" as a genuine outage
+ * would send them refreshing a board that is working exactly as designed.
  */
 export type SubmitResult =
   | { status: 'ok'; rank: number; table: ScoreEntry[] }
   | { status: 'skipped' }
+  | { status: 'limited' }
   | { status: 'failed' };
 
 /**
@@ -138,7 +146,7 @@ export async function submitGlobal(
       keepalive: true,
       signal: AbortSignal.timeout(TIMEOUT_MS)
     });
-    if (!res.ok) return { status: 'failed' };
+    if (!res.ok) return res.status === 429 ? { status: 'limited' } : { status: 'failed' };
     const data = (await res.json()) as { rank?: unknown; table?: unknown };
     return {
       status: 'ok',

@@ -101,19 +101,25 @@ export interface WorldNoteText {
   unavailable: string;
   rank: string;
   notSaved: string;
+  rateLimited: string;
 }
 
 /**
  * The panel's status line, kept pure so it can be unit-tested apart from the
- * DOM wiring. Four states: a run whose submission did not land, a board still
+ * DOM wiring. Five states: a run refused for being over the submission rate
+ * limit, a run whose submission otherwise did not land, a board still
  * loading, a board that could not be reached, or a placed rank.
  *
- * A failed submission speaks first and regardless of the board's own state,
- * because it is the only thing on this panel the player might act on. It is
- * also the only trace such a run leaves: with no per-device table behind it
- * any more, a score that does not reach the shared board is gone, so saying
- * nothing would mean a rate-limited or offline player simply watching their
- * run disappear.
+ * A failed or rate-limited submission speaks first and regardless of the
+ * board's own state, because it is the only thing on this panel the player
+ * might act on. It is also the only trace such a run leaves: with no
+ * per-device table behind it any more, a score that does not reach the shared
+ * board is gone, so saying nothing would mean a rate-limited or offline player
+ * simply watching their run disappear. The two are kept apart rather than
+ * sharing `notSaved`'s copy: a rate limit means "try again later", not
+ * "something is broken", and a grinding session can hit the API's hourly cap
+ * well before ten distinct scores have charted, long before anything is
+ * actually wrong.
  *
  * The rank is shown only when it points at a real row of the board being drawn
  * (`count`). A submission sets the rank alongside the board it charted on, but
@@ -125,9 +131,17 @@ export interface WorldNoteText {
  * row.
  */
 export function worldNoteText(
-  state: { loaded: boolean; pending: boolean; rank: number; count: number; failed: boolean },
+  state: {
+    loaded: boolean;
+    pending: boolean;
+    rank: number;
+    count: number;
+    failed: boolean;
+    rateLimited: boolean;
+  },
   text: WorldNoteText
 ): string {
+  if (state.rateLimited) return text.rateLimited;
   if (state.failed) return text.notSaved;
   if (!state.loaded) return state.pending ? text.loading : text.unavailable;
   return state.rank > 0 && state.rank <= state.count
@@ -167,7 +181,8 @@ export function initScoreboard(
     loading: panel.dataset.tWorldLoading ?? '',
     unavailable: panel.dataset.tWorldUnavailable ?? '',
     rank: panel.dataset.tWorldRank ?? '',
-    notSaved: panel.dataset.tScoreNotSaved ?? ''
+    notSaved: panel.dataset.tScoreNotSaved ?? '',
+    rateLimited: panel.dataset.tScoreRateLimited ?? ''
   };
 
   // Declared up here because `commit` records a finished run through the
@@ -200,6 +215,9 @@ export function initScoreboard(
   // Set when this run's submission was attempted and did not land. Cleared by
   // the next run and by any submission that succeeds.
   let failed = false;
+  // Set when this run's submission was refused for being over the rate limit,
+  // as opposed to any other failure. Cleared the same way as `failed`.
+  let rateLimited = false;
 
   function render() {
     if (!list) return;
@@ -228,7 +246,7 @@ export function initScoreboard(
       // The rank rides on the board actually drawn, so a stale refetch that
       // empties the board can't leave "World rank #1" over it.
       const message = worldNoteText(
-        { loaded, pending: fetching, rank, count: table.length, failed },
+        { loaded, pending: fetching, rank, count: table.length, failed, rateLimited },
         worldText
       );
       note.textContent = message;
@@ -279,6 +297,7 @@ export function initScoreboard(
     runRecord.bank(score);
     if (form) form.hidden = true;
     failed = false;
+    rateLimited = false;
     render();
 
     const token = runToken;
@@ -303,6 +322,7 @@ export function initScoreboard(
       // notice belong to one run and are dropped once that run is past.
       if (token === runToken) {
         if (fresh) rank = fresh.rank;
+        else if (result.status === 'limited') rateLimited = true;
         else if (result.status === 'failed') failed = true;
       }
       render();
@@ -361,6 +381,7 @@ export function initScoreboard(
       panel.hidden = false;
       rank = 0;
       failed = false;
+      rateLimited = false;
       runToken++;
       // Every run counts, whether or not the player is asked for initials:
       // an unanswered form is committed with the remembered ones.

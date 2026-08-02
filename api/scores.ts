@@ -359,6 +359,7 @@ async function record(
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     if (attempt > 0) await pause(RETRY_BACKOFF_MS * attempt);
     const loaded = await readBoard(game, true);
+    const finalAttempt = attempt === WRITE_ATTEMPTS - 1;
 
     /*
      * An absent board normally means this is the first score the game has
@@ -371,7 +372,7 @@ async function record(
      * final attempt, once the backoffs above have given storage time to
      * settle. A genuine first write costs those attempts once per game.
      */
-    if (!loaded && attempt < WRITE_ATTEMPTS - 1) continue;
+    if (!loaded && !finalAttempt) continue;
 
     const board = loaded?.board ?? { top: [], recent: [] };
     const now = Math.floor(Date.now() / 1000);
@@ -411,18 +412,33 @@ async function record(
         contentType: 'application/json',
         allowOverwrite: true,
         cacheControlMaxAge: BLOB_CACHE_SECONDS,
-        // Every write that read an existing board carries its ETag, so a read
-        // that went stale mid-merge is rejected here and retried. Only the
-        // accepted-absence path above writes without one.
-        ...(loaded ? { ifMatch: loaded.etag } : {})
+        /*
+         * Every write that read an existing board carries its ETag, so a read
+         * that went stale mid-merge is rejected here and retried — except on
+         * the final attempt, which writes unconditionally instead. Vercel
+         * Blob documents up to sixty seconds for an overwrite to reach every
+         * reader, far longer than this function's retry budget can span, so a
+         * `loaded` read here can keep looking stale for reasons that have
+         * nothing to do with a rival submission. Refusing to ever write past
+         * that point does not protect a real rival's entry, which this same
+         * merge already carries forward from whatever was last read — it only
+         * guarantees the current player's own score is silently dropped. That
+         * is the same bounded risk already accepted above for a board's first
+         * write, generalised to every write a stale-but-plausible read can
+         * produce.
+         */
+        ...(loaded && !finalAttempt ? { ifMatch: loaded.etag } : {})
       });
     } catch (error) {
-      if (error instanceof BlobPreconditionFailedError) continue;
+      if (error instanceof BlobPreconditionFailedError && !finalAttempt) continue;
       throw error;
     }
 
     return Response.json({ rank: rankOf(next.top, nonce), table: publish(next.top) }, { headers: cors });
   }
 
+  // Unreachable: the final iteration always writes unconditionally and either
+  // returns above or throws out to POST's own catch. Kept only because the
+  // loop's exit is not something the type checker can prove on its own.
   return fail(503, 'board busy, try again', cors);
 }

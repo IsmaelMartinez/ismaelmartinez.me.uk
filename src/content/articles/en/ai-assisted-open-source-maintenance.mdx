@@ -3,20 +3,20 @@ title: "AI-Assisted Open Source: What Changes and What Doesn't"
 description: "How AI tooling fits into maintaining a 7-year open-source project: what it accelerates, what it can't replace, and why the CLAUDE.md file exists."
 publishedDate: 2026-03-03
 tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
-draft: true
+draft: false
 ---
 
 ## Seven Years and Still Growing
 
-teams-for-linux started in 2018. Microsoft had no Linux client and the web app didn't even deliver notifications, which made it fairly useless as a chat app, so I revived an Electron wrapper to scratch my own itch. I didn't expect much beyond that, but the community pushed me to keep maintaining it. It's now closing in on 5,000 stars, 365 forks, and more than 100 people who have landed a commit.
+teams-for-linux started in 2018. Microsoft had no Linux client and the web app didn't even deliver notifications, which made it fairly useless as a chat app, so I revived an Electron wrapper to scratch my own itch. I didn't expect much beyond that, but the community pushed me to keep maintaining it. It's now closing in on 5,000 stars, 370 forks, and more than 100 people who have landed a commit.
 
-That contributor number still catches me off guard. People I've never spoken to turn up with a fix, a bug report, or a PR adding new features. Every now and then a donation arrives from someone who didn't know they were using it, always welcome. Seven years in, that's still how open source works, and the little AI has changed is that some of those contributions now come with AI help, and some people use it better than others, but we're all learning.
+That contributor number still catches me off guard. People I've never spoken to turn up with a fix, a bug report, or a PR adding new features. Seven years in, that's still how open source works, and the little AI has changed is that some of those contributions now come with AI help, and some people use it better than others, but we're all learning.
 
 What AI changed is whether one person can keep pace with a project this size. Adopting it wasn't the origin story. The code, the architecture, and the decisions predate the tools by years. What AI gives me is the room to improve the support and the quality of this product while demand keeps growing. The rest of this article is what that looks like in practice: what it accelerates, what it can't touch, and other details like why there's a CLAUDE.md file in the repo. It's a series of articles: this one is the why, and [the next](/en/articles/ai-assisted-open-source-workflow) is the day-to-day how.
 
 ## What CLAUDE.md Actually Is
 
-Let's start with the elephant in the room. More than one person has taken me to task for having a CLAUDE.md file in the repository. Some assume it means the project is AI-written, vibe coded and little else. That's a misunderstanding of what the file does.
+Let's start with the elephant in the room. More than one person has taken me to task for having a CLAUDE.md file in the repository. Some assume it means the project is AI-written, "vibe coded" and little else. Clearly a misunderstanding of what the file does.
 
 CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, how things are structured, how I like to work with the code, requirements, and other things that get broken again and again. Basically, what I'd normally keep in my head, and the bits that are the way they are for one reason or another.
 
@@ -32,11 +32,11 @@ Implementation of well-understood features is the obvious one. Once I've decided
 
 Dependency upgrades and security patches are where the time savings really add up. The npm ecosystem pushes advisories multiple times a week, and handling each one by hand can eat most of a maintainer's hours.
 
-Exploring unfamiliar APIs is another area where AI shines. Electron's API surface is vast, Wayland has its own quirks, and Linux in general never stops surprising you. Having a tool that can quickly digest relevant documentation, weigh up solutions and patterns, cuts the exploration and planning time significantly.
+Exploring unfamiliar APIs is another area where AI shines. Electron's API surface is vast, Wayland has its own quirks, and Linux in general never stops surprising you. Having a tool that can quickly digest relevant documentation, weigh up solutions and patterns, cuts the exploration, planning, and solving time significantly.
 
 It also helps me do higher-quality work. Thanks to AI, when a new issue comes in, I don't have to lean on memory and intuition alone. I can set it to analyse old issues, look for earlier solutions, and build up an understanding of the problem. It depends less on whether it's a Monday morning or a Friday at ten at night. Basically, giving whoever uses the app a better and faster answer, which is what it's all about in the end.
 
-But AI isn't good for everything. It gives a lot, and it often seems to know more than you. Yet there are things where the human is still in charge. Let's look at those.
+Even so, there are plenty of times when I have to steer it to get to the solution and yes, AI isn't good for everything (however hard they sell it to you everywhere). It gives a lot, and it often seems to know more than you. Yet there are things where the human is still in charge. Let's look at those.
 
 ## What AI Cannot Replace
 
@@ -46,11 +46,11 @@ Deciding what to build and what not to build requires understanding the project'
 
 Community management is entirely human work. When users started pushing back on update frequency (the "chill with updates" conversation), it took empathy, reading the room, and a judgement call about release cadence.
 
-Architectural decisions sit in the same category. When to refactor versus when to patch. Where to draw module boundaries. How much backwards compatibility to maintain and when to break it. These choices shape the project for years and can't be delegated to a tool that optimises for the immediate task.
+Architectural decisions sit in the same category. When to refactor versus when to patch. Where to draw module boundaries. How much backwards compatibility to maintain and when to break it. These choices shape the project for years and can't be delegated to a tool that optimises for the immediate task. Yes, you can ask it, but you're the one who has to make the call.
 
 Release judgement is more nuanced than it sounds. Is this build ready? Should I batch more fixes first? Is the Wayland fix stable enough to ship, or does it need another week of testing? These decisions require context that no tool has access to. Sometimes it's a gut feeling that's hard to explain.
 
-And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a project, and it's entirely a human skill. AI will try everything, everything, everything to help the user, but sometimes saying no beats spending weeks digging a tunnel with no way out.
+And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a project, and it's entirely a human skill. AI will try everything, everything, everything to help the user, but sometimes saying no beats blowing weeks digging a tunnel with no way out.
 
 ## Solo Maintainer Reality
 

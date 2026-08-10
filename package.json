@@ -18,14 +18,14 @@
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.3",
     "@vercel/blob": "^2.6.1",
-    "astro": "^7.1.5"
+    "astro": "^7.1.6"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.0",
     "eslint-plugin-astro": "^3.0.1",
-    "jsdom": "^30.0.0",
+    "jsdom": "^30.0.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"

@@ -26,13 +26,13 @@ Todos estos documentos están vivos, o lo intento, y van mejorando poco a poco c
 
 ## Investigar antes de programar
 
-Con esta base, lo primero que hago siempre es investigar. La IA es muy buena buscando y reuniendo información, sobre todo si está bien estructurada (y no, no necesitas un RAG para eso). Todas las issues y peticiones las paso por la IA para ver si ya lo hemos resuelto o probado. Muchas veces hay algo al respecto, y eso me ahorra un montón de tiempo: con la IA analizo en minutos lo que tardaría días (y que, si no, acabaría dejando para mañana...).
+Con esta base, lo primero que hago siempre es investigar. La IA es muy buena buscando y reuniendo información, sobre todo si está bien estructurada (y no, no necesitas un RAG para eso). Todas las issues y peticiones las paso por la IA para ver si ya lo hemos resuelto o probado (la respuesta, eso sí, siempre la escribo yo). Muchas veces hay algo al respecto, y eso me ahorra un montón de tiempo: con la IA analizo en minutos lo que tardaría días (y que, si no, acabaría dejando para mañana...).
 
 Si entonces creo que hay un bug o que se puede añadir una funcionalidad, hago una investigación. Es importante centrar siempre las primeras iteraciones en investigar, recoger datos y evaluar hipótesis. Todo esto lo delego en el agente de IA. Describo el problema ("compartir pantalla falla en Wayland con la última actualización de Electron") y el agente investiga el código relevante, el registro de cambios y las issues de upstream, y me trae un informe. Lo guío y corrijo si hace falta y, para lo que no tengo claro, le pido un prototipo desechable que pruebe la hipótesis.
 
 A veces es una sola iteración; otras, varias sesiones. Para eso tengo también documentos de investigación en el repositorio. Cuando un enfoque parece viable, le pido al agente que escriba un plan de acción. Lo reviso y abro otra conversación para reducir riesgos y ganar claridad. Solo entonces empieza la implementación.
 
-Para lo sencillo, esa conversación se acaba enseguida; en algunos casos, como actualizar dependencias, el proceso es casi automático y no hacen falta prototipos ni nada de eso. Para lo complejo puede alargarse varias sesiones, así que el documento de investigación se divide en fases. 
+Para lo sencillo, esa conversación se acaba enseguida; en algunos casos, como actualizar dependencias, el proceso es casi automático y no hacen falta prototipos ni nada de eso (aunque el diff lo sigo leyendo yo: las dependencias son justo donde menos conviene despistarse). Para lo complejo puede alargarse varias sesiones, así que el documento de investigación se divide en fases. 
 
 Para ser sincero, cuando los documentos de investigación acaban siendo largos, pocas veces acabamos implementándolo todo: que la IA pueda generarlas sin esfuerzo no significa que las necesites, y eso es complejidad regalada. El proceso se adapta; lo que no cambia es que entiendo qué está pasando antes de comprometerme con un enfoque.
 
@@ -48,7 +48,7 @@ Las actualizaciones de dependencias son el tipo de sesión más frecuente, pero 
 
 La más difícil de todas es seguirle el ritmo a la aplicación web de Teams, que cambia sin previo aviso. Programar a la defensiva contra esos cambios es de lo más complicado del proyecto. Cuando algo se rompe, el agente me ayuda a clasificarlo: ¿es una regresión nuestra o un cambio de upstream? Luego investiga las diferencias en el DOM, en la red o en las respuestas de la API. Algunos cambios se pueden sortear; otros no. Reconocer cuándo un problema no tiene solución es una decisión humana, y la respuesta a los usuarios es cosa mía.
 
-Nada se publica sin pasar los controles de siempre: CI tiene que estar en verde sin excepciones (el linter, la comprobación de tipos y toda la batería de tests), cada commit asistido por IA lleva su etiqueta `Co-authored-by`, cada diff se lee a mano, y las notas de la versión se redactan para explicar el *porqué* en vez de listar archivos.
+Nada se publica sin pasar los controles que ya salieron en el primer artículo: cada diff leído a mano y el CI en verde sin excepciones (el linter, los tests unitarios y los end-to-end), con su etiqueta `Co-authored-by` en cada commit asistido. Aquí solo añado uno: las notas de la versión se redactan para explicar el *porqué* en vez de listar archivos.
 
 Cuando ya has puesto suficientes restricciones alrededor de la IA (CLAUDE.md, el ciclo de investigar y luego prototipar, la revisión manual, los controles de CI), dejas de usar una herramienta y pasas a dirigir un sistema. El patrón es el mismo que aplicarías a cualquier software que crece: construyes confianza con datos, añades solidez según avanzas y simplificas o quitas lo que deja de ganarse su sitio. La diferencia es que aquí los ciclos van mucho más rápido. Trátalo como a un equipo.
 

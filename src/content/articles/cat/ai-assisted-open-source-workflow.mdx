@@ -26,13 +26,13 @@ Tots aquests documents estan vius, o ho intento, i van millorant a poc a poc amb
 
 ## Investigar abans de programar
 
-Amb aquesta base, el primer que faig sempre és investigar. La IA és molt bona buscant i agregant informació, sobretot si està ben estructurada (i no, no necessites un RAG per a això). Totes les issues i peticions les passo per la IA per veure si ja ho hem resolt o provat. Sovint hi ha alguna cosa al respecte, i això m'estalvia molt de temps: amb la IA analitzo en minuts el que trigaria dies (i que, si no, acabaria deixant per demà...).
+Amb aquesta base, el primer que faig sempre és investigar. La IA és molt bona buscant i agregant informació, sobretot si està ben estructurada (i no, no necessites un RAG per a això). Totes les issues i peticions les passo per la IA per veure si ja ho hem resolt o provat (la resposta, això sí, sempre l'escric jo). Sovint hi ha alguna cosa al respecte, i això m'estalvia molt de temps: amb la IA analitzo en minuts el que trigaria dies (i que, si no, acabaria deixant per demà...).
 
 Si llavors crec que hi ha un bug o que es pot afegir una funcionalitat, faig una investigació. És important centrar sempre les primeres iteracions a investigar, recollir dades i avaluar hipòtesis. Tot això ho delego en l'agent d'IA. Descric el problema ("compartir pantalla falla a Wayland amb la darrera actualització d'Electron") i l'agent investiga el codi rellevant, el registre de canvis i les issues d'upstream, i em porta un informe. El guio i el corregeixo si cal i, per al que no tinc clar, li demano un prototip d'usar i llençar que provi la hipòtesi.
 
 De vegades és una sola iteració; altres, diverses sessions. Per això tinc també documents d'investigació al repositori. Quan un enfocament sembla viable, li demano a l'agent que escrigui un pla d'acció. El reviso i obro una altra conversa per reduir riscos i guanyar claredat. Només llavors comença la implementació.
 
-Per al que és senzill, aquesta conversa s'acaba de seguida; en alguns casos, com actualitzar dependències, el procés és gairebé automàtic i no calen prototips ni res semblant. Per al que és complex pot allargar-se diverses sessions, així que el document d'investigació es divideix en fases.
+Per al que és senzill, aquesta conversa s'acaba de seguida; en alguns casos, com actualitzar dependències, el procés és gairebé automàtic i no calen prototips ni res semblant (tot i que el diff me'l continuo llegint jo: les dependències són justament on menys convé badar). Per al que és complex pot allargar-se diverses sessions, així que el document d'investigació es divideix en fases.
 
 Per ser sincer, quan els documents d'investigació acaben sent llargs, poques vegades acabem implementant-ho tot: que la IA pugui generar-les sense esforç no vol dir que les necessitis, i això és complexitat regalada. El procés s'adapta; el que no canvia és que entenc què està passant abans de comprometre'm amb un enfocament.
 
@@ -48,7 +48,7 @@ Les actualitzacions de dependències són el tipus de sessió més freqüent, pe
 
 La més difícil de totes és seguir-li el ritme a l'aplicació web de Teams, que canvia sense avís previ. Programar a la defensiva contra aquests canvis és de les parts més complicades del projecte. Quan alguna cosa es trenca, l'agent m'ajuda a classificar-ho: és una regressió nostra o un canvi d'upstream? Després investiga les diferències al DOM, a la xarxa o a les respostes de l'API. Alguns canvis es poden sortejar; d'altres no. Reconèixer quan un problema no té solució és una decisió humana, i la resposta als usuaris és cosa meva.
 
-Res no es publica sense passar els controls de sempre: CI ha d'estar en verd sense excepcions (el linter, la comprovació de tipus i tota la bateria de tests), cada commit assistit per IA porta la seva etiqueta `Co-authored-by`, cada diff es llegeix a mà, i les notes de la versió es redacten per explicar el *perquè* en lloc de llistar arxius.
+Res no es publica sense passar els controls que ja van sortir al primer article: cada diff llegit a mà i el CI en verd sense excepcions (el linter, els tests unitaris i els end-to-end), amb la seva etiqueta `Co-authored-by` a cada commit assistit. Aquí només n'afegeixo un: les notes de la versió es redacten per explicar el *perquè* en lloc de llistar arxius.
 
 Un cop has posat prou restriccions al voltant de la IA (CLAUDE.md, el cicle d'investigar i després prototipar, la revisió manual, els controls de CI), deixes d'usar una eina i passes a dirigir un sistema. El patró és el mateix que aplicaries a qualsevol software que creix: construeixes confiança amb dades, afegeixes solidesa a mesura que avances i simplifiques o treus el que deixa de guanyar-se el seu lloc. La diferència és que aquí els cicles van molt més ràpid. Tracta'l com un equip.
 

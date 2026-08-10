@@ -18,7 +18,7 @@ Aquest projecte té diversos nivells de documentació. Primer, els documents tè
 
 Després hi ha els documents per al contribuïdor. El clàssic CONTRIBUTING.md, al qual ara li puc treure part de la palla tècnica, que ja viu en aquells altres documents.
 
-També tinc una altra categoria per a la investigació, per als projectes o parts que requereixen una fase d'implementació. De vegades fins i tot pujo els plans d'implementació, encara que aquests dos tipus de document els tracto de manera més efímera: un cop la fase o el projecte s'acaba, actualitzo els altres documents o en creo de nous, i aquests els esborro. Si necessito aquells detalls, sempre puc mirar l'historial de git.
+També tinc una altra categoria per a la investigació, per als projectes o parts que requereixen una fase d'implementació. De vegades fins i tot pujo els plans d'implementació, encara que aquests dos tipus de document els tracto de manera més efímera: viuen mentre dura la feina, i més endavant explico què en faig.
 
 I, finalment, hi ha els documents per als usuaris. Una documentació bona i concisa és essencial quan mantens tants usuaris. No vull que la gent perdi el temps obrint issues al repositori quan hi ha una opció de configuració que resol el seu problema.
 
@@ -26,7 +26,7 @@ Tots aquests documents estan vius, o ho intento, i van millorant a poc a poc amb
 
 ## Investigar abans de programar
 
-Amb aquesta base, el primer que faig sempre és investigar. La IA és molt bona buscant i agregant informació, sobretot si està ben estructurada (i no, no necessites un RAG per a això). Totes les issues i peticions les passo per la IA per veure si ja ho hem resolt o provat (la resposta, això sí, sempre l'escric jo). Sovint hi ha alguna cosa al respecte, i això m'estalvia molt de temps: amb la IA analitzo en minuts el que trigaria dies (i que, si no, acabaria deixant per demà...).
+Amb aquesta base, el primer que faig sempre és investigar. La IA és molt bona buscant i agregant informació, sobretot si està ben estructurada (i no, no necessites un RAG per a això). Totes les issues i peticions les passo per la IA per veure si ja ho hem resolt o provat (la resposta, això sí, sempre l'escric jo). Sovint hi ha alguna cosa al respecte, i això m'estalvia molt de temps: amb la IA analitzo en minuts el que a mà em menjaria la tarda (i que, si no, acabaria deixant per demà...).
 
 Si llavors crec que hi ha un bug o que es pot afegir una funcionalitat, faig una investigació. És important centrar sempre les primeres iteracions a investigar, recollir dades i avaluar hipòtesis. Tot això ho delego en l'agent d'IA. Descric el problema ("compartir pantalla falla a Wayland amb la darrera actualització d'Electron") i l'agent investiga el codi rellevant, el registre de canvis i les issues d'upstream, i em porta un informe. El guio i el corregeixo si cal i, per al que no tinc clar, li demano un prototip d'usar i llençar que provi la hipòtesi.
 
@@ -44,13 +44,13 @@ Quan la feina acaba, els documents d'investigació es destil·len en un ADR i/o 
 
 ## Mantenir el ritme
 
-Les actualitzacions de dependències són el tipus de sessió més freqüent, però no l'únic. Les sessions de seguretat avaluen i apliquen els pegats dels avisos. Les passades de documentació actualitzen els README i refresquen CLAUDE.md amb els invariants acabats de descobrir. Les sessions de mètriques miren les tendències d'issues, l'activitat dels contribuïdors, els temps de compilació o els canvis en la cobertura de tests. Cadascuna segueix la mateixa forma: jo fixo l'abast, la IA executa, jo reviso.
+Les actualitzacions de dependències són el tipus de sessió més freqüent, i avui dia estan gairebé del tot automatitzades: el bot obre el PR i jo només hi entro quan alguna cosa se surt del guió. Però no són l'únic tipus de sessió. Les sessions de seguretat avaluen i apliquen els pegats dels avisos. Les passades de documentació actualitzen els README i refresquen CLAUDE.md amb els invariants acabats de descobrir. Les sessions de mètriques miren les tendències d'issues, l'activitat dels contribuïdors o els temps de compilació (i per vigilar l'estat general del projecte hi ha el repo-butler, però d'aquest en parlem un altre dia). Cadascuna segueix la mateixa forma: jo fixo l'abast, la IA executa, jo reviso.
 
 La més difícil de totes és seguir-li el ritme a l'aplicació web de Teams, que canvia sense avís previ. Programar a la defensiva contra aquests canvis és de les parts més complicades del projecte. Quan alguna cosa es trenca, l'agent m'ajuda a classificar-ho: és una regressió nostra o un canvi d'upstream? Després investiga les diferències al DOM, a la xarxa o a les respostes de l'API. Alguns canvis es poden sortejar; d'altres no. Reconèixer quan un problema no té solució és una decisió humana, i la resposta als usuaris és cosa meva.
 
 Res no es publica sense passar els controls que ja van sortir al primer article: cada diff llegit a mà i el CI en verd sense excepcions (el linter, els tests unitaris i els end-to-end), amb la seva etiqueta `Co-authored-by` a cada commit assistit. Aquí només n'afegeixo un: les notes de la versió es redacten per explicar el *perquè* en lloc de llistar arxius.
 
-Un cop has posat prou restriccions al voltant de la IA (CLAUDE.md, el cicle d'investigar i després prototipar, la revisió manual, els controls de CI), deixes d'usar una eina i passes a dirigir un sistema. El patró és el mateix que aplicaries a qualsevol software que creix: construeixes confiança amb dades, afegeixes solidesa a mesura que avances i simplifiques o treus el que deixa de guanyar-se el seu lloc. La diferència és que aquí els cicles van molt més ràpid. Tracta'l com un equip.
+Un cop has posat prou restriccions al voltant de la IA (CLAUDE.md, el cicle d'investigar i després prototipar, la revisió manual, els controls de CI), deixes d'usar una eina i passes a dirigir un sistema. El patró és el mateix que aplicaries a qualsevol software que creix: construeixes confiança amb dades, afegeixes solidesa a mesura que avances i simplifiques o treus el que deixa de guanyar-se el seu lloc. La diferència és que aquí els cicles van molt més ràpid.
 
 ## Reflexió final
 

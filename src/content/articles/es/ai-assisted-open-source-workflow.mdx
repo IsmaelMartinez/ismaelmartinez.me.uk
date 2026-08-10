@@ -18,7 +18,7 @@ Este proyecto tiene varios niveles de documentación. Primero, los documentos t�
 
 Luego están los documentos para el contribuidor. El clásico CONTRIBUTING.md, al que ahora le puedo quitar parte de la paja técnica, que ya vive en esos otros documentos.
 
-También tengo otra categoría para la investigación, para esos proyectos o partes que requieren una fase de implementación. A veces incluso subo los planes de implementación, aunque estos dos tipos de documentos los trato de forma más efímera: una vez que la fase o el proyecto se acaba, actualizo los demás documentos o creo nuevos, y los borro. Si necesito esos detalles, siempre puedo mirar el historial de git.
+También tengo otra categoría para la investigación, para esos proyectos o partes que requieren una fase de implementación. A veces incluso subo los planes de implementación, aunque estos dos tipos de documentos los trato de forma más efímera: viven mientras dura el trabajo, y luego cuento qué hago con ellos.
 
 Y, por último, están los documentos para los usuarios. Una documentación buena y concisa es esencial cuando mantienes tantos usuarios. No quiero que la gente pierda el tiempo abriendo issues en el repositorio cuando hay una opción de configuración que resuelve su problema.
 
@@ -26,7 +26,7 @@ Todos estos documentos están vivos, o lo intento, y van mejorando poco a poco c
 
 ## Investigar antes de programar
 
-Con esta base, lo primero que hago siempre es investigar. La IA es muy buena buscando y reuniendo información, sobre todo si está bien estructurada (y no, no necesitas un RAG para eso). Todas las issues y peticiones las paso por la IA para ver si ya lo hemos resuelto o probado (la respuesta, eso sí, siempre la escribo yo). Muchas veces hay algo al respecto, y eso me ahorra un montón de tiempo: con la IA analizo en minutos lo que tardaría días (y que, si no, acabaría dejando para mañana...).
+Con esta base, lo primero que hago siempre es investigar. La IA es muy buena buscando y reuniendo información, sobre todo si está bien estructurada (y no, no necesitas un RAG para eso). Todas las issues y peticiones las paso por la IA para ver si ya lo hemos resuelto o probado (la respuesta, eso sí, siempre la escribo yo). Muchas veces hay algo al respecto, y eso me ahorra un montón de tiempo: con la IA analizo en minutos lo que a mano me comería la tarde (y que, si no, acabaría dejando para mañana...).
 
 Si entonces creo que hay un bug o que se puede añadir una funcionalidad, hago una investigación. Es importante centrar siempre las primeras iteraciones en investigar, recoger datos y evaluar hipótesis. Todo esto lo delego en el agente de IA. Describo el problema ("compartir pantalla falla en Wayland con la última actualización de Electron") y el agente investiga el código relevante, el registro de cambios y las issues de upstream, y me trae un informe. Lo guío y corrijo si hace falta y, para lo que no tengo claro, le pido un prototipo desechable que pruebe la hipótesis.
 
@@ -44,13 +44,13 @@ Cuando el trabajo termina, los documentos de investigación se destilan en un AD
 
 ## Mantener el ritmo
 
-Las actualizaciones de dependencias son el tipo de sesión más frecuente, pero no el único. Las sesiones de seguridad evalúan y aplican los parches de los avisos. Las pasadas de documentación actualizan los README y refrescan CLAUDE.md con los invariantes recién descubiertos. Las sesiones de métricas miran las tendencias de issues, la actividad de los contribuidores, los tiempos de compilación o los cambios en la cobertura de tests. Cada una sigue la misma forma: yo fijo el alcance, la IA ejecuta, yo reviso.
+Las actualizaciones de dependencias son el tipo de sesión más frecuente, y hoy en día están casi del todo automatizadas: el bot abre el PR y yo solo entro cuando algo se sale del guion. Pero no son el único tipo de sesión. Las sesiones de seguridad evalúan y aplican los parches de los avisos. Las pasadas de documentación actualizan los README y refrescan CLAUDE.md con los invariantes recién descubiertos. Las sesiones de métricas miran las tendencias de issues, la actividad de los contribuidores o los tiempos de compilación (y para vigilar el estado general del proyecto está el repo-butler, pero de ese hablamos otro día). Cada una sigue la misma forma: yo fijo el alcance, la IA ejecuta, yo reviso.
 
 La más difícil de todas es seguirle el ritmo a la aplicación web de Teams, que cambia sin previo aviso. Programar a la defensiva contra esos cambios es de lo más complicado del proyecto. Cuando algo se rompe, el agente me ayuda a clasificarlo: ¿es una regresión nuestra o un cambio de upstream? Luego investiga las diferencias en el DOM, en la red o en las respuestas de la API. Algunos cambios se pueden sortear; otros no. Reconocer cuándo un problema no tiene solución es una decisión humana, y la respuesta a los usuarios es cosa mía.
 
 Nada se publica sin pasar los controles que ya salieron en el primer artículo: cada diff leído a mano y el CI en verde sin excepciones (el linter, los tests unitarios y los end-to-end), con su etiqueta `Co-authored-by` en cada commit asistido. Aquí solo añado uno: las notas de la versión se redactan para explicar el *porqué* en vez de listar archivos.
 
-Cuando ya has puesto suficientes restricciones alrededor de la IA (CLAUDE.md, el ciclo de investigar y luego prototipar, la revisión manual, los controles de CI), dejas de usar una herramienta y pasas a dirigir un sistema. El patrón es el mismo que aplicarías a cualquier software que crece: construyes confianza con datos, añades solidez según avanzas y simplificas o quitas lo que deja de ganarse su sitio. La diferencia es que aquí los ciclos van mucho más rápido. Trátalo como a un equipo.
+Cuando ya has puesto suficientes restricciones alrededor de la IA (CLAUDE.md, el ciclo de investigar y luego prototipar, la revisión manual, los controles de CI), dejas de usar una herramienta y pasas a dirigir un sistema. El patrón es el mismo que aplicarías a cualquier software que crece: construyes confianza con datos, añades solidez según avanzas y simplificas o quitas lo que deja de ganarse su sitio. La diferencia es que aquí los ciclos van mucho más rápido.
 
 ## Reflexión final
 

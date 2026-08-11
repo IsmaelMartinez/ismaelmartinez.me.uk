@@ -2,7 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import ProjectCard from '../../components/ProjectCard.astro';
 import PortfolioHealthBadge from '../../components/PortfolioHealthBadge.astro';
-import { useTranslations, locales } from '../../i18n/translations';
+import { useTranslations, locales, getLocalizedPath } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { projects, externalContributions } from '../../data/projects';
 import { fetchPortfolioHealth } from '../../data/health';
@@ -24,6 +24,7 @@ const health = await fetchPortfolioHealth();
         <p class="page-description">{t('section.projects.description')}</p>
         <div class="badge-row">
           <PortfolioHealthBadge health={health} lang={lang} t={t} />
+          <a href={getLocalizedPath('/health', lang)} class="health-link">{t('projects.healthLink')} →</a>
         </div>
       </header>
       <div class="grid grid-2">
@@ -66,6 +67,21 @@ const health = await fetchPortfolioHealth();
 
   .badge-row {
     margin-top: var(--space-md);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+
+  .health-link {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+
+  .health-link:hover {
+    color: var(--color-accent);
   }
 
   .contributions {

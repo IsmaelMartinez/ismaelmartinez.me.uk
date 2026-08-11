@@ -19,7 +19,6 @@ export const translations = {
     'nav.home': 'Home',
     'nav.projects': 'Projects',
     'nav.writing': 'Writing',
-    'nav.connect': 'Connect',
     'nav.skipToContent': 'Skip to content',
     'nav.mainNavigation': 'Main navigation',
     'nav.languageSwitcher': 'Language switcher',
@@ -37,6 +36,7 @@ export const translations = {
     // Sections
     'section.projects': 'Open Source Projects',
     'section.projects.description': 'Some of my contributions to the open source community',
+    'projects.healthLink': 'Project health',
     'section.contributions': 'Contributions elsewhere',
     'section.contributions.description': "Projects I don't maintain, but have landed fixes and features in.",
     'section.writing': 'Latest Writing',
@@ -483,10 +483,8 @@ export const translations = {
     'about.focus2': 'Most of my architecture work is event-driven, on AWS. I care about the unglamorous parts that decide whether a system survives contact with production: observability, clear contracts, and knowing what happens when a consumer falls over.',
     'about.focus3Title': 'Open source',
     'about.focus3': 'I maintain teams-for-linux and a handful of smaller tools, and I contribute to other projects when I can, among them aws-cdk, electron, and asyncapi. Open, accessible, and respectful of your data is the bar I aim for.',
-    'about.elsewhereTitle': 'Find Me Elsewhere',
 
     // Health
-    'nav.health': 'Health',
     'health.title': 'Portfolio Health',
     'health.description': 'Health status across all open source repositories, powered by Repo Butler',
     'health.pulse.gold': 'Gold',
@@ -513,7 +511,6 @@ export const translations = {
     'nav.home': 'Inicio',
     'nav.projects': 'Proyectos',
     'nav.writing': 'Escritos',
-    'nav.connect': 'Conectar',
     'nav.skipToContent': 'Saltar al contenido',
     'nav.mainNavigation': 'Navegación principal',
     'nav.languageSwitcher': 'Selector de idioma',
@@ -531,6 +528,7 @@ export const translations = {
     // Sections
     'section.projects': 'Proyectos Open Source',
     'section.projects.description': 'Algunas de mis contribuciones a la comunidad de código abierto',
+    'projects.healthLink': 'Salud de los proyectos',
     'section.contributions': 'Contribuciones en otros proyectos',
     'section.contributions.description': 'Proyectos que no mantengo, pero en los que he aportado correcciones y funcionalidades.',
     'section.writing': 'Últimos Escritos',
@@ -979,10 +977,8 @@ export const translations = {
     'about.focus2': 'La mayor parte de mi trabajo de arquitectura es orientado a eventos, sobre AWS. Me importan las partes poco lucidas que deciden si un sistema sobrevive al contacto con producción: observabilidad, contratos claros y saber qué pasa cuando un consumidor se cae.',
     'about.focus3Title': 'Código abierto',
     'about.focus3': 'Mantengo teams-for-linux y un puñado de herramientas más pequeñas, y contribuyo a otros proyectos cuando puedo, entre ellos aws-cdk, electron y asyncapi. Abierto, accesible y respetuoso con tus datos es el listón al que apunto.',
-    'about.elsewhereTitle': 'Encuéntrame en otros sitios',
 
     // Health
-    'nav.health': 'Salud',
     'health.title': 'Salud del Portfolio',
     'health.description': 'Estado de salud de todos los repositorios de código abierto, con Repo Butler',
     'health.pulse.gold': 'Oro',
@@ -1009,7 +1005,6 @@ export const translations = {
     'nav.home': 'Inici',
     'nav.projects': 'Projectes',
     'nav.writing': 'Escrits',
-    'nav.connect': 'Connectar',
     'nav.skipToContent': 'Saltar al contingut',
     'nav.mainNavigation': 'Navegació principal',
     'nav.languageSwitcher': 'Selector d\'idioma',
@@ -1027,6 +1022,7 @@ export const translations = {
     // Sections
     'section.projects': 'Projectes Open Source',
     'section.projects.description': 'Algunes de les meves contribucions a la comunitat de codi obert',
+    'projects.healthLink': 'Salut dels projectes',
     'section.contributions': 'Contribucions en altres projectes',
     'section.contributions.description': 'Projectes que no mantinc, però on he aportat correccions i funcionalitats.',
     'section.writing': 'Últims Escrits',
@@ -1475,10 +1471,8 @@ export const translations = {
     'about.focus2': "La major part de la meva feina d'arquitectura és orientada a esdeveniments, sobre AWS. M'importen les parts poc lluïdes que decideixen si un sistema sobreviu al contacte amb producció: observabilitat, contractes clars i saber què passa quan un consumidor cau.",
     'about.focus3Title': 'Codi obert',
     'about.focus3': "Mantinc teams-for-linux i un grapat d'eines més petites, i contribueixo a altres projectes quan puc, entre ells aws-cdk, electron i asyncapi. Obert, accessible i respectuós amb les teves dades és el llistó al qual apunto.",
-    'about.elsewhereTitle': "Troba'm en altres llocs",
 
     // Health
-    'nav.health': 'Salut',
     'health.title': 'Salut del Portfolio',
     'health.description': 'Estat de salut de tots els repositoris de codi obert, amb Repo Butler',
     'health.pulse.gold': 'Or',

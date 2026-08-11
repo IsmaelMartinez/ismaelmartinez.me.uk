@@ -111,8 +111,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           <li><a href={getLocalizedPath('/about', lang)} aria-current={currentPath === '/about' ? 'page' : undefined}>{t('nav.about')}</a></li>
           <li><a href={getLocalizedPath('/projects', lang)} aria-current={currentPath === '/projects' ? 'page' : undefined}>{t('nav.projects')}</a></li>
           <li><a href={getLocalizedPath('/writing', lang)} aria-current={currentPath === '/writing' ? 'page' : undefined}>{t('nav.writing')}</a></li>
-          <li><a href={getLocalizedPath('/health', lang)} aria-current={currentPath === '/health' ? 'page' : undefined}>{t('nav.health')}</a></li>
-          <li><a href={getLocalizedPath('/connect', lang)} aria-current={currentPath === '/connect' ? 'page' : undefined}>{t('nav.connect')}</a></li>
         </ul>
 
         <div class="nav-actions">
@@ -146,7 +144,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> {t('footer.and')} ☕
         </p>
         <p class="footer-links">
-          <a href={getLocalizedPath('/connect', lang)} class="footer-link">{t('cta.connect')}</a>
+          <a href={`${getLocalizedPath('/about', lang)}#connect`} class="footer-link">{t('cta.connect')}</a>
           <span class="footer-separator">·</span>
           <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">RSS</a>
         </p>

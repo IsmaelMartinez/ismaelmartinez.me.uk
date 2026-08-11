@@ -20,5 +20,12 @@ export default defineConfig({
       prefixDefaultLocale: true,
       redirectToDefaultLocale: true
     }
+  },
+  // The Connect page was merged into About (see CLAUDE.md); these keep old
+  // bookmarks and inbound links landing on the section that replaced it.
+  redirects: {
+    '/en/connect': '/en/about#connect',
+    '/es/connect': '/es/about#connect',
+    '/cat/connect': '/cat/about#connect'
   }
 });

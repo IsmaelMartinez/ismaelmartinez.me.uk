@@ -171,7 +171,7 @@ const relatedArticles = scoredArticles
 
         <div class="article-discuss">
           <span>{t('article.discussPrompt')}</span>
-          <a href={getLocalizedPath('/connect', lang)}>{t('article.discussLink')} →</a>
+          <a href={`${getLocalizedPath('/about', lang)}#connect`}>{t('article.discussLink')} →</a>
         </div>
 
         <a href={getLocalizedPath('/writing', lang)} class="back-link">

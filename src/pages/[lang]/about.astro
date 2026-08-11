@@ -1,9 +1,10 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import ContactCTA from '../../components/ContactCTA.astro';
+import LinkCard from '../../components/LinkCard.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
-import { socialLinks } from '../../data/links';
+import { socialLinks, feedLink } from '../../data/links';
 import { personJsonLd, toJsonLd } from '../../data/person';
 
 export function getStaticPaths() {
@@ -12,6 +13,9 @@ export function getStaticPaths() {
 
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
+
+const readLinks = [{ ...feedLink, url: `/${lang}/rss.xml` }, ...socialLinks.filter(link => link.group === 'read')];
+const connectLinks = socialLinks.filter(link => link.group === 'connect');
 
 const focusAreas = [
   { icon: '🤖', title: t('about.focus1Title'), body: t('about.focus1') },
@@ -55,15 +59,26 @@ const aboutJsonLd = {
           </div>
         </div>
 
-        <div class="about-section">
-          <h2>{t('about.elsewhereTitle')}</h2>
-          <div class="social-row">
-            {socialLinks.map(link => (
-              <a href={link.url} class="social-pill" target="_blank" rel="noopener noreferrer">
-                <span aria-hidden="true">{link.icon}</span>
-                {link.name}
-              </a>
-            ))}
+        <div class="about-section" id="connect">
+          <h2>{t('section.connect')}</h2>
+          <p>{t('section.connect.description')}</p>
+
+          <div class="link-group">
+            <h3 class="group-title">{t('connect.readTitle')}</h3>
+            <div class="links-list">
+              {readLinks.map(link => (
+                <LinkCard link={link} lang={lang} />
+              ))}
+            </div>
+          </div>
+
+          <div class="link-group">
+            <h3 class="group-title">{t('connect.connectTitle')}</h3>
+            <div class="links-list">
+              {connectLinks.map(link => (
+                <LinkCard link={link} lang={lang} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -135,32 +150,23 @@ const aboutJsonLd = {
     }
   }
 
-  .social-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-md);
+  .link-group {
+    margin-top: var(--space-xl);
   }
 
-  .social-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-lg);
-    background: var(--color-bg-secondary);
-    border: var(--frame-width) solid var(--color-frame);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-btn);
-    color: var(--color-text);
+  .group-title {
+    font-size: 0.8rem;
     font-weight: 700;
-    font-size: 0.82rem;
-    letter-spacing: 0.06em;
     text-transform: uppercase;
-    transition: transform 0.08s ease, box-shadow 0.08s ease, color 0.2s ease;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-md);
   }
 
-  .social-pill:hover {
-    transform: translate(2px, 2px);
-    box-shadow: var(--shadow-btn-pressed);
-    color: var(--color-accent);
+  .links-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-width: 600px;
   }
 </style>

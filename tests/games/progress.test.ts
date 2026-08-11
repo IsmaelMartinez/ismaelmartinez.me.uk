@@ -75,6 +75,13 @@ describe('visibleCabinets', () => {
     // The floor renders straight from this return value, so its shape is the
     // spoiler boundary: whatever the progress, no chain id beyond `next` may
     // appear anywhere in it.
+    //
+    // The floor-wide invariant this serves is narrower than "hidden games are
+    // secret": it is that no PLAINTEXT hidden-cabinet identity (marquee name,
+    // icon, colour, tagline) reaches the built HTML or the floor's JS bundle.
+    // The game pages stay public, sitemapped routes, and the page's base64
+    // data island is trivially reversible by anyone who cares — that is
+    // accepted. This guards the casual reveal, not secrecy.
     for (const doneSet of [done(), done('first'), done('second')]) {
       const state = visibleCabinets(chain, doneSet);
       const named = JSON.stringify(state);
@@ -143,14 +150,57 @@ describe('completedGames', () => {
     for (const id of UNLOCK_CHAIN) markDone(id, 10);
     expect(completedGames()).toEqual(new Set(UNLOCK_CHAIN));
   });
+
+  it("counts a Cascade countdown run toward the chain's cascade link", () => {
+    // Countdown runs record under their own scoreboard gameId, which the
+    // chain never reads directly.
+    markDone('cascade-countdown', 900);
+    expect(localStorage.getItem(doneKey('cascade'))).toBe('1');
+    expect(completedGames().has('cascade')).toBe(true);
+  });
+
+  it('seeds cascade from a countdown-only personal best', () => {
+    localStorage.setItem(bestKey('cascade-countdown'), '4200');
+    expect(completedGames().has('cascade')).toBe(true);
+  });
 });
 
 describe('storage resilience', () => {
-  it('treats an unavailable localStorage as a fresh floor and never throws', () => {
+  it('never throws when localStorage is unavailable', () => {
     vi.stubGlobal('localStorage', undefined);
     try {
       expect(() => markDone('snake', 10)).not.toThrow();
-      expect(completedGames().size).toBe(0);
+      expect(() => completedGames()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fails OPEN when storage is unusable: the whole chain renders unlocked', () => {
+    // Progress could never be recorded on such a device, so gating the floor
+    // would strand the player at one cabinet behind a hint promising an
+    // unlock that can never land.
+    vi.stubGlobal('localStorage', undefined);
+    try {
+      expect(completedGames()).toEqual(new Set(UNLOCK_CHAIN));
+      const { unlocked, next } = visibleCabinets(UNLOCK_CHAIN, completedGames());
+      expect(unlocked).toEqual([...UNLOCK_CHAIN]);
+      expect(next).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fails OPEN when writes throw (Safari private browsing)', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+      removeItem: () => {}
+    });
+    try {
+      expect(completedGames(['a', 'b', 'c'])).toEqual(new Set(['a', 'b', 'c']));
     } finally {
       vi.unstubAllGlobals();
     }

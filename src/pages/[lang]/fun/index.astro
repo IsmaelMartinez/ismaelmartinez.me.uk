@@ -20,9 +20,17 @@ const t = useTranslations(lang);
 //
 // THE NEXT CABINET IS A MYSTERY. Unlock state lives client-side, so only the
 // always-on first cabinet and one anonymous shrouded silhouette are rendered
-// here; the client script below clones the first cabinet and patches in the
-// art (from src/data/arcadeCabinets.ts) for every cabinet the device has
-// unlocked. View-source therefore never names a hidden game.
+// here; every chain cabinet's display data (name, icon, colour, localized
+// copy) is composed in this frontmatter and shipped as the base64 JSON
+// island below, which the client script decodes to clone and patch further
+// unlocked cabinets. The precise invariant: no PLAINTEXT hidden-cabinet
+// identity (marquee name, icon, colour, tagline) in the built HTML or in the
+// floor's JS bundle — so client code must never import
+// src/data/arcadeCabinets.ts or the translations module. Chain ids (which are
+// also route slugs) do remain in the bundle: they are the localStorage key
+// names, and the routes are public and sitemapped anyway. The base64 is
+// spoiler-guarding, not security: anyone determined can decode it, and that
+// is accepted; it only keeps casual view-source and asset-grep clean.
 //
 // Pixel Park is parked: its ride graphics need more work before it ships, so
 // we're stabilising the other cabinets first. Its cabinet is off the floor
@@ -42,6 +50,33 @@ const t = useTranslations(lang);
 // progress.ts.
 const firstId = UNLOCK_CHAIN[0];
 const first = CABINETS[firstId];
+
+// Everything the client script needs to dress an unlocked cabinet, fully
+// localized and pre-formatted here so the client imports neither the cabinet
+// catalogue nor the (three-locale) translations dictionary.
+const floorCabinets = UNLOCK_CHAIN.map(id => {
+  const c = CABINETS[id];
+  return {
+    id,
+    title: c.title,
+    icon: c.icon,
+    color: c.color,
+    href: getLocalizedPath(c.path, lang),
+    tagline: t(c.taglineKey),
+    genre: t(c.genreKey),
+    players: t(c.twoPlayer ? 'fun.arcade.twoPlayers' : 'fun.arcade.onePlayer'),
+    // Pre-formatted so the plaque format lives only in ArcadeCabinet.astro
+    // and here, not in client code too.
+    plaque: `EST. ${c.estYear}`,
+    isNew: Boolean(c.isNew),
+    // The shroud hint shown while THIS cabinet is the newest unlocked one.
+    hint: t('fun.arcade.locked.hint').replace('{game}', c.title)
+  };
+});
+const floorIsland = Buffer.from(
+  JSON.stringify({ newLabel: t('fun.arcade.new'), cabinets: floorCabinets }),
+  'utf8'
+).toString('base64');
 ---
 
 <Layout title="The Arcade" lang={lang}>
@@ -62,6 +97,10 @@ const first = CABINETS[firstId];
       <div class="tape-line" aria-hidden="true"></div>
     </div>
 
+    <noscript>
+      <p class="arcade-noscript">{t('fun.arcade.noscript')}</p>
+    </noscript>
+
     <div class="arcade-floor">
       <div class="cabinets-row" data-floor>
         <ArcadeCabinet
@@ -74,6 +113,7 @@ const first = CABINETS[firstId];
           color={first.color}
           href={getLocalizedPath(first.path, lang)}
           bestLabel={t('fun.arcade.best')}
+          newBadge={first.isNew ? t('fun.arcade.new') : undefined}
           estYear={first.estYear}
         />
         {/* The one mystery cabinet: a tarped silhouette that identifies
@@ -91,6 +131,12 @@ const first = CABINETS[firstId];
       </div>
     </div>
 
+    {/* The floor's data island: every chain cabinet's display data, composed
+        and localized server-side, base64 of JSON so casual view-source and
+        asset-grep stay free of hidden cabinet names. Not a security boundary
+        (see the frontmatter note) — a spoiler guard. */}
+    <script type="application/json" data-floor-data set:html={floorIsland} is:inline />
+
     <div class="arcade-decorations">
       <div class="floor-reflection"></div>
     </div>
@@ -104,10 +150,17 @@ const first = CABINETS[firstId];
 <script>
   // The floor is a progressive reveal whose state lives in this device's
   // localStorage, so it is laid out here rather than at build time: the static
-  // HTML carries only the always-on first cabinet and the anonymous shroud
-  // (which is also the no-JS floor), and every further unlocked cabinet is
-  // cloned from the first one — the clone keeps Astro's scoped-style
-  // attributes — then patched with its own art and localized copy. All the
+  // HTML carries only the always-on first cabinet and the anonymous shroud,
+  // and every further unlocked cabinet is cloned from the first one — the
+  // clone keeps Astro's scoped-style attributes — then patched from the
+  // base64 data island the page frontmatter composed.
+  //
+  // This script must NOT import src/data/arcadeCabinets.ts or the
+  // translations module: the first would ship every hidden cabinet's name,
+  // icon and colour in the bundle in plaintext (defeating the mystery), the
+  // second would bundle the whole three-locale dictionary to render five
+  // taglines (against the repo's server-side-labels rule). All display data
+  // arrives already localized and pre-formatted through the island. All the
   // unlock logic is in progress.ts (tested); this only builds DOM.
   import { loadBest, loadInitials, formatScore } from '../../../games/engine/highscores';
   import {
@@ -115,65 +168,110 @@ const first = CABINETS[firstId];
     completedGames,
     visibleCabinets
   } from '../../../games/engine/progress';
-  import { CABINETS, type ChainGameId } from '../../../data/arcadeCabinets';
-  import {
-    useTranslations,
-    getLangFromUrl,
-    getLocalizedPath
-  } from '../../../i18n/translations';
+
+  interface CabinetView {
+    id: string;
+    title: string;
+    icon: string;
+    color: string;
+    href: string;
+    tagline: string;
+    genre: string;
+    players: string;
+    /** Ready-formatted "EST. 1974": the plaque format lives server-side. */
+    plaque: string;
+    isNew: boolean;
+    /** Shroud copy naming this cabinet as the one that powers the next. */
+    hint: string;
+  }
+
+  interface FloorData {
+    newLabel: string;
+    cabinets: CabinetView[];
+  }
+
+  function readIsland(): FloorData | null {
+    const el = document.querySelector('[data-floor-data]');
+    if (!el?.textContent) return null;
+    try {
+      // atob yields bytes, and the payload is UTF-8 (emoji icons, accented
+      // Spanish and Catalan copy), so it needs decoding rather than reading
+      // as latin1.
+      const bytes = Uint8Array.from(atob(el.textContent.trim()), c => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes)) as FloorData;
+    } catch {
+      return null;
+    }
+  }
 
   function setText(root: HTMLElement, selector: string, text: string) {
     const el = root.querySelector<HTMLElement>(selector);
     if (el) el.textContent = text;
   }
 
+  /** Astro's scoped-style marker, so elements we create are styled too. */
+  function scopeAttr(el: HTMLElement): string | null {
+    return el.getAttributeNames().find(n => n.startsWith('data-astro-cid-')) ?? null;
+  }
+
+  /** The localized "New" ribbon, added or removed to match the cabinet. */
+  function applyRibbon(clone: HTMLElement, isNew: boolean, label: string) {
+    const existing = clone.querySelector<HTMLElement>('.new-ribbon');
+    if (!isNew) {
+      existing?.remove();
+      return;
+    }
+    const ribbon = existing ?? document.createElement('span');
+    if (!existing) {
+      ribbon.className = 'new-ribbon';
+      const scope = scopeAttr(clone);
+      if (scope) ribbon.setAttribute(scope, '');
+      clone.prepend(ribbon);
+    }
+    ribbon.textContent = label;
+  }
+
   function buildFloor() {
     const row = document.querySelector<HTMLElement>('[data-floor]');
     const base = row?.querySelector<HTMLElement>('.arcade-cabinet');
     const shroud = row?.querySelector<HTMLElement>('[data-shroud]');
-    if (!row || !base || !shroud) return;
+    const island = readIsland();
+    if (!row || !base || !shroud || !island) return;
 
     // Rebuilds start from the server floor: only clones are ever added, so
     // only clones need clearing.
     for (const old of row.querySelectorAll('[data-floor-clone]')) old.remove();
 
-    const lang = getLangFromUrl(new URL(window.location.href));
-    const t = useTranslations(lang);
+    const byId = new Map(island.cabinets.map(c => [c.id, c]));
     const { unlocked, next } = visibleCabinets(UNLOCK_CHAIN, completedGames());
 
-    for (const id of unlocked.slice(1) as ChainGameId[]) {
-      const meta = CABINETS[id];
+    for (const id of unlocked.slice(1)) {
+      const meta = byId.get(id);
+      if (!meta) continue;
       const clone = base.cloneNode(true) as HTMLAnchorElement;
       clone.setAttribute('data-floor-clone', '');
       clone.dataset.game = id;
-      clone.href = getLocalizedPath(meta.path, lang);
+      clone.href = meta.href;
       clone.style.setProperty('--cabinet-color', meta.color);
       clone.style.setProperty('--cabinet-glow', `${meta.color}40`);
       setText(clone, '.marquee-text', meta.title);
       setText(clone, '.screen-icon', meta.icon);
-      setText(clone, '.game-desc', t(meta.taglineKey));
-      setText(clone, '.chip-genre', t(meta.genreKey));
-      setText(
-        clone,
-        '.chip-players',
-        t(meta.twoPlayer ? 'fun.arcade.twoPlayers' : 'fun.arcade.onePlayer')
-      );
-      setText(clone, '.est-plaque', `EST. ${meta.estYear}`);
+      setText(clone, '.game-desc', meta.tagline);
+      setText(clone, '.chip-genre', meta.genre);
+      setText(clone, '.chip-players', meta.players);
+      setText(clone, '.est-plaque', meta.plaque);
+      applyRibbon(clone, meta.isNew, island.newLabel);
       const best = clone.querySelector<HTMLElement>('.best-value');
       if (best) best.dataset.gameId = id;
       shroud.before(clone);
     }
 
     // The newest unlocked cabinet is, by construction, the shroud's immediate
-    // predecessor in the chain (proven in progress.test.ts), so it is the one
-    // the hint names.
-    const newest = unlocked[unlocked.length - 1] as ChainGameId;
+    // predecessor in the chain (proven in progress.test.ts), so its hint is
+    // the one the shroud wears.
+    const newest = byId.get(unlocked[unlocked.length - 1]);
     shroud.hidden = next === null;
-    setText(
-      shroud,
-      '.shroud-hint',
-      t('fun.arcade.locked.hint').replace('{game}', CABINETS[newest].title)
-    );
+    if (newest) setText(shroud, '.shroud-hint', newest.hint);
   }
 
   // Fill each cabinet's attract screen with this device's best run at the
@@ -346,6 +444,21 @@ const first = CABINETS[firstId];
     text-align: center;
     text-transform: uppercase;
     letter-spacing: 0.15em;
+    color: var(--color-text-muted);
+  }
+
+  /* Without JavaScript the floor is only the first cabinet and the shroud —
+     the unlocked ones are cloned client-side — so say so. The game pages
+     themselves stay reachable (and sitemapped). */
+  .arcade-noscript {
+    position: relative;
+    z-index: 10;
+    max-width: 560px;
+    margin: 0 auto var(--space-lg);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-align: center;
+    letter-spacing: 0.1em;
     color: var(--color-text-muted);
   }
 

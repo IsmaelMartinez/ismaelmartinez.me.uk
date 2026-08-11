@@ -14,14 +14,17 @@ export interface CabinetMeta {
   path: string;
   /** Year of the classic the cabinet homages, for its "EST. 1974" plaque. */
   estYear: number;
+  /** Shows the localized "New" ribbon on the cabinet. */
+  isNew?: boolean;
 }
 
 /**
- * Cabinet artwork for the /fun floor, keyed by unlock-chain id. This module is
- * imported both server-side (to render the always-on first cabinet) and by the
- * floor's client script, which clones that cabinet and patches these fields in
- * for each unlocked game — so no still-hidden cabinet ever appears in the
- * page's static HTML (see the floor page for the reveal rules).
+ * Cabinet artwork for the /fun floor, keyed by unlock-chain id. Server-side
+ * only: the floor page renders the always-on first cabinet from it and
+ * serializes the rest into a base64 JSON island for its client script — this
+ * module must NOT be imported by client code, or every hidden cabinet's name,
+ * icon, and colour would ship in plaintext in the floor's JS bundle (see the
+ * floor page for the reveal rules and the precise no-spoiler invariant).
  */
 export const CABINETS: Record<ChainGameId, CabinetMeta> = {
   tanks: {
@@ -52,7 +55,8 @@ export const CABINETS: Record<ChainGameId, CabinetMeta> = {
     icon: '🧱',
     color: '#a855f7',
     path: '/fun/cascade',
-    estYear: 1985
+    estYear: 1985,
+    isNew: true
   },
   city: {
     title: 'MICROCITY',

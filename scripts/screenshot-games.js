@@ -17,7 +17,9 @@
  *   for f in before/*.png; do cmp "$f" "after/$(basename "$f")"; done
  *
  * Usage: node scripts/screenshot-games.js <outDir> [game...]
- * (games: linehold syndicate city park snake tanks; default all)
+ * (games: linehold city snake tanks; default all. `park` and `syndicate` are
+ * parked — their pages are unrouted, so they are skipped by the default run
+ * and only attempted when named explicitly, after un-parking the page.)
  * Serves ./dist via a tiny static server on 4173. The Chromium path below
  * matches the Claude Code cloud environment; point CHROMIUM elsewhere
  * (e.g. a local Playwright install) as needed. The scripted click
@@ -127,7 +129,15 @@ async function snap(page, name) {
   console.log(`captured ${name}`);
 }
 
-const run = name => ONLY.length === 0 || ONLY.includes(name);
+// Pixel Park and Syndicate are parked: their pages are unrouted
+// (_park.astro / _syndicate.astro), so /fun/park and /fun/syndicate are not
+// in ./dist and opening them 404s, which would abort the whole run. Their
+// sections stay here for whenever a cabinet is revived, but the default run
+// skips them — naming one explicitly still runs it (rename the page back
+// first, or it will 404).
+const PARKED = ['park', 'syndicate'];
+const run = name =>
+  PARKED.includes(name) ? ONLY.includes(name) : ONLY.length === 0 || ONLY.includes(name);
 
 // --- Line Hold ------------------------------------------------------------
 if (run('linehold')) {

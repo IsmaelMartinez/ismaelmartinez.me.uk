@@ -1,0 +1,439 @@
+---
+// CALCIO '90 ships unlisted: the arcade floor (index.astro) is being rebuilt
+// in a parallel PR, so this cabinet gets its floor slot in a follow-up rather
+// than registering an `arcadeGames` entry here and now.
+import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+
+const roundNames = [
+  t('fun.football.roundR16'),
+  t('fun.football.roundQuarter'),
+  t('fun.football.roundSemi'),
+  t('fun.football.roundFinal')
+].join('|');
+---
+
+<Layout title="Calcio '90" lang={lang}>
+  <section class="football-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div
+        class="game-container"
+        id="football-root"
+        data-t-goal={t('fun.football.goal')}
+        data-t-golden={t('fun.football.goldenGoal')}
+        data-t-round-won={t('fun.football.roundWon')}
+        data-t-new-record={t('fun.football.newRecord')}
+        data-t-vs={t('fun.football.vs')}
+        data-t-rounds={roundNames}
+      >
+        <div class="game-header">
+          <h1><span class="football-emoji">⚽</span> {t('fun.football.title')}</h1>
+          <SoundToggles lang={lang} />
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label">{t('fun.football.match')}</span>
+              <span id="match-score" class="score-value">0–0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.football.time')}</span>
+              <span id="clock" class="score-value clock">1:30</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.football.score')}</span>
+              <span id="run-score" class="score-value run">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.football.record')}</span>
+              <span id="record" class="score-value">0</span>
+            </div>
+          </div>
+        </div>
+        <p id="round-label" class="round-label">&nbsp;</p>
+
+        <div class="game-area">
+          <canvas id="game-canvas"></canvas>
+          <div id="toast-area" class="toast-area"></div>
+
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">⚽</span>
+              <h2>{t('fun.football.title')}</h2>
+              <p class="tagline">{t('fun.football.tagline')}</p>
+              <p class="instructions">{t('fun.football.instructions')}</p>
+              <button id="start-btn" class="btn btn-primary btn-large">
+                {t('fun.football.start')}
+              </button>
+            </div>
+          </div>
+
+          <div id="next-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span class="play-icon">🏆</span>
+              <h2>{t('fun.football.through')}</h2>
+              <p class="next-round" id="next-round"></p>
+              <button id="next-btn" class="btn btn-primary btn-large">
+                {t('fun.football.nextMatch')}
+              </button>
+            </div>
+          </div>
+
+          <div id="over-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <div id="over-win" hidden>
+                <span class="play-icon">🏆</span>
+                <h2>{t('fun.football.champions')}</h2>
+                <p>{t('fun.football.championsDesc')}</p>
+              </div>
+              <div id="over-loss">
+                <span class="play-icon">📯</span>
+                <h2>{t('fun.football.knockedOut')}</h2>
+                <p>{t('fun.football.knockedOutDesc')}</p>
+              </div>
+              <p class="final-stats">
+                {t('fun.football.finalScore')}: <strong id="final-score">0</strong>
+              </p>
+              <HighScoreTable gameId="football" lang={lang} accent="#22c55e" />
+              <button id="again-btn" class="btn btn-primary btn-large">
+                {t('fun.football.playAgain')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pad">
+          <div id="stick" class="stick" role="application" aria-label={t('fun.football.move')}>
+            <div id="stick-nub" class="stick-nub"></div>
+          </div>
+          <div class="pad-actions">
+            <button id="btn-pass" class="pad-btn" aria-label={t('fun.football.pass')}>
+              {t('fun.football.pass')}
+            </button>
+            <button id="btn-shoot" class="pad-btn pad-action" aria-label={t('fun.football.shoot')}>
+              {t('fun.football.shoot')}
+            </button>
+          </div>
+        </div>
+        <p class="hint">{t('fun.football.hint')}</p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired game board. Re-init after
+  // every swap; initFootballGame no-ops on pages without a fresh root.
+  import { initFootballGame } from '../../../games/football';
+  initFootballGame();
+  document.addEventListener('astro:after-swap', initFootballGame);
+</script>
+
+<style>
+  .football-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
+  }
+
+  .game-container {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-xs);
+  }
+
+  .game-header h1 {
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+  }
+
+  .football-emoji {
+    animation: ballBounce 2.2s ease-in-out infinite;
+  }
+
+  @keyframes ballBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px) rotate(20deg); }
+  }
+
+  .scores {
+    display: flex;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .score-item {
+    text-align: center;
+  }
+
+  .score-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .score-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #22c55e;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .score-value.clock {
+    color: #fbbf24;
+  }
+
+  .score-value.clock:global(.golden) {
+    color: #f87171;
+  }
+
+  .score-value.run {
+    color: #60a5fa;
+  }
+
+  .round-label {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .game-area {
+    position: relative;
+    background: var(--color-bg-secondary);
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 2px solid var(--color-border);
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 640 / 440;
+    touch-action: manipulation;
+  }
+
+  .toast-area {
+    position: absolute;
+    bottom: var(--space-md);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    pointer-events: none;
+  }
+
+  .toast-area :global(.toast) {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 0.8rem;
+    padding: var(--space-xs) var(--space-md);
+    border-radius: 999px;
+    animation: toastIn 0.2s ease;
+    white-space: nowrap;
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .game-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+    padding: var(--space-md);
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(4px);
+    z-index: 2;
+  }
+
+  .overlay-content {
+    text-align: center;
+    margin: auto;
+    padding: var(--space-xl);
+    max-width: 480px;
+  }
+
+  .overlay-content h2 {
+    margin: 0 0 var(--space-sm);
+    color: #22c55e;
+  }
+
+  .overlay-content p {
+    margin: 0 0 var(--space-md);
+    color: var(--color-text);
+  }
+
+  .overlay-content .tagline {
+    font-weight: 600;
+  }
+
+  .overlay-content .instructions {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .overlay-content .next-round {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fbbf24;
+  }
+
+  .play-icon {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: var(--space-md);
+  }
+
+  .final-stats {
+    font-size: 1.1rem;
+  }
+
+  .final-stats strong {
+    color: #22c55e;
+  }
+
+  .pad {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-top: var(--space-lg);
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .stick {
+    position: relative;
+    width: 104px;
+    height: 104px;
+    border-radius: 50%;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    flex-shrink: 0;
+  }
+
+  .stick-nub {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    margin: -22px 0 0 -22px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.35);
+    border: 2px solid #22c55e;
+    pointer-events: none;
+  }
+
+  .pad-actions {
+    display: flex;
+    gap: var(--space-sm);
+  }
+
+  .pad-btn {
+    min-width: 84px;
+    min-height: 56px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .pad-btn:hover {
+    border-color: #22c55e;
+  }
+
+  .pad-btn:active {
+    background: rgba(34, 197, 94, 0.15);
+    transform: translateY(1px);
+  }
+
+  .pad-action {
+    border-color: rgba(34, 197, 94, 0.5);
+  }
+
+  .hint {
+    margin-top: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  @media (max-width: 600px) {
+    .game-header {
+      justify-content: center;
+      text-align: center;
+    }
+
+    .scores {
+      justify-content: center;
+      gap: var(--space-md);
+    }
+
+    .round-label {
+      text-align: center;
+    }
+  }
+</style>

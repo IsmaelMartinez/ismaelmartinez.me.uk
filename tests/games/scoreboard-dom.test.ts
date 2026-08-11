@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initScoreboard } from '../../src/games/engine/scoreboard';
 import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
 import { bestKey } from '../../src/games/engine/highscores';
+import { doneKey } from '../../src/games/engine/progress';
 import { fullBoard } from './board-fixtures';
 
 vi.mock('../../src/games/engine/globalScores', () => ({
@@ -130,6 +131,19 @@ describe('initScoreboard commit()', () => {
     board.hide();
     await flush();
     expect(submitGlobal).not.toHaveBeenCalled();
+    // A scoreless run is not a finished run for the floor's unlock chain
+    // either, matching the personal-best seed (which also needs a score).
+    expect(localStorage.getItem(doneKey('snake'))).toBeNull();
+  });
+
+  it('records the finished run for the floor unlock chain', async () => {
+    // The one place markDone is wired: every cabinet's run end passes through
+    // commit(), so the floor needs no per-game wiring.
+    const board = initScoreboard(buildPanel());
+    board.show(4210);
+    board.hide();
+    await flush();
+    expect(localStorage.getItem(doneKey('snake'))).toBe('1');
   });
 
   it('auto-commits a pending entry on pagehide with the last-used initials', async () => {

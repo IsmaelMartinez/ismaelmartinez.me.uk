@@ -3,6 +3,7 @@ import Layout from '../../../layouts/Layout.astro';
 import ArcadeCabinet from '../../../components/ArcadeCabinet.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale, TranslationKey } from '../../../i18n/translations';
+import { UNLOCK_CHAIN } from '../../../games/engine/progress';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -11,36 +12,37 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
-type Shelf = 'featured' | 'backCatalogue';
-
 interface ArcadeGame {
-  id: string;
+  id: (typeof UNLOCK_CHAIN)[number];
   title: string;
   taglineKey: TranslationKey;
   genreKey: TranslationKey;
-  shelf: Shelf;
   twoPlayer: boolean;
   icon: string;
   color: string;
   path: string;
-  isNew?: boolean;
 }
 
-const arcadeGames: ArcadeGame[] = [
-  {
-    id: 'syndicate',
-    shelf: 'featured',
-    title: 'SYNDICATE',
-    taglineKey: 'fun.syndicate.description',
-    genreKey: 'fun.arcade.genre.syndicate',
-    twoPlayer: false,
-    icon: '🕶️',
-    color: '#22d3ee',
-    path: '/fun/syndicate'
-  },
-  {
-    id: 'towerdefense',
-    shelf: 'featured',
+// The floor is under construction: cabinets stand in UNLOCK_CHAIN order and
+// are revealed one at a time (see src/games/engine/progress.ts). The old
+// Featured / Back-catalogue shelves are retired with it.
+//
+// Pixel Park is parked: its ride graphics need more work before it ships, so
+// we're stabilising the other cabinets first. Its cabinet is off the floor
+// AND its page is unpublished — renamed to the unrouted
+// src/pages/[lang]/fun/_park.astro, so no /fun/park route is built. The game
+// under src/games/park/ stays in the repo. To bring it back for a future
+// release: rename _park.astro back to park.astro and re-add an entry here.
+//
+// Syndicate is parked the same way (2026-08-11): it sat outside the unlock
+// chain while the floor is rebuilt, so its cabinet is off the floor AND its
+// page is unpublished — renamed to the unrouted
+// src/pages/[lang]/fun/_syndicate.astro, so no /fun/syndicate route is built.
+// The game under src/games/syndicate/ stays in the repo. To bring it back:
+// rename _syndicate.astro back to syndicate.astro, re-add an entry here, and
+// slot it into the unlock chain in progress.ts.
+const cabinetArt: Record<(typeof UNLOCK_CHAIN)[number], Omit<ArcadeGame, 'id'>> = {
+  towerdefense: {
     title: 'LINE HOLD',
     taglineKey: 'fun.towerdefense.description',
     genreKey: 'fun.arcade.genre.towerdefense',
@@ -49,9 +51,7 @@ const arcadeGames: ArcadeGame[] = [
     color: '#f59e0b',
     path: '/fun/towerdefense'
   },
-  {
-    id: 'lemmings',
-    shelf: 'featured',
+  lemmings: {
     title: 'CRITTER RESCUE',
     taglineKey: 'fun.lemmings.description',
     genreKey: 'fun.arcade.genre.lemmings',
@@ -60,27 +60,16 @@ const arcadeGames: ArcadeGame[] = [
     color: '#84cc16',
     path: '/fun/lemmings'
   },
-  // Pixel Park is parked: its ride graphics need more work before it ships, so
-  // we're stabilising the other cabinets first. Its cabinet is off the floor
-  // AND its page is unpublished — renamed to the unrouted
-  // src/pages/[lang]/fun/_park.astro, so no /fun/park route is built. The game
-  // under src/games/park/ stays in the repo. To bring it back for a future
-  // release: rename _park.astro back to park.astro and re-add an entry here.
-  {
-    id: 'cascade',
-    shelf: 'featured',
+  cascade: {
     title: 'CASCADE',
     taglineKey: 'fun.cascade.description',
     genreKey: 'fun.arcade.genre.cascade',
     twoPlayer: false,
     icon: '🧱',
     color: '#a855f7',
-    path: '/fun/cascade',
-    isNew: true
+    path: '/fun/cascade'
   },
-  {
-    id: 'city',
-    shelf: 'backCatalogue',
+  city: {
     title: 'MICROCITY',
     taglineKey: 'fun.city.description',
     genreKey: 'fun.arcade.genre.city',
@@ -89,9 +78,7 @@ const arcadeGames: ArcadeGame[] = [
     color: '#38bdf8',
     path: '/fun/city'
   },
-  {
-    id: 'tanks',
-    shelf: 'backCatalogue',
+  tanks: {
     title: 'TANK DUEL',
     taglineKey: 'fun.tanks.description',
     genreKey: 'fun.arcade.genre.tanks',
@@ -100,9 +87,7 @@ const arcadeGames: ArcadeGame[] = [
     color: '#3b82f6',
     path: '/fun/tanks'
   },
-  {
-    id: 'snake',
-    shelf: 'backCatalogue',
+  snake: {
     title: 'SNAKE',
     taglineKey: 'fun.snake.description',
     genreKey: 'fun.arcade.genre.snake',
@@ -111,16 +96,10 @@ const arcadeGames: ArcadeGame[] = [
     color: '#14b8a6',
     path: '/fun/snake'
   }
-];
+};
 
-// Aisle order on the floor; each shelf renders its own labelled row. The
-// Round 6 focus decision (owner-approved list): the five deepest, most
-// distinctive cabinets stand on the front shelf, the rest keep playing from
-// the back catalogue — nothing retired.
-const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
-  { id: 'featured', labelKey: 'fun.arcade.shelf.featured' },
-  { id: 'backCatalogue', labelKey: 'fun.arcade.shelf.backCatalogue' }
-];
+// One cabinet per chain link, in unlock order.
+const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id] }));
 ---
 
 <Layout title="The Arcade" lang={lang}>
@@ -135,30 +114,47 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
       <p class="arcade-subtitle">{t('fun.arcade.subtitle')}</p>
     </div>
 
+    <div class="dust-sign">
+      <div class="tape-line" aria-hidden="true"></div>
+      <p>{t('fun.arcade.wip.sign')}</p>
+      <div class="tape-line" aria-hidden="true"></div>
+    </div>
+
     <div class="arcade-floor">
-      {shelves.map(shelf => (
-        <section class="arcade-shelf">
-          <h2 class="shelf-sign">{t(shelf.labelKey)}</h2>
-          <div class="cabinets-row">
-            {arcadeGames
-              .filter(game => game.shelf === shelf.id)
-              .map(game => (
-                <ArcadeCabinet
-                  id={game.id}
-                  title={game.title}
-                  tagline={t(game.taglineKey)}
-                  genre={t(game.genreKey)}
-                  players={game.twoPlayer ? t('fun.arcade.twoPlayers') : t('fun.arcade.onePlayer')}
-                  icon={game.icon}
-                  color={game.color}
-                  href={getLocalizedPath(game.path, lang)}
-                  bestLabel={t('fun.arcade.best')}
-                  newBadge={game.isNew ? t('fun.arcade.new') : undefined}
-                />
-              ))}
-          </div>
-        </section>
-      ))}
+      <div class="cabinets-row">
+        {/*
+          The whole chain is rendered and toggled client-side, since unlock
+          state lives in this device's localStorage. Server defaults match a
+          first visit (and no-JS): the first cabinet on, the second shrouded.
+        */}
+        {arcadeGames.map((game, i) => (
+          <>
+            {i > 0 && (
+              <div class="locked-cabinet" data-shroud={game.id} hidden={i !== 1}>
+                <div class="shroud-tape" aria-hidden="true"></div>
+                <span class="shroud-icon" aria-hidden="true">🕹️</span>
+                <p class="shroud-title">{t('fun.arcade.locked.title')}</p>
+                <p class="shroud-hint">
+                  {t('fun.arcade.locked.hint').replace('{game}', arcadeGames[i - 1].title)}
+                </p>
+              </div>
+            )}
+            <div class="floor-slot" data-cabinet={game.id} hidden={i !== 0}>
+              <ArcadeCabinet
+                id={game.id}
+                title={game.title}
+                tagline={t(game.taglineKey)}
+                genre={t(game.genreKey)}
+                players={game.twoPlayer ? t('fun.arcade.twoPlayers') : t('fun.arcade.onePlayer')}
+                icon={game.icon}
+                color={game.color}
+                href={getLocalizedPath(game.path, lang)}
+                bestLabel={t('fun.arcade.best')}
+              />
+            </div>
+          </>
+        ))}
+      </div>
     </div>
 
     <div class="arcade-decorations">
@@ -178,6 +174,11 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
   // automatically). Re-runs after ClientRouter swaps so scores earned in a
   // game show up when navigating back to the arcade.
   import { loadBest, loadInitials, formatScore } from '../../../games/engine/highscores';
+  import {
+    UNLOCK_CHAIN,
+    completedGames,
+    visibleCabinets
+  } from '../../../games/engine/progress';
 
   function showBestScores() {
     const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-game-id]');
@@ -190,8 +191,27 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
     }
   }
 
-  showBestScores();
-  document.addEventListener('astro:after-swap', showBestScores);
+  // The floor is a progressive reveal: unlocked cabinets stand powered, the
+  // one after them waits under a shroud, and the rest are not on the floor at
+  // all. All the logic is in progress.ts; this only toggles `hidden`.
+  function layoutFloor() {
+    const { unlocked, next } = visibleCabinets(UNLOCK_CHAIN, completedGames());
+    const open = new Set<string>(unlocked);
+    for (const slot of document.querySelectorAll<HTMLElement>('.floor-slot[data-cabinet]')) {
+      slot.hidden = !open.has(slot.dataset.cabinet ?? '');
+    }
+    for (const shroud of document.querySelectorAll<HTMLElement>('.locked-cabinet[data-shroud]')) {
+      shroud.hidden = shroud.dataset.shroud !== next;
+    }
+  }
+
+  function refreshFloor() {
+    layoutFloor();
+    showBestScores();
+  }
+
+  refreshFloor();
+  document.addEventListener('astro:after-swap', refreshFloor);
 </script>
 
 <style>
@@ -211,6 +231,9 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
       0 0 1px rgba(29, 78, 216, 0.5),
       0 0 14px rgba(0, 183, 255, 0.45),
       0 0 34px rgba(0, 183, 255, 0.25);
+    /* Caution tape: the same two colours in both themes — it's a physical
+       object in the room, like the cabinets. */
+    --tape-stripes: repeating-linear-gradient(-45deg, #f5c518 0 14px, #16161d 14px 28px);
 
     min-height: calc(100vh - var(--nav-height));
     background: var(--room-bg);
@@ -259,7 +282,7 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
 
   .arcade-header {
     text-align: center;
-    margin-bottom: var(--space-3xl);
+    margin-bottom: var(--space-xl);
     position: relative;
     z-index: 10;
   }
@@ -311,40 +334,38 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
     50% { opacity: 0.5; }
   }
 
+  /* "Pardon our dust": a taped-off notice hanging between the neon sign and
+     the half-assembled floor. */
+  .dust-sign {
+    position: relative;
+    z-index: 10;
+    max-width: 560px;
+    margin: 0 auto var(--space-2xl);
+  }
+
+  .tape-line {
+    height: 10px;
+    border-radius: 2px;
+    background: var(--tape-stripes);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+
+  .dust-sign p {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--color-text-muted);
+  }
+
   .arcade-floor {
     position: relative;
     z-index: 10;
     max-width: 1100px;
     margin: 0 auto;
-  }
-
-  .arcade-shelf + .arcade-shelf {
-    margin-top: var(--space-2xl);
-  }
-
-  /* Aisle signage: same neon family as the main sign, much smaller, with a
-     hairline shelf rail running off both sides. */
-  .shelf-sign {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: 0.9rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.35em;
-    color: var(--sign-accent);
-    text-shadow: var(--sign-accent-glow);
-  }
-
-  .shelf-sign::before,
-  .shelf-sign::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--sign-accent), transparent);
-    opacity: 0.35;
   }
 
   /* flex-wrap centres partial rows, so an orphan pair of cabinets doesn't
@@ -356,6 +377,82 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
     align-items: stretch;
     gap: var(--space-2xl) var(--space-xl);
     padding: var(--space-xl) 0;
+  }
+
+  /* The slot exists only to carry the `hidden` toggle; when visible it
+     dissolves so the cabinet remains a direct flex item of the row. */
+  .floor-slot:not([hidden]) {
+    display: contents;
+  }
+
+  /* The one shrouded cabinet: a tarped silhouette waiting to be powered,
+     wrapped in caution tape. Dark in both themes, like the live cabinets.
+     `display: flex` would override the UA's `[hidden] { display: none }`,
+     so the hidden state is restated explicitly. */
+  .locked-cabinet[hidden] {
+    display: none;
+  }
+
+  .locked-cabinet {
+    position: relative;
+    width: 220px;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-xl) var(--space-md);
+    border-radius: 12px 12px 8px 8px;
+    border: 2px dashed #3d3d49;
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.03) 0 18px,
+        transparent 18px 36px
+      ),
+      linear-gradient(180deg, #23232b 0%, #131318 100%);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+  }
+
+  /* High across the tarp, clear of the title and hint text. */
+  .shroud-tape {
+    position: absolute;
+    top: 16%;
+    left: -24px;
+    right: -24px;
+    height: 16px;
+    background: var(--tape-stripes);
+    transform: rotate(-7deg);
+    opacity: 0.9;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .shroud-icon {
+    font-size: 2.5rem;
+    filter: grayscale(1) brightness(0.45);
+  }
+
+  .shroud-title {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: #6d7486;
+  }
+
+  .shroud-hint {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    line-height: 1.6;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #a9b4c6;
   }
 
   .arcade-decorations {
@@ -408,6 +505,13 @@ const shelves: { id: Shelf; labelKey: TranslationKey }[] = [
 
     .cabinets-row {
       gap: var(--space-lg) var(--space-md);
+    }
+  }
+
+  @media (max-width: 600px) {
+    .locked-cabinet {
+      width: 180px;
+      padding: var(--space-lg) var(--space-sm);
     }
   }
 </style>

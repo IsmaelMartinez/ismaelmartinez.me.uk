@@ -30,6 +30,7 @@ import {
   type ScoreEntry
 } from './highscores';
 import { fetchGlobal, submitGlobal } from './globalScores';
+import { markDone } from './progress';
 
 export interface Scoreboard {
   /** Present a finished run's score on the game-over screen. */
@@ -295,6 +296,10 @@ export function initScoreboard(
     // banks mid-run, so the attract-screen readouts stay honest. Routed
     // through the record so `best()` cannot fall behind what is on disk.
     runRecord.bank(score);
+    // The floor's unlock chain counts this cabinet as finished from here:
+    // commit is the one door every finished run passes through, so the chain
+    // needs no per-game wiring. All the logic lives (tested) in progress.ts.
+    markDone(gameId);
     if (form) form.hidden = true;
     failed = false;
     rateLimited = false;

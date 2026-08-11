@@ -2,8 +2,9 @@
 import Layout from '../../../layouts/Layout.astro';
 import ArcadeCabinet from '../../../components/ArcadeCabinet.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
-import type { Locale, TranslationKey } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
 import { UNLOCK_CHAIN } from '../../../games/engine/progress';
+import { CABINETS } from '../../../data/arcadeCabinets';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -12,94 +13,35 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
-interface ArcadeGame {
-  id: (typeof UNLOCK_CHAIN)[number];
-  title: string;
-  taglineKey: TranslationKey;
-  genreKey: TranslationKey;
-  twoPlayer: boolean;
-  icon: string;
-  color: string;
-  path: string;
-}
-
-// The floor is under construction: cabinets stand in UNLOCK_CHAIN order and
-// are revealed one at a time (see src/games/engine/progress.ts). The old
+// The floor is under construction: cabinets stand in UNLOCK_CHAIN order — a
+// walk through gaming history, oldest homaged classic first — and are
+// revealed one at a time (see src/games/engine/progress.ts). The old
 // Featured / Back-catalogue shelves are retired with it.
+//
+// THE NEXT CABINET IS A MYSTERY. Unlock state lives client-side, so only the
+// always-on first cabinet and one anonymous shrouded silhouette are rendered
+// here; the client script below clones the first cabinet and patches in the
+// art (from src/data/arcadeCabinets.ts) for every cabinet the device has
+// unlocked. View-source therefore never names a hidden game.
 //
 // Pixel Park is parked: its ride graphics need more work before it ships, so
 // we're stabilising the other cabinets first. Its cabinet is off the floor
 // AND its page is unpublished — renamed to the unrouted
 // src/pages/[lang]/fun/_park.astro, so no /fun/park route is built. The game
 // under src/games/park/ stays in the repo. To bring it back for a future
-// release: rename _park.astro back to park.astro and re-add an entry here.
+// release: rename _park.astro back to park.astro and re-add an entry to
+// src/data/arcadeCabinets.ts.
 //
 // Syndicate is parked the same way (2026-08-11): it sat outside the unlock
 // chain while the floor is rebuilt, so its cabinet is off the floor AND its
 // page is unpublished — renamed to the unrouted
 // src/pages/[lang]/fun/_syndicate.astro, so no /fun/syndicate route is built.
 // The game under src/games/syndicate/ stays in the repo. To bring it back:
-// rename _syndicate.astro back to syndicate.astro, re-add an entry here, and
-// slot it into the unlock chain in progress.ts.
-const cabinetArt: Record<(typeof UNLOCK_CHAIN)[number], Omit<ArcadeGame, 'id'>> = {
-  towerdefense: {
-    title: 'LINE HOLD',
-    taglineKey: 'fun.towerdefense.description',
-    genreKey: 'fun.arcade.genre.towerdefense',
-    twoPlayer: false,
-    icon: '🏰',
-    color: '#f59e0b',
-    path: '/fun/towerdefense'
-  },
-  lemmings: {
-    title: 'CRITTER RESCUE',
-    taglineKey: 'fun.lemmings.description',
-    genreKey: 'fun.arcade.genre.lemmings',
-    twoPlayer: false,
-    icon: '🐛',
-    color: '#84cc16',
-    path: '/fun/lemmings'
-  },
-  cascade: {
-    title: 'CASCADE',
-    taglineKey: 'fun.cascade.description',
-    genreKey: 'fun.arcade.genre.cascade',
-    twoPlayer: false,
-    icon: '🧱',
-    color: '#a855f7',
-    path: '/fun/cascade'
-  },
-  city: {
-    title: 'MICROCITY',
-    taglineKey: 'fun.city.description',
-    genreKey: 'fun.arcade.genre.city',
-    twoPlayer: false,
-    icon: '🏙️',
-    color: '#38bdf8',
-    path: '/fun/city'
-  },
-  tanks: {
-    title: 'TANK DUEL',
-    taglineKey: 'fun.tanks.description',
-    genreKey: 'fun.arcade.genre.tanks',
-    twoPlayer: true,
-    icon: '🎯',
-    color: '#3b82f6',
-    path: '/fun/tanks'
-  },
-  snake: {
-    title: 'SNAKE',
-    taglineKey: 'fun.snake.description',
-    genreKey: 'fun.arcade.genre.snake',
-    twoPlayer: false,
-    icon: '🐍',
-    color: '#14b8a6',
-    path: '/fun/snake'
-  }
-};
-
-// One cabinet per chain link, in unlock order.
-const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id] }));
+// rename _syndicate.astro back to syndicate.astro, re-add an entry to
+// src/data/arcadeCabinets.ts, and slot it into the unlock chain in
+// progress.ts.
+const firstId = UNLOCK_CHAIN[0];
+const first = CABINETS[firstId];
 ---
 
 <Layout title="The Arcade" lang={lang}>
@@ -121,39 +63,31 @@ const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id
     </div>
 
     <div class="arcade-floor">
-      <div class="cabinets-row">
-        {/*
-          The whole chain is rendered and toggled client-side, since unlock
-          state lives in this device's localStorage. Server defaults match a
-          first visit (and no-JS): the first cabinet on, the second shrouded.
-        */}
-        {arcadeGames.map((game, i) => (
-          <>
-            {i > 0 && (
-              <div class="locked-cabinet" data-shroud={game.id} hidden={i !== 1}>
-                <div class="shroud-tape" aria-hidden="true"></div>
-                <span class="shroud-icon" aria-hidden="true">🕹️</span>
-                <p class="shroud-title">{t('fun.arcade.locked.title')}</p>
-                <p class="shroud-hint">
-                  {t('fun.arcade.locked.hint').replace('{game}', arcadeGames[i - 1].title)}
-                </p>
-              </div>
-            )}
-            <div class="floor-slot" data-cabinet={game.id} hidden={i !== 0}>
-              <ArcadeCabinet
-                id={game.id}
-                title={game.title}
-                tagline={t(game.taglineKey)}
-                genre={t(game.genreKey)}
-                players={game.twoPlayer ? t('fun.arcade.twoPlayers') : t('fun.arcade.onePlayer')}
-                icon={game.icon}
-                color={game.color}
-                href={getLocalizedPath(game.path, lang)}
-                bestLabel={t('fun.arcade.best')}
-              />
-            </div>
-          </>
-        ))}
+      <div class="cabinets-row" data-floor>
+        <ArcadeCabinet
+          id={firstId}
+          title={first.title}
+          tagline={t(first.taglineKey)}
+          genre={t(first.genreKey)}
+          players={first.twoPlayer ? t('fun.arcade.twoPlayers') : t('fun.arcade.onePlayer')}
+          icon={first.icon}
+          color={first.color}
+          href={getLocalizedPath(first.path, lang)}
+          bestLabel={t('fun.arcade.best')}
+          estYear={first.estYear}
+        />
+        {/* The one mystery cabinet: a tarped silhouette that identifies
+            nothing. Its hint names only the game before it in the chain —
+            server-rendered for the fresh-floor default (and no-JS), retargeted
+            client-side once real progress is known. */}
+        <div class="locked-cabinet" data-shroud>
+          <div class="shroud-tape" aria-hidden="true"></div>
+          <span class="shroud-icon" aria-hidden="true">?</span>
+          <p class="shroud-title">{t('fun.arcade.locked.title')}</p>
+          <p class="shroud-hint">
+            {t('fun.arcade.locked.hint').replace('{game}', first.title)}
+          </p>
+        </div>
       </div>
     </div>
 
@@ -168,18 +102,84 @@ const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id
 </Layout>
 
 <script>
-  // Fill each cabinet's attract screen with this device's best run at the
-  // game, under the initials the player last entered (loading a best migrates
-  // it from the retired per-device table, or from the game's pre-table key,
-  // automatically). Re-runs after ClientRouter swaps so scores earned in a
-  // game show up when navigating back to the arcade.
+  // The floor is a progressive reveal whose state lives in this device's
+  // localStorage, so it is laid out here rather than at build time: the static
+  // HTML carries only the always-on first cabinet and the anonymous shroud
+  // (which is also the no-JS floor), and every further unlocked cabinet is
+  // cloned from the first one — the clone keeps Astro's scoped-style
+  // attributes — then patched with its own art and localized copy. All the
+  // unlock logic is in progress.ts (tested); this only builds DOM.
   import { loadBest, loadInitials, formatScore } from '../../../games/engine/highscores';
   import {
     UNLOCK_CHAIN,
     completedGames,
     visibleCabinets
   } from '../../../games/engine/progress';
+  import { CABINETS, type ChainGameId } from '../../../data/arcadeCabinets';
+  import {
+    useTranslations,
+    getLangFromUrl,
+    getLocalizedPath
+  } from '../../../i18n/translations';
 
+  function setText(root: HTMLElement, selector: string, text: string) {
+    const el = root.querySelector<HTMLElement>(selector);
+    if (el) el.textContent = text;
+  }
+
+  function buildFloor() {
+    const row = document.querySelector<HTMLElement>('[data-floor]');
+    const base = row?.querySelector<HTMLElement>('.arcade-cabinet');
+    const shroud = row?.querySelector<HTMLElement>('[data-shroud]');
+    if (!row || !base || !shroud) return;
+
+    // Rebuilds start from the server floor: only clones are ever added, so
+    // only clones need clearing.
+    for (const old of row.querySelectorAll('[data-floor-clone]')) old.remove();
+
+    const lang = getLangFromUrl(new URL(window.location.href));
+    const t = useTranslations(lang);
+    const { unlocked, next } = visibleCabinets(UNLOCK_CHAIN, completedGames());
+
+    for (const id of unlocked.slice(1) as ChainGameId[]) {
+      const meta = CABINETS[id];
+      const clone = base.cloneNode(true) as HTMLAnchorElement;
+      clone.setAttribute('data-floor-clone', '');
+      clone.dataset.game = id;
+      clone.href = getLocalizedPath(meta.path, lang);
+      clone.style.setProperty('--cabinet-color', meta.color);
+      clone.style.setProperty('--cabinet-glow', `${meta.color}40`);
+      setText(clone, '.marquee-text', meta.title);
+      setText(clone, '.screen-icon', meta.icon);
+      setText(clone, '.game-desc', t(meta.taglineKey));
+      setText(clone, '.chip-genre', t(meta.genreKey));
+      setText(
+        clone,
+        '.chip-players',
+        t(meta.twoPlayer ? 'fun.arcade.twoPlayers' : 'fun.arcade.onePlayer')
+      );
+      setText(clone, '.est-plaque', `EST. ${meta.estYear}`);
+      const best = clone.querySelector<HTMLElement>('.best-value');
+      if (best) best.dataset.gameId = id;
+      shroud.before(clone);
+    }
+
+    // The newest unlocked cabinet is, by construction, the shroud's immediate
+    // predecessor in the chain (proven in progress.test.ts), so it is the one
+    // the hint names.
+    const newest = unlocked[unlocked.length - 1] as ChainGameId;
+    shroud.hidden = next === null;
+    setText(
+      shroud,
+      '.shroud-hint',
+      t('fun.arcade.locked.hint').replace('{game}', CABINETS[newest].title)
+    );
+  }
+
+  // Fill each cabinet's attract screen with this device's best run at the
+  // game, under the initials the player last entered (loading a best migrates
+  // it from the retired per-device table, or from the game's pre-table key,
+  // automatically).
   function showBestScores() {
     const readouts = document.querySelectorAll<HTMLElement>('.best-value[data-game-id]');
     // One set of initials serves the whole floor: they are the last ones the
@@ -191,22 +191,10 @@ const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id
     }
   }
 
-  // The floor is a progressive reveal: unlocked cabinets stand powered, the
-  // one after them waits under a shroud, and the rest are not on the floor at
-  // all. All the logic is in progress.ts; this only toggles `hidden`.
-  function layoutFloor() {
-    const { unlocked, next } = visibleCabinets(UNLOCK_CHAIN, completedGames());
-    const open = new Set<string>(unlocked);
-    for (const slot of document.querySelectorAll<HTMLElement>('.floor-slot[data-cabinet]')) {
-      slot.hidden = !open.has(slot.dataset.cabinet ?? '');
-    }
-    for (const shroud of document.querySelectorAll<HTMLElement>('.locked-cabinet[data-shroud]')) {
-      shroud.hidden = shroud.dataset.shroud !== next;
-    }
-  }
-
+  // Re-runs after ClientRouter swaps so progress made in a game shows up when
+  // navigating back to the arcade.
   function refreshFloor() {
-    layoutFloor();
+    buildFloor();
     showBestScores();
   }
 
@@ -379,12 +367,6 @@ const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id
     padding: var(--space-xl) 0;
   }
 
-  /* The slot exists only to carry the `hidden` toggle; when visible it
-     dissolves so the cabinet remains a direct flex item of the row. */
-  .floor-slot:not([hidden]) {
-    display: contents;
-  }
-
   /* The one shrouded cabinet: a tarped silhouette waiting to be powered,
      wrapped in caution tape. Dark in both themes, like the live cabinets.
      `display: flex` would override the UA's `[hidden] { display: none }`,
@@ -416,7 +398,7 @@ const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id
     overflow: hidden;
   }
 
-  /* High across the tarp, clear of the title and hint text. */
+  /* High across the tarp, clear of the question mark and hint text. */
   .shroud-tape {
     position: absolute;
     top: 16%;
@@ -430,8 +412,12 @@ const arcadeGames: ArcadeGame[] = UNLOCK_CHAIN.map(id => ({ id, ...cabinetArt[id
   }
 
   .shroud-icon {
-    font-size: 2.5rem;
-    filter: grayscale(1) brightness(0.45);
+    font-family: var(--font-mono);
+    font-size: 3rem;
+    font-weight: 900;
+    line-height: 1;
+    color: #4a5162;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   }
 
   .shroud-title {

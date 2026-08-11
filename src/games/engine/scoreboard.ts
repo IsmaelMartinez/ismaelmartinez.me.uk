@@ -298,8 +298,9 @@ export function initScoreboard(
     runRecord.bank(score);
     // The floor's unlock chain counts this cabinet as finished from here:
     // commit is the one door every finished run passes through, so the chain
-    // needs no per-game wiring. All the logic lives (tested) in progress.ts.
-    markDone(gameId);
+    // needs no per-game wiring. All the logic lives (tested) in progress.ts,
+    // including the above-zero-score gate.
+    markDone(gameId, score);
     if (form) form.hidden = true;
     failed = false;
     rateLimited = false;

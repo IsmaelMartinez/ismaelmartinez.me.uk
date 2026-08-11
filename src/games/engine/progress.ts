@@ -15,22 +15,34 @@
 
 import { loadBest } from './highscores';
 
-/** Floor order. Each cabinet is powered by finishing the one before it. */
+/**
+ * Floor order: a walk through gaming history, oldest homaged classic first —
+ * Tank Duel (Atari Tank, 1974), Snake (Blockade, 1976), Cascade (the
+ * falling-block era, 1985), Microcity (SimCity, 1989), Critter Rescue
+ * (Lemmings, 1991), Line Hold (the tower-defense era, 2007). Each cabinet is
+ * powered by scoring on the one before it.
+ */
 export const UNLOCK_CHAIN = [
-  'towerdefense',
-  'lemmings',
+  'tanks',
+  'snake',
   'cascade',
   'city',
-  'tanks',
-  'snake'
+  'lemmings',
+  'towerdefense'
 ] as const;
 
 const DONE_PREFIX = 'arcade-done-';
 
 export const doneKey = (gameId: string): string => `${DONE_PREFIX}${gameId}`;
 
-/** Records a finished run for the floor. Idempotent; storage failures are silent. */
-export function markDone(gameId: string): void {
+/**
+ * Records a finished run for the floor. Only a run that actually put
+ * something on the board counts — finishing with nothing scored reveals
+ * nothing, matching the personal-best seed below (which also needs a score
+ * above zero). Idempotent; storage failures are silent.
+ */
+export function markDone(gameId: string, score: number): void {
+  if (score <= 0) return;
   try {
     localStorage.setItem(doneKey(gameId), '1');
   } catch {

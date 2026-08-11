@@ -71,6 +71,20 @@ describe('visibleCabinets', () => {
     });
   });
 
+  it('never names anything past the one shrouded cabinet (no spoilers)', () => {
+    // The floor renders straight from this return value, so its shape is the
+    // spoiler boundary: whatever the progress, no chain id beyond `next` may
+    // appear anywhere in it.
+    for (const doneSet of [done(), done('first'), done('second')]) {
+      const state = visibleCabinets(chain, doneSet);
+      const named = JSON.stringify(state);
+      const boundary = state.next === null ? chain.length : chain.indexOf(state.next);
+      for (const hidden of chain.slice(boundary + 1)) {
+        expect(named).not.toContain(hidden);
+      }
+    }
+  });
+
   it('the shroud is always powered by its immediate predecessor', () => {
     // The floor's hint copy relies on this: whatever the done set, the game
     // that powers the shrouded cabinet is the one right before it in chain
@@ -97,10 +111,17 @@ describe('completedGames', () => {
     expect(completedGames().size).toBe(0);
   });
 
-  it('contains games marked done', () => {
-    markDone('towerdefense');
+  it('contains games marked done with a score above zero', () => {
+    markDone('towerdefense', 250);
     expect(completedGames().has('towerdefense')).toBe(true);
     expect(localStorage.getItem(doneKey('towerdefense'))).toBe('1');
+  });
+
+  it('does not record a scoreless run: finishing with nothing on the board reveals nothing', () => {
+    markDone('towerdefense', 0);
+    markDone('snake', -5);
+    expect(localStorage.getItem(doneKey('towerdefense'))).toBeNull();
+    expect(completedGames().size).toBe(0);
   });
 
   it('seeds from an existing personal best, so returning players keep their floor', () => {
@@ -114,12 +135,12 @@ describe('completedGames', () => {
   });
 
   it('only consults the games in the chain it is asked about', () => {
-    markDone('towerdefense');
+    markDone('towerdefense', 10);
     expect(completedGames(['snake']).has('towerdefense')).toBe(false);
   });
 
   it('defaults to the floor chain', () => {
-    for (const id of UNLOCK_CHAIN) markDone(id);
+    for (const id of UNLOCK_CHAIN) markDone(id, 10);
     expect(completedGames()).toEqual(new Set(UNLOCK_CHAIN));
   });
 });
@@ -128,7 +149,7 @@ describe('storage resilience', () => {
   it('treats an unavailable localStorage as a fresh floor and never throws', () => {
     vi.stubGlobal('localStorage', undefined);
     try {
-      expect(() => markDone('snake')).not.toThrow();
+      expect(() => markDone('snake', 10)).not.toThrow();
       expect(completedGames().size).toBe(0);
     } finally {
       vi.unstubAllGlobals();

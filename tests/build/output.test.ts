@@ -11,7 +11,7 @@ describe.skipIf(!hasDist)('build output', () => {
   const locales = ['en', 'es', 'cat'];
 
   describe('locale pages exist', () => {
-    const pages = ['index.html', 'about/index.html', 'connect/index.html', 'projects/index.html', 'writing/index.html', 'tags/index.html', 'health/index.html'];
+    const pages = ['index.html', 'about/index.html', 'projects/index.html', 'writing/index.html', 'tags/index.html', 'health/index.html'];
 
     for (const locale of locales) {
       for (const page of pages) {
@@ -19,6 +19,19 @@ describe.skipIf(!hasDist)('build output', () => {
           expect(existsSync(`dist/${locale}/${page}`)).toBe(true);
         });
       }
+    }
+  });
+
+  // The old Connect page is gone; astro.config.mjs redirects emit a stub that
+  // forwards to the localized /about#connect section. If the redirects are
+  // removed, this fails as a redirect regression, not as a missing page.
+  describe('connect redirect stubs point at about#connect', () => {
+    for (const locale of locales) {
+      it(`${locale}/connect/index.html is a redirect to /${locale}/about#connect`, () => {
+        const html = readFileSync(`dist/${locale}/connect/index.html`, 'utf-8');
+        expect(html).toContain(`http-equiv="refresh" content="0;url=/${locale}/about#connect"`);
+        expect(html).toContain(`rel="canonical" href="https://ismaelmartinez.me.uk/${locale}/about#connect"`);
+      });
     }
   });
 

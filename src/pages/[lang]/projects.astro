@@ -23,7 +23,7 @@ const health = await fetchPortfolioHealth();
         <h1 class="page-title">{t('section.projects')}</h1>
         <p class="page-description">{t('section.projects.description')}</p>
         <div class="badge-row">
-          <PortfolioHealthBadge health={health} lang={lang} t={t} />
+          <PortfolioHealthBadge health={health} lang={lang} t={t} linked={false} />
           <a href={getLocalizedPath('/health', lang)} class="health-link">{t('projects.healthLink')} →</a>
         </div>
       </header>

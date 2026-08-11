@@ -1,6 +1,7 @@
 ---
 import { ClientRouter } from 'astro:transitions';
 import { languages, useTranslations, getLocalizedPath } from '../i18n/translations';
+import { connectAnchorPath } from '../data/links';
 import '../styles/global.css';
 
 interface Props {
@@ -144,7 +145,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> {t('footer.and')} ☕
         </p>
         <p class="footer-links">
-          <a href={`${getLocalizedPath('/about', lang)}#connect`} class="footer-link">{t('cta.connect')}</a>
+          <a href={getLocalizedPath(connectAnchorPath, lang)} class="footer-link">{t('cta.connect')}</a>
           <span class="footer-separator">·</span>
           <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">RSS</a>
         </p>

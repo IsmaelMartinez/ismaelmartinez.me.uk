@@ -3,6 +3,7 @@ import Layout from './Layout.astro';
 import TableOfContents from '../components/TableOfContents.astro';
 import ArticleCard from '../components/ArticleCard.astro';
 import { useTranslations, getLocalizedPath } from '../i18n/translations';
+import { connectAnchorPath } from '../data/links';
 import { getCollection } from 'astro:content';
 
 interface Props {
@@ -171,7 +172,7 @@ const relatedArticles = scoredArticles
 
         <div class="article-discuss">
           <span>{t('article.discussPrompt')}</span>
-          <a href={`${getLocalizedPath('/about', lang)}#connect`}>{t('article.discussLink')} →</a>
+          <a href={getLocalizedPath(connectAnchorPath, lang)}>{t('article.discussLink')} →</a>
         </div>
 
         <a href={getLocalizedPath('/writing', lang)} class="back-link">

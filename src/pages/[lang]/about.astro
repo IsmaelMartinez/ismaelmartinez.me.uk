@@ -1,6 +1,5 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import ContactCTA from '../../components/ContactCTA.astro';
 import LinkCard from '../../components/LinkCard.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
@@ -59,12 +58,13 @@ const aboutJsonLd = {
           </div>
         </div>
 
+        {/* id must match connectAnchorPath in src/data/links.ts */}
         <div class="about-section" id="connect">
           <h2>{t('section.connect')}</h2>
           <p>{t('section.connect.description')}</p>
 
           <div class="link-group">
-            <h3 class="group-title">{t('connect.readTitle')}</h3>
+            <h2 class="group-title">{t('connect.readTitle')}</h2>
             <div class="links-list">
               {readLinks.map(link => (
                 <LinkCard link={link} lang={lang} />
@@ -73,7 +73,7 @@ const aboutJsonLd = {
           </div>
 
           <div class="link-group">
-            <h3 class="group-title">{t('connect.connectTitle')}</h3>
+            <h2 class="group-title">{t('connect.connectTitle')}</h2>
             <div class="links-list">
               {connectLinks.map(link => (
                 <LinkCard link={link} lang={lang} />
@@ -84,8 +84,6 @@ const aboutJsonLd = {
       </div>
     </div>
   </section>
-
-  <ContactCTA lang={lang} />
 </Layout>
 
 <style>
@@ -111,6 +109,11 @@ const aboutJsonLd = {
 
   .about-section {
     margin-bottom: var(--space-2xl);
+  }
+
+  /* Keep the anchored section clear of the sticky nav when reached via #connect. */
+  #connect {
+    scroll-margin-top: calc(var(--nav-height) + var(--space-md));
   }
 
   .about-section h2 {
@@ -154,7 +157,9 @@ const aboutJsonLd = {
     margin-top: var(--space-xl);
   }
 
-  .group-title {
+  /* Group titles are h2 for the document outline (LinkCard names are h3),
+     but keep the small-caps look; the extra specificity beats .about-section h2. */
+  .about-section .group-title {
     font-size: 0.8rem;
     font-weight: 700;
     text-transform: uppercase;

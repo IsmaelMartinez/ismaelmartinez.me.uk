@@ -519,6 +519,10 @@ function stepBall(m: MatchState, events: MatchEvent[], dt: number): void {
     const p = playerAt(m, m.owner);
     ball.x = p.x + p.fx * DRIBBLE_OFFSET;
     ball.y = p.y + p.fy * DRIBBLE_OFFSET;
+    // The carrier clamp plus the dribble offset can push a carried ball over
+    // the goal line, so a dribbled ball in the mouth scores like a driven one.
+    if (ball.x < 0 && inGoalMouth(ball.y)) scoreGoal(m, 1, events);
+    else if (ball.x > PITCH_W && inGoalMouth(ball.y)) scoreGoal(m, 0, events);
     return;
   }
   ball.x += ball.vx * dt;

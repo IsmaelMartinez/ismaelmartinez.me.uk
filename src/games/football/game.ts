@@ -20,6 +20,7 @@ import {
   createToaster,
   createEffects,
   clamp,
+  formatClock,
   hash01 as hash
 } from '../engine';
 import {
@@ -47,6 +48,7 @@ import {
   ROUND_KEYS,
   OPPONENTS,
   GOAL_POINTS,
+  ROUND_POINTS,
   type Ladder
 } from './ladder';
 
@@ -359,21 +361,20 @@ export function initFootballGame(): void {
 
   const px = (x: number, y: number) => ({ x: OX + x, y: OY + y });
 
-  /** The run's submittable score right now: banked rounds plus this match's goals. */
+  /**
+   * The run's submittable score mid-match: banked rounds plus this match's
+   * goals. Only valid before recordMatch folds the match into the ladder —
+   * from then on `ladderScore(ladder)` alone is the run's score.
+   */
   function currentScore(): number {
     return ladderScore(ladder) + match.score[0] * GOAL_POINTS;
   }
 
   /** Banks the growing run; announces (once per run) a beaten personal best. */
-  function bankScore() {
-    const { best, newRecord } = board.bank(currentScore());
+  function bankScore(score: number) {
+    const { best, newRecord } = board.bank(score);
     if (newRecord) showToast(`🏅 ${strings.newRecord}`);
     recordEl.textContent = `${best}`;
-  }
-
-  function formatClock(seconds: number): string {
-    const total = Math.max(0, Math.ceil(seconds));
-    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
   }
 
   function roundLabel(round: number): string {
@@ -402,8 +403,10 @@ export function initFootballGame(): void {
     phase = 'over';
     audio.stop();
     audio.playSfx(champion ? 'rescue' : 'gameover');
-    bankScore();
-    const score = currentScoreFinal();
+    // After recordMatch the ladder already folded this match's goals in, so
+    // the banked and submitted numbers are the same ladder score.
+    const score = ladderScore(ladder);
+    bankScore(score);
     finalScoreEl.textContent = `${score}`;
     overWin.hidden = !champion;
     overLoss.hidden = champion;
@@ -411,9 +414,6 @@ export function initFootballGame(): void {
     // After the overlay is visible, so the initials input can take focus.
     board.show(score);
   }
-
-  /** After recordMatch the ladder already folded this match's goals in. */
-  const currentScoreFinal = () => ladderScore(ladder);
 
   function handleEvents(events: MatchEvent[]) {
     for (const event of events) {
@@ -428,7 +428,8 @@ export function initFootballGame(): void {
             glow: true
           });
         }
-        fx.floater(px(PITCH_W / 2, PITCH_H * 0.4).x, px(0, PITCH_H * 0.4).y, strings.goal, colour, {
+        const point = px(PITCH_W / 2, PITCH_H * 0.4);
+        fx.floater(point.x, point.y, strings.goal, colour, {
           size: 30,
           life: 1.6,
           rise: 8,
@@ -438,7 +439,7 @@ export function initFootballGame(): void {
           audio.playSfx('score');
           fx.floater(goal.x - 30, goal.y - 40, `+${GOAL_POINTS}`, '#fbbf24', { size: 16 });
           // Bank the run as it grows so a closed tab keeps the record.
-          bankScore();
+          bankScore(currentScore());
         } else {
           audio.playSfx('hit');
         }
@@ -448,7 +449,8 @@ export function initFootballGame(): void {
         audio.playSfx('blip');
       } else if (event.type === 'goldenGoal') {
         audio.playSfx('rescue');
-        fx.floater(px(PITCH_W / 2, PITCH_H * 0.55).x, px(0, PITCH_H * 0.55).y, strings.golden, '#fde047', {
+        const point = px(PITCH_W / 2, PITCH_H * 0.55);
+        fx.floater(point.x, point.y, strings.golden, '#fde047', {
           size: 22,
           life: 1.8,
           rise: 6,
@@ -457,6 +459,16 @@ export function initFootballGame(): void {
       } else if (event.type === 'end') {
         const won = event.winner === 0;
         recordMatch(ladder, won, match.score[0]);
+        if (won) {
+          // The round-won bonus is announced like every other point gain.
+          const point = px(PITCH_W / 2, PITCH_H * 0.5);
+          fx.floater(point.x, point.y, `+${ROUND_POINTS}`, '#fbbf24', {
+            size: 20,
+            life: 1.6,
+            rise: 10,
+            glow: true
+          });
+        }
         if (!won) {
           endRun(false);
         } else if (ladder.champion) {
@@ -465,7 +477,7 @@ export function initFootballGame(): void {
           phase = 'between';
           audio.playSfx('rescue');
           showToast(`⚽ ${strings.roundWon}`);
-          bankScore();
+          bankScore(ladderScore(ladder));
           nextRoundEl.textContent = roundLabel(ladder.round);
           nextOverlay.style.display = 'flex';
         }
@@ -534,8 +546,16 @@ export function initFootballGame(): void {
     if (e.key === ' ') releaseCharge();
     keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
   };
+  // Alt-tabbing away swallows the keyup, so a held key would auto-run the
+  // player on return; drop everything held when the tab loses the keyboard.
+  const onBlur = () => keys.clear();
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') keys.clear();
+  };
   document.addEventListener('keydown', onKeydown);
   document.addEventListener('keyup', onKeyup);
+  window.addEventListener('blur', onBlur);
+  document.addEventListener('visibilitychange', onVisibility);
   // Document-level listeners outlive a ClientRouter swap; each wiring retires
   // its own handlers so re-inits don't stack keyboard handlers forever.
   document.addEventListener(
@@ -543,6 +563,8 @@ export function initFootballGame(): void {
     () => {
       document.removeEventListener('keydown', onKeydown);
       document.removeEventListener('keyup', onKeyup);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibility);
     },
     { once: true }
   );
@@ -714,7 +736,8 @@ export function initFootballGame(): void {
       clockEl.textContent = clockLine;
       clockEl.classList.toggle('golden', match.golden);
     }
-    const run = currentScore();
+    // Once a match is recorded the ladder already holds its goals.
+    const run = phase === 'between' || phase === 'over' ? ladderScore(ladder) : currentScore();
     if (hud.run !== run) {
       hud.run = run;
       runScoreEl.textContent = `${run}`;

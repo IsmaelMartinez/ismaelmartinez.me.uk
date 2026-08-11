@@ -4,6 +4,7 @@ export type { HiDpiCanvas, StaticLayer } from './canvas';
 export type { GameLoop } from './loop';
 export { loadScore, saveScore } from './storage';
 export { clamp } from './math';
+export { formatClock } from './clock';
 export { initScoreboard, createRunRecord } from './scoreboard';
 export type { Scoreboard, ScoreboardOptions, RunRecordBank } from './scoreboard';
 export { createGameAudio, loadMusicMuted, loadSfxMuted } from './audio';

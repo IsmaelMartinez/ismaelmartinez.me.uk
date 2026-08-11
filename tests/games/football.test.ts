@@ -23,6 +23,7 @@ import {
   GOAL_POINTS,
   ROUND_POINTS
 } from '../../src/games/football/ladder';
+import { createRunRecord } from '../../src/games/engine/scoreboard';
 
 const DT = 1 / 60;
 
@@ -90,6 +91,29 @@ describe('football match', () => {
     tickUntil(m, Math.ceil((GOAL_PAUSE + 0.2) / DT), () => m.phase === 'kickoff');
     expect(m.phase).toBe('kickoff');
     expect(m.score).toEqual([1, 0]);
+  });
+
+  it('scores a ball dribbled across the goal line', () => {
+    const m = createMatch(0, seededRandom(13));
+    toPlay(m);
+    benchKeeper(m, 1);
+    // Park the CPU outfield away so nothing can tackle the carrier.
+    for (let idx = 1; idx < m.players[1].length; idx++) {
+      m.players[1][idx].x = 60;
+      m.players[1][idx].y = 40;
+    }
+    // The carrier stands on the clamp line facing the goal: the dribble
+    // offset puts the owned ball beyond the line, inside the mouth.
+    const fwd = m.players[0][4];
+    fwd.x = PITCH_W - 5;
+    fwd.y = PITCH_H / 2;
+    fwd.fx = 1;
+    fwd.fy = 0;
+    m.owner = { side: 0, idx: 4 };
+    const events = tickUntil(m, 30, all => all.some(e => e.type === 'goal'));
+    expect(events.find(e => e.type === 'goal')).toMatchObject({ side: 0 });
+    expect(m.score).toEqual([1, 0]);
+    expect(m.phase).toBe('goal');
   });
 
   it('rebounds off the walled perimeter instead of going out', () => {
@@ -197,14 +221,20 @@ describe('football match', () => {
     const m = createMatch(0, seededRandom(11), 1);
     toPlay(m);
     tickUntil(m, 120, all => all.some(e => e.type === 'goldenGoal'));
-    // Freeze the ball in a neutral corner so nobody can realistically score,
-    // then burn the golden minute.
-    const events = tickUntil(m, Math.ceil((GOLDEN_SECONDS + 5) / DT), all =>
-      all.some(e => e.type === 'end')
-    );
+    // Script the freeze: before every tick the ball goes back loose and dead
+    // in a neutral corner, so neither side can score while the minute burns.
+    const events: MatchEvent[] = [];
+    const budget = Math.ceil((GOLDEN_SECONDS + 5) / DT);
+    for (let i = 0; i < budget; i++) {
+      m.owner = null;
+      m.ball = { x: 4, y: 4, vx: 0, vy: 0 };
+      events.push(...tickMatch(m, DT));
+      if (events.some(e => e.type === 'end')) break;
+    }
     const end = events.find(e => e.type === 'end');
     expect(end).toBeDefined();
-    if (end?.type === 'end') expect([null, 0, 1]).toContain(end.winner);
+    if (end?.type === 'end') expect(end.winner).toBeNull();
+    expect(m.score).toEqual([0, 0]);
     expect(m.phase).toBe('over');
   });
 
@@ -266,6 +296,22 @@ describe('football ladder', () => {
     expect(ladder.roundsWon).toBe(1);
     expect(ladder.round).toBe(1);
     expect(ladderScore(ladder)).toBe(3 * GOAL_POINTS + ROUND_POINTS);
+  });
+
+  it('banks exactly the ladder score across a won round', () => {
+    // Mirrors game.ts's accounting: each goal banks the live score (ladder
+    // plus this match's goals); the round-end bank runs after recordMatch has
+    // folded the match into the ladder, so it banks the ladder score alone —
+    // adding the goals again there is the double-count regression.
+    const record = createRunRecord(0, () => {});
+    record.beginRun();
+    const ladder = createLadder();
+    const matchGoals = 2;
+    for (let g = 1; g <= matchGoals; g++) record.bank(ladderScore(ladder) + g * GOAL_POINTS);
+    recordMatch(ladder, true, matchGoals);
+    const { best } = record.bank(ladderScore(ladder));
+    expect(best).toBe(ladderScore(ladder));
+    expect(best).toBe(matchGoals * GOAL_POINTS + ROUND_POINTS);
   });
 
   it('treats a scoreless golden minute as elimination', () => {

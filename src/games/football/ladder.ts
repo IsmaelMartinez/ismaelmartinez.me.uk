@@ -44,7 +44,7 @@ export function createLadder(): Ladder {
 
 /** CPU difficulty 0..1 for a round index; the final plays at full tilt. */
 export function difficultyFor(round: number): number {
-  return ROUNDS > 1 ? Math.min(1, round / (ROUNDS - 1)) : 1;
+  return Math.min(1, round / (ROUNDS - 1));
 }
 
 /** Fold a finished match into the ladder. `won` false covers golden-goal draws too. */

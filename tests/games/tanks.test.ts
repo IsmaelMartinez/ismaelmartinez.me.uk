@@ -7,10 +7,15 @@ import {
   simulateShot,
   explosionDamage,
   stepFall,
-  matchScore,
   GRAVITY,
   type FallBody
 } from '../../src/games/tanks/physics';
+import {
+  createScoreLedger,
+  submitsToBoard,
+  DIRECT_HIT_POINTS,
+  ROUND_WIN_POINTS
+} from '../../src/games/tanks/scoring';
 import {
   chooseAiShot,
   cpuDifficulty,
@@ -282,20 +287,113 @@ describe('physics', () => {
   });
 });
 
-describe('matchScore', () => {
-  it('scores 100 per round of margin plus remaining armour', () => {
-    expect(matchScore(3, 0, 100)).toBe(400);
-    expect(matchScore(3, 2, 40)).toBe(140);
+describe('scoring', () => {
+  const PLAYER = 0;
+  const FOE = 1;
+
+  it('pays a point per hp of damage landed on the opponent', () => {
+    const ledger = createScoreLedger();
+    expect(ledger.damage(PLAYER, FOE, 37)).toBe(37);
+    expect(ledger.total(PLAYER)).toBe(37);
+    // Credited to the shooter, never to the tank that was hit.
+    expect(ledger.total(FOE)).toBe(0);
   });
 
-  it('ranks a wider round margin above a narrower one', () => {
-    // hp is capped at 100 and the match winner always survives with hp > 0,
-    // so even a battered sweep outranks a full-health narrower win.
-    expect(matchScore(3, 0, 1)).toBeGreaterThan(matchScore(3, 1, 100));
+  it('pays a bonus for putting a shell on the enemy hull', () => {
+    const ledger = createScoreLedger();
+    expect(ledger.directHit(PLAYER, FOE)).toBe(DIRECT_HIT_POINTS);
+    expect(ledger.total(PLAYER)).toBe(DIRECT_HIT_POINTS);
   });
 
-  it('clamps negative armour', () => {
-    expect(matchScore(3, 2, -5)).toBe(100);
+  it('pays the round winner a flat bonus, and nobody on a mutual kill', () => {
+    const ledger = createScoreLedger();
+    expect(ledger.roundWin(FOE)).toBe(ROUND_WIN_POINTS);
+    expect(ledger.roundWin(null)).toBe(0);
+    expect(ledger.total(FOE)).toBe(ROUND_WIN_POINTS);
+    expect(ledger.total(PLAYER)).toBe(0);
+  });
+
+  it('pays nothing for self-damage or for a fall', () => {
+    const ledger = createScoreLedger();
+    // A shell that lands on the tank that fired it.
+    expect(ledger.damage(PLAYER, PLAYER, 40)).toBe(0);
+    expect(ledger.directHit(PLAYER, PLAYER)).toBe(0);
+    // A drop into a crater has no shooter at all.
+    expect(ledger.damage(null, PLAYER, 30)).toBe(0);
+    expect(ledger.damage(null, FOE, 30)).toBe(0);
+    expect(ledger.total(PLAYER)).toBe(0);
+    expect(ledger.total(FOE)).toBe(0);
+  });
+
+  it('never subtracts, whatever it is handed', () => {
+    // The bug this scoring replaced showed the player a negative number for
+    // most of a match. No award may ever move a total downwards.
+    const ledger = createScoreLedger();
+    ledger.damage(PLAYER, FOE, 50);
+    const before = ledger.total(PLAYER);
+    for (const bad of [-1, -100, 0, -0.4]) {
+      expect(ledger.damage(PLAYER, FOE, bad)).toBe(0);
+      expect(ledger.survivingArmour(PLAYER, bad)).toBe(0);
+    }
+    expect(ledger.total(PLAYER)).toBe(before);
+    expect(ledger.total(PLAYER)).toBeGreaterThan(0);
+  });
+
+  it('folds surviving armour in once, clamping a destroyed tank to nothing', () => {
+    const ledger = createScoreLedger();
+    expect(ledger.survivingArmour(PLAYER, 64)).toBe(64);
+    expect(ledger.survivingArmour(FOE, 0)).toBe(0);
+    expect(ledger.total(PLAYER)).toBe(64);
+    expect(ledger.total(FOE)).toBe(0);
+  });
+
+  it('clears both totals for a new match', () => {
+    const ledger = createScoreLedger();
+    ledger.damage(PLAYER, FOE, 20);
+    ledger.roundWin(FOE);
+    ledger.reset();
+    expect(ledger.total(PLAYER)).toBe(0);
+    expect(ledger.total(FOE)).toBe(0);
+  });
+
+  it('grows monotonically across a whole match, and submits what it displays', () => {
+    // A full best-of-five played out shot by shot. The header shows
+    // total(0) throughout and the match end submits total(0) — one number,
+    // so the two cannot disagree.
+    const ledger = createScoreLedger();
+    let seen = 0;
+    const play = () => {
+      expect(ledger.total(PLAYER)).toBeGreaterThanOrEqual(seen);
+      seen = ledger.total(PLAYER);
+    };
+    for (let round = 0; round < 5; round++) {
+      for (let shot = 0; shot < 4; shot++) {
+        ledger.directHit(PLAYER, FOE);
+        ledger.damage(PLAYER, FOE, 25);
+        play();
+        ledger.damage(FOE, PLAYER, 25); // the CPU shooting back
+        play();
+        ledger.damage(null, PLAYER, 12); // a fall into a crater
+        play();
+      }
+      ledger.roundWin(round % 2 === 0 ? PLAYER : FOE);
+      play();
+    }
+    ledger.survivingArmour(PLAYER, 40);
+    play();
+    // 5 rounds × 4 shots × (25 direct + 25 damage) + 3 round wins + armour.
+    expect(ledger.total(PLAYER)).toBe(
+      20 * (DIRECT_HIT_POINTS + 25) + 3 * ROUND_WIN_POINTS + 40
+    );
+    // The submitted number is exactly the displayed one.
+    expect(ledger.total(PLAYER)).toBe(seen);
+  });
+
+  it('offers a vs-CPU match to the board and never a two-player one', () => {
+    // Two humans on one keyboard can farm any total they like, so a 2P run
+    // reaches neither the world board nor the personal best. Load-bearing.
+    expect(submitsToBoard('cpu')).toBe(true);
+    expect(submitsToBoard('2p')).toBe(false);
   });
 });
 

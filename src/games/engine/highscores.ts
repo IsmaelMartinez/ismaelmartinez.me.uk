@@ -37,8 +37,10 @@ const TABLE_PREFIX = 'arcade-hs-';
 
 /**
  * Single-number keys the games used before either board existed. Tank Duel is
- * absent on purpose: its legacy key counted matches won, which is not
- * comparable with the per-match score it reports now.
+ * absent on purpose: its legacy `tanks-victories` key counted matches won,
+ * which is not comparable with the per-match score it reports now. That
+ * counter has since been retired from the cabinet altogether; the rows are
+ * left where they are rather than deleted, as with the retired tables above.
  */
 const LEGACY_KEYS: Record<string, string> = {
   snake: 'snake-high-score',

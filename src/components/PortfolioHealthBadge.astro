@@ -7,16 +7,25 @@ interface Props {
   health: PortfolioHealth;
   lang: 'en' | 'es' | 'cat';
   t: (key: TranslationKey) => string;
+  /** Render as a plain span instead of a link, for pages that already carry their own /health anchor. */
+  linked?: boolean;
 }
 
-const { health, lang, t } = Astro.props;
+const { health, lang, t, linked = true } = Astro.props;
 ---
 
 {health.available && (
-  <a href={getLocalizedPath('/health', lang)} class="health-badge">
-    <span class="badge-label">{t('health.badge.label')}</span>
-    <span class="badge-value">{health.totalRepos} {t('health.pulse.repos')} · {health.goldPct}% {t('health.pulse.gold')}</span>
-  </a>
+  linked ? (
+    <a href={getLocalizedPath('/health', lang)} class="health-badge">
+      <span class="badge-label">{t('health.badge.label')}</span>
+      <span class="badge-value">{health.totalRepos} {t('health.pulse.repos')} · {health.goldPct}% {t('health.pulse.gold')}</span>
+    </a>
+  ) : (
+    <span class="health-badge">
+      <span class="badge-label">{t('health.badge.label')}</span>
+      <span class="badge-value">{health.totalRepos} {t('health.pulse.repos')} · {health.goldPct}% {t('health.pulse.gold')}</span>
+    </span>
+  )
 )}
 
 <style>
@@ -33,7 +42,7 @@ const { health, lang, t } = Astro.props;
     text-decoration: none;
   }
 
-  .health-badge:hover {
+  a.health-badge:hover {
     border-color: var(--color-accent);
   }
 

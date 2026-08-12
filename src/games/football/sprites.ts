@@ -62,6 +62,13 @@ export const PALETTE = {
 
   triangle: '#FFDB00',
   triangleOutline: '#492400',
+  /**
+   * The marker's other colour, and the HUD arrow's: the A button under the
+   * thumb is a shot rather than a clearance. Red is the one hue on the ladder
+   * that cannot be mistaken for the gold marker, the mint chalk or the grass,
+   * and it is already the cabinet's "look here" colour on the radar.
+   */
+  shotArmed: '#FF0000',
   markerIdle: '#B6FFDB',
   markerPicked: '#FFDB00',
 
@@ -392,7 +399,12 @@ export interface SpriteSheet {
   /** The ball at the size its height earns. */
   ball(z: number): HTMLCanvasElement;
   ballShadow: HTMLCanvasElement;
-  triangle: HTMLCanvasElement;
+  /**
+   * The control marker at the player's feet. `armed` draws it in the shot
+   * colour: inside shooting range A is a shot, outside it a clearance, and
+   * the marker is where that boundary is told.
+   */
+  triangle(armed: boolean): HTMLCanvasElement;
   /** Corner landing marker; the stick's pick is drawn in gold. */
   marker(picked: boolean): HTMLCanvasElement;
 }
@@ -444,6 +456,10 @@ export function createSpriteSheet(): SpriteSheet {
     o: PALETTE.triangleOutline,
     y: PALETTE.triangle
   });
+  const triangleArmed = bakeMask(TRIANGLE_MASK, {
+    o: PALETTE.triangleOutline,
+    y: PALETTE.shotArmed
+  });
   const markerIdle = bakeMask(MARKER_MASK, { m: PALETTE.markerIdle });
   const markerPicked = bakeMask(MARKER_MASK, { m: PALETTE.markerPicked });
 
@@ -486,7 +502,9 @@ export function createSpriteSheet(): SpriteSheet {
       return baked;
     },
     ballShadow: shadow,
-    triangle,
+    triangle(armed) {
+      return armed ? triangleArmed : triangle;
+    },
     marker(picked) {
       return picked ? markerPicked : markerIdle;
     }

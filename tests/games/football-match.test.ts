@@ -28,7 +28,9 @@ import {
   TEAM_SIZE,
   attackGoalY
 } from '../../src/games/football/pitch';
-import { teamByCode } from '../../src/games/football/teams';
+import { firstKit, teamByCode } from '../../src/games/football/teams';
+import { shotArmed } from '../../src/games/football/render';
+import { SHOOT_RANGE } from '../../src/games/football/ai';
 import { passive, competent } from './football-policies';
 
 const DT = 1 / 60;
@@ -111,6 +113,86 @@ describe('kickoff assignment', () => {
     expect(m.ball.x).toBeCloseTo(before.x, 6);
     expect(m.ball.y).toBeCloseTo(before.y, 6);
     expect(m.owner).toBeNull();
+  });
+});
+
+/**
+ * The strips are part of the fixture, not of the frame: whether a side wears
+ * its change kit is decided once when the match is made, so the two teams
+ * cannot swap shirts mid-match and a headless test can read the answer.
+ */
+describe('the fixture picks the strips', () => {
+  it('plays an unclashing fixture in both first strips', () => {
+    const m = fresh();
+    expect(m.kits[0]).toEqual(firstKit(TEAMS[0]));
+    expect(m.kits[1]).toEqual(firstKit(TEAMS[1]));
+  });
+
+  it('puts the away side in its change strip when the two clash', () => {
+    const home = teamByCode('COR');
+    const away = teamByCode('CIN');
+    const m = createMatch({ rng: seededRandom(7), teams: [home, away] });
+    expect(m.kits[0]).toEqual(firstKit(home));
+    expect(m.kits[1]).toEqual(away.alt);
+  });
+});
+
+/**
+ * The shooting-range cue. Inside `SHOOT_RANGE` the A button is a shot and
+ * outside it the same press is a clearance that usually concedes possession,
+ * and before this the boundary was invisible: nothing on the pitch, the player
+ * or the HUD changed as you crossed it. `shotArmed` is what turns the marker
+ * and the HUD arrow red, so it has to answer exactly what `humanAction` will
+ * do with the next press — including the cases where there is no press to
+ * make, because a cue that lies about a slide tackle is worse than none.
+ */
+describe('the shooting-range cue', () => {
+  function carry(m: MatchState, x: number, y: number): void {
+    m.phase = 'play';
+    m.phaseTimer = 0;
+    const idx = m.controlled;
+    m.players[0][idx].x = x;
+    m.players[0][idx].y = y;
+    m.owner = { side: 0, idx };
+  }
+
+  it('is on inside shooting range and off outside it', () => {
+    const m = fresh();
+    const goalY = attackGoalY(0, m.swapped);
+    const dir = goalY === 0 ? 1 : -1;
+    carry(m, CENTRE_X, goalY + dir * (SHOOT_RANGE - 10));
+    expect(shotArmed(m)).toBe(true);
+    carry(m, CENTRE_X, goalY + dir * (SHOOT_RANGE + 10));
+    expect(shotArmed(m)).toBe(false);
+  });
+
+  it('agrees with the range the shot itself is decided on, all the way out', () => {
+    const m = fresh();
+    const goalY = attackGoalY(0, m.swapped);
+    const dir = goalY === 0 ? 1 : -1;
+    for (let d = 4; d < 320; d += 4) {
+      carry(m, CENTRE_X, goalY + dir * d);
+      const p = m.players[0][m.controlled];
+      const shoots = Math.hypot(p.x - CENTRE_X, p.y - goalY) <= SHOOT_RANGE;
+      expect(shotArmed(m), `at ${d} px`).toBe(shoots);
+    }
+  });
+
+  it('stays off when the ball is not at the controlled man\'s feet', () => {
+    const m = fresh();
+    const goalY = attackGoalY(0, m.swapped);
+    const dir = goalY === 0 ? 1 : -1;
+    carry(m, CENTRE_X, goalY + dir * 60);
+    expect(shotArmed(m)).toBe(true);
+    // A loose ball: A is a slide tackle, not a shot.
+    m.owner = null;
+    expect(shotArmed(m)).toBe(false);
+    // The CPU on the ball in the same place, likewise.
+    m.owner = { side: 1, idx: m.controlled };
+    expect(shotArmed(m)).toBe(false);
+    // A teammate on the ball the stick is not holding.
+    m.owner = { side: 0, idx: m.controlled === 1 ? 2 : 1 };
+    expect(shotArmed(m)).toBe(false);
   });
 });
 

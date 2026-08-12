@@ -43,6 +43,7 @@ import {
   VIEW_H,
   VIEW_W,
   attackDir,
+  attackGoalY,
   cameraFor,
   type Camera,
   type Side
@@ -72,9 +73,18 @@ import {
   type PlayerSprites,
   type SpriteSheet
 } from './sprites';
-import { ALL_TEAMS, KEEPER_KITS, SECRET_TEAM, TEAMS, type Team } from './teams';
+import {
+  ALL_TEAMS,
+  KEEPER_KITS,
+  SECRET_TEAM,
+  TEAMS,
+  playerName,
+  shirtNumber,
+  type Kit,
+  type Team
+} from './teams';
 import type { MatchState, PlayerState } from './match';
-import { scorerList } from './match';
+import { SHOOT_RANGE, scorerList } from './match';
 import { DIVE_WINDOW, SHOOTOUT_ZONES, type ShootoutState } from './shootout';
 import { standings, type RunState, type TableRow } from './tournament';
 
@@ -120,6 +130,29 @@ const RADAR_FRAME = { x: 252, y: 66, w: 60, h: 120 };
 const MARK = 2;
 
 const SIDES: readonly Side[] = [0, 1];
+
+/**
+ * True when the A button under the player's thumb is a **shot** rather than a
+ * clearance: he is the man on the ball, and the goal he is attacking is inside
+ * `SHOOT_RANGE`.
+ *
+ * The rule itself is section 5.3's A-quirk and is faithful — outside range, A
+ * hoofs the ball up-pitch and usually gives it away. What was missing was any
+ * way to know which press you were about to make until you had made it, so
+ * this predicate drives two things the cabinet already drew: the marker at the
+ * controlled player's feet and the HUD's attacking arrow, both of which go red
+ * while a shot is armed. Nothing modern goes on the pitch — no aiming arc, no
+ * range circle.
+ *
+ * It is exported because it must not be allowed to drift from `humanAction`'s
+ * own branch in match.ts; a test pins the two together.
+ */
+export function shotArmed(m: MatchState): boolean {
+  const owner = m.owner;
+  if (!owner || owner.side !== 0 || owner.idx !== m.controlled) return false;
+  const p = m.players[0][owner.idx];
+  return Math.hypot(p.x - CENTRE_X, p.y - attackGoalY(0, m.swapped)) <= SHOOT_RANGE;
+}
 
 /**
  * Every word the renderer draws itself. Defaults are the cabinet's arcade
@@ -273,6 +306,8 @@ export interface BracketView {
 
 export interface ShootoutView {
   teams: [Team, Team];
+  /** The strips the fixture was played in, so the taker keeps his shirt. */
+  kits: [Kit, Kit];
 }
 
 export interface FullTimeView {
@@ -657,7 +692,9 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     const sx = Math.round(p.x - camera.x);
     const sy = Math.round(p.y - camera.y);
     if (sx < -SLIDE_W || sx > VIEW_W + SLIDE_W || sy < -SLIDE_H || sy > VIEW_H + SLIDE_H) return;
-    const team = m.teams[side];
+    // The strip, not the team: a fixture whose two first strips would be two
+    // dark blobs is played in a change strip, decided once at kickoff.
+    const strip = m.kits[side];
     let kit: PlayerSprites;
     if (idx === 0) {
       const keeper = sprites.keeper(KEEPER_KITS[side]);
@@ -670,7 +707,7 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       }
       kit = keeper;
     } else {
-      kit = sprites.outfield(team.primary, team.trim);
+      kit = sprites.outfield(strip.primary, strip.trim);
     }
 
     if (p.slide > 0 || p.down > 0) {
@@ -693,16 +730,16 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     ctx!.drawImage(sprites.ball(m.ball.z), Math.round(sx - size / 2), Math.round(sy - size / 2));
   }
 
-  function drawTriangle(m: MatchState): void {
+  function drawTriangle(m: MatchState, armed: boolean): void {
     if (m.switchFlash > 0 && Math.floor(m.switchFlash * 4) % 2 === 1) return;
     const p = m.players[0][m.controlled];
     if (!p) return;
     const sx = Math.round(p.x - camera.x - TRIANGLE_W / 2);
     const sy = Math.round(p.y - camera.y + PLAYER_H / 2 + 2);
-    ctx!.drawImage(sprites.triangle, sx, sy);
+    ctx!.drawImage(sprites.triangle(armed), sx, sy);
   }
 
-  function drawHud(m: MatchState, view: MatchView): void {
+  function drawHud(m: MatchState, view: MatchView, armed: boolean): void {
     fill(ctx!, HUD_X, 0, HUD_W, FB_H, PALETTE.hudPanel);
     fill(ctx!, HUD_X, 0, 1, FB_H, PALETTE.hudRule);
     const cx = HUD_X + HUD_W / 2;
@@ -721,9 +758,10 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       outline: PALETTE.scoreOutline
     });
 
-    // Which way the human is kicking, so a swapped half is never a surprise.
+    // Which way the human is kicking, so a swapped half is never a surprise —
+    // and, in the shot cue's red, that the goal it points at is in range.
     const down = attackDir(0, m.swapped) === 1;
-    triangleRows(ctx!, cx - 5, 52, 10, 8, down ? 'down' : 'up', PALETTE.hudDim);
+    triangleRows(ctx!, cx - 5, 52, 10, 8, down ? 'down' : 'up', armed ? PALETTE.shotArmed : PALETTE.hudDim);
 
     drawRadar(m);
 
@@ -815,7 +853,8 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     for (const entry of order) drawPlayer(entry.p, entry.side, entry.idx, m);
 
     drawBall(m);
-    drawTriangle(m);
+    const armed = shotArmed(m);
+    drawTriangle(m, armed);
 
     const banner = view.banner === undefined ? bannerFor(m) : view.banner;
     if (banner) {
@@ -828,7 +867,7 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     if (view.attract) drawAttractPrompt();
     ctx!.restore();
 
-    drawHud(m, view);
+    drawHud(m, view, armed);
   }
 
   /**
@@ -1142,8 +1181,8 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
         PLAYER_H * 2
       );
     }
-    const takerTeam = view.teams[s.turn];
-    const taker = sprites.outfield(takerTeam.primary, takerTeam.trim);
+    const takerStrip = view.kits[s.turn];
+    const taker = sprites.outfield(takerStrip.primary, takerStrip.trim);
     ctx!.drawImage(taker.run[0][0], FB_W / 2 - PLAYER_W, 172, PLAYER_W * 2, PLAYER_H * 2);
 
     // Power bar down the left, and the shrinking dive timer while defending.
@@ -1193,9 +1232,11 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       drawText(ctx!, m.teams[side].name, x, 74, { color: PALETTE.menuPanel });
       for (let i = 0; i < list.length; i++) {
         const g = list[i];
-        // There are no player names in a seven-a-side of invented teams, so
-        // the shirt number is the scorer's name.
-        drawText(ctx!, `NO ${g.scorer}`, x, 90 + i * 12, { color: PALETTE.menuText });
+        // A scorer is a man in a shirt, not a squad index: the number comes
+        // from his position in the 2-3-1 and the name from his side's squad,
+        // both fixed, so `10 MARINI 63'` reads like a result.
+        const scorer = `${shirtNumber(g.scorer)} ${playerName(m.teams[side], g.scorer)}`;
+        drawText(ctx!, scorer, x, 90 + i * 12, { color: PALETTE.menuText });
         drawTextRight(ctx!, `${Math.round(g.minute)}'`, x + 112, 90 + i * 12, { color: PALETTE.menuText });
       }
     }

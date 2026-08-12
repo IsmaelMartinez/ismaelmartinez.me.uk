@@ -70,19 +70,39 @@ type Screen =
  */
 const UNLOCK_KEY = 'arcade-unlock-football';
 
-/** Up up down down left right left right B A, on the keys the cabinet reads. */
-const KONAMI: readonly string[] = [
-  'ArrowUp',
-  'ArrowUp',
-  'ArrowDown',
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-  'ArrowLeft',
-  'ArrowRight',
-  'b',
-  'a'
+/**
+ * Up up down down left right left right B A — on **the cabinet's** B and A.
+ *
+ * Each step lists every key that satisfies it. The last two steps are the
+ * point: this cabinet's B button is `X` or `K` and its A button is `Z` or `J`,
+ * which is what the control legend under the canvas tells the player, so those
+ * are the keys the code answers to. The letters `b` and `a` stay in as well —
+ * they cost nothing, they are what a player who knows the code from elsewhere
+ * will reach for, and `a` is already the WASD left key, which only moves the
+ * select cursor.
+ */
+const KONAMI: readonly (readonly string[])[] = [
+  ['ArrowUp'],
+  ['ArrowUp'],
+  ['ArrowDown'],
+  ['ArrowDown'],
+  ['ArrowLeft'],
+  ['ArrowRight'],
+  ['ArrowLeft'],
+  ['ArrowRight'],
+  ['x', 'k', 'b'],
+  ['z', 'j', 'a']
 ];
+
+/**
+ * The index at which the code stops being directions and starts being buttons.
+ *
+ * A key that satisfies one of those two steps is *consumed* by the code: the A
+ * button is also the cabinet's confirm, so without this the press that unlocks
+ * the hidden side would open the team's YES / NO box underneath the unlock
+ * banner at the same instant.
+ */
+const KONAMI_BUTTONS = 8;
 
 /** Seconds the unlock banner holds over the select grid. */
 const UNLOCK_FLASH = 2.4;
@@ -404,6 +424,12 @@ export function initFootballGame(): void {
   const prevConfirm = { down: false };
   const prevPause = { down: false };
   /**
+   * Set when the Konami code eats a press of the A button, cleared when the
+   * confirm is released: the unlock and the team's YES / NO box share a key,
+   * and only one of them may answer a given press.
+   */
+  let swallowConfirm = false;
+  /**
    * A key tapped and released inside a single frame still counts. Sampling the
    * held state once a frame drops a quick press entirely, which on the static
    * screens means a tap on START doing nothing at all.
@@ -509,9 +535,13 @@ export function initFootballGame(): void {
       e.stopPropagation();
     }
     if (!e.repeat) {
-      if (CONFIRM_KEYS.has(key)) tapped.confirm = true;
+      // The code is fed first: a press it consumes is not also a confirm, and
+      // it stays swallowed until the key comes back up so neither the tap nor
+      // the held-edge path can open the YES / NO box behind the unlock.
+      const konamiTook = feedKonami(e.key.length === 1 ? key : e.key);
+      if (konamiTook) swallowConfirm = true;
+      if (CONFIRM_KEYS.has(key) && !konamiTook) tapped.confirm = true;
       if (PAUSE_KEYS.has(key)) tapped.pause = true;
-      feedKonami(e.key.length === 1 ? key : e.key);
     }
     keys.add(key);
   };
@@ -541,15 +571,22 @@ export function initFootballGame(): void {
    * which is why `onKeyDown` captures and stops those keys: on this page the
    * cabinet answers the code, and the site's arcade overlay stays shut.
    */
-  function feedKonami(key: string): void {
+  function feedKonami(key: string): boolean {
     if (screen !== 'select') {
       konami = 0;
-      return;
+      return false;
     }
-    konami = key === KONAMI[konami] ? konami + 1 : key === KONAMI[0] ? 1 : 0;
-    if (konami < KONAMI.length) return;
-    konami = 0;
-    revealSecretTeam();
+    const matched = KONAMI[konami].includes(key);
+    if (matched) konami += 1;
+    else konami = KONAMI[0].includes(key) ? 1 : 0;
+    // A button step the code has just eaten belongs to the code, not to the
+    // screen underneath it.
+    const consumed = matched && konami > KONAMI_BUTTONS;
+    if (konami >= KONAMI.length) {
+      konami = 0;
+      revealSecretTeam();
+    }
+    return consumed;
   }
 
   /** Put the thirteenth side on the grid, remember it, and make a fuss. */
@@ -913,7 +950,8 @@ export function initFootballGame(): void {
     tapped.pause = false;
 
     const confirmDown = confirmHeld();
-    const confirmEdge = tapped.confirm || (confirmDown && !prevConfirm.down);
+    if (!confirmDown) swallowConfirm = false;
+    const confirmEdge = !swallowConfirm && (tapped.confirm || (confirmDown && !prevConfirm.down));
     prevConfirm.down = confirmDown;
     tapped.confirm = false;
 
@@ -1047,7 +1085,7 @@ export function initFootballGame(): void {
         }
         break;
       case 'shootout':
-        if (shootout && match) renderer.drawShootout(shootout, { teams: match.teams });
+        if (shootout && match) renderer.drawShootout(shootout, { teams: match.teams, kits: match.kits });
         break;
       case 'fullTime':
         if (match && run) {

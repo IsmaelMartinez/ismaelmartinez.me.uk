@@ -27,7 +27,7 @@ import {
   type Point,
   type Side
 } from './pitch';
-import { TEAMS, type Team } from './teams';
+import { TEAMS, fixtureKits, type Kit, type Team } from './teams';
 import {
   ASSIST_DIVE_PENALTY,
   ASSIST_REACT_LOSS,
@@ -465,6 +465,14 @@ export interface MatchState {
   score: [number, number];
   difficulty: number;
   teams: [Team, Team];
+  /**
+   * The strips this fixture is played in, decided once at kickoff by
+   * `fixtureKits`: a side wears its change strip when its first one would be
+   * two indistinguishable blobs against the opponent's, or would disappear
+   * into the grass. Presentation data, but it belongs to the fixture rather
+   * than to the frame, which is why it is settled here and not in the draw.
+   */
+  kits: [Kit, Kit];
   keepers: [KeeperRuntime, KeeperRuntime];
   /** Human outfield index under the stick; the keeper is never selectable. */
   controlled: number;
@@ -604,6 +612,7 @@ export function createMatch(opts: MatchOptions = {}): MatchState {
     score: [0, 0],
     difficulty,
     teams,
+    kits: fixtureKits(teams[0], teams[1]),
     keepers: [freshKeeper(teams[0], 0, difficulty), freshKeeper(teams[1], 1, difficulty)],
     controlled: 6,
     switchFlash: 0,

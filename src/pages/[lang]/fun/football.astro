@@ -62,30 +62,45 @@ const t = useTranslations(lang);
       >
         <div class="game-header">
           <h1><span class="football-emoji">⚽</span> {t('fun.football.title')}</h1>
-          <SoundToggles lang={lang} />
+          <div class="header-controls">
+            <SoundToggles lang={lang} />
+            <!--
+              The pause button lives beside the sound toggles rather than over
+              the canvas: the framebuffer's right-hand 72 px is the HUD, so a
+              button in the canvas's top-right corner sat squarely on the
+              clock, the team codes and the score.
+            -->
+            <button id="btn-pause" class="pause-btn" aria-label={t('fun.football.pause')}>❚❚</button>
+          </div>
         </div>
         <p class="tagline">{t('fun.football.tagline')}</p>
 
-        <div class="game-area">
-          <canvas id="game-canvas"></canvas>
-          <button id="btn-pause" class="pause-btn" aria-label={t('fun.football.pause')}>❚❚</button>
-          <div id="toast-area" class="toast-area"></div>
-        </div>
-
-        <div class="pad">
-          <div id="stick" class="stick" role="application" aria-label={t('fun.football.move')}>
-            <div id="stick-nub" class="stick-nub"></div>
+        <!--
+          The cabinet proper: screen and controls. One wrapper so a landscape
+          phone can lay them out as a single row — stick, screen, buttons —
+          with nothing below the fold.
+        -->
+        <div class="cabinet">
+          <div class="game-area">
+            <canvas id="game-canvas"></canvas>
+            <div id="toast-area" class="toast-area"></div>
           </div>
-          <div class="pad-actions">
-            <button id="btn-pass" class="pad-btn pad-c" aria-label={t('fun.football.pass')}>
-              {t('fun.football.pass')}
-            </button>
-            <button id="btn-cross" class="pad-btn pad-b" aria-label={t('fun.football.cross')}>
-              {t('fun.football.cross')}
-            </button>
-            <button id="btn-shoot" class="pad-btn pad-a" aria-label={t('fun.football.shoot')}>
-              {t('fun.football.shoot')}
-            </button>
+
+          <div class="pad">
+            <div id="stick" class="stick" role="application" aria-label={t('fun.football.move')}>
+              <div id="stick-nub" class="stick-nub"></div>
+            </div>
+            <div class="pad-actions">
+              <button id="btn-pass" class="pad-btn pad-c" aria-label={t('fun.football.pass')}>
+                {t('fun.football.pass')}
+              </button>
+              <button id="btn-cross" class="pad-btn pad-b" aria-label={t('fun.football.cross')}>
+                {t('fun.football.cross')}
+              </button>
+              <button id="btn-shoot" class="pad-btn pad-a" aria-label={t('fun.football.shoot')}>
+                {t('fun.football.shoot')}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -191,19 +206,25 @@ const t = useTranslations(lang);
     touch-action: manipulation;
   }
 
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
   .pause-btn {
-    position: absolute;
-    top: var(--space-sm);
-    right: var(--space-sm);
     min-width: 44px;
     min-height: 44px;
     font-size: 0.9rem;
-    background: rgba(0, 0, 0, 0.55);
-    border: 2px solid rgba(255, 255, 255, 0.35);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
     border-radius: 0.5rem;
-    color: #fff;
+    color: var(--color-text);
     cursor: pointer;
-    z-index: 2;
+  }
+
+  .pause-btn:hover {
+    border-color: #22c55e;
   }
 
   .toast-area {
@@ -317,13 +338,6 @@ const t = useTranslations(lang);
     border-color: rgba(34, 197, 94, 0.6);
   }
 
-  /* A fine pointer means a keyboard is to hand; the pad only clutters it. */
-  @media (pointer: fine) {
-    .pad {
-      display: none;
-    }
-  }
-
   .hint {
     margin-top: var(--space-sm);
     font-size: 0.75rem;
@@ -351,6 +365,90 @@ const t = useTranslations(lang);
 
     .pad {
       gap: var(--space-md);
+    }
+  }
+
+  /*
+   * A phone held sideways. 844 x 390 is ample width — the framebuffer is only
+   * 320 CSS px across — and desperately short of height, so everything that
+   * is not the cabinet goes, and what is left becomes one row: stick, screen,
+   * buttons. Two things were unplayable before this block. The page stacked
+   * screen over pad, which put the pad 500 px down the document and the top
+   * of the canvas 255 px down, so no single scroll position showed both. And
+   * the sticky nav floated over the framebuffer's first 60 rows, which is the
+   * clock, both team codes, the score and the attacking arrow — so the nav is
+   * static here and scrolls away with the rest of the page.
+   */
+  @media (orientation: landscape) and (max-height: 500px) {
+    :global(.nav) {
+      position: static;
+    }
+
+    .football-section {
+      min-height: 0;
+      padding: var(--space-xs) 0;
+    }
+
+    .game-container {
+      max-width: none;
+    }
+
+    .back-link,
+    .game-header h1,
+    .tagline,
+    .hint,
+    .instructions {
+      display: none;
+    }
+
+    .game-header {
+      justify-content: flex-end;
+      margin-bottom: var(--space-xs);
+    }
+
+    .cabinet {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-md);
+    }
+
+    /*
+     * The screen takes the width the two controls leave and letterboxes the
+     * canvas inside it. It has to *claim* that width rather than shrink to
+     * the canvas: game.ts sizes the canvas from its parent's box, so a
+     * content-sized parent would ratchet the integer scale down and never
+     * back up.
+     */
+    .game-area {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    /* The pad's two halves become row items so they can straddle the screen. */
+    .pad {
+      display: contents;
+    }
+
+    .stick {
+      order: -1;
+      width: 108px;
+      height: 108px;
+    }
+
+    .pad-actions {
+      gap: var(--space-xs);
+    }
+  }
+  /*
+   * A fine pointer means a keyboard is to hand; the pad only clutters it.
+   * Last in the file on purpose: the landscape block above turns `.pad` into
+   * a `display: contents` row item, and this has to beat that at equal
+   * specificity on a desktop window that happens to be short and wide.
+   */
+  @media (pointer: fine) {
+    .pad {
+      display: none;
     }
   }
 </style>

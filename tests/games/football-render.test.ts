@@ -19,7 +19,23 @@ import {
 } from '../../src/games/football/font';
 import { CROWD_COLOURS, PALETTE } from '../../src/games/football/sprites';
 import { DEFAULT_TEXT, FB_H, FB_W, integerScale } from '../../src/games/football/render';
-import { ALL_TEAMS, KEEPER_KITS, SECRET_TEAM, TEAMS } from '../../src/games/football/teams';
+import {
+  ALL_TEAMS,
+  GRASS,
+  KEEPER_KITS,
+  KIT_CLASH,
+  SECRET_TEAM,
+  SHIRT_NUMBERS,
+  TEAMS,
+  firstKit,
+  fixtureKits,
+  kitDistance,
+  kitLostOnGrass,
+  playerName,
+  shirtNumber,
+  teamByCode
+} from '../../src/games/football/teams';
+import { TEAM_SIZE } from '../../src/games/football/pitch';
 import { translations, locales } from '../../src/i18n/translations';
 
 /** The Mega Drive's 3-bit-per-channel ladder, per 8.1. */
@@ -78,7 +94,11 @@ describe('font table', () => {
       if (Array.isArray(value)) corpus.push(...value);
       else corpus.push(value as string);
     }
-    for (const team of ALL_TEAMS) corpus.push(team.code, team.name);
+    for (const team of ALL_TEAMS) {
+      corpus.push(team.code, team.name);
+      // Every man who can appear on a full-time scorer line.
+      for (let idx = 0; idx < TEAM_SIZE; idx++) corpus.push(playerName(team, idx));
+    }
     for (const locale of locales) {
       const table = translations[locale] as Record<string, string>;
       for (const [key, value] of Object.entries(table)) {
@@ -107,6 +127,8 @@ describe('palette', () => {
     for (const team of ALL_TEAMS) {
       expect(isLadderLegal(team.primary), `${team.code} primary`).toBe(true);
       expect(isLadderLegal(team.trim), `${team.code} trim`).toBe(true);
+      expect(isLadderLegal(team.alt.primary), `${team.code} change primary`).toBe(true);
+      expect(isLadderLegal(team.alt.trim), `${team.code} change trim`).toBe(true);
     }
     for (const kit of KEEPER_KITS) {
       expect(isLadderLegal(kit), kit).toBe(true);
@@ -184,6 +206,92 @@ describe('integer scaling', () => {
     for (const dpr of [1, 2, 3]) {
       const scale = integerScale(1000, 1000, dpr);
       expect((FB_W * scale) / (FB_H * scale)).toBeCloseTo(FB_W / FB_H, 10);
+    }
+  });
+});
+
+/**
+ * Change strips. The playtest's finding was that the draw put teams on the
+ * pitch in kits nobody could tell apart — Corvi's black against Cinghiali's
+ * brown, Aquile's orange against Gamberi's vermilion, and Vipere's green
+ * against the grass itself. Real football answers that with a change strip
+ * and so does the cabinet, decided once per fixture.
+ */
+describe('kit clashes', () => {
+  it('leaves every fixture in two strips that read apart, on grass', () => {
+    for (const home of ALL_TEAMS) {
+      for (const away of ALL_TEAMS) {
+        if (home === away) continue;
+        const [homeKit, awayKit] = fixtureKits(home, away);
+        const label = `${home.code} v ${away.code}`;
+        expect(kitDistance(homeKit.primary, awayKit.primary), label).toBeGreaterThanOrEqual(KIT_CLASH);
+        expect(kitLostOnGrass(homeKit), `${label} home on grass`).toBe(false);
+        expect(kitLostOnGrass(awayKit), `${label} away on grass`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps both first strips when they already read apart', () => {
+    // Tori's red against Orche's blue: nothing to solve, so nobody changes.
+    const [homeKit, awayKit] = fixtureKits(teamByCode('TOR'), teamByCode('ORC'));
+    expect(homeKit).toEqual(firstKit(teamByCode('TOR')));
+    expect(awayKit).toEqual(firstKit(teamByCode('ORC')));
+  });
+
+  it('changes the away side for each clash the playtest named', () => {
+    const clashes: Array<[string, string]> = [
+      ['COR', 'CIN'],
+      ['AQU', 'GAM'],
+      ['LEO', 'API']
+    ];
+    for (const [homeCode, awayCode] of clashes) {
+      const home = teamByCode(homeCode);
+      const away = teamByCode(awayCode);
+      // The pair has to be a clash in the first place, or the test proves
+      // nothing about the resolution.
+      expect(kitDistance(home.primary, away.primary), `${homeCode}/${awayCode}`).toBeLessThan(KIT_CLASH);
+      const [homeKit, awayKit] = fixtureKits(home, away);
+      expect(homeKit, `${homeCode} keeps its first strip`).toEqual(firstKit(home));
+      expect(awayKit, `${awayCode} changes`).toEqual(away.alt);
+    }
+  });
+
+  it('takes Vipere out of their grass-green shirt in every fixture', () => {
+    const vipere = teamByCode('VIP');
+    expect(kitDistance(vipere.primary, GRASS)).toBeLessThan(KIT_CLASH);
+    for (const other of ALL_TEAMS) {
+      if (other === vipere) continue;
+      expect(fixtureKits(vipere, other)[0], `VIP at home v ${other.code}`).toEqual(vipere.alt);
+      expect(fixtureKits(other, vipere)[1], `VIP away at ${other.code}`).toEqual(vipere.alt);
+    }
+  });
+});
+
+/**
+ * Squads. The full-time screen used to read `NO 6` for almost every goal,
+ * because it drew the squad index and the striker is index 6; a scorer is now
+ * a shirt number from the formation and a name from his side's squad.
+ */
+describe('squads', () => {
+  it('numbers the seven shirts by position, with no repeats', () => {
+    expect(SHIRT_NUMBERS).toHaveLength(TEAM_SIZE);
+    expect(new Set(SHIRT_NUMBERS).size).toBe(TEAM_SIZE);
+    // The keeper is index 0 and wears 1; the lone striker wears 9.
+    expect(shirtNumber(0)).toBe(1);
+    expect(shirtNumber(TEAM_SIZE - 1)).toBe(9);
+  });
+
+  it('fields seven different, stable names per side', () => {
+    for (const team of ALL_TEAMS) {
+      const squad = Array.from({ length: TEAM_SIZE }, (_, idx) => playerName(team, idx));
+      expect(new Set(squad).size, `${team.code} squad ${squad.join()}`).toBe(TEAM_SIZE);
+      for (const name of squad) {
+        expect(name).toMatch(/^[A-Z]+$/);
+        // Long enough to read as a name, short enough to sit beside a minute.
+        expect(name.length).toBeGreaterThanOrEqual(4);
+        expect(name.length).toBeLessThanOrEqual(8);
+      }
+      expect(playerName(team, 3), 'the same shirt is the same man').toBe(squad[3]);
     }
   });
 });

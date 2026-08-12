@@ -5,6 +5,10 @@
  * nicknames with invented kits, so the names read the same in all three
  * locales.
  *
+ * A thirteenth side, `SECRET_TEAM`, sits outside `TEAMS` — it is unlocked by
+ * the Konami code on the select screen and is deliberately not in the pool the
+ * draw reads, so it can only ever be *your* team.
+ *
  * Every colour is on the Mega Drive's 3-bit-per-channel ladder
  * (00/24/49/6D/92/B6/DB/FF), which render.ts asserts.
  */
@@ -40,6 +44,31 @@ export const TEAMS: readonly Team[] = [
 ];
 
 /**
+ * The thirteenth side: not in `TEAMS`, so it is never drawn as an opponent and
+ * never appears on the select grid until the cabinet's Konami code unlocks it.
+ *
+ * It is a reward, not a cheat. 5/5/4/4 is one rung above the best of the
+ * twelve (Leoni's 5/4/3/3 and Corvi's 3/4/4/4 both total 15, this totals 18)
+ * and a long way short of 5/5/5/5 — the run still has to be won, and the
+ * difficulty ladder in `tournament.ts` is untouched by who you picked. Like
+ * the rest of the roster it is an invented nickname with an invented kit: no
+ * national side, no licence, no mascot.
+ */
+export const SECRET_TEAM: Team = {
+  code: 'FEN',
+  name: 'Fenice',
+  primary: '#DB2492',
+  trim: '#FFDB00',
+  speed: 5,
+  skill: 5,
+  defence: 4,
+  keeper: 4
+};
+
+/** The roster plus the secret side: what `teamByCode` resolves against. */
+export const ALL_TEAMS: readonly Team[] = [...TEAMS, SECRET_TEAM];
+
+/**
  * Keepers wear a third colour so they are never mistaken for an outfielder —
  * a readability win the original did not have. Index by side.
  */
@@ -50,7 +79,7 @@ export const GROUP_SIZE = 4;
 export const RUN_TEAMS = GROUP_SIZE * 2;
 
 export function teamByCode(code: string): Team {
-  const team = TEAMS.find(t => t.code === code);
+  const team = ALL_TEAMS.find(t => t.code === code);
   if (!team) throw new Error(`unknown team code: ${code}`);
   return team;
 }

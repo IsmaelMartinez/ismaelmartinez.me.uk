@@ -55,6 +55,8 @@ const t = useTranslations(lang);
         data-t-shootout={t('fun.football.penalties')}
         data-t-sudden-death={t('fun.football.suddenDeath')}
         data-t-credit={t('fun.football.credit')}
+        data-t-attract={t('fun.football.attract')}
+        data-t-unlocked={t('fun.football.unlocked')}
         data-t-ratings={t('fun.football.ratings')}
         data-t-new-record={t('fun.football.newRecord')}
       >
@@ -168,14 +170,23 @@ const t = useTranslations(lang);
     border-radius: 1rem;
     overflow: hidden;
     border: 2px solid var(--color-border);
+    /* The cabinet's own bezel: whatever the integer scale leaves over. */
+    display: flex;
+    justify-content: center;
   }
 
-  /* The cabinet is 320 x 224; the canvas letterboxes it at a whole scale. */
+  /*
+   * The canvas is sized by game.ts, not by this stylesheet, and that is the
+   * whole point. The cabinet is 320 x 224 and it must land on screen as a
+   * whole-number multiple of that in *device* pixels; a `width: 100%` box
+   * hands the browser a fractional scale and it drops framebuffer rows and
+   * columns to fit, which is visible as uneven stems on the wordmark and the
+   * HUD. So: no width, no aspect-ratio here — only the nearest-neighbour hint
+   * for the one case JS cannot avoid, a viewport narrower than 320 device px.
+   */
   #game-canvas {
     display: block;
-    width: 100%;
-    height: auto;
-    aspect-ratio: 320 / 224;
+    max-width: 100%;
     image-rendering: pixelated;
     touch-action: manipulation;
   }

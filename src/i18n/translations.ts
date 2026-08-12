@@ -488,6 +488,8 @@ export const translations = {
     'fun.football.no': 'NO',
     'fun.football.suddenDeath': 'SUDDEN DEATH',
     'fun.football.credit': 'A PIXEL FOOTBALL CABINET',
+    'fun.football.attract': 'PRESS SPACE TO PLAY',
+    'fun.football.unlocked': 'SECRET TEAM UNLOCKED',
     'fun.football.ratings': 'SPD,SKL,DEF,GK',
     'fun.backToFun': 'Back to Fun Stuff',
 
@@ -1021,6 +1023,8 @@ export const translations = {
     'fun.football.no': 'NO',
     'fun.football.suddenDeath': 'MUERTE SÚBITA',
     'fun.football.credit': 'UNA MÁQUINA DE FÚTBOL PIXELADO',
+    'fun.football.attract': 'PULSA ESPACIO PARA JUGAR',
+    'fun.football.unlocked': 'EQUIPO SECRETO DESBLOQUEADO',
     'fun.football.ratings': 'VEL,TEC,DEF,POR',
     'fun.backToFun': 'Volver a Diversión',
 
@@ -1554,6 +1558,8 @@ export const translations = {
     'fun.football.no': 'NO',
     'fun.football.suddenDeath': 'MORT SÚBITA',
     'fun.football.credit': 'UNA MÀQUINA DE FUTBOL PIXELAT',
+    'fun.football.attract': 'PREM ESPAI PER JUGAR',
+    'fun.football.unlocked': 'EQUIP SECRET DESBLOQUEJAT',
     'fun.football.ratings': 'VEL,TEC,DEF,POR',
     'fun.backToFun': 'Tornar a Diversió',
 

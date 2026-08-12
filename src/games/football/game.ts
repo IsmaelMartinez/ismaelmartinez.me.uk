@@ -16,14 +16,25 @@ import {
   createGameAudio,
   createToaster,
   initScoreboard,
-  setupHiDpiCanvas,
+  loadScore,
+  saveScore,
   wireChannelButton
 } from '../engine';
-import { createRenderer, type Renderer } from './render';
+import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
 import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
 import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
-import { TEAMS, teamByCode, type Team } from './teams';
+import { ALL_TEAMS, TEAMS, teamByCode, type Team } from './teams';
 import {
+  ATTRACT_DELAY,
+  DEMO_DIFFICULTY,
+  DEMO_HALF_SECONDS,
+  createDemoDriver,
+  demoPairing,
+  seededRng,
+  type DemoDriver
+} from './demo';
+import {
+  SCORE_GOAL,
   createRun,
   difficultyFor,
   isKnockout,
@@ -39,16 +50,9 @@ import {
   type ShootoutState
 } from './shootout';
 
-/**
- * Logical size of the visible canvas. `blit` picks the largest integer scale of
- * the 320 x 224 framebuffer that fits, so this is exactly x3 and never lands on
- * a fractional pixel.
- */
-const CANVAS_W = 960;
-const CANVAS_H = 672;
-
 type Screen =
   | 'title'
+  | 'attract'
   | 'select'
   | 'match'
   | 'shootout'
@@ -58,8 +62,30 @@ type Screen =
   | 'champion'
   | 'gameOver';
 
-/** How long the goal celebration holds the crowd roar and the burst. */
-const GOAL_FX_TIME = 1.2;
+/**
+ * The hidden side, remembered across visits. `arcade-` prefixed like every
+ * other key the cabinets write (`arcade-best-*`, `arcade-initials`,
+ * `arcade-music-muted`), and read through the engine's guarded storage helpers
+ * so a blocked-cookies browser simply starts locked every time.
+ */
+const UNLOCK_KEY = 'arcade-unlock-football';
+
+/** Up up down down left right left right B A, on the keys the cabinet reads. */
+const KONAMI: readonly string[] = [
+  'ArrowUp',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowLeft',
+  'ArrowRight',
+  'b',
+  'a'
+];
+
+/** Seconds the unlock banner holds over the select grid. */
+const UNLOCK_FLASH = 2.4;
 
 export function initFootballGame(): void {
   const root = document.getElementById('football-root');
@@ -105,6 +131,8 @@ export function initFootballGame(): void {
     shootout: s('tShootout', 'PENALTIES'),
     suddenDeath: s('tSuddenDeath', 'SUDDEN DEATH'),
     credit: s('tCredit', 'A PIXEL FOOTBALL CABINET'),
+    attract: s('tAttract', 'PRESS SPACE TO PLAY'),
+    unlocked: s('tUnlocked', 'SECRET TEAM UNLOCKED'),
     newRecord: s('tNewRecord', 'New record!'),
     ratings: (s('tRatings', 'SPD,SKL,DEF,GK').split(',') as string[]).slice(0, 4)
   };
@@ -143,25 +171,105 @@ export function initFootballGame(): void {
       shootout: strings.shootout,
       suddenDeath: strings.suddenDeath,
       credit: strings.credit,
+      attract: strings.attract,
+      unlocked: strings.unlocked,
       ratings
     }
   });
-  setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, { smoothing: false });
+
+  /**
+   * Size the visible canvas so one framebuffer pixel is always the same whole
+   * block of device pixels.
+   *
+   * The engine's `setupHiDpiCanvas` is the right tool for a game that draws in
+   * logical units and lets CSS own the box — but this cabinet's whole premise
+   * is that CSS must *not* own the box. Its contract sizes the backing store
+   * from whatever width the stylesheet ended up with (and clamps the ratio at
+   * 3), which is exactly how a 960-wide framebuffer came to be painted into a
+   * 716 px box and lost a quarter of its rows to the browser's resampler. So
+   * the box is computed here instead: pick the largest whole scale that fits
+   * the container in device pixels, make the backing store exactly that, and
+   * hand CSS the matching size in CSS pixels. The canvas is centred by the
+   * stylesheet, and the black `.game-area` behind it is the letterbox.
+   */
+  let scale = 0;
+  let scaleDpr = 0;
+  function fitCanvas(): void {
+    const box = canvas.parentElement;
+    const availW = box ? box.clientWidth : FB_W;
+    // Height is never the binding constraint at 320:224 inside a column
+    // layout, but a landscape phone is exactly where it would be.
+    const availH = Math.max(FB_H, window.innerHeight - 160);
+    const dpr = window.devicePixelRatio || 1;
+    const next = integerScale(availW, availH, dpr);
+    // The ratio is part of the answer, not just the scale: the same whole
+    // scale at a different dpr is a different CSS box.
+    if (next === scale && dpr === scaleDpr) return;
+    scale = next;
+    scaleDpr = dpr;
+    canvas.width = FB_W * scale;
+    canvas.height = FB_H * scale;
+    // Assigning width wipes the context state, smoothing included.
+    ctx.imageSmoothingEnabled = false;
+    // The CSS box is the backing store divided by the device ratio, so it
+    // covers exactly `FB_W * scale` device pixels — a 1:1 blit, no resampling.
+    canvas.style.width = `${(FB_W * scale) / dpr}px`;
+    canvas.style.height = `${(FB_H * scale) / dpr}px`;
+  }
+  fitCanvas();
+
+  // devicePixelRatio changes on zoom (which fires resize) but also when the
+  // window moves to a different-DPR monitor at the same CSS size, which fires
+  // nothing else — the same matchMedia trick the engine helper uses, re-armed
+  // after each change, and unhooked with the DOM it measures.
+  let dprQuery: MediaQueryList | null = null;
+  const onDisplayChange = () => {
+    if (!canvas.isConnected) {
+      unhookDisplay();
+      return;
+    }
+    fitCanvas();
+    watchDpr();
+  };
+  function watchDpr(): void {
+    const query = `(resolution: ${window.devicePixelRatio || 1}dppx)`;
+    if (dprQuery?.matches && dprQuery.media === query) return;
+    dprQuery?.removeEventListener('change', onDisplayChange);
+    dprQuery = window.matchMedia(query);
+    dprQuery.addEventListener('change', onDisplayChange, { once: true });
+  }
+  function unhookDisplay(): void {
+    window.removeEventListener('resize', onDisplayChange);
+    dprQuery?.removeEventListener('change', onDisplayChange);
+    document.removeEventListener('astro:before-swap', unhookDisplay);
+  }
+  watchDpr();
+  window.addEventListener('resize', onDisplayChange);
+  document.addEventListener('astro:before-swap', unhookDisplay);
 
   const toastArea = el('toast-area');
   const { show: showToast } = createToaster(toastArea as HTMLElement);
   const board = initScoreboard(el('highscores'));
 
-  // Particles and floaters land in the framebuffer, before the blit, so a goal
-  // burst is the same chunky pixel size as everything else on screen.
+  /**
+   * The engine owns the celebration's physics; `render.ts` owns its pixels.
+   *
+   * Particles and floaters land in the framebuffer, before the blit, so a goal
+   * burst is the same chunky size as everything else on screen — but the
+   * engine draws floaters with `ctx.fillText` in a system font and fades both
+   * kinds under `globalAlpha`, and 8.1 forbids anti-aliasing and alpha
+   * blending in the pixel layer. So `burst`, `emit`, `update` and `clear` are
+   * the engine's as the shared channel requires, and `renderer.drawEffects`
+   * reads its arrays and rasterises them as whole-pixel squares and bitmap
+   * words. `size: 1` makes a particle a 2 x 2 block of framebuffer pixels.
+   */
   const fx = createEffects({
     gravityScale: 200,
     burstSpeed: 60,
     burstSize: 1,
     glowBlur: 0,
-    floaterSize: 9,
-    floaterRise: 16,
-    floaterLife: 0.9
+    floaterRise: 14,
+    floaterLife: 1.4
   });
 
   /**
@@ -251,8 +359,6 @@ export function initFootballGame(): void {
   let cursor = 0;
   let confirming = false;
   let confirmYes = true;
-  /** Counts down the goal celebration's effects; the sim runs its own pause. */
-  let goalFx = 0;
   /**
    * Whether the match just finished was a knockout tie. `recordPlayerMatch`
    * advances the stage, so by the time the full-time screen asks, the run no
@@ -261,6 +367,24 @@ export function initFootballGame(): void {
   let lastKnockout = false;
   /** Set once the finished run has been handed to the scoreboard. */
   let submitted = false;
+  /**
+   * The attract-mode demo. Deliberately its own variable rather than `match`:
+   * nothing that settles a match, banks a score or touches the scoreboard can
+   * reach a demo, because a demo has no `RunState` to settle into.
+   */
+  let demo: MatchState | null = null;
+  let driveDemo: DemoDriver = createDemoDriver();
+  /** Idle seconds on the title screen; at ATTRACT_DELAY the demo starts. */
+  let idle = 0;
+  /** True once the Konami code has revealed the thirteenth side. */
+  let unlocked = loadScore(UNLOCK_KEY) === 1;
+  /** Counts the unlock banner down over the select grid. */
+  let unlockFlash = 0;
+  /** How far into the Konami sequence the select screen has got. */
+  let konami = 0;
+
+  /** The roster the select grid is showing: twelve, or thirteen once unlocked. */
+  const roster = (): readonly Team[] => (unlocked ? ALL_TEAMS : TEAMS);
 
   const score = () => (run ? runScore(run) : 0);
 
@@ -347,30 +471,98 @@ export function initFootballGame(): void {
 
   const CONFIRM_KEYS = new Set(['Enter', ' ', 'z', 'j']);
   const PAUSE_KEYS = new Set(['p', 'Escape']);
+  /**
+   * Keys the cabinet swallows outright: everything it steers or fires with,
+   * plus `b`, which is only here because the layout's site-wide Konami code
+   * would otherwise be listening over the cabinet's own.
+   */
+  const SWALLOWED = new Set([...HELD, 'b']);
+
+  /**
+   * True while the keystroke belongs to the page rather than the cabinet.
+   *
+   * Capturing keys before they reach the document is what keeps the layout's
+   * site-wide Konami handler out of a match, but the same capture must not eat
+   * the page's own keyboard. A text field (the high-score initials box) owns
+   * every key it is given. A focused button or link owns only the two keys
+   * that activate it, so the sound toggles and the back link still work from
+   * the keyboard while the arrows and the action keys keep steering the game.
+   */
+  const TEXT_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+  const ACTIVATE_KEYS = new Set([' ', 'Enter']);
+  function pageOwnsKey(target: EventTarget | null, key: string): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    if (TEXT_TAGS.has(target.tagName) || target.isContentEditable) return true;
+    return ACTIVATE_KEYS.has(key) && (target.tagName === 'BUTTON' || target.tagName === 'A');
+  }
+
   const onKeyDown = (e: KeyboardEvent) => {
-    if (HELD.has(e.key) || HELD.has(e.key.toLowerCase())) e.preventDefault();
+    if (pageOwnsKey(e.target, e.key)) return;
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (SWALLOWED.has(e.key) || SWALLOWED.has(key)) {
+      e.preventDefault();
+      // Capture-phase, so this is the cabinet claiming the key before it can
+      // reach anything else on the page — specifically the layout's own Konami
+      // handler, which listens on `document` and would otherwise fire its
+      // arcade overlay in the middle of a match. The guard above keeps the
+      // high-score initials box typable.
+      e.stopPropagation();
+    }
     if (!e.repeat) {
       if (CONFIRM_KEYS.has(key)) tapped.confirm = true;
       if (PAUSE_KEYS.has(key)) tapped.pause = true;
+      feedKonami(e.key.length === 1 ? key : e.key);
     }
     keys.add(key);
   };
+  // Releases are never filtered: a key that went down on the canvas and came
+  // up over a focused button would otherwise stay "held" forever, which reads
+  // as a player at the controls and would keep attract mode from ever running.
   const onKeyUp = (e: KeyboardEvent) => {
     keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
   };
-  document.addEventListener('keydown', onKeyDown);
-  document.addEventListener('keyup', onKeyUp);
-  // Document-level listeners outlive a ClientRouter swap; each wiring retires
+  window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('keyup', onKeyUp, true);
+  // Window-level listeners outlive a ClientRouter swap; each wiring retires
   // its own handlers so re-inits don't stack keyboard handlers forever.
   document.addEventListener(
     'astro:before-swap',
     () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
     },
     { once: true }
   );
+
+  /**
+   * The cabinet's own Konami code, live on the team-select screen only.
+   *
+   * It shares its ten keys with the site-wide easter egg in `Layout.astro`,
+   * which is why `onKeyDown` captures and stops those keys: on this page the
+   * cabinet answers the code, and the site's arcade overlay stays shut.
+   */
+  function feedKonami(key: string): void {
+    if (screen !== 'select') {
+      konami = 0;
+      return;
+    }
+    konami = key === KONAMI[konami] ? konami + 1 : key === KONAMI[0] ? 1 : 0;
+    if (konami < KONAMI.length) return;
+    konami = 0;
+    revealSecretTeam();
+  }
+
+  /** Put the thirteenth side on the grid, remember it, and make a fuss. */
+  function revealSecretTeam(): void {
+    if (!unlocked) {
+      unlocked = true;
+      saveScore(UNLOCK_KEY, 1);
+    }
+    confirming = false;
+    cursor = roster().length - 1;
+    unlockFlash = UNLOCK_FLASH;
+    audio.playSfx('rescue');
+  }
 
   /** Round action button: press and release are reported separately. */
   function wirePad(id: string, key: 'a' | 'b' | 'c'): void {
@@ -478,7 +670,7 @@ export function initFootballGame(): void {
   /* screen flow                                                       */
 
   function startRun(): void {
-    run = createRun(Math.random, TEAMS[cursor].code);
+    run = createRun(Math.random, roster()[cursor].code);
     submitted = false;
     board.hide();
     board.beginRun();
@@ -503,7 +695,6 @@ export function initFootballGame(): void {
     });
     shootout = null;
     lastKnockout = isKnockout(run);
-    goalFx = 0;
     fx.clear();
     renderer.resetCamera(match);
     screen = 'match';
@@ -533,9 +724,53 @@ export function initFootballGame(): void {
     board.show(runScore(run));
   }
 
+  /* ---------------------------------------------------------------- */
+  /* attract mode                                                      */
+
+  /**
+   * Start the cabinet demoing itself: an ordinary match with an AI driver on
+   * the stick, seeded so the same demo replays from the same number.
+   *
+   * It borrows nothing from the run and gives nothing back — no `RunState`, no
+   * `bank()`, no `board` call anywhere in the attract path — so a demo can
+   * neither submit a score nor move the personal best.
+   */
+  function enterAttract(): void {
+    const seed = Math.floor(Math.random() * 0xffffffff);
+    const rng = seededRng(seed);
+    const [home, away] = demoPairing(rng, TEAMS);
+    demo = createMatch({
+      rng,
+      difficulty: DEMO_DIFFICULTY,
+      teams: [TEAMS[home], TEAMS[away]],
+      halfSeconds: DEMO_HALF_SECONDS
+    });
+    driveDemo = createDemoDriver();
+    fx.clear();
+    renderer.resetCamera(demo);
+    screen = 'attract';
+    idle = 0;
+  }
+
+  /** Drop the demo on the floor. Any input at all does this. */
+  function exitAttract(): void {
+    demo = null;
+    fx.clear();
+    screen = 'title';
+    idle = 0;
+  }
+
   /** The one "yes" every static screen listens for. */
   function advance(): void {
     switch (screen) {
+      case 'attract':
+        exitAttract();
+        cursor = 0;
+        confirming = false;
+        confirmYes = true;
+        screen = 'select';
+        audio.playSfx('blip');
+        return;
       case 'title':
         cursor = 0;
         confirming = false;
@@ -582,6 +817,57 @@ export function initFootballGame(): void {
   /* ---------------------------------------------------------------- */
   /* match events                                                      */
 
+  /**
+   * The goal moment: the loudest thing the cabinet does.
+   *
+   * Three layers, all of them pixels. Confetti bursts out of the goalmouth the
+   * ball has just crossed, in the scoring side's own kit colours so you can
+   * see whose goal it was without reading the score. A second shower rains
+   * down the full width of the playfield from above the top of the screen,
+   * which is the terrace emptying its confetti onto the pitch. And the points
+   * the goal is worth float up in the bitmap font over the mouth, because
+   * every point gain is announced where it lands. The big `GOAL!` banner over
+   * the middle comes free with the match's own `goal` phase.
+   */
+  function celebrate(side: 0 | 1, m: MatchState): void {
+    audio.playSfx(side === 0 ? 'rescue' : 'hit');
+    const kit = m.teams[side];
+    const goalY = attackGoalY(side, m.swapped);
+    const mouthX = CENTRE_X - renderer.camera.x;
+    const mouthY = goalY - renderer.camera.y;
+    for (let i = 0; i < 36; i++) {
+      fx.burst(
+        Math.round(mouthX + (Math.random() - 0.5) * 76),
+        Math.round(mouthY + (Math.random() - 0.5) * 12),
+        1,
+        i % 3 === 0 ? PALETTE.white : i % 3 === 1 ? kit.primary : kit.trim,
+        { speed: 78, life: 1, gravity: 1 }
+      );
+    }
+    // The terrace shower: slow, wide, and drawn over the whole playfield.
+    for (let i = 0; i < 26; i++) {
+      fx.emit({
+        x: Math.round(Math.random() * VIEW_W),
+        y: -Math.round(Math.random() * 40),
+        vx: (Math.random() - 0.5) * 18,
+        vy: 40 + Math.random() * 40,
+        life: 1.6,
+        color: CROWD_COLOURS[i % CROWD_COLOURS.length],
+        gravity: 0.4
+      });
+    }
+    // Only the player's own goals pay: a conceded one earns nothing, and a
+    // demo earns nothing at all, so neither claims a number it did not bank.
+    if (side === 0 && run && !demo) {
+      fx.floater(
+        Math.round(Math.min(Math.max(mouthX, 40), VIEW_W - 40)),
+        Math.round(Math.min(Math.max(mouthY, 40), VIEW_H - 40)),
+        `+${SCORE_GOAL}`,
+        PALETTE.bannerText
+      );
+    }
+  }
+
   function handleMatchEvents(events: MatchEvent[], m: MatchState): void {
     for (const event of events) {
       switch (event.type) {
@@ -590,26 +876,7 @@ export function initFootballGame(): void {
             run.liveGoals = m.score[0];
             bank();
           }
-          goalFx = GOAL_FX_TIME;
-          audio.playSfx(event.side === 0 ? 'rescue' : 'hit');
-          // Confetti out of the goalmouth the ball has just crossed.
-          const goalY = attackGoalY(event.side, m.swapped);
-          for (let i = 0; i < 22; i++) {
-            fx.burst(
-              CENTRE_X - renderer.camera.x + (Math.random() - 0.5) * 70,
-              goalY - renderer.camera.y + (Math.random() - 0.5) * 10,
-              1,
-              i % 2 === 0 ? '#FFDB00' : '#FFFFFF',
-              { speed: 70, life: 0.9, gravity: 1 }
-            );
-          }
-          fx.floater(
-            Math.round(VIEW_W / 2),
-            Math.round(VIEW_H / 2) - 30,
-            strings.goal,
-            '#B6FFDB',
-            { size: 12, life: 1.3, rise: 10 }
-          );
+          celebrate(event.side, m);
           break;
         }
         case 'save':
@@ -651,20 +918,21 @@ export function initFootballGame(): void {
     tapped.confirm = false;
 
     if (paused) return;
-    goalFx = Math.max(0, goalFx - dt);
     fx.update(dt);
 
     if (screen === 'select') {
+      unlockFlash = Math.max(0, unlockFlash - dt);
+      const size = roster().length;
       // The stick steps the grid once per push rather than scrolling it.
       const stepX = Math.abs(input.x) > 0.5 ? Math.sign(input.x) : 0;
       const stepY = Math.abs(input.y) > 0.5 ? Math.sign(input.y) : 0;
       if (!confirming) {
         if (stepX !== 0 && prevCursor.x === 0) {
-          cursor = (cursor + stepX + TEAMS.length) % TEAMS.length;
+          cursor = (cursor + stepX + size) % size;
           audio.playSfx('blip');
         }
         if (stepY !== 0 && prevCursor.y === 0) {
-          cursor = (cursor + stepY * 4 + TEAMS.length) % TEAMS.length;
+          cursor = (cursor + stepY * 4 + size) % size;
           audio.playSfx('blip');
         }
       } else if (stepX !== 0 && prevCursor.x === 0) {
@@ -704,7 +972,45 @@ export function initFootballGame(): void {
       return;
     }
 
+    // Attract mode. Any input at all drops the demo; a confirming one carries
+    // straight on into team select through the title case below, which is what
+    // "press start and you are playing" means on a cabinet.
+    if (screen === 'attract') {
+      if (touched(input) || confirmEdge) exitAttract();
+      else if (demo) {
+        // A hidden tab gets no simulation: rAF is already throttled there, and
+        // a demo nobody can see should cost nothing when it resumes either.
+        if (document.hidden) return;
+        handleMatchEvents(tickMatch(demo, dt, driveDemo(demo, dt)), demo);
+        if (demo.phase === 'over') exitAttract();
+        return;
+      }
+    }
+
     if (confirmEdge) advance();
+
+    // The idle clock only runs on the title screen, and any touch resets it.
+    if (screen === 'title') {
+      if (touched(input) || confirmEdge) idle = 0;
+      else idle += dt;
+      if (idle >= ATTRACT_DELAY) enterAttract();
+    }
+  }
+
+  /** True when the player is doing anything at all this frame. */
+  function touched(input: MatchInput): boolean {
+    return (
+      keys.size > 0 ||
+      pads.a ||
+      pads.b ||
+      pads.c ||
+      stick.active ||
+      input.a ||
+      input.b ||
+      input.c ||
+      input.x !== 0 ||
+      input.y !== 0
+    );
   }
 
   /* ---------------------------------------------------------------- */
@@ -717,8 +1023,16 @@ export function initFootballGame(): void {
       case 'title':
         renderer.drawTitle({ clock });
         break;
+      case 'attract':
+        if (demo) {
+          // The demo's HUD is the real HUD: clock, codes, score and radar all
+          // live. Only the run totals are zero, because a demo banks nothing.
+          renderer.drawMatch(demo, { dt: 1 / 60, runScore: 0, best, attract: true });
+          renderer.drawEffects(fx);
+        }
+        break;
       case 'select':
-        renderer.drawTeamSelect({ clock, cursor, confirming, confirmYes });
+        renderer.drawTeamSelect({ clock, cursor, confirming, confirmYes, unlocked, unlockFlash });
         break;
       case 'match':
         if (match) {
@@ -729,7 +1043,7 @@ export function initFootballGame(): void {
             best,
             aimX: stick.x
           });
-          if (goalFx > 0) fx.draw(renderer.ctx);
+          renderer.drawEffects(fx);
         }
         break;
       case 'shootout':
@@ -760,7 +1074,9 @@ export function initFootballGame(): void {
       default:
     }
     if (paused) renderer.drawPause();
-    renderer.blit(ctx, CANVAS_W, CANVAS_H);
+    // The backing store is exactly FB x scale, so this blit is one whole-pixel
+    // copy with nothing left over to letterbox.
+    renderer.blit(ctx, canvas.width, canvas.height);
   }
 
   /**

@@ -217,8 +217,12 @@ export interface CarrierPlan {
   target: number;
 }
 
-/** How crowded the corridor from `p` to the goal mouth is. */
-function laneBlockers(m: MatchState, side: Side, p: PlayerState): number {
+/**
+ * How crowded the corridor from `p` to the goal mouth is. Exported because the
+ * attract-mode driver asks the same question of side 0 — a shot into three
+ * defenders is a wasted shot whoever is holding the stick.
+ */
+export function laneBlockers(m: MatchState, side: Side, p: PlayerState): number {
   const goalY = attackGoalY(side, m.swapped);
   const dir = attackDir(side, m.swapped);
   let blockers = 0;

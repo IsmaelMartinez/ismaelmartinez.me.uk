@@ -18,7 +18,7 @@
  *
  * Import-safe in node: nothing touches `document` until `createRenderer()`.
  */
-import { createStaticLayer, hash01, type StaticLayer } from '../engine/canvas';
+import { blink, createStaticLayer, hash01, type StaticLayer } from '../engine/canvas';
 import { clamp } from '../engine/math';
 import {
   BOX_DEPTH,
@@ -72,7 +72,7 @@ import {
   type PlayerSprites,
   type SpriteSheet
 } from './sprites';
-import { KEEPER_KITS, TEAMS, type Team } from './teams';
+import { ALL_TEAMS, KEEPER_KITS, SECRET_TEAM, TEAMS, type Team } from './teams';
 import type { MatchState, PlayerState } from './match';
 import { scorerList } from './match';
 import { DIVE_WINDOW, SHOOTOUT_ZONES, type ShootoutState } from './shootout';
@@ -86,6 +86,26 @@ export const FB_H = 224;
 /** The HUD column occupies the right-hand 72 px; the playfield is the rest. */
 export const HUD_X = VIEW_W;
 export const HUD_W = FB_W - VIEW_W;
+
+/**
+ * The largest whole multiple of the framebuffer that fits `availW x availH`
+ * **device** pixels, never below 1.
+ *
+ * This is the whole of the integer-blit contract and it is stated in device
+ * pixels on purpose. Sizing the canvas in CSS pixels and letting the browser
+ * scale the backing store is what broke it before: a 960-wide backing store
+ * displayed in a 716 px box is a 0.746x nearest-neighbour *downscale*, and a
+ * quarter of the framebuffer's rows and columns simply vanish — visible as
+ * uneven stems on the wordmark and the HUD. `game.ts` feeds this the container
+ * width times `devicePixelRatio`, sizes the backing store to the scale it
+ * returns, and sets the CSS box to exactly that many device pixels, so one
+ * framebuffer pixel is always the same square block of screen.
+ */
+export function integerScale(availW: number, availH: number, dpr: number): number {
+  const wide = Math.floor((availW * dpr) / FB_W);
+  const tall = Math.floor((availH * dpr) / FB_H);
+  return Math.max(1, Math.min(wide, tall));
+}
 
 /** Terrace baked around the pitch, which is also the camera's slack. */
 export const LAYER_MARGIN = 40;
@@ -136,6 +156,10 @@ export interface RenderText {
   suddenDeath: string;
   credit: string;
   wordmark: string;
+  /** Blinked over the attract-mode demo: the cabinet asking for a player. */
+  attract: string;
+  /** Banner for the flourish when the hidden team is unlocked. */
+  unlocked: string;
 }
 
 export const DEFAULT_TEXT: RenderText = {
@@ -167,7 +191,9 @@ export const DEFAULT_TEXT: RenderText = {
   shootout: 'PENALTIES',
   suddenDeath: 'SUDDEN DEATH',
   credit: 'A PIXEL FOOTBALL CABINET',
-  wordmark: "CALCIO '90"
+  wordmark: "CALCIO '90",
+  attract: 'PRESS SPACE TO PLAY',
+  unlocked: 'SECRET TEAM UNLOCKED'
 };
 
 /* ------------------------------------------------------------------ */
@@ -186,6 +212,11 @@ export interface MatchView {
    * match.ts's `pickMarker` so the highlight cannot lie about the outcome.
    */
   aimX?: number;
+  /**
+   * True while this match is the attract-mode demo: the HUD stays live and the
+   * blinking `PRESS SPACE TO PLAY` strip goes over the playfield.
+   */
+  attract?: boolean;
 }
 
 export interface TitleView {
@@ -195,12 +226,39 @@ export interface TitleView {
 
 export interface TeamSelectView {
   clock: number;
-  /** Index into `TEAMS`, 0..11. */
+  /** Index into the visible roster, 0..11 — or 12 once the secret side is in. */
   cursor: number;
   /** True once the stats box with YES / NO is open. */
   confirming: boolean;
   /** Which of YES / NO the stick is on. */
   confirmYes: boolean;
+  /** True once the Konami code has put the thirteenth side on the grid. */
+  unlocked?: boolean;
+  /** Seconds left on the unlock flourish; 0 or absent draws no banner. */
+  unlockFlash?: number;
+}
+
+/**
+ * The live effect arrays, exactly as `createEffects` exposes them. The
+ * renderer takes the physics from the engine and does its own rasterising —
+ * see {@link Renderer.drawEffects}.
+ */
+export interface EffectsView {
+  readonly particles: ReadonlyArray<{
+    x: number;
+    y: number;
+    size: number;
+    color: string;
+    life: number;
+    maxLife: number;
+  }>;
+  readonly floaters: ReadonlyArray<{
+    x: number;
+    y: number;
+    text: string;
+    color: string;
+    life: number;
+  }>;
 }
 
 export interface TablesView {
@@ -254,6 +312,12 @@ export interface Renderer {
   drawFullTime(view: FullTimeView): void;
   drawChampion(view: ChampionView): void;
   drawGameOver(view: GameOverView): void;
+  /**
+   * Draw the engine's live particles and floaters into the framebuffer as
+   * pixels: whole-pixel squares and bitmap-font words, no alpha, no system
+   * font. See the method's own note for why the drawing is not the engine's.
+   */
+  drawEffects(fx: EffectsView): void;
   /** Dither the framebuffer down and stamp PAUSED over whatever is there. */
   drawPause(): void;
   /** Copy the framebuffer to a visible context at an integer scale. */
@@ -286,6 +350,18 @@ function frame(
   fill(ctx, x, y + h - t, w, t, colour);
   fill(ctx, x, y, t, h, colour);
   fill(ctx, x + w - t, y, t, h, colour);
+}
+
+/** Seconds of flicker at the end of a floater's life, in place of a fade. */
+const FLOATER_FLICKER = 0.3;
+
+/**
+ * True when an effect in its last `window` seconds should be skipped this
+ * frame. Alternating every second frame at 15 Hz is how the hardware faded a
+ * sprite out — there is no alpha channel to fade with, and 8.1 forbids one.
+ */
+function dying(life: number, window: number): boolean {
+  return life < window && Math.floor(life * 30) % 2 === 0;
 }
 
 /**
@@ -749,9 +825,60 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
         shadow: { color: PALETTE.bannerShadow, dx: 2, dy: 2 }
       });
     }
+    if (view.attract) drawAttractPrompt();
     ctx!.restore();
 
     drawHud(m, view);
+  }
+
+  /**
+   * The cabinet asking for a player, over its own demo. A strip rather than
+   * bare text: a one-pixel font on mown grass is unreadable, and the panel is
+   * the same opaque `hudPanel` the HUD column uses, so it reads as chrome.
+   */
+  function drawAttractPrompt(): void {
+    const w = textWidth(text.attract) + 12;
+    const x = Math.round((VIEW_W - w) / 2);
+    const y = VIEW_H - 26;
+    fill(ctx!, x, y, w, 15, PALETTE.hudPanel);
+    frame(ctx!, x, y, w, 15, 1, PALETTE.hudRule);
+    // 1.5 Hz, the arcade's own beacon cadence: on for two thirds of a second.
+    if (blink(animClock)) {
+      drawTextCentred(ctx!, text.attract, VIEW_W / 2, y + 4, { color: PALETTE.hudText });
+    }
+  }
+
+  /**
+   * Particles and floaters, rasterised here rather than by `effects.ts`.
+   *
+   * The engine module stays the required channel for the *physics* — `burst`,
+   * `emit`, `floater`, `update` and `clear` are all its own, and this reads the
+   * arrays it owns. Only the drawing is local, because the engine draws
+   * floaters with `ctx.fillText` in a system font and fades everything under
+   * `globalAlpha`, and 8.1 forbids both anti-aliasing and alpha blending in
+   * the pixel layer. A particle therefore fades the way a Mega Drive faded a
+   * sprite — by flickering off on alternate frames near the end of its life —
+   * and a floater is a bitmap word like every other word on screen.
+   */
+  function drawEffects(fx: EffectsView): void {
+    ctx!.save();
+    ctx!.beginPath();
+    ctx!.rect(0, 0, VIEW_W, VIEW_H);
+    ctx!.clip();
+    for (const part of fx.particles) {
+      if (dying(part.life, part.maxLife * 0.3)) continue;
+      const size = Math.max(1, Math.round(part.size * 2));
+      fill(ctx!, Math.round(part.x), Math.round(part.y), size, size, part.color);
+    }
+    for (const f of fx.floaters) {
+      if (dying(f.life, FLOATER_FLICKER)) continue;
+      drawTextCentred(ctx!, f.text, f.x, f.y, {
+        scale: 2,
+        color: f.color,
+        shadow: { color: PALETTE.bannerShadow, dx: 2, dy: 2 }
+      });
+    }
+    ctx!.restore();
   }
 
   /* --- screens --------------------------------------------------- */
@@ -807,23 +934,26 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       outline: PALETTE.menuSelected
     });
 
+    // The thirteenth cell sits alone on a fourth row, so an unlocked cabinet
+    // shows the secret side without reflowing the twelve above it.
+    const roster = view.unlocked ? ALL_TEAMS : TEAMS;
     const cols = 4;
     const cellW = 66;
-    const cellH = 40;
+    const cellH = 36;
     const gapX = 8;
-    const gapY = 8;
+    const gapY = 6;
     const x0 = 16;
-    const y0 = 42;
-    for (let i = 0; i < TEAMS.length; i++) {
-      const team = TEAMS[i];
+    const y0 = 40;
+    for (let i = 0; i < roster.length; i++) {
+      const team = roster[i];
       const cx = x0 + (i % cols) * (cellW + gapX);
       const cy = y0 + Math.floor(i / cols) * (cellH + gapY);
       fill(ctx!, cx, cy, cellW, cellH, team.primary);
       frame(ctx!, cx, cy, cellW, cellH, 1, PALETTE.black);
       fill(ctx!, cx + cellW - 12, cy + 4, 8, 8, team.trim);
       const ink = inkOn(team.primary);
-      drawText(ctx!, team.code, cx + 5, cy + 6, { scale: 2, color: ink });
-      drawText(ctx!, team.name, cx + 5, cy + 26, { color: ink });
+      drawText(ctx!, team.code, cx + 5, cy + 5, { scale: 2, color: ink });
+      drawText(ctx!, team.name, cx + 5, cy + 23, { color: ink });
       if (i === view.cursor && Math.floor(view.clock * 2) % 2 === 0) {
         // The cursor blinks on the same half-second beat as PRESS START.
         frame(ctx!, cx - 2, cy - 2, cellW + 4, cellH + 4, 2, PALETTE.white);
@@ -831,7 +961,37 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       }
     }
 
-    if (view.confirming) drawStatsBox(TEAMS[view.cursor], view.confirmYes);
+    if (view.confirming) drawStatsBox(roster[view.cursor], view.confirmYes);
+    if (view.unlockFlash && view.unlockFlash > 0) drawUnlockBanner(view.unlockFlash);
+  }
+
+  /**
+   * The flourish for the hidden side. It sits over the grid for a couple of
+   * seconds on the same 1.5 Hz beat as everything else that blinks, so the
+   * reward reads as part of the cabinet rather than a web page's toast.
+   */
+  function drawUnlockBanner(remaining: number): void {
+    const label = text.unlocked;
+    // Spanish and Catalan say it in more letters than English does; the label
+    // drops a size rather than running off the framebuffer.
+    const labelScale = textWidth(label, 2) + 20 <= FB_W ? 2 : 1;
+    const w = Math.max(textWidth(label, labelScale), textWidth(SECRET_TEAM.name, 3)) + 20;
+    const h = 52;
+    const x = Math.round((FB_W - w) / 2);
+    const y = 82;
+    fill(ctx!, x, y, w, h, PALETTE.menuPanel);
+    frame(ctx!, x, y, w, h, 2, SECRET_TEAM.primary);
+    if (blink(remaining)) {
+      drawTextCentred(ctx!, label, FB_W / 2, y + 10, {
+        scale: labelScale,
+        color: PALETTE.bannerText
+      });
+    }
+    drawTextCentred(ctx!, SECRET_TEAM.name, FB_W / 2, y + 28, {
+      scale: 3,
+      color: SECRET_TEAM.primary,
+      shadow: { color: PALETTE.bannerShadow, dx: 2, dy: 2 }
+    });
   }
 
   function drawStatsBox(team: Team, confirmYes: boolean): void {
@@ -1128,6 +1288,7 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     drawFullTime,
     drawChampion,
     drawGameOver,
+    drawEffects,
     drawPause,
     blit
   };

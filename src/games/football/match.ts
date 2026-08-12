@@ -22,7 +22,6 @@ import {
   attackDir,
   attackGoalY,
   ownGoalY,
-  inSixYardBox,
   inPenaltyBox,
   dist,
   type Point,
@@ -31,10 +30,9 @@ import {
 import { TEAMS, type Team } from './teams';
 import {
   ASSIST_DIVE_PENALTY,
+  ASSIST_REACT_LOSS,
   KEEPER_WALK,
   KEEPER_DIVE,
-  KEEPER_SMOTHER,
-  KEEPER_SMOTHER_R,
   KEEPER_HOLD,
   KEEPER_STEAL_R,
   KEEPER_STEAL_RATE,
@@ -43,8 +41,8 @@ import {
   PARRY_LOCK,
   REACH_BASE,
   SAVE_FLOOR,
+  approachGap,
   commitDive,
-  diveProgress,
   flightTime,
   keeperReach,
   keeperSkill,
@@ -118,6 +116,13 @@ export const CAPTURE_R = 10;
  * button-masher does not, so it has to pay.
  */
 export const PASS_INTERCEPT_R = 4;
+/**
+ * How near the ball the *intended receiver* of a ground pass has to be to take
+ * it in. Wider than `CAPTURE_R`, because a man a ball has been played to is
+ * running onto it and expecting it, and narrower than a stride, because he
+ * still has to be there.
+ */
+export const RECEIVE_R = 16;
 export const CONTROL_MAX = 330;
 /**
  * A keeper gathers loose balls up to this pace and no faster. Anything quicker
@@ -131,8 +136,14 @@ export const KEEPER_TRAP_MAX = 200;
  * reacts to a 450 px/s shot from the same distance they trap a loose ball.
  * Without the tighter radius half of every shot is deflected before it reaches
  * the keeper and shot power stops mattering again.
+ *
+ * 9 rather than 5, which is a body's width rather than a rumour of one. At 5 a
+ * defender standing in the corridor was transparent, so shooting through
+ * traffic cost nothing and picking a clean lane bought nothing — and 6.2's own
+ * number is `CAPTURE_R`, which is 10. It is still tighter than trapping a
+ * loose ball, which is the part that has to stay true.
  */
-export const BLOCK_R = 5;
+export const BLOCK_R = 9;
 export const TACKLE_R = 15;
 export const DRIBBLE_OFFSET = 8;
 export const KICK_GRACE = 0.35;
@@ -143,13 +154,9 @@ export const WIN_GRACE = 0.5;
  * width inside the post, so the whole stick range is a reachable target. See
  * `shoot` for why the specification's wider-than-the-mouth envelope had to go.
  *
- * It is deliberately *not* congruent with `KEEPER_BAND`, the furthest off
- * centre the keeper will ever stand, which is 20. When the two were equal the
- * whole game collapsed into one number: the target and the man defending it
- * lived on the same 72 px line, so dragging him to one end of it left the
- * other end uncovered by construction and the routine solved the cabinet. The
- * far corner is now 15 px beyond the furthest he stands, so moving him is
- * worth something real and worth strictly less than the whole goal.
+ * Where the keeper stands is no longer a band at all — he stands on the angle
+ * (`narrowAngleX`), so there is no line for the aim scale to be congruent
+ * with. What matters here is only that the whole stick maps inside the frame.
  *
  * Going the other way and pushing this out to `GOAL_HALF - 2` — which the
  * first pass at this fix did, to make the span exactly twice the band — is
@@ -221,7 +228,7 @@ const RUSH_HOOF = 1;
  * three quarters of the passes that did lead to a shot were collecting nothing
  * for it — which is most of why passing was a net loss.
  */
-const ASSIST_WINDOW = 2;
+export const ASSIST_WINDOW = 2;
 const RUSH_MAX = 2;
 /** Rush below this stays out of the sky; above it, some of them go over. */
 const SKY_GATE = 1.15;
@@ -252,8 +259,16 @@ export const SLIDE_DOWN = 0.8;
  * is worth the 0.8 s on the floor a lost one costs: the risk is priced in the
  * failure case, which is the only place it can be priced without making the
  * success case worthless.
+ *
+ * 40 rather than 70, because at 70 the ball ran away from the man who had just
+ * won it: an audit measured the tackler still in possession 19 % of the time a
+ * quarter of a second after the challenge and 8 % after a second, which is
+ * level with a control that never slid at all. Knocking the ball back
+ * *through* the tackle rather than past the carrier was the right fix and it
+ * was not enough on its own — the ball was still struck hard enough to be a
+ * loose ball rather than a possession.
  */
-const KNOCK_SPEED = 70;
+const KNOCK_SPEED = 40;
 const KNOCK_STUMBLE = 0.4;
 const BODY_STEAL_RATE = 1.1;
 const BODY_STEAL_R = 12;
@@ -359,6 +374,17 @@ export interface KeeperRuntime {
   hold: number;
   parryLock: number;
   skill: number;
+  /**
+   * True once this keeper has rolled against the ball currently in flight.
+   *
+   * A keeper gets one go at a ball, and which frame he gets it on cannot be
+   * decided by a plane-crossing test alone: a shot struck from inside his
+   * standing line never crosses that plane, so before this flag existed the
+   * keeper was simply never consulted and every shot from ten pixels was a
+   * certain goal at every rating and difficulty. Cleared by every kick and
+   * every change of possession.
+   */
+  contested: boolean;
 }
 
 export type MatchPhase = 'kickoff' | 'play' | 'goal' | 'restart' | 'halfTime' | 'over';
@@ -544,7 +570,7 @@ function formation(side: Side, swapped: boolean): PlayerState[] {
  * held goals-against flat across the whole run. Side 0's keeper is therefore
  * fixed at a middling profile and only his team's Keeper rating moves him.
  */
-export const HUMAN_KEEPER_PROFILE = 0.45;
+export const HUMAN_KEEPER_PROFILE = 0.3;
 
 function freshKeeper(team: Team, side: Side, difficulty: number): KeeperRuntime {
   return {
@@ -552,7 +578,8 @@ function freshKeeper(team: Team, side: Side, difficulty: number): KeeperRuntime 
     dive: null,
     hold: 0,
     parryLock: 0,
-    skill: keeperSkill(team.keeper, side === 0 ? HUMAN_KEEPER_PROFILE : difficulty)
+    skill: keeperSkill(team.keeper, side === 0 ? HUMAN_KEEPER_PROFILE : difficulty),
+    contested: false
   };
 }
 
@@ -650,6 +677,7 @@ function placeKickoff(m: MatchState): void {
     gk.hold = 0;
     gk.parryLock = 0;
     gk.trackX = CENTRE_X;
+    gk.contested = false;
   }
   const taker = m.players[m.kickoffSide][6];
   const dir = attackDir(m.kickoffSide, m.swapped);
@@ -699,6 +727,8 @@ function takePossession(m: MatchState, side: Side, idx: number, won: boolean): v
   m.ball.vz = 0;
   m.keepers[0].dive = null;
   m.keepers[1].dive = null;
+  m.keepers[0].contested = false;
+  m.keepers[1].contested = false;
   if (idx === 0) m.keepers[side].hold = KEEPER_HOLD;
   if (won) m.winGrace = { side, idx, t: WIN_GRACE };
   m.noScore = false;
@@ -716,6 +746,9 @@ function kick(m: MatchState, vx: number, vy: number, vz: number): void {
   m.ball.vz = vz;
   m.kickGrace = { side: owner.side, idx: owner.idx, t: KICK_GRACE };
   m.kickFrom = { x: m.ball.x, y: m.ball.y };
+  // A new ball in flight is a new ball for both keepers to answer.
+  m.keepers[0].contested = false;
+  m.keepers[1].contested = false;
   m.lastTouch = owner.side;
   m.lastKicker[owner.side] = owner.idx;
   m.winGrace = null;
@@ -1204,25 +1237,35 @@ function armKeeper(m: MatchState, kickingSide: Side): void {
   const ball = m.ball;
   const speed = Math.hypot(ball.vx, ball.vy);
   if (speed < 60) return;
-  const toPlane = (keeper.y - ball.y) * -dir;
-  if (toPlane <= 0) return;
   const along = -dir * ball.vy;
   if (along <= 0) return;
-  const travel = (toPlane * speed) / along;
+  const toPlane = (keeper.y - ball.y) * -dir;
+  // How far the ball travels before it is level with him. A ball released
+  // *inside* his line has none of that journey left, and he has to go now.
+  const travel = Math.max(0, (toPlane * speed) / along);
   const t = flightTime(travel, speed);
   if (!Number.isFinite(t) || t > 2.5) return;
+  // He dives at where the ball will pass him, which is not where it crosses
+  // his line: for a ball dragged across the face of goal those two points are
+  // thirty pixels apart, and committing to the second is committing to a
+  // corner the ball reaches long after it has gone by him.
+  const nearest = Math.max(
+    0,
+    ((keeper.x - ball.x) * ball.vx + (keeper.y - ball.y) * ball.vy) / (speed * speed)
+  );
   // A ball that arrived off a completed pass or a delivered cross catches him
   // still adjusting to where it came from, so he commits with half a dive. It
   // is the whole reward for moving the ball rather than running with it.
   const assisted = !!m.assist && m.assist.side === kickingSide;
   gk.dive = commitDive({
     restX: keeper.x,
-    interceptX: ball.x + (ball.vx / speed) * travel,
+    interceptX: ball.x + ball.vx * nearest,
     flightT: t,
     skill: gk.skill,
     speed,
     rng: m.rng,
-    budgetScale: assisted ? ASSIST_DIVE_PENALTY : 1
+    budgetScale: assisted ? ASSIST_DIVE_PENALTY : 1,
+    late: assisted ? ASSIST_REACT_LOSS : 0
   });
 }
 
@@ -1248,39 +1291,11 @@ function stepKeeper(m: MatchState, side: Side, dt: number): void {
   const rest = restPosition(gk.trackX, m.ball.y, goalY, dir);
   let tx = rest.x;
   let ty = rest.y;
-  // A man on the ball this close is followed across, not waited for.
-  //
-  // This is what pays for `KEEPER_BAND`. Holding a central position is the
-  // whole of the fix for "drag him one way and shoot the other", but a keeper
-  // who *only* ever holds it stops covering the forward running in off the
-  // wing, and the `dribbler` control's goals went from 0.44 a match to 0.64 at
-  // d = 0.65 on that alone. So the narrow band governs where he stands against
-  // a **shot**, which is where the exploit lived, and a **carrier** inside
-  // `KEEPER_SMOTHER_R` shades him back out toward his posts.
-  //
-  // It shades him sideways and nothing else. An earlier version of this also
-  // brought him out to meet the man, and a keeper who leaves his line at
-  // anything inside the whole penalty area is a keeper you walk round: the
-  // same `dribbler` went to 9.4 goals a match and the suite found a 13-goal
-  // scoreline. Coming out is `restPosition`'s job and it is already doing it.
-  const carrier =
-    m.owner && m.owner.side !== side && m.owner.idx !== 0
-      ? m.players[m.owner.side][m.owner.idx]
-      : null;
-  if (carrier) {
-    const depth = Math.abs(carrier.y - goalY);
-    if (depth < KEEPER_SMOTHER_R) {
-      const close = clamp(1 - depth / KEEPER_SMOTHER_R, 0, 1);
-      // The outer limit is his posts less a ball's width: following a man is
-      // the one thing that takes him wider than `KEEPER_BAND`, and even then
-      // he stays inside his own frame.
-      tx = clamp(
-        rest.x + (carrier.x - rest.x) * KEEPER_SMOTHER * close,
-        CENTRE_X - (GOAL_HALF - 6),
-        CENTRE_X + (GOAL_HALF - 6)
-      );
-    }
-  }
+  // There is no separate "shade across toward a close carrier" term any more,
+  // and there is no longer anything for it to correct. It existed to buy back
+  // the coverage a keeper clamped to a central band lost against a forward
+  // running in off the wing; a keeper who stands on the angle covers that man
+  // by construction, because the angle is computed from where the ball is.
   const slow = Math.hypot(m.ball.vx, m.ball.vy) < 150;
   if (!m.owner && slow && inPenaltyBox(m.ball.x, m.ball.y, goalY) && m.ball.z < KEEPER_JUMP_Z) {
     tx = m.ball.x;
@@ -1309,13 +1324,40 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
   const relPrev = (prevY - goalY) * dir;
   const relNow = (m.ball.y - goalY) * dir;
   const relKeeper = (keeper.y - goalY) * dir;
-  if (!(relPrev > relKeeper && relNow <= relKeeper)) return;
+  // Crossing his line is the ordinary case. The other one is a ball that was
+  // struck from *inside* it — a shot from ten pixels, a rebound at his feet —
+  // which never crosses anything and which the crossing test therefore waved
+  // straight into the net, at every rating and every difficulty. He gets one
+  // roll at a ball either way; `contested` is what makes it one.
+  const crossing = relPrev > relKeeper && relNow <= relKeeper;
+  // ...and only for a ball that was still in front of the goal line when the
+  // frame began: one that had already crossed is a goal, not a save he never
+  // made. The test is on the *previous* position because a shot from ten
+  // pixels crosses the line inside a single tick, and he has to be consulted
+  // about that shot rather than about where it ended up.
+  const inside = relNow <= relKeeper && relPrev > 0 && m.ball.vy * dir < 0;
+  if (!(crossing || (inside && !gk.contested))) return;
   if (m.ball.z > KEEPER_JUMP_Z) return;
 
   const speed = Math.hypot(m.ball.vx, m.ball.vy);
   if (speed < 40) return;
-  const gap = Math.abs(m.ball.x - keeper.x);
-  const reach = gk.dive ? keeperReach(diveProgress(gk.dive.elapsed)) : REACH_BASE;
+  gk.contested = true;
+  // How near it passed him, not how far apart two lateral coordinates are:
+  // his reach is a radius and the ball is on a line, so a shot squeezed
+  // across him at a tight angle is a shot he is standing in the way of.
+  const gap = approachGap({
+    keeperX: keeper.x,
+    keeperY: keeper.y,
+    ballX: m.ball.x,
+    ballY: m.ball.y,
+    vx: m.ball.vx,
+    vy: m.ball.vy,
+    back: dist(m.ball.x, m.ball.y, m.kickFrom.x, m.kickFrom.y)
+  });
+  // A keeper who was never armed — a loose ball rolling in, a deflection — has
+  // had all the time in the world and is simply set; one who was armed is
+  // measured from the moment the ball was struck.
+  const reach = gk.dive ? keeperReach(gk.dive.elapsed - gk.dive.late) : REACH_BASE;
   // The desperation floor applies only to a ball that is actually going in:
   // he is never credited with saving one that was missing the goal anyway.
   const inFrame = Math.abs(m.ball.x - CENTRE_X) < GOAL_HALF;
@@ -1770,12 +1812,23 @@ function stepTackles(m: MatchState, dt: number, events: MatchEvent[]): void {
 
   // The keeper has a body: walking the ball in through him is impossible,
   // while a dribbled finish from an open angle around him still counts.
+  //
+  // The zone is the *penalty* area rather than the six-yard box, and the two
+  // stopped being interchangeable when he started coming out to narrow the
+  // angle. A keeper standing twenty-nine pixels off his line is at the feet of
+  // a striker who has carried the ball to the edge of the six-yard box, and
+  // under the old test he could only watch him: the zone said his own box, so
+  // a carrier who stopped a pixel outside it was safe from the man he was
+  // standing next to. That pocket is where "carry it into the box and strike
+  // it" lived — a policy that did nothing else converted 0.43 of its shots
+  // from there. Coming out and smothering is one act; where he happens to be
+  // standing when he makes it is not a rule.
   const gkGoal = ownGoalY(defSide, m.swapped);
   const gk = m.players[defSide][0];
   const gkGap = dist(gk.x, gk.y, carrier.x, carrier.y);
   if (
     owner.idx !== 0 &&
-    inSixYardBox(carrier.x, carrier.y, gkGoal) &&
+    inPenaltyBox(carrier.x, carrier.y, gkGoal) &&
     gkGap < KEEPER_STEAL_R &&
     !graceProtected(m, owner.side, owner.idx) &&
     (gkGap < KEEPER_BODY_R || m.rng() < KEEPER_STEAL_RATE * dt)
@@ -1798,6 +1851,12 @@ function stepTackles(m: MatchState, dt: number, events: MatchEvent[]): void {
       p.slideRolled = true;
       if (m.rng() < slideChance(base, carrier, p)) {
         m.stats.slidesWon[defSide]++;
+        // He has won it, so he is up: the commitment a slide costs is priced
+        // entirely in the failure case, where it is 0.8 s on the floor. Riding
+        // out the rest of the slide on a *successful* challenge was the other
+        // half of why winning one bought so little — the ball was at his feet
+        // and he was still travelling, face down, in a fixed direction.
+        p.slide = 0;
         knockLoose(m, defSide, idx);
         events.push({ type: 'tackle', side: defSide, won: true });
         return;
@@ -1850,7 +1909,8 @@ function tryCapture(m: MatchState): void {
   if (m.ball.z >= TRAP_Z) return;
   const speed = Math.hypot(m.ball.vx, m.ball.vy);
   let best: Owner | null = null;
-  let bestD = speed > CONTROL_MAX ? BLOCK_R : CAPTURE_R;
+  let bestD = Infinity;
+  const loose = speed > CONTROL_MAX ? BLOCK_R : CAPTURE_R;
   for (const side of [0, 1] as const) {
     // Cutting out a pass that is on takes more than standing in its corridor;
     // receiving one takes only the usual first touch.
@@ -1860,8 +1920,18 @@ function tryCapture(m: MatchState): void {
       if (idx === 0 && speed > KEEPER_TRAP_MAX) continue;
       const p = m.players[side][idx];
       if (p.down > 0) continue;
+      // The man the ball was played to is expecting it, so he takes it in from
+      // a stride further than he would reach for a loose one. This is the only
+      // difference between a pass and a ball that happens to be going his way,
+      // and without it there wasn't one: a third of every ground pass ran
+      // through the receiver's own radius and out the other side, which is
+      // most of the arithmetic behind passing being a net loss. A minute of
+      // football has room for about a dozen possessions a side, so a verb that
+      // costs a shot has to complete like a pass rather than like a punt.
+      const receiving = m.passInFlight === side && m.passTarget === idx;
+      const reach = intercepting ? PASS_INTERCEPT_R : receiving ? RECEIVE_R : loose;
       const d = dist(p.x, p.y, m.ball.x, m.ball.y);
-      if (d < Math.min(bestD, intercepting ? PASS_INTERCEPT_R : bestD)) {
+      if (d < reach && d < bestD) {
         bestD = d;
         best = { side, idx };
       }

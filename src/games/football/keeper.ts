@@ -13,11 +13,23 @@
  *    exactly 100%.
  *  - he acts on **both** paths: he rolls against shots crossing his plane and
  *    he strips a carrier who dribbles into his six-yard box.
- *  - **where he stands and where the stick can put the ball are not the same
- *    line.** `KEEPER_BAND` holds him near the middle of his goal; `AIM_SPAN`
- *    reaches most of the way to a post. When the two were congruent the whole
- *    cabinet reduced to one number — drag him one way, shoot the other — and
- *    no amount of tuning inside that geometry could have fixed it.
+ *  - **he stands on the angle, not on the ball.** `narrowAngleX` puts him on
+ *    the bisector of the angle the goal mouth subtends from the ball, which is
+ *    what a keeper does and what decides how much goal there is to shoot at.
+ *    Tracking the ball's lateral coordinate instead — which is what 6.5 asks
+ *    for and what this module did until an audit swept it — is what made a
+ *    fixed camp spot the best strategy in the game: from the corner of the
+ *    penalty box the keeper stood where the *ball* was, the whole far side of
+ *    the goal was open by construction, and no clamp on how far he would go
+ *    could fix it without leaving him rooted to his spot against a genuine
+ *    run. On the bisector, a wide position buys a narrow target: he covers his
+ *    near post and the shooter is squeezing the ball past his body.
+ *  - **his reach is a radius, so what counts is how near the ball passed
+ *    him**, not the difference of two lateral coordinates. A shot dragged
+ *    across the goal from a tight angle crosses his plane wide of him but
+ *    travels *through* the space he is standing in; measuring it laterally
+ *    credited it with a gap it never had, and that measurement is the other
+ *    half of the same camp exploit.
  *  - **his commit is a guess whose spread grows with what is asked of it.** A
  *    ball at his chest he simply catches; a ball into a corner he has to pick
  *    a side for. That, and not the size of his dive, is what makes placement a
@@ -28,7 +40,7 @@
  * out at each constant.
  */
 import { clamp } from '../engine/math';
-import { CENTRE_X, PITCH_L, SIX_DEPTH } from './pitch';
+import { CENTRE_X, GOAL_HALF, PITCH_L, SIX_DEPTH } from './pitch';
 
 /** Walking pace along the line while the ball is live. */
 export const KEEPER_WALK = 120;
@@ -73,6 +85,23 @@ export const DIVE_WINDOW = 0.45;
 /** Standing reach, and the extra a full-stretch dive adds. */
 export const REACH_BASE = 26;
 export const REACH_DIVE = 10;
+/**
+ * What he covers with no time at all — his own body — and how long it takes
+ * him to get from that to his standing reach.
+ *
+ * This is the honest reason a shot from six yards beats a keeper who is
+ * standing right in front of it, and without it there isn't one. Once the gap
+ * is measured as how near the ball passed him rather than as a difference of
+ * two lateral coordinates, a keeper who has come out to meet a striker is in
+ * the way of *every* aim from close range, and the sweep said so: the goal
+ * rate from the six-yard box was flat across the whole stick and lower than
+ * from eighty pixels, which inverts 7.3's distance response. A keeper has
+ * hands, not a wall; reaching a ball struck two metres away takes time he does
+ * not have, and that — not a smaller body — is what a point-blank finish
+ * beats.
+ */
+export const REACH_BODY = 12;
+export const REACT_TIME = 0.16;
 
 /**
  * He stands this far off his line, and comes this far further out *as the ball
@@ -86,41 +115,30 @@ export const REACH_DIVE = 10;
  */
 export const KEEPER_LINE = 8;
 /**
- * 18 rather than 12, and the six pixels are bought back from `KEEPER_BAND`. A
- * keeper who now holds the middle of his goal has to make up for it somewhere,
- * and coming to meet the ball is the move he has: it is what the cabinet's own
- * keeper does as an attack arrives, and it is what keeps a shot from the edge
- * of the six-yard box from being a formality.
+ * 26, well past the specification's 22, and it is the second half of narrowing
+ * the angle: standing on the bisector decides *which* line he is on and coming
+ * out decides how much of the goal his body covers from it. It is also what
+ * keeps the response falling with distance — at 18 a shot from eighty pixels
+ * measured better than one from forty-five, because he stopped following the
+ * ball out exactly where the shooter still had room to go round him.
  */
-export const KEEPER_ADVANCE = 18;
+export const KEEPER_ADVANCE = 26;
 /**
- * How far off centre he will ever *stand*.
+ * How far inside his posts he will ever stand. The bisector does the work of
+ * deciding *where*; this only keeps him inside his own frame, and it is the
+ * specification's own bound (6.5's `mouthCentre +- (GOAL_HALF - 6)`).
  *
- * This is deliberately much narrower than `AIM_SPAN`, the band the stick maps
- * a shot into, and the non-congruence is the point. When the two were equal
- * the game reduced to one number — both the keeper and the target lived on the
- * same 72 px line, so moving him to one end of it left the other end
- * uncovered by construction and no dive could ever close the distance. A
- * keeper who holds a central position takes the far corner away from *nobody*
- * on geometry alone; what takes it away is the dive, which is a guess with a
- * budget. Dragging him still pays — he is 20 px off his spot and the far
- * corner is that much further from his hands — it simply is not a free goal.
+ * The constant it replaces was a hard `+-20` band around the centre of the
+ * goal, introduced to stop a shooter dragging him off his spot.
+ * It could not work and the audit measured why: a keeper pinned near the
+ * middle covers the *centre* of the goal from every angle, so the reward for
+ * getting wide was a free far post rather than a hard finish. The bisector
+ * needs no band, because a keeper on the angle is already where the ball has
+ * to pass.
  */
-export const KEEPER_BAND = 20;
+export const KEEPER_POST_INSET = GOAL_HALF - 6;
 /** How far behind the ball he always stays; he narrows angles, never dives past it. */
-export const KEEPER_STANDOFF = 20;
-/**
- * How far across toward a carrier this close to goal the keeper shades, as a
- * fraction of the distance between them, and the range over which it fades in.
- *
- * This is a *lateral* correction and deliberately nothing else: the keeper
- * follows the man across his goal, he does not leave it. It is what lets
- * `KEEPER_BAND` hold him central against a shot — which is where the
- * drag-him-and-shoot-the-other-way exploit lived — without leaving him rooted
- * to the middle while a forward runs in from the wing.
- */
-export const KEEPER_SMOTHER = 0.8;
-export const KEEPER_SMOTHER_R = 60;
+export const KEEPER_STANDOFF = 6;
 /**
  * Over what depth his advance fades back to his line. It is a whole half of
  * the pitch rather than the width of the box, and that is what keeps 7.3's
@@ -209,6 +227,13 @@ export const BALL_FRICTION = 0.55;
  * isolation rig sweeps at, lands on exactly the same skill as before: the
  * shot-model bands and the ladder can then be read independently of one
  * another.
+ *
+ * Widening it further was tried this round, to steepen a ladder the keeper
+ * work had flattened, and measured backwards: the curve that is steeper at the
+ * top is shallower at the bottom, so the group stage got *easier* (a competent
+ * player scored 3.43 a match at d = 0.25 against 3.12 before) and an expert put
+ * ten past a keeper in one of two hundred matches, which 7.2 forbids outright.
+ * The pinned shape stands.
  */
 export function keeperSkill(rating: number, difficulty: number): number {
   return 0.3 + 0.5 * (rating / 5) * (0.133 + 0.667 * clamp(difficulty, 0, 1));
@@ -217,16 +242,19 @@ export function keeperSkill(rating: number, difficulty: number): number {
 /**
  * Exponential lag on the keeper's lateral tracking: he guesses, never knows.
  *
- * Longer than the specification's 0.22 - 0.12 x skill, and deliberately so.
- * This lag is the only channel through which *moving the ball* is rewarded in
- * front of goal: a side that switches play, crosses, or lays the ball off
- * across the face leaves the keeper trailing the ball by a real distance, and
- * a player who simply runs at the goal and strikes finds him already there.
- * At the specification's value the trail was four or five pixels and passing
- * bought nothing a straight run did not.
+ * Back to the specification's 0.22 - 0.12 x skill, from the 0.44 - 0.2 this
+ * module inflated it to. The inflation was bought to make moving the ball
+ * worth something in front of goal, and under the old measurement it had to
+ * be: with the gap read laterally and the reach a flat 36 px, a keeper four
+ * or five pixels behind the play was still standing in front of everything.
+ * Now that his reach is what he can get to in the time he has, being caught
+ * out of position is expensive by itself and the lag does not have to be
+ * exaggerated to make the point — at the inflated value a ball switched
+ * across the face left him 25 px wrong with 0.05 s to fix it, which is a
+ * certain goal rather than a chance created.
  */
 export function trackLag(skill: number): number {
-  return 0.44 - 0.2 * clamp(skill, 0, 1);
+  return 0.22 - 0.12 * clamp(skill, 0, 1);
 }
 
 /** Advance the delayed copy of the ball's lateral coordinate. */
@@ -236,8 +264,39 @@ export function trackBall(prevX: number, ballX: number, skill: number, dt: numbe
 }
 
 /**
- * Where the keeper wants to stand: on the delayed ball line, clamped inside
- * his posts, and off his line when the ball is still a long way out.
+ * Where a keeper standing `standDepth` off his line has to be to bisect the
+ * angle the goal mouth subtends from a ball at `(ballX, ballDepth)`.
+ *
+ * This is the whole of what "narrowing the angle" means and it is the thing
+ * lateral ball-tracking cannot express. From the middle of the pitch the two
+ * posts are almost the same direction, so the bisector is nearly the centre of
+ * the goal and the keeper barely moves however wide the ball is — which is why
+ * a shooter can no longer drag him anywhere from range. From the corner of the
+ * penalty box the two posts are 22 degrees apart and the bisector is hard
+ * against the near post, which is where the ball has to pass to be squeezed
+ * across goal. The reward for a wide position is a difficult finish.
+ */
+export function narrowAngleX(ballX: number, ballDepth: number, standDepth: number): number {
+  const inside = (x: number) =>
+    clamp(x, CENTRE_X - KEEPER_POST_INSET, CENTRE_X + KEEPER_POST_INSET);
+  if (ballDepth <= standDepth + 1) return inside(ballX);
+  // Unit vectors from the ball to each post, in a frame where the goal line is
+  // depth 0 and the ball is out at `ballDepth`.
+  let bx = 0;
+  let bd = 0;
+  for (const post of [CENTRE_X - GOAL_HALF, CENTRE_X + GOAL_HALF]) {
+    const dx = post - ballX;
+    const len = Math.hypot(dx, ballDepth) || 1;
+    bx += dx / len;
+    bd += -ballDepth / len;
+  }
+  if (bd > -1e-6) return inside(ballX);
+  return inside(ballX + (bx * (ballDepth - standDepth)) / -bd);
+}
+
+/**
+ * Where the keeper wants to stand: on the angle from the delayed ball line,
+ * inside his posts, and off his line when the ball is still a long way out.
  */
 export function restPosition(
   trackX: number,
@@ -254,10 +313,43 @@ export function restPosition(
     KEEPER_ADVANCE * near,
     Math.max(0, depth - KEEPER_LINE - KEEPER_STANDOFF)
   );
+  const standDepth = KEEPER_LINE + advance;
   return {
-    x: clamp(trackX, CENTRE_X - KEEPER_BAND, CENTRE_X + KEEPER_BAND),
-    y: goalY + dir * (KEEPER_LINE + advance)
+    x: narrowAngleX(trackX, depth, standDepth),
+    y: goalY + dir * standDepth
   };
+}
+
+/**
+ * How near the ball passed the keeper on its way in, which is what a reach
+ * measured as a radius is actually about.
+ *
+ * `back` is how far behind the ball its flight extends — the distance to the
+ * boot that struck it — so a shot from six yards is never credited with a
+ * closest approach it took before it existed. Beyond that, and for a ball that
+ * is already past him, the answer is simply how far away it is.
+ */
+export function approachGap(opts: {
+  keeperX: number;
+  keeperY: number;
+  ballX: number;
+  ballY: number;
+  vx: number;
+  vy: number;
+  back: number;
+}): number {
+  const dx = opts.keeperX - opts.ballX;
+  const dy = opts.keeperY - opts.ballY;
+  const speed = Math.hypot(opts.vx, opts.vy);
+  const here = Math.hypot(dx, dy);
+  if (speed < 1e-6) return here;
+  // Backwards along the flight: where the ball has come from.
+  const ux = -opts.vx / speed;
+  const uy = -opts.vy / speed;
+  const t = dx * ux + dy * uy;
+  if (t <= 0) return here;
+  if (t >= opts.back) return Math.hypot(dx - opts.back * ux, dy - opts.back * uy);
+  return Math.abs(dx * uy - dy * ux);
 }
 
 /**
@@ -293,9 +385,14 @@ export function diveProgress(elapsed: number): number {
   return clamp(elapsed / DIVE_TIME, 0, 1);
 }
 
-/** Reach either side of his hands, growing as the dive extends. */
-export function keeperReach(progress: number): number {
-  return REACH_BASE + REACH_DIVE * clamp(progress, 0, 1);
+/**
+ * Reach either side of his hands `elapsed` seconds after the ball was struck:
+ * his body at once, his standing reach once he has reacted, and the extra a
+ * full-stretch dive adds as it extends.
+ */
+export function keeperReach(elapsed: number): number {
+  const react = clamp(elapsed / REACT_TIME, 0, 1);
+  return REACH_BODY + (REACH_BASE - REACH_BODY) * react + REACH_DIVE * diveProgress(elapsed);
 }
 
 /**
@@ -345,6 +442,24 @@ export const ERROR_REACH = 3;
  */
 export const ASSIST_DIVE_PENALTY = 0.5;
 
+/**
+ * How much of his reaction a keeper has already spent on the *previous* ball
+ * when a shot arrives off a completed pass, in seconds.
+ *
+ * The dive penalty above is the same idea applied to his legs, and on its own
+ * it was not enough to make passing pay: measured with paired common random
+ * numbers, a player who passed lost about 0.07 points a match to the identical
+ * player who never did at three of the four difficulties. A dive is a small
+ * part of what a keeper does; being *set* is most of it, and a keeper who has
+ * just tracked the ball to one man and watched it go to another is not set. So
+ * the same fact is charged where it is actually felt — his reach starts from
+ * his body rather than from his standing position, and he has to find the
+ * ground again before he is the obstacle he was.
+ *
+ * It is deliberately smaller than `REACT_TIME`: he is late, not absent.
+ */
+export const ASSIST_REACT_LOSS = 0.12;
+
 /** How badly he reads the shot, as a fraction of the dive available to him. */
 export function errorFraction(skill: number, speed: number): number {
   return (0.86 - 0.46 * clamp(skill, 0, 1)) * (0.6 + 0.4 * clamp(speed / 450, 0, 1.4));
@@ -362,6 +477,8 @@ export interface KeeperDive {
   targetX: number;
   budget: number;
   elapsed: number;
+  /** Reaction already spent on the previous ball; see `ASSIST_REACT_LOSS`. */
+  late: number;
 }
 
 /**
@@ -377,6 +494,8 @@ export function commitDive(opts: {
   rng: () => number;
   /** Fraction of his dive he still has; see `ASSIST_DIVE_PENALTY`. */
   budgetScale?: number;
+  /** Reaction already spent on the previous ball; see `ASSIST_REACT_LOSS`. */
+  late?: number;
 }): KeeperDive {
   const budget = diveBudget(opts.flightT) * clamp(opts.budgetScale ?? 1, 0, 1);
   const offset = opts.interceptX - opts.restX;
@@ -388,7 +507,8 @@ export function commitDive(opts: {
     fromX: opts.restX,
     targetX: opts.restX + offset + err,
     budget,
-    elapsed: 0
+    elapsed: 0,
+    late: Math.max(0, opts.late ?? 0)
   };
 }
 

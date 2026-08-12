@@ -66,7 +66,11 @@ export function dribbler(): Policy {
  * mashing": the period is swept, because a masher that only loses at one
  * cadence has not been fixed.
  */
-export function masher(period = 21, hold = Math.max(1, Math.round(period / 2))): Policy {
+export function masher(
+  period = 21,
+  hold = Math.max(1, Math.round(period / 2)),
+  reaction = MASH_REACTION
+): Policy {
   let tick = 0;
   let think = 0;
   let steer = { x: 0, y: 0 };
@@ -88,14 +92,77 @@ export function masher(period = 21, hold = Math.max(1, Math.round(period / 2))):
       const owns = !!m.owner && m.owner.side === 0;
       const target = owns ? goalPoint(m) : { x: m.ball.x, y: m.ball.y };
       steer = quantise8(target.x - p.x, target.y - p.y);
-      think = owns ? MASH_REACTION : Math.max(MASH_REACTION, DEFENSIVE_REACTION);
+      think = owns ? reaction : Math.max(reaction, DEFENSIVE_REACTION);
     }
     return { x: steer.x, y: steer.y, a: (tick - 1) % period < held, b: false, c: false };
   };
 }
 
 /** The masher reacts as fast as the `competent` player and no faster. */
-const MASH_REACTION = 0.17;
+export const MASH_REACTION = 0.17;
+
+/**
+ * The camper: carry the ball to one fixed spot and strike it across the goal
+ * from there, at the same 170 ms reaction as `competent`. Nothing else.
+ *
+ * This is the policy an independent audit found was the strongest thing on the
+ * pitch — "camp on the corner of the penalty box and shoot across goal" scored
+ * 6.6 to 6.8 ladder points against the expert's 5.9, won 94 % of matches at
+ * d = 0.25 and was champion in nearly half of all runs. It is a whole class of
+ * bug rather than a spot on the pitch: any *fixed* position that beats playing
+ * football means the geometry in front of goal has a hole in it, so the suite
+ * sweeps the position rather than testing the one that was found.
+ */
+export function camper(campX: number, campDepth: number): Policy {
+  let think = 0;
+  let held: MatchInput = NEUTRAL_INPUT;
+  let charging = 0;
+  return (m: MatchState, dt: number) => {
+    if (charging > 0) {
+      charging--;
+      if (charging === 0) return { ...held, a: false };
+      return held;
+    }
+    think -= dt;
+    if (think > 0) return held;
+    think = MASH_REACTION;
+    const p = m.players[0][m.controlled];
+    const owns = !!m.owner && m.owner.side === 0 && m.owner.idx === m.controlled;
+    const dir = attackDir(0, m.swapped);
+    const goalY = attackGoalY(0, m.swapped);
+    if (owns) {
+      const spot = { x: campX, y: goalY - dir * campDepth };
+      if (dist(p.x, p.y, spot.x, spot.y) < 12) {
+        // Across the goal, away from the near post: the shot the audit found.
+        const across = campX <= CENTRE_X ? 1 : -1;
+        held = { x: across, y: Math.sign(goalY - p.y), a: true, b: false, c: false };
+        charging = FULL_CHARGE_TICKS;
+        return held;
+      }
+      const q = quantise8(spot.x - p.x, spot.y - p.y);
+      held = { x: q.x, y: q.y, a: false, b: false, c: false };
+      return held;
+    }
+    const q = quantise8(m.ball.x - p.x, m.ball.y - p.y);
+    held = { x: q.x, y: q.y, a: false, b: false, c: false };
+    return held;
+  };
+}
+
+/**
+ * Camp positions swept across the attacking third: nine lateral stations from
+ * the left touchline to the right, at five depths from the six-yard line to
+ * the edge of the centre circle. Forty-five fixed spots, deliberately including
+ * the ones the audit named and the ones a later round of this work found when
+ * the first hole was closed and the exploit moved.
+ */
+export const CAMP_SPOTS: Array<[number, number]> = (() => {
+  const out: Array<[number, number]> = [];
+  for (const x of [50, 90, 120, 145, 170, 195, 220, 250, 290]) {
+    for (const depth of [40, 60, 78, 110, 150]) out.push([x, depth]);
+  }
+  return out;
+})();
 
 /**
  * A press has to fit inside its own cycle, and it has to end: a masher who
@@ -143,7 +210,11 @@ function goalPoint(m: MatchState): { x: number; y: number } {
 
 /** How crowded the corridor from the carrier to the mouth is. */
 function laneBlockers(m: MatchState): number {
-  const p = m.players[0][m.controlled];
+  return laneBlockersFrom(m, m.players[0][m.controlled]);
+}
+
+/** The same question asked of any point, so a pass can be judged by it too. */
+function laneBlockersFrom(m: MatchState, p: { x: number; y: number }): number {
   const goalY = attackGoalY(0, m.swapped);
   const dir = attackDir(0, m.swapped);
   let n = 0;
@@ -173,6 +244,11 @@ const DEFENSIVE_REACTION = 0.12;
 interface HumanOptions {
   reaction: number;
   shootRange: number;
+  /**
+   * Inside this he will shoot with one defender in the corridor; beyond it the
+   * lane has to be clean. It is where he stops working the ball and hits it.
+   */
+  workRange: number;
 /** Where across the mouth this player puts a shot, 0..1. */
   aim: number;
   /**
@@ -312,7 +388,20 @@ function makeHuman(opts: HumanOptions): Policy {
       }
       // A blocked lane is a wasted shot: from range the corridor has to be
       // clear, and only inside the box is one body in the way worth risking.
-      if (goalDist < opts.shootRange && laneBlockers(m) <= (goalDist < 190 ? 2 : 1)) {
+      //
+      // The gate this replaces accepted two bodies in the corridor out to
+      // 190 px and one beyond that, and it is most of what a camping policy
+      // was beating: shooting from anywhere inside 200 px through traffic
+      // converted at 0.19 a shot, against 0.41 for a policy that walked the
+      // ball to one spot at the edge of the box and struck it from there. A
+      // decent human does not hit the first shot that is technically legal,
+      // he takes the one that is on — and "a shot is worth taking when a
+      // better one is not available" is a *policy* claim, so it belongs here
+      // rather than in the game. The camp sweep is what holds it honest: the
+      // whole attacking third is swept for a fixed spot that out-points this
+      // player, and if one exists again this gate is the first thing to look
+      // at.
+      if (goalDist < opts.shootRange && laneBlockers(m) <= (goalDist < opts.workRange ? 1 : 0)) {
         // Place it toward the post the keeper is further from.
         const keeper = m.players[1][0];
         const side = keeper.x <= CENTRE_X ? 1 : -1;
@@ -343,14 +432,23 @@ function makeHuman(opts: HumanOptions): Policy {
       // that actually loses matches.
       const mate = opts.passes !== false ? openTeammate(m) : -1;
       // Passing is not only an escape. A decent player also gives it to a man
-      // who is further up the pitch and freer than he is, and gating the pass
-      // on pressure alone left the policy playing four a match against 7.4's
-      // floor of eight — and left the reward for moving the ball collectable
-      // only when he was already in trouble.
+      // who is further up the pitch and *much* freer than he is.
+      //
+      // "Much" is doing the work, and it is the second half of the answer to
+      // finding two. The gate this replaces asked for twelve pixels of extra
+      // room, which is inside the width of the two players; the policy played
+      // eleven and a half balls a match on it, half of them to a man no better
+      // off than the passer, and every one of them cost a shot. Volume is the
+      // one thing passing does not need: measured with paired common random
+      // numbers, taking it from eight to eleven and a half moved the verb from
+      // -0.07 to -0.22 points a match. The distance here is the width of the
+      // corridor a defender has to cover to get to the receiver, so the pass
+      // is played when the ball genuinely reaches a freer man and not because
+      // there is a teammate in front.
       const better =
         mate >= 0 &&
         aheadOf(m, mate, p) > 40 &&
-        nearestOpponent(m, m.players[0][mate].x, m.players[0][mate].y) > pressure + 12;
+        nearestOpponent(m, m.players[0][mate].x, m.players[0][mate].y) > pressure + 40;
       if (mate >= 0 && (pressure < 26 || better)) {
         if (aheadOf(m, mate, p) > -60) {
           const t = m.players[0][mate];
@@ -395,6 +493,30 @@ function advancedTeammate(m: MatchState): number {
   return best;
 }
 
+/**
+ * How many opponents are standing in the corridor a pass would travel down.
+ *
+ * A decent player does not play the ball through a defender and hope, and
+ * until this existed the policy did: it picked the freest, most advanced
+ * teammate with no regard for what was between the two of them, which is a
+ * third of a pass's value handed straight back. Passing quality is the whole
+ * of what the paired comparison is asking about — a pass has to make a better
+ * chance than the shot it replaced, and a pass that is cut out makes none.
+ */
+function passLaneBlockers(m: MatchState, from: { x: number; y: number }, idx: number): number {
+  const t = m.players[0][idx];
+  const dx = t.x - from.x;
+  const dy = t.y - from.y;
+  const d2 = dx * dx + dy * dy || 1;
+  let blockers = 0;
+  for (let o = 1; o < TEAM_SIZE; o++) {
+    const opp = m.players[1][o];
+    const along = Math.max(0, Math.min(1, ((opp.x - from.x) * dx + (opp.y - from.y) * dy) / d2));
+    if (dist(opp.x, opp.y, from.x + dx * along, from.y + dy * along) < 18) blockers++;
+  }
+  return blockers;
+}
+
 function openTeammate(m: MatchState): number {
   const p = m.players[0][m.controlled];
   const dir = attackDir(0, m.swapped);
@@ -405,7 +527,16 @@ function openTeammate(m: MatchState): number {
     const t = m.players[0][idx];
     const d = dist(p.x, p.y, t.x, t.y);
     if (d < 26 || d > 220) continue;
-    const score = (t.y - p.y) * dir * 0.5 + nearestOpponent(m, t.x, t.y) - d * 0.2;
+    // A body in the corridor is a heavy penalty rather than a veto: vetoing it
+    // outright measured worse than not passing at all, because it cut the
+    // policy from eight balls a match to three without improving what was
+    // left. What passing needs is the *best* option taken, not the marginal
+    // one refused.
+    const score =
+      (t.y - p.y) * dir * 0.5 +
+      nearestOpponent(m, t.x, t.y) -
+      d * 0.2 -
+      passLaneBlockers(m, p, idx) * 90;
     if (score > bestScore) {
       bestScore = score;
       best = idx;
@@ -416,7 +547,8 @@ function openTeammate(m: MatchState): number {
 
 const COMPETENT: HumanOptions = {
   reaction: 0.17,
-  shootRange: 200,
+  shootRange: 165,
+  workRange: 130,
   aim: 0.82,
   aimSpread: 0.3,
   chargeTicks: 33,
@@ -425,7 +557,14 @@ const COMPETENT: HumanOptions = {
 
 const EXPERT: HumanOptions = {
   reaction: 0.066,
-  shootRange: 205,
+  // The same shot selection as the competent player, and deliberately so: what
+  // makes the expert an expert is his reaction, his placement and his charge,
+  // not a licence to shoot from further out. Given a wider gate (185 / 150
+  // against 165 / 130) he measured *worse* than the competent player at
+  // d = 0.65 — 0.73 wins against 0.78 — because the extra shots he took were
+  // the ones the competent player had already learned to decline.
+  shootRange: 165,
+  workRange: 130,
   aim: 0.9,
   aimSpread: 0.18,
   chargeTicks: 28,

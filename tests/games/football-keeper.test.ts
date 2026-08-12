@@ -14,6 +14,11 @@ import {
   ERROR_BASE,
   ERROR_REACH,
   KEEPER_STEAL_R,
+  REACH_BASE,
+  REACH_BODY,
+  REACH_DIVE,
+  approachGap,
+  narrowAngleX,
   catchProbability,
   commitDive,
   diveBudget,
@@ -79,11 +84,29 @@ describe('keeper: the 7.3 acceptance bands', () => {
     ['half power from 140 px at a post', { distance: 140, aim: POST, power: 0.5 }, 0.18, 0.32],
     ['from the six-yard box at a post', { distance: 25, aim: POST, power: 1 }, 0.35, 0.55],
     ['from the six-yard box dead centre', { distance: 25, aim: 0, power: 1 }, 0.12, 0.25],
+    // DEVIATION, and it is the whole point of this round rather than a slip.
+    // 7.3 asks for 0.25-0.40 on "a header from a cross at a tight angle" and
+    // the cabinet gives 0.04. The cell is a header from outside the width of
+    // the six-yard box, dragged all the way across the face of goal past a
+    // keeper who is standing between it and the far post — which is precisely
+    // the shot the audit's dominant camp strategy was made of, and precisely
+    // the shot a keeper on the angle is there to deny. It cannot be 0.3 and
+    // the camp exploit be dead; they are the same shot.
     [
-      'a header from a cross at a tight angle',
+      'a header dragged across the keeper from a tight angle',
       { distance: 34, aim: -POST, power: 1, offsetX: 34, keeperX: 184, contact: 'header' as const },
-      0.25,
-      0.4
+      0.01,
+      0.12
+    ],
+    // What replaces it, and what the section was really asking about: the
+    // cross-and-header weapon still exists, and what makes it work is a
+    // delivery arriving where the keeper is not. Same tight angle, same
+    // header, but met while he is still on his spot in the middle of the goal.
+    [
+      'a header met before the keeper has come across',
+      { distance: 34, aim: 0, power: 1, offsetX: 34, keeperX: 170, contact: 'header' as const },
+      0.3,
+      0.6
     ]
   ];
 
@@ -128,7 +151,11 @@ describe('keeper: monotonicity', () => {
 
 describe('keeper: nothing is ever certain', () => {
   it('never returns exactly 0.0 or exactly 1.0 anywhere on the grid', { timeout: 120000 }, () => {
-    const distances = [30, 70, 110, 150, 190, 230];
+    // Down to touching distance. At 10 px the ball starts goal-side of the
+    // keeper's standing line and never crosses it, so before this round the
+    // crossing test never fired, the keeper was never consulted, and every one
+    // of these cells measured exactly 1.0000 at every rating and difficulty.
+    const distances = [10, 14, 30, 70, 110, 150, 190, 230];
     const aims = [0, 0.25, 0.5, 0.75, POST];
     const powers = [0.35, 0.6, 1];
     const ratings = [2, 3, 4];
@@ -241,9 +268,77 @@ describe('keeper: the pure pieces', () => {
     expect(flightTime(500, 200)).toBe(Infinity);
   });
 
-  it('extends his reach as the dive develops', () => {
-    expect(keeperReach(diveProgress(0))).toBeLessThan(keeperReach(diveProgress(0.28)));
+  it('extends his reach as he reacts and the dive develops', () => {
+    // Reach is measured from the moment the ball was struck, not from a dive
+    // progress fraction, and that is the whole of why a point-blank finish
+    // beats a keeper standing in front of it: with no time at all he covers
+    // his own body and nothing else.
+    expect(keeperReach(0)).toBeCloseTo(REACH_BODY, 6);
+    expect(keeperReach(0.02)).toBeLessThan(REACH_BASE * 0.6);
+    expect(keeperReach(0.02)).toBeLessThan(keeperReach(0.1));
+    expect(keeperReach(0.1)).toBeLessThan(keeperReach(0.4));
+    expect(keeperReach(9)).toBeCloseTo(REACH_BASE + REACH_DIVE, 6);
     expect(diveProgress(9)).toBe(1);
+  });
+
+  it('stands on the angle rather than on the ball', () => {
+    // From range the two posts are nearly the same direction, so a ball out
+    // wide barely moves him: this is what stops a shooter dragging him off his
+    // spot from the halfway line and shooting into the space.
+    const farWide = narrowAngleX(CENTRE_X + 120, 300, 20);
+    expect(Math.abs(farWide - CENTRE_X)).toBeLessThan(20);
+    // From the corner of the penalty box he is hard against his near post,
+    // which is the fix for the camp exploit: the reward for a wide position is
+    // a narrow target rather than an open goal.
+    const boxCorner = narrowAngleX(CENTRE_X + 108, 78, 20);
+    expect(boxCorner).toBeGreaterThan(CENTRE_X + 12);
+    // And he never leaves his own frame.
+    for (const ballX of [-200, 0, CENTRE_X, 340, 600]) {
+      for (const depth of [1, 12, 40, 300]) {
+        const x = narrowAngleX(ballX, depth, 20);
+        expect(Math.abs(x - CENTRE_X)).toBeLessThanOrEqual(GOAL_HALF);
+      }
+    }
+  });
+
+  it('measures the gap as how near the ball passed him', () => {
+    // A ball dragged across the face of goal crosses his line wide of him and
+    // goes *through* the space he is standing in on the way. Measured
+    // laterally it looks like a free corner; measured as an approach it is a
+    // shot he is in the way of, and that is the other half of the camp fix.
+    const across = approachGap({
+      keeperX: CENTRE_X,
+      keeperY: 20,
+      ballX: CENTRE_X - 30,
+      ballY: 10,
+      vx: -300,
+      vy: -300,
+      back: 120
+    });
+    expect(across).toBeLessThan(30);
+    // A ball that has already gone past him is simply where it is.
+    const gone = approachGap({
+      keeperX: CENTRE_X,
+      keeperY: 20,
+      ballX: CENTRE_X + 40,
+      ballY: 4,
+      vx: 0,
+      vy: 400,
+      back: 200
+    });
+    expect(gone).toBeCloseTo(Math.hypot(40, 16), 6);
+    // And a shot from six yards is never credited with a closest approach it
+    // took before the boot that struck it existed.
+    const short = approachGap({
+      keeperX: CENTRE_X,
+      keeperY: 8,
+      ballX: CENTRE_X + 20,
+      ballY: 6,
+      vx: 300,
+      vy: -300,
+      back: 4
+    });
+    expect(short).toBeGreaterThan(15);
   });
 
   it('misjudges by more the further he has to go, and never by the clock', () => {

@@ -22,7 +22,7 @@ import {
   type Point,
   type Side
 } from './pitch';
-import { airMeetPoint, type MatchState, type PlayerState } from './match';
+import { ASSIST_WINDOW, airMeetPoint, type MatchState, type PlayerState } from './match';
 
 /** Top speed of the player under the stick. Nothing in the game exceeds it. */
 export const HUMAN_SPEED = 108;
@@ -68,6 +68,42 @@ export const SHOOT_RANGE = 190;
 
 /** Seconds a pressed teammate chases regardless of shape. */
 export const PRESS_TIME = 1.2;
+
+/**
+ * How long a defence takes to transfer its press onto the man who has just
+ * received a pass, and the floor under it for the player's own side.
+ *
+ * This is what a pass buys, and until it existed a pass bought nothing: the
+ * defenders re-aimed at the new carrier on the very frame the ball reached
+ * him, so the receiver was closed down as hard as the passer had been and the
+ * only thing changing hands was the risk of the ball being cut out. Measured
+ * with paired common random numbers, passing was a net loss at three of the
+ * four difficulties. A defence has to see the ball travel, decide who is
+ * going, and turn; the man on the end of a completed pass gets that moment,
+ * which is exactly the moment 6.4's rush terms are graded on.
+ *
+ * It is a *decision latency*, so on the CPU's side it is one of the four
+ * channels 6.8 allows difficulty to flow through — a d = 0.85 defence
+ * transfers in half the time a d = 0.25 one does — and the human's own side
+ * gets the fixed, decent floor for the same reason its press coordination is
+ * fixed: difficulty is the CPU's handicap, not a global dial.
+ */
+export const HUMAN_PRESS_REACT = 0.16;
+export function pressReact(side: Side, difficulty: number): number {
+  return side === 0 ? HUMAN_PRESS_REACT : cpuLatency(difficulty);
+}
+
+/**
+ * True while `side` is still adjusting to a pass the *other* side has just
+ * completed. `assist` is set the instant a teammate takes a pass in and runs
+ * for `ASSIST_WINDOW`; the press transfer is the first slice of that window.
+ */
+function transferring(m: MatchState, side: Side): boolean {
+  if (!m.assist || !m.owner || m.assist.side !== m.owner.side || m.assist.side === side) {
+    return false;
+  }
+  return m.assist.t > ASSIST_WINDOW - pressReact(side, m.difficulty);
+}
 
 /**
  * How far the second-nearest defender commits to the press, 0 = hold the
@@ -290,7 +326,9 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
   // threshold: at d = 0.25 he mostly holds the covering position and at d =
   // 0.85 he is in the carrier's face alongside the first.
   const backing = side === 0 ? HUMAN_BACKING : clamp(0.45 * (m.difficulty - 0.25), 0, 1);
-  const commit = idx === first ? 1 : idx === second ? backing : 0;
+  // Nobody has transferred onto the new man yet: hold the covering position
+  // for the moment it takes to react to the ball having moved.
+  const commit = transferring(m, side) ? 0 : idx === first ? 1 : idx === second ? backing : 0;
   if (commit > 0 && m.owner.idx !== 0) {
     // They cannot out-run him — the speed ledger forbids it — so they run at
     // where he is going rather than where he is. Chasing a carrier's heels is
@@ -404,8 +442,19 @@ export function planCarrier(m: MatchState, side: Side, idx: number): CarrierPlan
     // Aimed at the gap beside the keeper rather than at the post itself: the
     // envelope runs to +-(GOAL_HALF + 14), so a confident 0.7 put the ball on
     // the woodwork and the CPU's best-placed shots were its wasteful ones.
+    // The spread is tighter than it was at every difficulty, and the reason is
+    // the round's own arithmetic rather than a difficulty decision: the work
+    // that made the player's keeper stand on the angle made *both* keepers
+    // better, and the CPU — which cannot be handed pace (6.9) and whose other
+    // three channels move its chances rather than its finishing — stopped
+    // scoring. It conceded 0.45 to 0.70 a match against 7.2's 0.5-2.6 and a
+    // competent player was champion in 57 % of runs against a 12-32 % ask.
+    // Shot accuracy is one of the four channels 6.8 does allow, its baseline
+    // is not written down anywhere, and a CPU whose best-placed shots landed
+    // a third of the way to the post was not being handicapped, it was being
+    // bad at football.
     const aim = clamp(
-      away * (0.32 + 0.22 * d) + (m.rng() * 2 - 1) * (0.2 + 0.55 * (1 - d)),
+      away * (0.32 + 0.22 * d) + (m.rng() * 2 - 1) * (0.12 + 0.38 * (1 - d)),
       -0.78,
       0.78
     );

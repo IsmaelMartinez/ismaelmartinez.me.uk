@@ -39,7 +39,7 @@ export function cpuSpeed(d: number): number {
 /** Base slide-tackle success. The human's is fixed; the CPU's tops out below. */
 export const HUMAN_TACKLE_BASE = 0.6;
 export function cpuTackleBase(d: number): number {
-  return 0.44 + 0.165 * clamp(d, 0, 1);
+  return 0.28 + 0.24 * clamp(d, 0, 1);
 }
 
 /** CPU thinking time: 0.30 s at d=0.25 down to 0.12 s at d=0.85. */
@@ -52,6 +52,14 @@ export const SHOOT_RANGE = 230;
 
 /** Seconds a pressed teammate chases regardless of shape. */
 export const PRESS_TIME = 1.2;
+
+/**
+ * How far the second-nearest defender commits to the press, 0 = hold the
+ * covering position, 1 = in the carrier's face beside the first man. The
+ * player's side is a fixed, decent 0.6; the CPU's rises with difficulty, which
+ * is 6.8's "press coordination" channel and the strongest of the four.
+ */
+export const HUMAN_BACKING = 1;
 
 /**
  * The outfielder who should go for a loose ball. Whoever just kicked it is
@@ -106,6 +114,9 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
     // One outfielder goes for it, aiming where the ball will be rather than
     // where it is; everyone else keeps shape.
     const lead = { x: ball.x + ball.vx * 0.22, y: ball.y + ball.vy * 0.22 };
+    // A pass has an intended receiver, and he is the one who runs onto it.
+    if (m.passInFlight === side && m.passTarget === idx) return lead;
+    if (m.passInFlight === side && m.passTarget >= 0) return anchor;
     if (chaserFor(m, side, lead.x, lead.y) === idx) return lead;
     return anchor;
   }
@@ -131,13 +142,25 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
     return anchor;
   }
 
-  // Defending: the two nearest cut the carrier off, the rest drop between ball
-  // and goal. Nobody presses a keeper who is holding it — crowding his
-  // six-yard box would turn every goal kick into a gift.
+  // Defending: the nearest cut the carrier off, the rest drop between ball and
+  // goal. Nobody presses a keeper who is holding it — crowding his six-yard
+  // box would turn every goal kick into a gift.
+  //
+  // How many converge is one of the four channels difficulty is allowed to
+  // flow through (6.8), and it is the strongest of them: two defenders closing
+  // a carrier down at once is a trap he cannot dribble out of, so the CPU only
+  // earns the second presser from the semi-final on. The human's own side
+  // always presses with two — difficulty is the CPU's handicap, not a global
+  // dial, and weakening the player's defence would show up as goals against.
   const carrier = m.players[m.owner.side][m.owner.idx];
   const own = ownGoalY(side, m.swapped);
   const [first, second] = twoNearest(m, side, carrier.x, carrier.y);
-  if ((idx === first || idx === second) && m.owner.idx !== 0) {
+  // The second man's commitment is graded rather than switched on at a
+  // threshold: at d = 0.25 he mostly holds the covering position and at d =
+  // 0.85 he is in the carrier's face alongside the first.
+  const backing = side === 0 ? HUMAN_BACKING : clamp(0.45 * (m.difficulty - 0.25), 0, 1);
+  const commit = idx === first ? 1 : idx === second ? backing : 0;
+  if (commit > 0 && m.owner.idx !== 0) {
     // They cannot out-run him — the speed ledger forbids it — so they run at
     // where he is going rather than where he is. Chasing a carrier's heels is
     // what let the audited build be dribbled through end to end.
@@ -145,11 +168,22 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
     const gy = own - carrier.y;
     const glen = Math.hypot(gx, gy) || 1;
     const lead = clamp(dist(p.x, p.y, carrier.x, carrier.y) * 0.55, 0, 44);
-    return {
+    const cut = {
       x: clamp(carrier.x + (gx / glen) * lead, 8, PITCH_W - 8),
       y: clamp(carrier.y + (gy / glen) * lead, 8, PITCH_L - 8)
     };
+    if (commit >= 1) return cut;
+    const hold = coverPoint(anchor, ball, own);
+    return {
+      x: hold.x + (cut.x - hold.x) * commit,
+      y: hold.y + (cut.y - hold.y) * commit
+    };
   }
+  return coverPoint(anchor, ball, own);
+}
+
+/** Where a defender who is not pressing sits: between the ball and his goal. */
+function coverPoint(anchor: Point, ball: { x: number; y: number }, own: number): Point {
   return {
     x: clamp((anchor.x + ball.x) / 2, 12, PITCH_W - 12),
     y: clamp(anchor.y * 0.45 + (ball.y * 0.35 + own * 0.2), 12, PITCH_L - 12)
@@ -222,15 +256,23 @@ export function planCarrier(m: MatchState, side: Side, idx: number): CarrierPlan
   // the CPU shoot through traffic and turned the curve into a cliff; shot
   // *selection* is the channel difficulty flows through, and a clear lane is
   // what good selection means.
-  if (goalDist < SHOOT_RANGE && laneBlockers(m, side, p) === 0) {
+  // Inside the box one body in the corridor is worth shooting through; from
+  // range the lane still has to be clean. The gate does not loosen with
+  // difficulty — shooting through traffic is not better decision-making, and
+  // tying it to `d` turned the curve into a cliff when it was tried.
+  const traffic = goalDist < 150 ? 1 : 0;
+  if (goalDist < SHOOT_RANGE && laneBlockers(m, side, p) <= traffic) {
     // Place it away from the keeper, with the error shrinking as d rises. The
     // envelope is the player's exactly, and the clamp keeps a confident CPU
     // inside its own frame rather than aiming at the post as d approaches 1.
     const away = keeper.x <= CENTRE_X ? 1 : -1;
+    // Aimed at the gap beside the keeper rather than at the post itself: the
+    // envelope runs to +-(GOAL_HALF + 14), so a confident 0.7 put the ball on
+    // the woodwork and the CPU's best-placed shots were its wasteful ones.
     const aim = clamp(
-      away * (0.45 + 0.35 * d) + (m.rng() * 2 - 1) * 0.55 * (1 - d),
-      -0.7,
-      0.7
+      away * (0.32 + 0.22 * d) + (m.rng() * 2 - 1) * (0.2 + 0.55 * (1 - d)),
+      -0.78,
+      0.78
     );
     const power = clamp(0.45 + goalDist / 320 + 0.15 * d, 0.35, 1);
     return { action: 'shoot', aim, power, target: -1 };
@@ -248,7 +290,10 @@ export function planCarrier(m: MatchState, side: Side, idx: number): CarrierPlan
   }
 
   const pressed = m.players[1 - side].some((o, i) => i > 0 && dist(o.x, o.y, p.x, p.y) < 30);
-  const wantsPass = best >= 0 && (pressed || bestScore > 24);
+  // A hard CPU backs itself: it only lets go of the ball when the pass is
+  // clearly better than carrying it, which is what gets it into shooting
+  // positions against a side that presses with two all match.
+  const wantsPass = best >= 0 && (pressed || bestScore > 24 + 50 * d);
   if (wantsPass) {
     const mate = m.players[side][best];
     const far = dist(p.x, p.y, mate.x, mate.y) > 150;
@@ -268,8 +313,29 @@ export function dribbleTarget(m: MatchState, side: Side, idx: number): Point {
   const goalY = attackGoalY(side, m.swapped);
   const goalDist = Math.abs(goalY - p.y);
   const lane = p.x < CENTRE_X ? CENTRE_X - GOAL_HALF : CENTRE_X + GOAL_HALF;
+  // Running *at* the nearest defender is what a bad carrier does. Stepping
+  // round him is decision quality, so how far the CPU bothers is one of 6.8's
+  // difficulty channels — and it is what opens the shooting lane its own gate
+  // insists on, which is why a hard CPU gets shots at all against a side that
+  // always presses with two.
+  let nearest = -1;
+  let nearestD = Infinity;
+  for (let o = 1; o < TEAM_SIZE; o++) {
+    const opp = m.players[1 - side][o];
+    const d = dist(opp.x, opp.y, p.x, p.y);
+    if (d < nearestD) {
+      nearestD = d;
+      nearest = o;
+    }
+  }
+  let evade = 0;
+  if (nearest >= 0 && nearestD < 70) {
+    const opp = m.players[1 - side][nearest];
+    const away = opp.x <= p.x ? 1 : -1;
+    evade = away * 46 * m.difficulty * (1 - nearestD / 70);
+  }
   return {
-    x: goalDist < 170 ? CENTRE_X + (lane - CENTRE_X) * 0.35 : lane,
+    x: clamp((goalDist < 170 ? CENTRE_X + (lane - CENTRE_X) * 0.35 : lane) + evade, 16, PITCH_W - 16),
     y: goalY
   };
 }

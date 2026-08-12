@@ -30,7 +30,7 @@ export const THROW_DEADLINE = 3;
 /** A keeper idling on a goal kick clears automatically after this. */
 export const GOAL_KICK_DEADLINE = 2.5;
 /** Seconds the banner holds while the taker is placed; the clock is paused. */
-export const RESTART_PAUSE = 0.9;
+export const RESTART_PAUSE = 0.5;
 
 /** Speed of an automatic release, whichever restart ran out of patience. */
 export const AUTO_THROW_SPEED = 165;

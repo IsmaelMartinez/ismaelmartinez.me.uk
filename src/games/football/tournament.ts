@@ -77,6 +77,14 @@ export interface RunState {
   otherSemiWinner: string | null;
   matchesPlayed: number;
   goals: number;
+  /**
+   * Goals scored in the match currently being played. `runScore` counts these
+   * exactly as it counts finished ones, which is what lets game.ts bank a
+   * growing total the instant a goal goes in without computing the number
+   * anywhere but here. `recordPlayerMatch` folds them into `goals` and clears
+   * this, so the total never moves backwards.
+   */
+  liveGoals: number;
   groupWins: number;
   groupDraws: number;
   cleanSheets: number;
@@ -154,6 +162,7 @@ export function createRun(rng: () => number, playerCode: string): RunState {
     otherSemiWinner: null,
     matchesPlayed: 0,
     goals: 0,
+    liveGoals: 0,
     groupWins: 0,
     groupDraws: 0,
     cleanSheets: 0,
@@ -216,7 +225,12 @@ function applyResult(rows: TableRow[], home: string, away: string, hg: number, a
  * shows a scoreline the player could not have produced.
  */
 export function simulateGoals(attacker: Team, defender: Team, rng: () => number): number {
-  const mean = clamp(0.55 + (attacker.skill - defender.defence) * 0.28 + attacker.speed * 0.08, 0.15, 3.2);
+  // The mean is deliberately close to the goal rate a human match produces.
+  // At the specification's quieter numbers nine simulated fixtures out of ten
+  // ended level, the group table never separated anybody, and a player who
+  // beat one opponent qualified with a game to spare — which made the run's
+  // first act a formality.
+  const mean = clamp(0.95 + (attacker.skill - defender.defence) * 0.3 + attacker.speed * 0.1, 0.2, 3.4);
   let goals = 0;
   let p = Math.exp(-mean);
   let acc = p;
@@ -256,11 +270,14 @@ export function difficultyFor(run: RunState): number {
         ? SEMI_DIFFICULTY
         : FINAL_DIFFICULTY;
   if (!run.opponent) return base;
-  const strength = teamStrength(teamByCode(run.opponent));
-  // Ratings put `teamStrength` in [0.45, 0.75] around a 0.65 middling side, so
-  // 0.4 keeps the swing inside the specification's +-0.08. A strong draw is
-  // felt; it never buys the CPU anything but better decisions.
-  return clamp(base + (strength - 0.65) * 0.4, 0, 0.95);
+  const opponent = teamStrength(teamByCode(run.opponent));
+  const player = teamStrength(teamByCode(run.playerCode));
+  // The specification modulates by the opponent's rating alone, which meant a
+  // player who picked Leoni got exactly the same final as one who picked Api —
+  // and picking the best side in the roster was a free run to the trophy.
+  // The *gap* between the two is what a handicap should read, and at 0.5 it
+  // stays inside the same +-0.08 for the middling pairings the table describes.
+  return clamp(base + (opponent - player) * 0.5, 0, 0.95);
 }
 
 /** The two sides the player might meet, in bracket order. */
@@ -300,6 +317,7 @@ export function recordPlayerMatch(run: RunState, result: MatchResult): void {
   const { goalsFor, goalsAgainst } = result;
   run.matchesPlayed++;
   run.goals += goalsFor;
+  run.liveGoals = 0;
   if (goalsAgainst === 0) run.cleanSheets++;
   if (result.wonOnPenalties) run.penaltyWins++;
 
@@ -363,7 +381,7 @@ export function recordPlayerMatch(run: RunState, result: MatchResult): void {
 export function runScore(run: RunState): number {
   return (
     run.matchesPlayed * SCORE_MATCH_PLAYED +
-    run.goals * SCORE_GOAL +
+    (run.goals + run.liveGoals) * SCORE_GOAL +
     run.groupWins * SCORE_GROUP_WIN +
     run.groupDraws * SCORE_GROUP_DRAW +
     run.cleanSheets * SCORE_CLEAN_SHEET +

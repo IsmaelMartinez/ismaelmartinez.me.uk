@@ -13,8 +13,8 @@
  * happening rather than replaying a fixed tape.
  */
 import {
+  canAirStrike,
   NEUTRAL_INPUT,
-  SHOOT_RANGE,
   TACKLE_R,
   type MatchInput,
   type MatchState
@@ -85,11 +85,20 @@ function nearestOpponent(m: MatchState, x: number, y: number): number {
   return best;
 }
 
+/** Slowest a scripted player reacts when the ball is not at his feet. */
+const DEFENSIVE_REACTION = 0.12;
+
 interface HumanOptions {
   reaction: number;
   shootRange: number;
   /** Where across the mouth this player puts a shot, 0..1. */
   aim: number;
+  /**
+   * How far his intent wanders either side of that, per shot. Nobody hits the
+   * same spot twice, and without this every shot the policy takes is inside
+   * the frame — which is not a decent human, it is a machine.
+   */
+  aimSpread: number;
   /** Ticks A is held before release, which sets the shot's power. */
   chargeTicks: number;
   /** Whether the policy uses the lofted cross from wide areas. */
@@ -109,34 +118,80 @@ function makeHuman(opts: HumanOptions): Policy {
       if (charging === 0) return { ...held, a: false };
       return held;
     }
-    think -= dt;
-    if (think > 0) return held;
-    think = opts.reaction;
 
     const p = m.players[0][m.controlled];
     const owns = !!m.owner && m.owner.side === 0 && m.owner.idx === m.controlled;
+    const goal = goalPoint(m);
+
+    // Attacking a dropping ball is an instinct, not a decision: the window a
+    // cross is headable in is a handful of frames wide, so it is checked every
+    // tick rather than behind the reaction gate. A is the only button
+    // involved — the contact follows from the ball's height, per 6.1.
+    // The game itself is asked whether the ball can be attacked: pressing A at
+    // a ball that cannot be headed buys a slide tackle and its cooldown, and
+    // the chance is gone before the policy looks again.
+    if (!owns && canAirStrike(m, 0, m.controlled) && Math.abs(goal.y - m.ball.y) < 150) {
+      const keeper = m.players[1][0];
+      const away = keeper.x <= CENTRE_X ? 1 : -1;
+      held = { x: away * opts.aim, y: Math.sign(goal.y - p.y), a: true, b: false, c: false };
+      // Two frames of A: the press is what fires the header, the release
+      // simply lets go of a button that is no longer charging anything.
+      charging = 2;
+      return held;
+    }
+
+    think -= dt;
+    if (think > 0) return held;
+    // Reaction is a decision latency, and only decisions *on* the ball are
+    // made four times faster by being good at the game: nobody reads a loose
+    // ball 66 ms after it moves. Chasing therefore runs on a floor shared by
+    // both policies — without it the expert's defending alone held goals
+    // against flat across the whole difficulty ladder.
+    think = owns ? opts.reaction : Math.max(opts.reaction, DEFENSIVE_REACTION);
 
     if (owns) {
-      const goal = goalPoint(m);
       const goalDist = dist(p.x, p.y, goal.x, goal.y);
       const pressure = nearestOpponent(m, p.x, p.y);
-      if (goalDist < opts.shootRange && laneBlockers(m) <= 1) {
+      // A blocked lane is a wasted shot: from range the corridor has to be
+      // clear, and only inside the box is one body in the way worth risking.
+      if (goalDist < opts.shootRange && laneBlockers(m) <= (goalDist < 190 ? 2 : 1)) {
         // Place it toward the post the keeper is further from.
         const keeper = m.players[1][0];
         const side = keeper.x <= CENTRE_X ? 1 : -1;
-        // Just inside the post: wide enough to stretch him, not so wide that
-        // the shot spread throws it past the frame.
-        held = { x: side * opts.aim, y: Math.sign(goal.y - p.y), a: true, b: false, c: false };
+        // Toward the post the keeper is further from, give or take: the
+        // wander is drawn from the match's own RNG so a seeded match still
+        // replays identically.
+        const wander = (m.rng() * 2 - 1) * opts.aimSpread;
+        held = {
+          x: side * Math.max(0, opts.aim + wander),
+          y: Math.sign(goal.y - p.y),
+          a: true,
+          b: false,
+          c: false
+        };
         charging = opts.chargeTicks;
         return held;
       }
-      if (pressure < 22) {
+      // From the touchline the angle is not a shooting angle: the ball goes
+      // into the middle for the most advanced man to attack. This is the only
+      // route to the header 7.4 wants a share of the goals to come from.
+      const wide = Math.abs(p.x - CENTRE_X) > GOAL_HALF + 66;
+      if (opts.crosses && wide && goalDist < 160) {
+        const runner = advancedTeammate(m);
+        const target =
+          runner >= 0
+            ? m.players[0][runner]
+            : { x: CENTRE_X, y: goal.y - Math.sign(goal.y - p.y) * 60 };
+        const q = quantise8(target.x - p.x, target.y - p.y);
+        held = { x: q.x, y: q.y, a: false, b: true, c: false };
+        return held;
+      }
+      if (pressure < 20) {
         const mate = openTeammate(m);
         if (mate >= 0) {
           const t = m.players[0][mate];
           const q = quantise8(t.x - p.x, t.y - p.y);
-          const wide = Math.abs(p.x - CENTRE_X) > GOAL_HALF + 40;
-          held = { x: q.x, y: q.y, a: false, b: opts.crosses && wide, c: !(opts.crosses && wide) };
+          held = { x: q.x, y: q.y, a: false, b: false, c: true };
           return held;
         }
       }
@@ -169,6 +224,23 @@ function makeHuman(opts: HumanOptions): Policy {
   };
 }
 
+/** The teammate furthest up the pitch: the man a cross is aimed at. */
+function advancedTeammate(m: MatchState): number {
+  const dir = attackDir(0, m.swapped);
+  let best = -1;
+  let bestY = -Infinity;
+  for (let idx = 1; idx < TEAM_SIZE; idx++) {
+    if (idx === m.controlled) continue;
+    const t = m.players[0][idx];
+    const forward = t.y * dir;
+    if (forward > bestY) {
+      bestY = forward;
+      best = idx;
+    }
+  }
+  return best;
+}
+
 function openTeammate(m: MatchState): number {
   const p = m.players[0][m.controlled];
   const dir = attackDir(0, m.swapped);
@@ -189,11 +261,25 @@ function openTeammate(m: MatchState): number {
 }
 
 export function competent(): Policy {
-  return makeHuman({ reaction: 0.17, shootRange: 200, aim: 0.7, chargeTicks: 22, crosses: false });
+  return makeHuman({
+    reaction: 0.17,
+    shootRange: 200,
+    aim: 0.58,
+    aimSpread: 0.38,
+    chargeTicks: 33,
+    crosses: true
+  });
 }
 
 export function expert(): Policy {
-  return makeHuman({ reaction: 0.066, shootRange: SHOOT_RANGE, aim: 0.72, chargeTicks: 30, crosses: true });
+  return makeHuman({
+    reaction: 0.066,
+    shootRange: 205,
+    aim: 0.62,
+    aimSpread: 0.2,
+    chargeTicks: 28,
+    crosses: true
+  });
 }
 
 export const POLICIES: Record<PolicyName, () => Policy> = {

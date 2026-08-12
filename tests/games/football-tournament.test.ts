@@ -268,12 +268,30 @@ describe('difficulty', () => {
     expect(seen).toBe(true);
   });
 
-  it('modulates by the opposition rating within the stated band', () => {
+  /**
+   * The modulation reads the *gap* between the two sides rather than the
+   * opponent's rating alone, so picking the best team in the roster is felt as
+   * a harder run rather than as a free one. For the middling pairings the
+   * specification's table describes the swing is still its +-0.08; the widest
+   * mismatch the twelve-team roster can produce is Api against Leoni, and that
+   * is worth 0.15 either way.
+   */
+  it('modulates by the gap between the two sides', () => {
+    let widest = 0;
     for (let seed = 0; seed < 200; seed++) {
       const r = run(seed * 7919 + 17);
-      const d = difficultyFor(r);
-      expect(Math.abs(d - 0.25)).toBeLessThanOrEqual(0.0801);
+      widest = Math.max(widest, Math.abs(difficultyFor(r) - 0.25));
     }
+    expect(widest).toBeGreaterThan(0);
+    expect(widest).toBeLessThanOrEqual(0.1501);
+  });
+
+  it('is unmodulated when the two sides are evenly matched', () => {
+    const r = run(11);
+    r.playerCode = 'TOR';
+    r.opponent = 'LUP';
+    // Tori 3/4/4/3 and Lupi 3/3/4/4 both total 14, so the gap is zero.
+    expect(difficultyFor(r)).toBeCloseTo(0.25, 10);
   });
 });
 

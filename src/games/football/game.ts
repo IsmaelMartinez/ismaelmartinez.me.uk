@@ -1,70 +1,65 @@
 /**
- * CALCIO '90 — the arcade's top-down football cabinet.
+ * CALCIO '90 — the arcade's football cabinet.
  *
- * Pure rules live in pitch.ts / match.ts / ladder.ts; this module owns DOM
- * wiring, input (keyboard + a touch virtual stick with pass/shoot buttons),
- * and canvas rendering. It expects the markup defined in
- * src/pages/[lang]/fun/football.astro.
+ * Every rule lives in the DOM-free modules beside this one (pitch, teams,
+ * match, keeper, ai, setpieces, shootout, tournament) and every pixel is drawn
+ * by render.ts into a 320 x 224 framebuffer. This module is the wiring: the
+ * screen flow, the keyboard and touch input, the fixed-timestep loop, the
+ * audio, the scoreboard, and the single integer-scaled blit that puts the
+ * framebuffer on the page.
  *
- * Rendering splits two ways: the pitch (grass stripes, chalk lines, boxes,
- * goals, terrace crowd) is baked once into a static layer; players, ball,
- * markers, particles and popups draw per frame on top.
+ * It expects the markup in src/pages/[lang]/fun/football.astro.
  */
 import {
   createGameLoop,
-  createStaticLayer,
+  createEffects,
+  createGameAudio,
+  createToaster,
   initScoreboard,
   setupHiDpiCanvas,
-  createGameAudio,
-  wireChannelButton,
-  createToaster,
-  createEffects,
-  clamp,
-  formatClock,
-  hash01 as hash
+  wireChannelButton
 } from '../engine';
+import { createRenderer, type Renderer } from './render';
+import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
+import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
+import { TEAMS, teamByCode, type Team } from './teams';
 import {
-  PITCH_W,
-  PITCH_H,
-  GOAL_TOP,
-  GOAL_BOTTOM,
-  BOX_DEPTH,
-  BOX_HALF,
-  TEAM_SIZE
-} from './pitch';
-import {
-  createMatch,
-  tickMatch,
-  humanPass,
-  humanShoot,
-  type MatchState,
-  type MatchEvent
-} from './match';
-import {
-  createLadder,
-  recordMatch,
-  ladderScore,
+  createRun,
   difficultyFor,
-  ROUND_KEYS,
-  OPPONENTS,
-  GOAL_POINTS,
-  ROUND_POINTS,
-  type Ladder
-} from './ladder';
+  isKnockout,
+  playerTeam,
+  recordPlayerMatch,
+  runScore,
+  type RunState
+} from './tournament';
+import {
+  createShootout,
+  tickShootout,
+  type ShootoutInput,
+  type ShootoutState
+} from './shootout';
 
-const CANVAS_W = 640;
-const CANVAS_H = 440;
-const OX = (CANVAS_W - PITCH_W) / 2;
-const OY = (CANVAS_H - PITCH_H) / 2;
+/**
+ * Logical size of the visible canvas. `blit` picks the largest integer scale of
+ * the 320 x 224 framebuffer that fits, so this is exactly x3 and never lands on
+ * a fractional pixel.
+ */
+const CANVAS_W = 960;
+const CANVAS_H = 672;
 
-/** Seconds of holding the shoot button for a full-power shot. */
-const CHARGE_TIME = 0.9;
+type Screen =
+  | 'title'
+  | 'select'
+  | 'match'
+  | 'shootout'
+  | 'fullTime'
+  | 'tables'
+  | 'bracket'
+  | 'champion'
+  | 'gameOver';
 
-const HUMAN_SHIRT = '#2563eb';
-const HUMAN_KEEPER_SHIRT = '#facc15';
-const CPU_KEEPER_SHIRT = '#e2e8f0';
-
-type Phase = 'idle' | 'play' | 'between' | 'over';
+/** How long the goal celebration holds the crowd roar and the burst. */
+const GOAL_FX_TIME = 1.2;
 
 export function initFootballGame(): void {
   const root = document.getElementById('football-root');
@@ -79,705 +74,705 @@ export function initFootballGame(): void {
   const ctx: CanvasRenderingContext2D = context;
   root.dataset.gameWired = 'true';
 
-  const el = (id: string) => document.getElementById(id) as HTMLElement;
-  const startOverlay = el('start-overlay');
-  const nextOverlay = el('next-overlay');
-  const overOverlay = el('over-overlay');
-  const startBtn = el('start-btn');
-  const nextBtn = el('next-btn');
-  const againBtn = el('again-btn');
-  const nextRoundEl = el('next-round');
-  const overWin = el('over-win');
-  const overLoss = el('over-loss');
-  const finalScoreEl = el('final-score');
-  const matchScoreEl = el('match-score');
-  const clockEl = el('clock');
-  const runScoreEl = el('run-score');
-  const recordEl = el('record');
-  const roundLabelEl = el('round-label');
-  const toastArea = el('toast-area');
-  const { show: showToast } = createToaster(toastArea);
-
+  const el = (id: string) => document.getElementById(id);
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
-  // Round names travel as one pipe-joined data attribute (a hyphen-digit
-  // dataset key would not camelise cleanly).
-  const roundNames = s('tRounds', '').split('|');
+
+  /** Runtime-composed copy rides in on data attributes, per repo convention. */
   const strings = {
+    kickoff: s('tKickoff', 'KICKOFF'),
     goal: s('tGoal', 'GOAL!'),
-    golden: s('tGolden', 'Golden goal!'),
-    roundWon: s('tRoundWon', 'Through!'),
+    throwIn: s('tThrowIn', 'THROW IN'),
+    corner: s('tCorner', 'CORNER KICK'),
+    goalKick: s('tGoalKick', 'GOAL KICK'),
+    halfTime: s('tHalfTime', 'HALF TIME'),
+    fullTime: s('tFullTime', 'FULL TIME'),
+    paused: s('tPaused', 'PAUSED'),
+    pressStart: s('tPressStart', 'PRESS START'),
+    selectTeam: s('tSelectTeam', 'SELECT TEAM'),
+    score: s('tScore', 'SCORE'),
+    best: s('tBest', 'BEST'),
+    group: s('tGroup', 'GROUP'),
+    tables: s('tTables', 'GROUP TABLES'),
+    through: s('tThrough', 'THROUGH'),
+    penalties: s('tPenalties', 'PENALTIES'),
+    gameOver: s('tGameOver', 'GAME OVER'),
+    champions: s('tChampions', 'CHAMPIONS'),
+    semiFinal: s('tSemiFinal', 'SEMI FINAL'),
+    final: s('tFinal', 'FINAL'),
+    bracket: s('tBracket', 'KNOCKOUT'),
+    yes: s('tYes', 'YES'),
+    no: s('tNo', 'NO'),
+    shootout: s('tShootout', 'PENALTIES'),
+    suddenDeath: s('tSuddenDeath', 'SUDDEN DEATH'),
+    credit: s('tCredit', 'A PIXEL FOOTBALL CABINET'),
     newRecord: s('tNewRecord', 'New record!'),
-    vs: s('tVs', 'vs {team}'),
-    rounds: roundNames.length === ROUND_KEYS.length ? roundNames : [...ROUND_KEYS]
+    ratings: (s('tRatings', 'SPD,SKL,DEF,GK').split(',') as string[]).slice(0, 4)
   };
+  const ratings: [string, string, string, string] = [
+    strings.ratings[0] ?? 'SPD',
+    strings.ratings[1] ?? 'SKL',
+    strings.ratings[2] ?? 'DEF',
+    strings.ratings[3] ?? 'GK'
+  ];
 
-  // --- Static pitch bake ----------------------------------------------------
-  const ground = createStaticLayer(CANVAS_W, CANVAS_H, target => {
-    // Terrace band around the pitch: night-match dark with a speckled crowd.
-    target.fillStyle = '#101826';
-    target.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    const CROWD_COLORS = ['#64748b', '#94a3b8', '#f1f5f9', '#fca5a5', '#93c5fd', '#fde68a'];
-    for (let i = 0; i < 420; i++) {
-      const x = hash(i, 1) * CANVAS_W;
-      const y = hash(i, 2) * CANVAS_H;
-      // Keep the crowd off the grass.
-      if (x > OX - 8 && x < OX + PITCH_W + 8 && y > OY - 8 && y < OY + PITCH_H + 8) continue;
-      target.globalAlpha = 0.35 + hash(i, 3) * 0.5;
-      target.fillStyle = CROWD_COLORS[Math.floor(hash(i, 4) * CROWD_COLORS.length)];
-      target.fillRect(x, y, 2, 2);
-    }
-    target.globalAlpha = 1;
-
-    // Mown stripes goal to goal.
-    const STRIPES = 8;
-    const stripeW = PITCH_W / STRIPES;
-    for (let i = 0; i < STRIPES; i++) {
-      target.fillStyle = i % 2 === 0 ? '#2f9e44' : '#2b8a3e';
-      target.fillRect(OX + i * stripeW, OY, stripeW, PITCH_H);
-    }
-
-    // Chalk. All lines share one style pass.
-    target.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    target.lineWidth = 2;
-    target.strokeRect(OX, OY, PITCH_W, PITCH_H);
-    // Halfway line and centre circle.
-    target.beginPath();
-    target.moveTo(OX + PITCH_W / 2, OY);
-    target.lineTo(OX + PITCH_W / 2, OY + PITCH_H);
-    target.stroke();
-    target.beginPath();
-    target.arc(OX + PITCH_W / 2, OY + PITCH_H / 2, 50, 0, Math.PI * 2);
-    target.stroke();
-    target.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    target.beginPath();
-    target.arc(OX + PITCH_W / 2, OY + PITCH_H / 2, 3, 0, Math.PI * 2);
-    target.fill();
-    // Boxes, six-yard boxes, spots and arcs at both ends.
-    for (const side of [0, 1] as const) {
-      const goalX = side === 0 ? OX : OX + PITCH_W;
-      const dir = side === 0 ? 1 : -1;
-      const cy = OY + PITCH_H / 2;
-      target.strokeRect(
-        side === 0 ? goalX : goalX - BOX_DEPTH,
-        cy - BOX_HALF,
-        BOX_DEPTH,
-        BOX_HALF * 2
-      );
-      target.strokeRect(side === 0 ? goalX : goalX - 26, cy - 46, 26, 92);
-      target.beginPath();
-      target.arc(goalX + dir * 48, cy, 2.5, 0, Math.PI * 2);
-      target.fill();
-      target.beginPath();
-      target.arc(goalX + dir * 48, cy, 26, 0, Math.PI * 2);
-      // Only the arc outside the box shows; clip cheaply by redrawing grass.
-      target.stroke();
-      target.fillStyle = side === 0 ? '#2f9e44' : '#2b8a3e';
-      target.fillRect(
-        side === 0 ? goalX + 2 : goalX - BOX_DEPTH + 1,
-        cy - BOX_HALF + 2,
-        BOX_DEPTH - 3,
-        BOX_HALF * 2 - 4
-      );
-      // Redo the stripes the patch flattened inside the box.
-      const stripeStart = Math.floor(((side === 0 ? 0 : PITCH_W - BOX_DEPTH) / PITCH_W) * STRIPES);
-      for (let i = stripeStart; i <= stripeStart + Math.ceil(BOX_DEPTH / stripeW); i++) {
-        if (i < 0 || i >= STRIPES) continue;
-        target.fillStyle = i % 2 === 0 ? '#2f9e44' : '#2b8a3e';
-        const sx = Math.max(OX + i * stripeW, side === 0 ? goalX + 2 : goalX - BOX_DEPTH + 1);
-        const ex = Math.min(OX + (i + 1) * stripeW, side === 0 ? goalX + BOX_DEPTH - 1 : goalX - 2);
-        if (ex > sx) target.fillRect(sx, cy - BOX_HALF + 2, ex - sx, BOX_HALF * 2 - 4);
-      }
-      // Re-stroke the box over the patched grass.
-      target.strokeRect(
-        side === 0 ? goalX : goalX - BOX_DEPTH,
-        cy - BOX_HALF,
-        BOX_DEPTH,
-        BOX_HALF * 2
-      );
-      target.strokeRect(side === 0 ? goalX : goalX - 26, cy - 46, 26, 92);
-      target.fillStyle = 'rgba(255, 255, 255, 0.85)';
-      target.beginPath();
-      target.arc(goalX + dir * 48, cy, 2.5, 0, Math.PI * 2);
-      target.fill();
-
-      // The goal itself: posts and a hatched net outside the line.
-      const netX = side === 0 ? goalX - 13 : goalX;
-      target.fillStyle = 'rgba(15, 23, 42, 0.55)';
-      target.fillRect(netX, OY + GOAL_TOP, 13, GOAL_BOTTOM - GOAL_TOP);
-      target.strokeStyle = 'rgba(226, 232, 240, 0.5)';
-      target.lineWidth = 1;
-      for (let n = 1; n < 4; n++) {
-        target.beginPath();
-        target.moveTo(netX + (n * 13) / 4, OY + GOAL_TOP);
-        target.lineTo(netX + (n * 13) / 4, OY + GOAL_BOTTOM);
-        target.stroke();
-      }
-      for (let n = 1; n < 8; n++) {
-        target.beginPath();
-        target.moveTo(netX, OY + GOAL_TOP + (n * (GOAL_BOTTOM - GOAL_TOP)) / 8);
-        target.lineTo(netX + 13, OY + GOAL_TOP + (n * (GOAL_BOTTOM - GOAL_TOP)) / 8);
-        target.stroke();
-      }
-      target.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-      target.lineWidth = 3;
-      target.beginPath();
-      target.moveTo(goalX, OY + GOAL_TOP - 1);
-      target.lineTo(netX + (side === 0 ? 0 : 13), OY + GOAL_TOP - 1);
-      target.moveTo(goalX, OY + GOAL_BOTTOM + 1);
-      target.lineTo(netX + (side === 0 ? 0 : 13), OY + GOAL_BOTTOM + 1);
-      target.stroke();
-      // Restore the shared chalk style for the next side's boxes.
-      target.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-      target.lineWidth = 2;
-    }
-    // Corner arcs.
-    for (const [cx2, cy2, a0, a1] of [
-      [OX, OY, 0, Math.PI / 2],
-      [OX + PITCH_W, OY, Math.PI / 2, Math.PI],
-      [OX + PITCH_W, OY + PITCH_H, Math.PI, Math.PI * 1.5],
-      [OX, OY + PITCH_H, Math.PI * 1.5, Math.PI * 2]
-    ] as const) {
-      target.beginPath();
-      target.arc(cx2, cy2, 8, a0, a1);
-      target.stroke();
+  const renderer: Renderer = createRenderer({
+    text: {
+      kickoff: strings.kickoff,
+      goal: strings.goal,
+      throwIn: strings.throwIn,
+      corner: strings.corner,
+      goalKick: strings.goalKick,
+      halfTime: strings.halfTime,
+      fullTime: strings.fullTime,
+      paused: strings.paused,
+      pressStart: strings.pressStart,
+      selectTeam: strings.selectTeam,
+      score: strings.score,
+      best: strings.best,
+      group: strings.group,
+      tables: strings.tables,
+      through: strings.through,
+      penalties: strings.penalties,
+      gameOver: strings.gameOver,
+      champions: strings.champions,
+      semiFinal: strings.semiFinal,
+      final: strings.final,
+      bracket: strings.bracket,
+      yes: strings.yes,
+      no: strings.no,
+      shootout: strings.shootout,
+      suddenDeath: strings.suddenDeath,
+      credit: strings.credit,
+      ratings
     }
   });
-  setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, { onApply: ground.rebuild });
+  setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, { smoothing: false });
 
-  // --- Game state -----------------------------------------------------------
-  let phase: Phase = 'idle';
-  let ladder: Ladder = createLadder();
-  let match: MatchState = createMatch(0, Math.random);
+  const toastArea = el('toast-area');
+  const { show: showToast } = createToaster(toastArea as HTMLElement);
+  const board = initScoreboard(el('highscores'));
+
+  // Particles and floaters land in the framebuffer, before the blit, so a goal
+  // burst is the same chunky pixel size as everything else on screen.
   const fx = createEffects({
     gravityScale: 200,
-    launchKick: 30,
-    burstSpeed: 90,
-    burstSize: 2,
-    glowBlur: 6,
-    floaterSize: 14,
-    floaterRise: 20,
-    floaterLife: 1.2
+    burstSpeed: 60,
+    burstSize: 1,
+    glowBlur: 0,
+    floaterSize: 9,
+    floaterRise: 16,
+    floaterLife: 0.9
   });
-  /** Last values written to the HUD, so render skips redundant DOM writes. */
-  const hud = { score: '', clock: '', run: -1 };
 
-  const board = initScoreboard(document.getElementById('highscores'));
-  recordEl.textContent = `${board.best()}`;
-
-  // An anthemic terrace-chant arrangement: a proud square-wave chant over a
-  // pumping bass and a warm sustained pad, with a touch of stadium echo. Two
-  // 16-beat phrases; all three voices span 32 beats so the loop restarts
-  // together.
+  /**
+   * One arrangement, wound up stage by stage with `setTempo`.
+   *
+   * The specification asks for three separate match tracks. `createGameAudio`
+   * fixes its voices at construction and owns an AudioContext, so three of them
+   * would mean three contexts and a mute toggle that has to be re-wired every
+   * time the stage changes; the samba stays and the knockout rounds lean on the
+   * tempo, which is the part of "the run has an arc" a player actually hears.
+   */
   const audio = createGameAudio({
-    tempo: 112,
-    volume: 0.12,
-    echo: { time: 0.28, feedback: 0.25, mix: 0.18 },
+    tempo: 132,
+    volume: 0.1,
+    echo: { time: 0.18, feedback: 0.3, mix: 0.25 },
     tracks: [
       {
-        // CHANT — the terrace lead.
+        // LEAD — a bright samba-flavoured square line.
         wave: 'square',
-        volume: 1.0,
+        volume: 1,
+        detune: 8,
         melody: [
-          // Phrase A.
-          { freq: 659.25, beats: 1 }, // E5
-          { freq: 659.25, beats: 0.5 },
-          { freq: 659.25, beats: 0.5 },
-          { freq: 698.46, beats: 1 }, // F5
-          { freq: 783.99, beats: 1 }, // G5
+          { freq: 587.33, beats: 0.5 },
+          { freq: 698.46, beats: 0.5 },
+          { freq: 880.0, beats: 1 },
           { freq: 783.99, beats: 0.5 },
           { freq: 698.46, beats: 0.5 },
-          { freq: 659.25, beats: 0.5 },
-          { freq: 587.33, beats: 0.5 }, // D5
-          { freq: 659.25, beats: 2 },
-          { freq: 523.25, beats: 1 }, // C5
-          { freq: 523.25, beats: 0.5 },
-          { freq: 523.25, beats: 0.5 },
           { freq: 587.33, beats: 1 },
-          { freq: 659.25, beats: 1 },
-          { freq: 587.33, beats: 0.5 },
           { freq: 523.25, beats: 0.5 },
           { freq: 587.33, beats: 0.5 },
-          { freq: 659.25, beats: 0.5 },
-          { freq: 587.33, beats: 1 },
-          { freq: 0, beats: 1 },
-          // Phrase B — higher, the whole end singing.
-          { freq: 783.99, beats: 1 }, // G5
+          { freq: 698.46, beats: 1 },
+          { freq: 880.0, beats: 0.5 },
+          { freq: 987.77, beats: 0.5 },
+          { freq: 880.0, beats: 1 },
           { freq: 783.99, beats: 0.5 },
-          { freq: 783.99, beats: 0.5 },
-          { freq: 880.0, beats: 1 }, // A5
-          { freq: 783.99, beats: 1 },
           { freq: 698.46, beats: 0.5 },
-          { freq: 659.25, beats: 0.5 },
-          { freq: 698.46, beats: 0.5 },
-          { freq: 783.99, beats: 0.5 },
-          { freq: 698.46, beats: 2 },
           { freq: 659.25, beats: 1 },
-          { freq: 587.33, beats: 1 },
-          { freq: 523.25, beats: 1 },
-          { freq: 587.33, beats: 1 },
-          { freq: 659.25, beats: 1 },
-          { freq: 587.33, beats: 0.5 },
-          { freq: 523.25, beats: 0.5 },
-          { freq: 523.25, beats: 2 }
+          { freq: 587.33, beats: 1 }
         ]
       },
       {
-        // BASS — pumping quarter-note roots and fifths, one bar per chord:
-        // C, Am, F, G, C, F, G, C.
+        // BASS — a walking triangle under the lead.
         wave: 'triangle',
         volume: 0.85,
         melody: [
-          { freq: 65.41, beats: 1 }, { freq: 98.0, beats: 1 }, { freq: 65.41, beats: 1 }, { freq: 98.0, beats: 1 },
-          { freq: 110.0, beats: 1 }, { freq: 164.81, beats: 1 }, { freq: 110.0, beats: 1 }, { freq: 164.81, beats: 1 },
-          { freq: 87.31, beats: 1 }, { freq: 130.81, beats: 1 }, { freq: 87.31, beats: 1 }, { freq: 130.81, beats: 1 },
-          { freq: 98.0, beats: 1 }, { freq: 146.83, beats: 1 }, { freq: 98.0, beats: 1 }, { freq: 146.83, beats: 1 },
-          { freq: 65.41, beats: 1 }, { freq: 98.0, beats: 1 }, { freq: 65.41, beats: 1 }, { freq: 98.0, beats: 1 },
-          { freq: 87.31, beats: 1 }, { freq: 130.81, beats: 1 }, { freq: 87.31, beats: 1 }, { freq: 130.81, beats: 1 },
-          { freq: 98.0, beats: 1 }, { freq: 146.83, beats: 1 }, { freq: 98.0, beats: 1 }, { freq: 146.83, beats: 1 },
-          { freq: 65.41, beats: 2 }, { freq: 98.0, beats: 2 }
+          { freq: 146.83, beats: 1 },
+          { freq: 110.0, beats: 1 },
+          { freq: 130.81, beats: 1 },
+          { freq: 98.0, beats: 1 },
+          { freq: 146.83, beats: 1 },
+          { freq: 174.61, beats: 1 },
+          { freq: 130.81, beats: 1 },
+          { freq: 110.0, beats: 1 }
         ]
       },
       {
-        // PAD — one warm sustained third per bar, detuned for width.
-        wave: 'sine',
-        volume: 0.5,
+        // PAD — off-beat sustained chords, the terrace bed.
+        wave: 'sawtooth',
+        volume: 0.3,
         envelope: 'pad',
-        detune: 8,
+        octaveShift: -1,
         melody: [
-          { freq: 329.63, beats: 4 }, // E4
-          { freq: 261.63, beats: 4 }, // C4
-          { freq: 220.0, beats: 4 }, // A3
-          { freq: 246.94, beats: 4 }, // B3
-          { freq: 329.63, beats: 4 },
-          { freq: 220.0, beats: 4 },
-          { freq: 246.94, beats: 4 },
-          { freq: 261.63, beats: 4 } // C4
+          { freq: 0, beats: 0.5 },
+          { freq: 587.33, beats: 1.5 },
+          { freq: 0, beats: 0.5 },
+          { freq: 523.25, beats: 1.5 },
+          { freq: 0, beats: 0.5 },
+          { freq: 493.88, beats: 1.5 },
+          { freq: 0, beats: 0.5 },
+          { freq: 440.0, beats: 1.5 }
         ]
       }
     ]
   });
-  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
-  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
+  wireChannelButton(el('music-btn'), audio, 'music');
+  wireChannelButton(el('sfx-btn'), audio, 'sfx');
 
-  const px = (x: number, y: number) => ({ x: OX + x, y: OY + y });
+  /* ---------------------------------------------------------------- */
+  /* state                                                             */
 
+  let screen: Screen = 'title';
+  let paused = false;
+  let clock = 0;
+  let run: RunState | null = null;
+  let match: MatchState | null = null;
+  let shootout: ShootoutState | null = null;
+  let cursor = 0;
+  let confirming = false;
+  let confirmYes = true;
+  /** Counts down the goal celebration's effects; the sim runs its own pause. */
+  let goalFx = 0;
   /**
-   * The run's submittable score mid-match: banked rounds plus this match's
-   * goals. Only valid before recordMatch folds the match into the ladder —
-   * from then on `ladderScore(ladder)` alone is the run's score.
+   * Whether the match just finished was a knockout tie. `recordPlayerMatch`
+   * advances the stage, so by the time the full-time screen asks, the run no
+   * longer remembers what it was watching.
    */
-  function currentScore(): number {
-    return ladderScore(ladder) + match.score[0] * GOAL_POINTS;
+  let lastKnockout = false;
+  /** Set once the finished run has been handed to the scoreboard. */
+  let submitted = false;
+
+  const score = () => (run ? runScore(run) : 0);
+
+  /** The run's total, banked so a closed tab keeps it, with the record toast. */
+  function bank(): void {
+    if (!run) return;
+    if (board.bank(runScore(run)).newRecord) showToast(`🏅 ${strings.newRecord}`);
   }
 
-  /** Banks the growing run; announces (once per run) a beaten personal best. */
-  function bankScore(score: number) {
-    const { best, newRecord } = board.bank(score);
-    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
-    recordEl.textContent = `${best}`;
-  }
+  /* ---------------------------------------------------------------- */
+  /* input                                                             */
 
-  function roundLabel(round: number): string {
-    const opponent = OPPONENTS[Math.min(round, OPPONENTS.length - 1)];
-    return `${strings.rounds[round]} · ${strings.vs.replace('{team}', opponent.name.toUpperCase())}`;
-  }
-
-  function startMatch() {
-    match = createMatch(difficultyFor(ladder.round), Math.random);
-    fx.clear();
-    charge = -1;
-    roundLabelEl.textContent = roundLabel(ladder.round);
-    phase = 'play';
-    audio.start();
-  }
-
-  function startRun() {
-    ladder = createLadder();
-    board.beginRun();
-    recordEl.textContent = `${board.best()}`;
-    hud.run = -1;
-    startMatch();
-  }
-
-  function endRun(champion: boolean) {
-    phase = 'over';
-    audio.stop();
-    audio.playSfx(champion ? 'rescue' : 'gameover');
-    // After recordMatch the ladder already folded this match's goals in, so
-    // the banked and submitted numbers are the same ladder score.
-    const score = ladderScore(ladder);
-    bankScore(score);
-    finalScoreEl.textContent = `${score}`;
-    overWin.hidden = !champion;
-    overLoss.hidden = champion;
-    overOverlay.style.display = 'flex';
-    // After the overlay is visible, so the initials input can take focus.
-    board.show(score);
-  }
-
-  function handleEvents(events: MatchEvent[]) {
-    for (const event of events) {
-      if (event.type === 'goal') {
-        const goal = px(event.side === 0 ? PITCH_W : 0, PITCH_H / 2);
-        const colour = event.side === 0 ? '#fbbf24' : '#f87171';
-        for (let n = 0; n < 26; n++) {
-          fx.burst(goal.x, goal.y + (Math.random() - 0.5) * 60, 2, colour, {
-            speed: 130,
-            life: 0.8,
-            gravity: 1,
-            glow: true
-          });
-        }
-        const point = px(PITCH_W / 2, PITCH_H * 0.4);
-        fx.floater(point.x, point.y, strings.goal, colour, {
-          size: 30,
-          life: 1.6,
-          rise: 8,
-          glow: true
-        });
-        if (event.side === 0) {
-          audio.playSfx('score');
-          fx.floater(goal.x - 30, goal.y - 40, `+${GOAL_POINTS}`, '#fbbf24', { size: 16 });
-          // Bank the run as it grows so a closed tab keeps the record.
-          bankScore(currentScore());
-        } else {
-          audio.playSfx('hit');
-        }
-      } else if (event.type === 'shot') {
-        audio.playSfx('hit');
-      } else if (event.type === 'save') {
-        audio.playSfx('blip');
-      } else if (event.type === 'goldenGoal') {
-        audio.playSfx('rescue');
-        const point = px(PITCH_W / 2, PITCH_H * 0.55);
-        fx.floater(point.x, point.y, strings.golden, '#fde047', {
-          size: 22,
-          life: 1.8,
-          rise: 6,
-          glow: true
-        });
-      } else if (event.type === 'end') {
-        const won = event.winner === 0;
-        recordMatch(ladder, won, match.score[0]);
-        if (won) {
-          // The round-won bonus is announced like every other point gain.
-          const point = px(PITCH_W / 2, PITCH_H * 0.5);
-          fx.floater(point.x, point.y, `+${ROUND_POINTS}`, '#fbbf24', {
-            size: 20,
-            life: 1.6,
-            rise: 10,
-            glow: true
-          });
-        }
-        if (!won) {
-          endRun(false);
-        } else if (ladder.champion) {
-          endRun(true);
-        } else {
-          phase = 'between';
-          audio.playSfx('rescue');
-          showToast(`⚽ ${strings.roundWon}`);
-          bankScore(ladderScore(ladder));
-          nextRoundEl.textContent = roundLabel(ladder.round);
-          nextOverlay.style.display = 'flex';
-        }
-      }
-    }
-  }
-
-  // --- Input ----------------------------------------------------------------
   const keys = new Set<string>();
-  /** Virtual-stick vector, each axis -1..1; zero when released. */
-  const stick = { x: 0, y: 0 };
-  /** Shot charge 0..1 while the button is held; -1 when idle. */
-  let charge = -1;
+  /** Analog stick from the touch pad; the keyboard contributes 8-way. */
+  const stick = { x: 0, y: 0, active: false };
+  const pads = { a: false, b: false, c: false };
+  const prevConfirm = { down: false };
+  const prevPause = { down: false };
+  /**
+   * A key tapped and released inside a single frame still counts. Sampling the
+   * held state once a frame drops a quick press entirely, which on the static
+   * screens means a tap on START doing nothing at all.
+   */
+  const tapped = { confirm: false, pause: false };
+  /** Rising edge on the team-select cursor, so a held stick steps once. */
+  const prevCursor = { x: 0, y: 0 };
 
-  function inputVector(): { x: number; y: number } {
-    let x = stick.x;
-    let y = stick.y;
-    if (keys.has('ArrowLeft') || keys.has('a')) x -= 1;
-    if (keys.has('ArrowRight') || keys.has('d')) x += 1;
-    if (keys.has('ArrowUp') || keys.has('w')) y -= 1;
-    if (keys.has('ArrowDown') || keys.has('s')) y += 1;
-    return { x: clamp(x, -1, 1), y: clamp(y, -1, 1) };
-  }
-
-  function doPass() {
-    if (phase !== 'play') return;
-    if (humanPass(match)) audio.playSfx('blip');
-  }
-
-  function beginCharge() {
-    if (phase !== 'play') return;
-    charge = 0;
-  }
-
-  function releaseCharge() {
-    if (charge < 0) return;
-    const power = 0.3 + 0.7 * charge;
-    charge = -1;
-    if (phase !== 'play') return;
-    if (humanShoot(match, power, inputVector().y)) audio.playSfx('hit');
-  }
-
-  const GAME_KEYS = new Set([
-    'ArrowLeft',
-    'ArrowRight',
+  const HELD = new Set([
     'ArrowUp',
     'ArrowDown',
-    ' ',
-    'x',
-    'X',
-    'a',
-    'd',
+    'ArrowLeft',
+    'ArrowRight',
     'w',
-    's'
+    'a',
+    's',
+    'd',
+    'z',
+    'x',
+    'c',
+    'j',
+    'k',
+    'l',
+    'p',
+    ' ',
+    'Enter',
+    'Escape'
   ]);
 
-  const onKeydown = (e: KeyboardEvent) => {
-    if (phase !== 'play') return;
-    if (GAME_KEYS.has(e.key)) e.preventDefault();
-    if (e.repeat) return;
-    if (e.key === 'x' || e.key === 'X') doPass();
-    else if (e.key === ' ') beginCharge();
-    else keys.add(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+  function keyDown(key: string): boolean {
+    return keys.has(key) || keys.has(key.toUpperCase());
+  }
+
+  function readInput(): MatchInput {
+    let kx = 0;
+    let ky = 0;
+    if (keyDown('ArrowLeft') || keyDown('a')) kx -= 1;
+    if (keyDown('ArrowRight') || keyDown('d')) kx += 1;
+    if (keyDown('ArrowUp') || keyDown('w')) ky -= 1;
+    if (keyDown('ArrowDown') || keyDown('s')) ky += 1;
+    let x = kx;
+    let y = ky;
+    if (stick.active && (kx === 0 && ky === 0)) {
+      x = stick.x;
+      y = stick.y;
+    }
+    const len = Math.hypot(x, y);
+    if (len > 1) {
+      x /= len;
+      y /= len;
+    }
+    return {
+      x,
+      y,
+      a: pads.a || keyDown('z') || keyDown('j') || keys.has(' '),
+      b: pads.b || keyDown('x') || keyDown('k'),
+      c: pads.c || keyDown('c') || keyDown('l')
+    };
+  }
+
+  /** Enter, Space, or the A button: the one "yes" every screen listens for. */
+  function confirmHeld(): boolean {
+    return keys.has('Enter') || keys.has(' ') || pads.a || keyDown('z') || keyDown('j');
+  }
+
+  const CONFIRM_KEYS = new Set(['Enter', ' ', 'z', 'j']);
+  const PAUSE_KEYS = new Set(['p', 'Escape']);
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (HELD.has(e.key) || HELD.has(e.key.toLowerCase())) e.preventDefault();
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (!e.repeat) {
+      if (CONFIRM_KEYS.has(key)) tapped.confirm = true;
+      if (PAUSE_KEYS.has(key)) tapped.pause = true;
+    }
+    keys.add(key);
   };
-  const onKeyup = (e: KeyboardEvent) => {
-    if (e.key === ' ') releaseCharge();
+  const onKeyUp = (e: KeyboardEvent) => {
     keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
   };
-  // Alt-tabbing away swallows the keyup, so a held key would auto-run the
-  // player on return; drop everything held when the tab loses the keyboard.
-  const onBlur = () => keys.clear();
-  const onVisibility = () => {
-    if (document.visibilityState === 'hidden') keys.clear();
-  };
-  document.addEventListener('keydown', onKeydown);
-  document.addEventListener('keyup', onKeyup);
-  window.addEventListener('blur', onBlur);
-  document.addEventListener('visibilitychange', onVisibility);
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
   // Document-level listeners outlive a ClientRouter swap; each wiring retires
   // its own handlers so re-inits don't stack keyboard handlers forever.
   document.addEventListener(
     'astro:before-swap',
     () => {
-      document.removeEventListener('keydown', onKeydown);
-      document.removeEventListener('keyup', onKeyup);
-      window.removeEventListener('blur', onBlur);
-      document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keyup', onKeyUp);
     },
     { once: true }
   );
 
-  // Virtual stick: one pointer drives a normalized vector from the pad centre.
-  const stickEl = el('stick');
-  const nubEl = el('stick-nub');
-  const STICK_RADIUS = 40;
-  let stickPointer: number | null = null;
-  function stickMove(e: PointerEvent) {
-    const rect = stickEl.getBoundingClientRect();
-    const dx = e.clientX - (rect.left + rect.width / 2);
-    const dy = e.clientY - (rect.top + rect.height / 2);
-    const len = Math.hypot(dx, dy);
-    const capped = Math.min(len, STICK_RADIUS);
-    const nx = len > 0 ? dx / len : 0;
-    const ny = len > 0 ? dy / len : 0;
-    // A small deadzone so a resting thumb doesn't creep the player around.
-    const mag = capped < 10 ? 0 : capped / STICK_RADIUS;
-    stick.x = nx * mag;
-    stick.y = ny * mag;
-    nubEl.style.transform = `translate(${nx * capped}px, ${ny * capped}px)`;
-  }
-  function stickRelease() {
-    stickPointer = null;
-    stick.x = 0;
-    stick.y = 0;
-    nubEl.style.transform = '';
-  }
-  stickEl.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    stickPointer = e.pointerId;
-    stickEl.setPointerCapture(e.pointerId);
-    stickMove(e);
-  });
-  stickEl.addEventListener('pointermove', e => {
-    if (e.pointerId === stickPointer) stickMove(e);
-  });
-  for (const evt of ['pointerup', 'pointercancel'] as const) {
-    stickEl.addEventListener(evt, e => {
-      if (e.pointerId === stickPointer) stickRelease();
-    });
-  }
-
-  // Action buttons. `click` with detail 0 is keyboard/AT activation — those
-  // fire no pointerdown, so without it the aria-labelled buttons would be
-  // announced but dead to a switch or keyboard user.
-  const passBtn = el('btn-pass');
-  passBtn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    doPass();
-  });
-  passBtn.addEventListener('click', e => {
-    if (e.detail === 0) doPass();
-  });
-  const shootBtn = el('btn-shoot');
-  shootBtn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    beginCharge();
-  });
-  for (const evt of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
-    shootBtn.addEventListener(evt, () => releaseCharge());
-  }
-  shootBtn.addEventListener('click', e => {
-    if (e.detail === 0) {
-      // One keyboard activation = a fixed mid-power shot.
-      if (phase === 'play' && humanShoot(match, 0.7, 0)) audio.playSfx('hit');
-    }
-  });
-
-  // --- Update ---------------------------------------------------------------
-  function update(dt: number) {
-    fx.update(dt);
-    if (phase !== 'play') return;
-    if (charge >= 0) charge = Math.min(1, charge + dt / CHARGE_TIME);
-    handleEvents(tickMatch(match, dt, inputVector()));
-  }
-
-  // --- Rendering ------------------------------------------------------------
-  function drawPlayer(p: { x: number; y: number }, shirt: string, outline: string) {
-    const c = px(p.x, p.y);
-    // Grounding shadow.
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-    ctx.beginPath();
-    ctx.ellipse(c.x, c.y + 5, 6, 2.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = shirt;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, 6.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = outline;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    // Head.
-    ctx.fillStyle = '#fcd9b8';
-    ctx.beginPath();
-    ctx.arc(c.x, c.y - 2, 2.6, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  function render() {
-    ground.draw(ctx);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const opponent = OPPONENTS[Math.min(ladder.round, OPPONENTS.length - 1)];
-
-    // Controlled-player marker under everything else.
-    const sel = match.players[0][match.controlled];
-    const selPx = px(sel.x, sel.y);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(selPx.x, selPx.y + 2, 10, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Players, both teams, in y order so nearer bodies overlap farther ones.
-    const all: Array<{ y: number; draw: () => void }> = [];
-    for (const side of [0, 1] as const) {
-      for (let idx = 0; idx < TEAM_SIZE; idx++) {
-        const p = match.players[side][idx];
-        const shirt =
-          side === 0
-            ? idx === 0
-              ? HUMAN_KEEPER_SHIRT
-              : HUMAN_SHIRT
-            : idx === 0
-              ? CPU_KEEPER_SHIRT
-              : opponent.color;
-        all.push({ y: p.y, draw: () => drawPlayer(p, shirt, side === 0 ? '#1e3a8a' : '#1f2937') });
-      }
-    }
-    all.sort((a, b) => a.y - b.y);
-    for (const entry of all) entry.draw();
-
-    // Ball with shadow.
-    const b = px(match.ball.x, match.ball.y);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.beginPath();
-    ctx.ellipse(b.x + 1.5, b.y + 2.5, 3.5, 1.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#f8fafc';
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 3.8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Shot-power bar over the controlled player while the button is held.
-    if (charge >= 0 && phase === 'play') {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(selPx.x - 14, selPx.y - 20, 28, 5);
-      ctx.fillStyle = charge > 0.85 ? '#f87171' : '#fbbf24';
-      ctx.fillRect(selPx.x - 13, selPx.y - 19, 26 * charge, 3);
-    }
-
-    fx.draw(ctx);
-
-    // HUD writes only when a value moved.
-    const scoreLine = `${match.score[0]}–${match.score[1]}`;
-    if (hud.score !== scoreLine) {
-      hud.score = scoreLine;
-      matchScoreEl.textContent = scoreLine;
-    }
-    const clockLine = formatClock(match.timeLeft);
-    if (hud.clock !== clockLine) {
-      hud.clock = clockLine;
-      clockEl.textContent = clockLine;
-      clockEl.classList.toggle('golden', match.golden);
-    }
-    // Once a match is recorded the ladder already holds its goals.
-    const run = phase === 'between' || phase === 'over' ? ladderScore(ladder) : currentScore();
-    if (hud.run !== run) {
-      hud.run = run;
-      runScoreEl.textContent = `${run}`;
-    }
-  }
-
-  startBtn.addEventListener('click', () => {
-    startOverlay.style.display = 'none';
-    startRun();
-  });
-
-  nextBtn.addEventListener('click', () => {
-    nextOverlay.style.display = 'none';
-    startMatch();
-  });
-
-  againBtn.addEventListener('click', () => {
-    overOverlay.style.display = 'none';
-    board.hide();
-    startRun();
-  });
-
-  // Cheat-mode handle, only when the page is opened with #dev: exposes the
-  // live match and the real input paths so a bot (or a curious player) can
-  // drive full runs in a real browser. Retired with the page it drives.
-  if (window.location.hash === '#dev') {
-    const devWindow = window as unknown as Record<string, unknown>;
-    devWindow.footballDev = {
-      getMatch: () => match,
-      getLadder: () => ladder,
-      pass: () => doPass(),
-      shoot: (power: number) => phase === 'play' && humanShoot(match, power, 0),
-      setStick: (x: number, y: number) => {
-        stick.x = x;
-        stick.y = y;
+  /** Round action button: press and release are reported separately. */
+  function wirePad(id: string, key: 'a' | 'b' | 'c'): void {
+    const btn = el(id);
+    if (!btn) return;
+    const press = (e: Event) => {
+      e.preventDefault();
+      pads[key] = true;
+      if (btn instanceof HTMLElement && 'setPointerCapture' in btn && e instanceof PointerEvent) {
+        try {
+          btn.setPointerCapture(e.pointerId);
+        } catch {
+          /* capture is a nicety, not a requirement */
+        }
       }
     };
-    document.addEventListener('astro:before-swap', () => delete devWindow.footballDev, {
-      once: true
+    const release = () => {
+      pads[key] = false;
+    };
+    btn.addEventListener('pointerdown', press);
+    for (const evt of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
+      btn.addEventListener(evt, release);
+    }
+    // Keyboard and switch activation fires click with detail 0 and never a
+    // pointer event, so without this the aria-labelled buttons are announced
+    // and dead. One frame of "held" is enough to register a press-and-release.
+    btn.addEventListener('click', e => {
+      if ((e as MouseEvent).detail !== 0) return;
+      pads[key] = true;
+      setTimeout(release, 90);
     });
+  }
+  wirePad('btn-shoot', 'a');
+  wirePad('btn-cross', 'b');
+  wirePad('btn-pass', 'c');
+
+  /** Virtual stick: touch anywhere in the pad to set the origin, drag to steer. */
+  const stickEl = el('stick');
+  const nub = el('stick-nub');
+  const DEAD_R = 8;
+  const FULL_R = 44;
+  if (stickEl) {
+    let origin: { x: number; y: number } | null = null;
+    let pointer = -1;
+    const place = (e: PointerEvent) => {
+      const rect = stickEl.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+    const move = (e: PointerEvent) => {
+      if (!origin || e.pointerId !== pointer) return;
+      const at = place(e);
+      const dx = at.x - origin.x;
+      const dy = at.y - origin.y;
+      const len = Math.hypot(dx, dy);
+      if (len <= DEAD_R) {
+        stick.x = 0;
+        stick.y = 0;
+      } else {
+        const mag = Math.min(1, (len - DEAD_R) / (FULL_R - DEAD_R));
+        stick.x = (dx / len) * mag;
+        stick.y = (dy / len) * mag;
+      }
+      if (nub) nub.style.transform = `translate(${stick.x * FULL_R}px, ${stick.y * FULL_R}px)`;
+    };
+    const lift = (e: PointerEvent) => {
+      if (e.pointerId !== pointer) return;
+      origin = null;
+      pointer = -1;
+      stick.active = false;
+      stick.x = 0;
+      stick.y = 0;
+      if (nub) nub.style.transform = '';
+    };
+    stickEl.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      origin = place(e);
+      pointer = e.pointerId;
+      stick.active = true;
+      try {
+        stickEl.setPointerCapture(e.pointerId);
+      } catch {
+        /* capture is a nicety, not a requirement */
+      }
+    });
+    stickEl.addEventListener('pointermove', move);
+    for (const evt of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
+      stickEl.addEventListener(evt, lift);
+    }
+  }
+
+  el('btn-pause')?.addEventListener('click', () => togglePause());
+  // A tap on the canvas is the arcade's start button on every static screen.
+  canvas.addEventListener('click', () => {
+    if (screen !== 'match' && screen !== 'shootout') advance();
+  });
+
+  function togglePause(): void {
+    if (screen !== 'match' && screen !== 'shootout') return;
+    paused = !paused;
+    if (paused) audio.stop();
+    else audio.start();
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* screen flow                                                       */
+
+  function startRun(): void {
+    run = createRun(Math.random, TEAMS[cursor].code);
+    submitted = false;
+    board.hide();
+    board.beginRun();
+    bank();
+    startMatch();
+  }
+
+  /** Tempo lifts stage by stage, so the run is audibly getting harder. */
+  function stageTempo(state: RunState): number {
+    if (state.stage === 'final') return 152;
+    if (state.stage === 'semi') return 143;
+    return 132;
+  }
+
+  function startMatch(): void {
+    if (!run || !run.opponent) return;
+    const teams: [Team, Team] = [playerTeam(run), teamByCode(run.opponent)];
+    match = createMatch({
+      difficulty: difficultyFor(run),
+      teams,
+      knockout: isKnockout(run)
+    });
+    shootout = null;
+    lastKnockout = isKnockout(run);
+    goalFx = 0;
+    fx.clear();
+    renderer.resetCamera(match);
+    screen = 'match';
+    paused = false;
+    audio.setTempo(stageTempo(run));
+    audio.start();
+  }
+
+  /** Fold the finished match into the run and move to the full-time screen. */
+  function settleMatch(wonOnPenalties: boolean): void {
+    if (!run || !match) return;
+    audio.stop();
+    recordPlayerMatch(run, {
+      goalsFor: match.score[0],
+      goalsAgainst: match.score[1],
+      wonOnPenalties
+    });
+    bank();
+    screen = 'fullTime';
+  }
+
+  function finishRun(): void {
+    if (!run || submitted) return;
+    submitted = true;
+    bank();
+    audio.playSfx(run.champion ? 'rescue' : 'gameover');
+    board.show(runScore(run));
+  }
+
+  /** The one "yes" every static screen listens for. */
+  function advance(): void {
+    switch (screen) {
+      case 'title':
+        cursor = 0;
+        confirming = false;
+        confirmYes = true;
+        screen = 'select';
+        audio.playSfx('blip');
+        return;
+      case 'select':
+        if (!confirming) {
+          confirming = true;
+          audio.playSfx('blip');
+          return;
+        }
+        if (confirmYes) startRun();
+        else confirming = false;
+        audio.playSfx('blip');
+        return;
+      case 'fullTime':
+        if (!run) return;
+        if (run.over) {
+          screen = run.champion ? 'champion' : 'gameOver';
+          finishRun();
+        } else {
+          // A group matchday shows the tables; a won knockout shows the bracket.
+          screen = run.stage === 'group' ? 'tables' : 'bracket';
+        }
+        audio.playSfx('blip');
+        return;
+      case 'tables':
+      case 'bracket':
+        startMatch();
+        return;
+      case 'champion':
+      case 'gameOver':
+        board.hide();
+        run = null;
+        match = null;
+        screen = 'title';
+        return;
+      default:
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* match events                                                      */
+
+  function handleMatchEvents(events: MatchEvent[], m: MatchState): void {
+    for (const event of events) {
+      switch (event.type) {
+        case 'goal': {
+          if (event.side === 0 && run) {
+            run.liveGoals = m.score[0];
+            bank();
+          }
+          goalFx = GOAL_FX_TIME;
+          audio.playSfx(event.side === 0 ? 'rescue' : 'hit');
+          // Confetti out of the goalmouth the ball has just crossed.
+          const goalY = attackGoalY(event.side, m.swapped);
+          for (let i = 0; i < 22; i++) {
+            fx.burst(
+              CENTRE_X - renderer.camera.x + (Math.random() - 0.5) * 70,
+              goalY - renderer.camera.y + (Math.random() - 0.5) * 10,
+              1,
+              i % 2 === 0 ? '#FFDB00' : '#FFFFFF',
+              { speed: 70, life: 0.9, gravity: 1 }
+            );
+          }
+          fx.floater(
+            Math.round(VIEW_W / 2),
+            Math.round(VIEW_H / 2) - 30,
+            strings.goal,
+            '#B6FFDB',
+            { size: 12, life: 1.3, rise: 10 }
+          );
+          break;
+        }
+        case 'save':
+          audio.playSfx('blip');
+          break;
+        case 'post':
+          audio.playSfx('blip');
+          break;
+        case 'shot':
+          if (!event.onTarget) audio.playSfx('hit');
+          break;
+        case 'kickoff':
+          renderer.resetCamera(m);
+          break;
+        case 'halfTime':
+        case 'end':
+          audio.playSfx('blip');
+          break;
+        default:
+      }
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* update                                                            */
+
+  function update(dt: number): void {
+    clock += dt;
+    const input = readInput();
+
+    const pauseDown = keys.has('p') || keys.has('Escape');
+    if (tapped.pause || (pauseDown && !prevPause.down)) togglePause();
+    prevPause.down = pauseDown;
+    tapped.pause = false;
+
+    const confirmDown = confirmHeld();
+    const confirmEdge = tapped.confirm || (confirmDown && !prevConfirm.down);
+    prevConfirm.down = confirmDown;
+    tapped.confirm = false;
+
+    if (paused) return;
+    goalFx = Math.max(0, goalFx - dt);
+    fx.update(dt);
+
+    if (screen === 'select') {
+      // The stick steps the grid once per push rather than scrolling it.
+      const stepX = Math.abs(input.x) > 0.5 ? Math.sign(input.x) : 0;
+      const stepY = Math.abs(input.y) > 0.5 ? Math.sign(input.y) : 0;
+      if (!confirming) {
+        if (stepX !== 0 && prevCursor.x === 0) {
+          cursor = (cursor + stepX + TEAMS.length) % TEAMS.length;
+          audio.playSfx('blip');
+        }
+        if (stepY !== 0 && prevCursor.y === 0) {
+          cursor = (cursor + stepY * 4 + TEAMS.length) % TEAMS.length;
+          audio.playSfx('blip');
+        }
+      } else if (stepX !== 0 && prevCursor.x === 0) {
+        confirmYes = !confirmYes;
+        audio.playSfx('blip');
+      }
+      prevCursor.x = stepX;
+      prevCursor.y = stepY;
+    } else {
+      prevCursor.x = 0;
+      prevCursor.y = 0;
+    }
+
+    if (screen === 'match' && match && run) {
+      handleMatchEvents(tickMatch(match, dt, input), match);
+      if (match.phase === 'over') {
+        if (match.pendingShootout) {
+          shootout = createShootout({ difficulty: difficultyFor(run) });
+          screen = 'shootout';
+          audio.stop();
+        } else {
+          settleMatch(false);
+        }
+      }
+      return;
+    }
+
+    if (screen === 'shootout' && shootout) {
+      const kick: ShootoutInput = { x: input.x, y: input.y, a: input.a };
+      for (const event of tickShootout(shootout, dt, kick)) {
+        if (event.type === 'kick') {
+          audio.playSfx(event.kick.result === 'scored' ? 'score' : 'blip');
+        } else {
+          settleMatch(event.winner === 0);
+        }
+      }
+      return;
+    }
+
+    if (confirmEdge) advance();
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* render                                                            */
+
+  function render(): void {
+    const total = score();
+    const best = board.best();
+    switch (screen) {
+      case 'title':
+        renderer.drawTitle({ clock });
+        break;
+      case 'select':
+        renderer.drawTeamSelect({ clock, cursor, confirming, confirmYes });
+        break;
+      case 'match':
+        if (match) {
+          const stick = readInput();
+          renderer.drawMatch(match, {
+            dt: 1 / 60,
+            runScore: total,
+            best,
+            aimX: stick.x
+          });
+          if (goalFx > 0) fx.draw(renderer.ctx);
+        }
+        break;
+      case 'shootout':
+        if (shootout && match) renderer.drawShootout(shootout, { teams: match.teams });
+        break;
+      case 'fullTime':
+        if (match && run) {
+          renderer.drawFullTime({
+            match,
+            outcome: outcomeWord(),
+            runScore: total,
+            best
+          });
+        }
+        break;
+      case 'tables':
+        if (run) renderer.drawTables({ run });
+        break;
+      case 'bracket':
+        if (run) renderer.drawBracket({ run });
+        break;
+      case 'champion':
+        if (run) renderer.drawChampion({ team: playerTeam(run), runScore: total, best });
+        break;
+      case 'gameOver':
+        if (run) renderer.drawGameOver({ run, runScore: total, best });
+        break;
+      default:
+    }
+    if (paused) renderer.drawPause();
+    renderer.blit(ctx, CANVAS_W, CANVAS_H);
+  }
+
+  /**
+   * The word under the full-time scorers. A group fixture is none of the three
+   * the specification lists — you are not "through" for winning one — so it
+   * gets no word and the table screen behind it does the talking.
+   */
+  function outcomeWord(): string {
+    if (!run || !match) return '';
+    if (run.over) return run.champion ? strings.champions : strings.gameOver;
+    if (!lastKnockout) return '';
+    return match.score[0] === match.score[1] ? strings.penalties : strings.through;
   }
 
   createGameLoop(update, render).start();

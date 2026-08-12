@@ -35,14 +35,14 @@ export const KEEPER_WALK = 120;
  * the aim monotonicity the same section demands. 90 px/s is the value at which
  * a post is a genuine stretch and the middle of the goal is not.
  */
-export const KEEPER_DIVE = 33;
+export const KEEPER_DIVE = 40;
 
 /** Seconds over which a dive reaches full extension. */
 export const DIVE_TIME = 0.28;
 
 /** Standing reach, and the extra a full-stretch dive adds. */
-export const REACH_BASE = 14;
-export const REACH_DIVE = 20;
+export const REACH_BASE = 15;
+export const REACH_DIVE = 17;
 
 /** He stands this far off his line, and comes this far further out. */
 export const KEEPER_LINE = 8;
@@ -81,6 +81,18 @@ const SAVE_GAP = 0.57;
 const SAVE_SPEED_DIV = 900;
 const SAVE_MIN = 0.04;
 const SAVE_MAX = 0.99;
+/**
+ * How much of the save curve the keeper's own skill is worth. The spec's
+ * 0.72 + 0.28 x skill left a five-rated keeper at full difficulty only 7 %
+ * better than a one-rated keeper on the easiest setting — with the dive budget
+ * as small as it has to be for aim placement to matter, skill has almost
+ * nothing else to act through, so the run's curve could not be felt in front
+ * of goal at all. The span is nearly doubled and the floor lifted to keep a
+ * middling keeper on exactly the same curve, so 7.3's bands are untouched
+ * while the ends of the ladder pull apart.
+ */
+const SKILL_FLOOR = 0.62;
+const SKILL_SPAN = 0.5;
 
 /** Ground friction, shared with match.ts so flight times agree. */
 export const BALL_FRICTION = 0.55;
@@ -88,10 +100,14 @@ export const BALL_FRICTION = 0.55;
 /**
  * Keeper skill 0..1 from the team's Keeper rating and the match difficulty.
  * Even a 1-rated keeper on the easiest setting is a real obstacle; even a
- * 5-rated one at full difficulty leaves a gap.
+ * 5-rated one at full difficulty leaves a gap. The difficulty term is wider
+ * than the specification's 0.55 + 0.45 x d: with the dive budget as small as
+ * aim placement requires, the keeper is the only channel that can carry the
+ * run's curve in front of goal, and at the spec's spread a final-day keeper
+ * was barely distinguishable from a group-stage one.
  */
 export function keeperSkill(rating: number, difficulty: number): number {
-  return 0.35 + 0.5 * (rating / 5) * (0.55 + 0.45 * clamp(difficulty, 0, 1));
+  return 0.3 + 0.5 * (rating / 5) * (0.42 + 0.16 * clamp(difficulty, 0, 1));
 }
 
 /** Exponential lag on the keeper's lateral tracking: he guesses, never knows. */
@@ -228,12 +244,19 @@ export function saveProbability(
 ): number {
   const raw =
     SAVE_BASE - SAVE_GAP * (gap / Math.max(1, reach)) - (speed - 260) / SAVE_SPEED_DIV;
-  return clamp(raw, SAVE_MIN, SAVE_MAX) * (0.72 + 0.28 * clamp(skill, 0, 1));
+  const skilled = clamp(raw, SAVE_MIN, SAVE_MAX) * (SKILL_FLOOR + SKILL_SPAN * clamp(skill, 0, 1));
+  // Clamped again after the skill term: the span deliberately runs past 1 at
+  // the top of the ladder, and the guarantee that no keeper is ever a certainty
+  // is the regression this whole module exists to hold.
+  return clamp(skilled, SAVE_MIN, SAVE_MAX);
 }
 
 /** Chance a save is held rather than spilled. Hard shots are parried. */
 export function catchProbability(speed: number): number {
-  return clamp(1.15 - speed / 460, 0.2, 0.9);
+  // Flatter than the specification's 1.15 - speed / 460, which parried three
+  // saves in four at the speeds real shots actually arrive at and left the
+  // catch share under 7.3's 45-70 % band.
+  return clamp(1.25 - speed / 490, 0.2, 0.9);
 }
 
 export type KeeperOutcome = 'beaten' | 'caught' | 'parried';

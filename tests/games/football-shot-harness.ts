@@ -15,7 +15,7 @@ import {
   type ContactType,
   type MatchState
 } from '../../src/games/football/match';
-import { KEEPER_LINE } from '../../src/games/football/keeper';
+import { KEEPER_LINE, keeperSkill } from '../../src/games/football/keeper';
 import { CENTRE_X, PITCH_L, TEAM_SIZE, attackGoalY } from '../../src/games/football/pitch';
 import { teamByCode } from '../../src/games/football/teams';
 
@@ -81,7 +81,7 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
     difficulty,
     teams: [teamByCode('LUP'), teamByCode(KEEPER_TEAMS[rating])]
   });
-  m.keepers[1].skill = keeperSkillFor(rating, difficulty);
+  m.keepers[1].skill = keeperSkill(rating, difficulty);
   // Straight to open play: the kickoff freeze is 48 ticks of nothing and the
   // rig runs tens of thousands of these.
   m.phase = 'play';
@@ -129,9 +129,6 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
   return 'off';
 }
 
-function keeperSkillFor(rating: number, difficulty: number): number {
-  return 0.35 + 0.5 * (rating / 5) * (0.55 + 0.45 * difficulty);
-}
 
 /** Goal share over `n` seeded repeats of one cell. */
 export function goalRate(opts: Omit<ShotOptions, 'rng'>, seeds: number, seed0 = 0): number {

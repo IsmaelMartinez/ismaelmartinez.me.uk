@@ -86,9 +86,9 @@ export const HALF_SECONDS = 30;
 export const MINUTES_PER_SECOND = 1.5;
 export const FULL_TIME_MINUTES = 90;
 
-export const KICKOFF_FREEZE = 0.8;
-export const GOAL_PAUSE = 1.6;
-export const HALF_TIME_PAUSE = 1.4;
+export const KICKOFF_FREEZE = 0.6;
+export const GOAL_PAUSE = 1.2;
+export const HALF_TIME_PAUSE = 1.0;
 
 /** Seconds A must be held for a full-power shot. */
 export const CHARGE_TIME = 0.55;
@@ -114,7 +114,7 @@ export const KEEPER_TRAP_MAX = 200;
  * Without the tighter radius half of every shot is deflected before it reaches
  * the keeper and shot power stops mattering again.
  */
-export const BLOCK_R = 7;
+export const BLOCK_R = 4;
 export const TACKLE_R = 15;
 export const DRIBBLE_OFFSET = 8;
 export const KICK_GRACE = 0.35;
@@ -130,7 +130,19 @@ const BODY_STEAL_R = 12;
 /** Ball height windows for automatic contact selection. */
 export const TRAP_Z = 6;
 export const VOLLEY_Z = 10;
-export const HEADER_Z = 24;
+export const HEADER_Z = 30;
+/**
+ * How far an airborne ball must have travelled from the boot that launched it
+ * before anyone may attack it. Without this a goal kick passes through heading
+ * height a metre off its own goal line every time, and a forward loitering in
+ * the six-yard box heads it straight back in — which was putting nearly half
+ * of every side's goals on the end of a cross nobody ever played.
+ */
+export const AIR_STRIKE_MIN_TRAVEL = 40;
+/** How near an airborne ball a player has to be to attack it. */
+export const AIR_STRIKE_R = CAPTURE_R + 12;
+/** Lift on a lofted pass or cross; see `loftedPass` for why it is this low. */
+export const LOFT_LIFT = 150;
 
 export type ContactType = 'ground' | 'volley' | 'header';
 
@@ -234,10 +246,14 @@ export interface MatchStats {
   catches: [number, number];
   passes: [number, number];
   passesCompleted: [number, number];
+  shotDistance: [number, number];
+  /** Ground passes only (C), which is what 7.4's completion band is about. */
+  groundPasses: [number, number];
+  groundPassesCompleted: [number, number];
   slides: [number, number];
   slidesWon: [number, number];
   turnovers: number;
-  /** Durations of every completed human possession spell, seconds. */
+  /** Durations of every completed human *team* possession spell, seconds. */
   spells: number[];
 }
 
@@ -270,12 +286,24 @@ export interface MatchState {
   lastTouch: Side;
   /** Index of the last player of each side to kick the ball. */
   lastKicker: [number, number];
+  /** Where the ball was last kicked from, for the air-strike travel gate. */
+  kickFrom: { x: number; y: number };
   /** Contact type of the last strike, for the goal record. */
   lastContact: ContactType;
   /** True while the ball in flight came from a cross or loft. */
   lastFromCross: boolean;
   /** A pass in flight, so a teammate's capture counts as completed. */
   passInFlight: Side | null;
+  /** True while the pass in flight is a lofted one rather than along the deck. */
+  passLofted: boolean;
+  /**
+   * The teammate a ground pass was actually aimed at, so he is the one who
+   * runs onto it. Without this the loose-ball chaser is simply whoever is
+   * nearest the landing point, which is very often not the man the pass was
+   * played to — and a pass whose intended receiver stands still is a pass the
+   * opposition collects.
+   */
+  passTarget: number;
   /**
    * The side that last had the ball at someone's feet. A turnover is counted
    * when possession is regained by the other side, which is almost always via
@@ -339,13 +367,22 @@ function formation(side: Side, swapped: boolean): PlayerState[] {
   return out;
 }
 
-function freshKeeper(team: Team, difficulty: number): KeeperRuntime {
+/**
+ * The player's own keeper is not part of the difficulty curve. Difficulty is
+ * the CPU's handicap (6.8), and letting it lift *both* keepers meant a harder
+ * match quietly made the player's own goal harder to score in as well, which
+ * held goals-against flat across the whole run. Side 0's keeper is therefore
+ * fixed at a middling profile and only his team's Keeper rating moves him.
+ */
+export const HUMAN_KEEPER_PROFILE = 0.45;
+
+function freshKeeper(team: Team, side: Side, difficulty: number): KeeperRuntime {
   return {
     trackX: CENTRE_X,
     dive: null,
     hold: 0,
     parryLock: 0,
-    skill: keeperSkill(team.keeper, difficulty)
+    skill: keeperSkill(team.keeper, side === 0 ? HUMAN_KEEPER_PROFILE : difficulty)
   };
 }
 
@@ -370,15 +407,18 @@ export function createMatch(opts: MatchOptions = {}): MatchState {
     score: [0, 0],
     difficulty,
     teams,
-    keepers: [freshKeeper(teams[0], difficulty), freshKeeper(teams[1], difficulty)],
+    keepers: [freshKeeper(teams[0], 0, difficulty), freshKeeper(teams[1], 1, difficulty)],
     controlled: 6,
     switchFlash: 0,
     kickoffSide: half === 0 ? 0 : 1,
     lastTouch: 0,
     lastKicker: [6, 6],
+    kickFrom: { x: CENTRE_X, y: CENTRE_Y },
     lastContact: 'ground',
     lastFromCross: false,
     passInFlight: null,
+    passLofted: false,
+    passTarget: -1,
     lastOwnerSide: null,
     noScore: false,
     kickGrace: null,
@@ -402,6 +442,9 @@ export function createMatch(opts: MatchOptions = {}): MatchState {
       catches: [0, 0],
       passes: [0, 0],
       passesCompleted: [0, 0],
+      shotDistance: [0, 0],
+      groundPasses: [0, 0],
+      groundPassesCompleted: [0, 0],
       slides: [0, 0],
       slidesWon: [0, 0],
       turnovers: 0,
@@ -425,6 +468,8 @@ function placeKickoff(m: MatchState): void {
   m.winGrace = null;
   m.noScore = false;
   m.passInFlight = null;
+  m.passLofted = false;
+  m.passTarget = -1;
   m.lastOwnerSide = null;
   m.lastFromCross = false;
   m.charge = 0;
@@ -461,17 +506,19 @@ function endSpell(m: MatchState): void {
 }
 
 function takePossession(m: MatchState, side: Side, idx: number, won: boolean): void {
-  const before = m.owner;
   if (m.lastOwnerSide !== null && m.lastOwnerSide !== side) {
     m.stats.turnovers++;
     m.log.push({ type: 'turnover', side });
+    // A possession spell is the *team's*, not one player's: it survives every
+    // pass between teammates and ends only when the other side takes over.
+    if (m.lastOwnerSide === 0) endSpell(m);
   }
   m.lastOwnerSide = side;
-  if (before && before.side === 0 && side !== 0) endSpell(m);
   m.owner = { side, idx };
   m.lastTouch = side;
   m.kickGrace = null;
   m.passInFlight = null;
+  m.passTarget = -1;
   m.lastFromCross = false;
   m.ball.z = 0;
   m.ball.vx = 0;
@@ -495,11 +542,11 @@ function kick(m: MatchState, vx: number, vy: number, vz: number): void {
   m.ball.vy = vy;
   m.ball.vz = vz;
   m.kickGrace = { side: owner.side, idx: owner.idx, t: KICK_GRACE };
+  m.kickFrom = { x: m.ball.x, y: m.ball.y };
   m.lastTouch = owner.side;
   m.lastKicker[owner.side] = owner.idx;
   m.winGrace = null;
   m.owner = null;
-  if (owner.side === 0) endSpell(m);
 }
 
 /* ------------------------------------------------------------------ */
@@ -533,13 +580,13 @@ export function shoot(
   const scale = accuracyScale(m.teams[side]);
   const header = contact === 'header';
   const spread =
-    (signed(m) * (9 - 5 * clamp(power, 0, 1)) + signed(m) * (d / 45) + (header ? signed(m) * 10 : 0)) *
+    (signed(m) * (9 - 5 * clamp(power, 0, 1)) + signed(m) * (d / 45) + (header ? signed(m) * 13 : 0)) *
     scale;
   const targetX = clamp(CENTRE_X + clamp(aim, -1, 1) * (GOAL_HALF + 14) + spread, 6, PITCH_W - 6);
   const dx = targetX - p.x;
   const dy = goalY - p.y;
   const len = Math.hypot(dx, dy) || 1;
-  const speed = header ? 260 : 300 + 150 * clamp(power, 0, 1);
+  const speed = header ? 250 : 300 + 150 * clamp(power, 0, 1);
   p.fx = dx / len;
   p.fy = dy / len;
   const fromCross = m.lastFromCross;
@@ -551,6 +598,7 @@ export function shoot(
   const onTarget = Math.abs(targetX - CENTRE_X) < GOAL_HALF;
   if (onTarget) m.stats.onTarget[side]++;
   m.log.push({ type: 'shot', side, onTarget, contact });
+  m.stats.shotDistance[side] += d;
   armKeeper(m, side);
 }
 
@@ -573,9 +621,13 @@ function clearUpfield(m: MatchState, side: Side, power: number, aim: number): vo
 
 /**
  * The teammate a ground pass should find. Among teammates within 220 px whose
- * bearing is within 35 degrees of the stick, the nearest wins. This assist is
- * a deliberate departure from the original's purely directional passing:
- * short passing has to be viable or the game is hoof-and-hope.
+ * bearing is within 35 degrees of the stick, the most available wins — near,
+ * and with nobody standing on him. Picking the *nearest* instead, as the
+ * specification's 6.3 has it, threw half of all passes at whichever teammate
+ * happened to be closest to the line even with a defender in his pocket, and
+ * a 50 % completion rate is not "short passing is viable". This assist is
+ * already a deliberate departure from the original's purely directional
+ * passing; this is the same departure, done properly.
  */
 export function passAssist(
   m: MatchState,
@@ -591,7 +643,7 @@ export function passAssist(
   const ay = aimY / len;
   const cone = Math.cos((35 * Math.PI) / 180);
   let best = -1;
-  let bestD = Infinity;
+  let bestScore = -Infinity;
   for (let i = 1; i < TEAM_SIZE; i++) {
     if (i === idx) continue;
     const mate = m.players[side][i];
@@ -600,8 +652,19 @@ export function passAssist(
     const d = Math.hypot(dx, dy);
     if (d < 20 || d > 220) continue;
     if ((dx * ax + dy * ay) / d < cone) continue;
-    if (d < bestD) {
-      bestD = d;
+    let marker = Infinity;
+    let lane = 0;
+    for (let o = 1; o < TEAM_SIZE; o++) {
+      const opp = m.players[1 - side][o];
+      marker = Math.min(marker, dist(opp.x, opp.y, mate.x, mate.y));
+      // Anyone standing on the line the ball would travel gets to intercept
+      // it, so a candidate behind a defender is not an option at all.
+      const t = clamp(((opp.x - p.x) * dx + (opp.y - p.y) * dy) / (d * d), 0, 1);
+      if (dist(opp.x, opp.y, p.x + dx * t, p.y + dy * t) < 18) lane += 1;
+    }
+    const score = Math.min(marker, 60) * 2 - d - lane * 120;
+    if (score > bestScore) {
+      bestScore = score;
       best = i;
     }
   }
@@ -620,10 +683,14 @@ function groundPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   if (mate >= 0) {
     const t = m.players[side][mate];
     const d = dist(p.x, p.y, t.x, t.y);
-    speed = clamp(190 + 110 * (d / 220), 190, 300);
+    // Firmer than the specification's 190 + 110 x power. A pass that ambles
+    // gives every defender on the line time to step across it, and half of
+    // all passes were being read; this stays under CONTROL_MAX so the
+    // receiver still takes it cleanly rather than having it bounce off him.
+    speed = clamp(240 + 120 * (d / 220), 240, 320);
     const flight = d / speed;
-    dx = t.x - p.x + t.fx * t.speed * flight + signed(m) * 7 * scale;
-    dy = t.y - p.y + t.fy * t.speed * flight + signed(m) * 7 * scale;
+    dx = t.x - p.x + t.fx * t.speed * flight + signed(m) * 5 * scale;
+    dy = t.y - p.y + t.fy * t.speed * flight + signed(m) * 5 * scale;
   }
   const len = Math.hypot(dx, dy) || 1;
   p.fx = dx / len;
@@ -632,7 +699,10 @@ function groundPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   m.lastContact = 'ground';
   m.lastFromCross = false;
   m.passInFlight = side;
+  m.passLofted = false;
+  m.passTarget = mate;
   m.stats.passes[side]++;
+  m.stats.groundPasses[side]++;
   armKeeper(m, side);
 }
 
@@ -650,10 +720,19 @@ function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   const speed = 150 + 90 * clamp(power, 0, 1);
   p.fx = dx / len;
   p.fy = dy / len;
-  kick(m, (dx / len) * speed, (dy / len) * speed, 210 + 60 * clamp(power, 0, 1));
+  // Lower than the specification's 210 + 60 x power. At that lift a cross
+  // arcs to 42 px, twice the heading ceiling, and crosses the band on the way
+  // up and again on the way down inside a tenth of a second either side —
+  // nobody could ever meet one, and the cross-and-header weapon 7.4 asks for
+  // simply did not exist. At this lift the ball spends two thirds of its
+  // flight inside the heading band while still clearing every outfielder's
+  // 6 px trap ceiling, so it is a cross rather than a rolled pass.
+  kick(m, (dx / len) * speed, (dy / len) * speed, LOFT_LIFT + 45 * clamp(power, 0, 1));
   m.lastContact = 'ground';
   m.lastFromCross = true;
   m.passInFlight = side;
+  m.passLofted = true;
+  m.passTarget = -1;
   m.stats.passes[side]++;
   armKeeper(m, side);
 }
@@ -666,13 +745,16 @@ function crossTo(m: MatchState, side: Side, target: { x: number; y: number }): v
   const dx = target.x - p.x + signed(m) * 8;
   const dy = target.y - p.y + signed(m) * 8;
   const len = Math.hypot(dx, dy) || 1;
-  const flight = clamp(len / 190, 0.55, 1.4);
+  // Same trajectory as any other cross, timed to land on the chosen marker.
+  const flight = (2 * LOFT_LIFT) / GRAVITY;
   p.fx = dx / len;
   p.fy = dy / len;
   kick(m, dx / flight, dy / flight, (GRAVITY * flight) / 2);
   m.lastContact = 'ground';
   m.lastFromCross = true;
   m.passInFlight = side;
+  m.passLofted = true;
+  m.passTarget = -1;
   m.stats.passes[side]++;
   armKeeper(m, side);
 }
@@ -688,12 +770,19 @@ function airStrike(m: MatchState, side: Side, idx: number, aim: number): void {
   shoot(m, side, contact === 'header' ? 1 : 0.8, aim, contact);
 }
 
-function canAirStrike(m: MatchState, side: Side, idx: number): boolean {
+/**
+ * Whether `idx` may attack the ball in the air right now. Exported because the
+ * scripted policies have to ask the same question the game does — a policy
+ * that presses A at a ball it cannot head gets a slide tackle and its cooldown
+ * instead, and the chance is gone.
+ */
+export function canAirStrike(m: MatchState, side: Side, idx: number): boolean {
   if (m.owner) return false;
   if (m.ball.z < TRAP_Z || m.ball.z > HEADER_Z) return false;
+  if (dist(m.ball.x, m.ball.y, m.kickFrom.x, m.kickFrom.y) < AIR_STRIKE_MIN_TRAVEL) return false;
   if (m.kickGrace && m.kickGrace.side === side && m.kickGrace.idx === idx) return false;
   const p = m.players[side][idx];
-  return dist(p.x, p.y, m.ball.x, m.ball.y) < CAPTURE_R + 5;
+  return dist(p.x, p.y, m.ball.x, m.ball.y) < AIR_STRIKE_R;
 }
 
 /* ------------------------------------------------------------------ */
@@ -871,7 +960,12 @@ function updateControlled(m: MatchState, dt: number): void {
       bestD = d;
     }
   }
-  if (best !== m.controlled && curD - bestD > 30) {
+  // The hysteresis band keeps the cursor from flickering between two players
+  // equally close to the ball, but a player inside his own kick grace cannot
+  // touch it at all: holding the cursor on him would leave the player driving
+  // a man who can do nothing while his own cross drops on somebody's head.
+  const stuck = !!m.kickGrace && m.kickGrace.side === 0 && m.kickGrace.idx === m.controlled;
+  if (best !== m.controlled && (stuck || curD - bestD > 30)) {
     m.controlled = best;
     m.switchFlash = 1;
   }
@@ -1121,7 +1215,7 @@ function stepCpuCarrier(m: MatchState, dt: number): void {
   }
   if ((plan.action === 'pass' || plan.action === 'loft') && plan.target >= 0) {
     const mate = m.players[1][plan.target];
-    const scale = 1.4 - 0.7 * m.difficulty;
+    const scale = 1.1 - 0.5 * m.difficulty;
     const ax = mate.x - p.x + signed(m) * 14 * scale;
     const ay = mate.y - p.y + signed(m) * 14 * scale;
     if (plan.action === 'loft') loftedPass(m, 1, ax, ay, plan.power);
@@ -1143,7 +1237,9 @@ function stepCpuDefence(m: MatchState, dt: number): void {
     const p = m.players[1][idx];
     if (p.slide > 0 || p.down > 0 || p.slideCd > 0) continue;
     if (dist(p.x, p.y, carrier.x, carrier.y) > TACKLE_R + 6) continue;
-    if (m.rng() < (0.6 + m.difficulty) * dt) startSlide(m, 1, idx);
+    // Slide willingness is a decision, so it is a difficulty channel: an
+    // easy CPU commits rarely and can be run at, a hard one is always coming.
+    if (m.rng() < (0.02 + 0.66 * m.difficulty) * dt) startSlide(m, 1, idx);
   }
 }
 
@@ -1171,7 +1267,6 @@ function knockLoose(m: MatchState, side: Side, idx: number): void {
   m.ball.vx = (dx / len) * 60;
   m.ball.vy = (dy / len) * 60;
   m.ball.vz = 0;
-  if (m.owner.side === 0) endSpell(m);
   m.owner = null;
   m.lastTouch = side;
   m.passInFlight = null;
@@ -1231,7 +1326,10 @@ function stepTackles(m: MatchState, dt: number, events: MatchEvent[]): void {
       const toX = (carrier.x - p.x) / d;
       const toY = (carrier.y - p.y) / d;
       const head = -(carrier.fx * toX + carrier.fy * toY);
-      if (head > Math.cos((55 * Math.PI) / 180) && m.rng() < BODY_STEAL_RATE * dt) {
+      // The quiet steal scales with the same tackle rating the slide rolls
+      // against, so a low-difficulty CPU is no better at it than at sliding.
+      const stealRate = BODY_STEAL_RATE * (base / HUMAN_TACKLE_BASE);
+      if (head > Math.cos((55 * Math.PI) / 180) && m.rng() < stealRate * dt) {
         knockLoose(m, defSide, idx);
         m.ball.x = p.x + p.fx * DRIBBLE_OFFSET;
         m.ball.y = p.y + p.fy * DRIBBLE_OFFSET;
@@ -1292,7 +1390,10 @@ function tryCapture(m: MatchState): void {
     m.noScore = false;
     return;
   }
-  if (m.passInFlight === best.side && best.idx !== 0) m.stats.passesCompleted[best.side]++;
+  if (m.passInFlight === best.side && best.idx !== 0) {
+    m.stats.passesCompleted[best.side]++;
+    if (!m.passLofted) m.stats.groundPassesCompleted[best.side]++;
+  }
   takePossession(m, best.side, best.idx, false);
 }
 
@@ -1424,7 +1525,6 @@ function awardRestart(m: MatchState, events: MatchEvent[]): void {
   const ev: MatchEvent = { type: 'restart', kind: spec.kind, side: spec.side };
   events.push(ev);
   m.log.push(ev);
-  endSpell(m);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1448,6 +1548,11 @@ function beginRestart(m: MatchState): void {
   m.ball.y = taker.y + taker.fy * DRIBBLE_OFFSET;
   m.ball.z = 0;
   m.owner = { side: r.side, idx: r.taker };
+  // A stoppage is not a turnover: a side that puts the ball out and takes the
+  // throw itself has never lost it, so the spell only closes when the restart
+  // actually hands the ball to the other team.
+  if (m.lastOwnerSide === 0 && r.side !== 0) endSpell(m);
+  m.lastOwnerSide = r.side;
   m.lastTouch = r.side;
   m.keepers[r.side].hold = 0;
   // A throw-in cannot score directly; every other restart can.
@@ -1475,6 +1580,7 @@ function autoRelease(m: MatchState): void {
   }
   m.lastFromCross = true;
   m.passInFlight = r.side;
+  m.passLofted = true;
   const side = r.side;
   m.restart = null;
   m.markers = [];
@@ -1536,6 +1642,7 @@ function keeperDistribution(m: MatchState): void {
   kick(m, (lateral / len) * GOAL_KICK_SPEED, ((dir as number) / len) * GOAL_KICK_SPEED, GOAL_KICK_LIFT);
   m.lastFromCross = true;
   m.passInFlight = owner.side;
+  m.passLofted = true;
   armKeeper(m, owner.side);
 }
 
@@ -1578,7 +1685,7 @@ export function tickMatch(
   // set-piece placement cost the player no football.
   m.halfElapsed += dt;
   m.clock = Math.min(m.half * 45 + 45, m.half * 45 + m.halfElapsed * MINUTES_PER_SECOND);
-  if (m.owner && m.owner.side === 0) m.spell += dt;
+  if (m.lastOwnerSide === 0) m.spell += dt;
   else endSpell(m);
 
   if (m.kickGrace) {

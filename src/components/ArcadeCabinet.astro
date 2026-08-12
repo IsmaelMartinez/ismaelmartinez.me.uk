@@ -15,9 +15,14 @@ interface Props {
   bestLabel: string;
   /** Translated "New" ribbon text; omit to hide the ribbon. */
   newBadge?: string;
+  /**
+   * Year of the classic this cabinet homages, shown as a small "EST. 1974"
+   * plaque (numerals only, so no i18n). Omit to hide the plaque.
+   */
+  estYear?: number;
 }
 
-const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBadge } =
+const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBadge, estYear } =
   Astro.props;
 ---
 
@@ -28,6 +33,7 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
   style={`--cabinet-color: ${color}; --cabinet-glow: ${color}40;`}
 >
   {newBadge && <span class="new-ribbon">{newBadge}</span>}
+  {estYear && <span class="est-plaque">EST. {estYear}</span>}
 
   <div class="cabinet-top">
     <div class="cabinet-marquee">
@@ -144,6 +150,26 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
     border-radius: 999px;
     box-shadow: 0 0 18px rgba(253, 224, 71, 0.6);
     transform: rotate(6deg);
+  }
+
+  /* A little brass era plaque screwed to the cabinet's top-left corner. */
+  .est-plaque {
+    position: absolute;
+    top: -8px;
+    left: -6px;
+    z-index: 2;
+    padding: 3px 8px;
+    background: linear-gradient(135deg, #d9b45b, #9a7b2f);
+    color: #241c07;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    border-radius: 3px;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    transform: rotate(-4deg);
   }
 
   .cabinet-top {

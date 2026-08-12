@@ -18,6 +18,7 @@ import {
   shadeColor,
   clamp
 } from '../engine';
+import { markDone } from '../engine/progress';
 import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, isSolidColumn, type ArenaType } from './terrain';
 import {
   launchProjectile,
@@ -573,6 +574,12 @@ export function initTanksGame(): void {
       audio.playSfx('gameover');
       audio.stop();
     }
+    // Floor unlock progress is decoupled from the leaderboard: a completed
+    // 2P match, or a CPU match where the player took at least one round,
+    // finishes this cabinet for the chain even though nothing reaches the
+    // board below (the score argument is a sentinel — markDone only needs it
+    // above zero).
+    if (matchOver && (mode === '2p' || wins[0] > 0)) markDone('tanks', 1);
     const playerWonMatch = matchOver && winner === 0 && mode === 'cpu';
     if (playerWonMatch) {
       victories++;
@@ -593,6 +600,9 @@ export function initTanksGame(): void {
     matchScoreEl.style.display = playerWonMatch ? 'block' : 'none';
     roundOverlay.style.display = 'flex';
     // After the overlay is visible, so the initials input can take focus.
+    // The vs-CPU-win-only gate here is load-bearing for the LEADERBOARD (a
+    // lost or 2P match has no comparable score to submit) — do not widen it.
+    // Floor progress is marked above, independent of this gate.
     if (playerWonMatch) board.show(finalScore);
   }
 

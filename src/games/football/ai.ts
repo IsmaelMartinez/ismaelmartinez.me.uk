@@ -22,7 +22,7 @@ import {
   type Point,
   type Side
 } from './pitch';
-import type { MatchState, PlayerState } from './match';
+import { airMeetPoint, type MatchState, type PlayerState } from './match';
 
 /** Top speed of the player under the stick. Nothing in the game exceeds it. */
 export const HUMAN_SPEED = 108;
@@ -110,10 +110,80 @@ function twoNearest(m: MatchState, side: Side, x: number, y: number): [number, n
   return [ranked[0][0], ranked[1][0]];
 }
 
+/** How far ahead of, and to the side of, the carrier the short option stands. */
+const SUPPORT_AHEAD = 46;
+const SUPPORT_WIDE = 62;
+/** How far a runner steps off a defender who is standing in his lane. */
+const DRIFT_MAX = 40;
+const DRIFT_R = 34;
+/**
+ * How near goal a ball has to be dropping for a second man to attack it, and
+ * how far past it he stands. This is the back-post run: he is not competing
+ * with the first man for the same header, he is behind him for the one that
+ * is missed or flicked on.
+ */
+const BACK_POST_R = 150;
+const BACK_POST_OFFSET = 26;
+
+/** The nearest opponent to a point, or null when the side is somehow empty. */
+function nearestOpponentTo(
+  m: MatchState,
+  side: Side,
+  x: number,
+  y: number
+): PlayerState | null {
+  let best: PlayerState | null = null;
+  let bestD = Infinity;
+  for (let idx = 1; idx < TEAM_SIZE; idx++) {
+    const o = m.players[1 - side][idx];
+    const d = dist(o.x, o.y, x, y);
+    if (d < bestD) {
+      bestD = d;
+      best = o;
+    }
+  }
+  return best;
+}
+
+/** How far to step aside from the defender nearest a run's destination. */
+function drift(m: MatchState, side: Side, x: number, y: number): number {
+  const marker = nearestOpponentTo(m, side, x, y);
+  if (!marker) return 0;
+  const gap = dist(marker.x, marker.y, x, y);
+  if (gap >= DRIFT_R) return 0;
+  const away = marker.x > x ? -1 : 1;
+  return away * DRIFT_MAX * (1 - gap / DRIFT_R);
+}
+
+/**
+ * The teammate who offers the short option: the nearest to the carrier who is
+ * not one of the two making runs beyond him.
+ */
+function supportFor(m: MatchState, side: Side, carrierIdx: number): number {
+  const carrier = m.players[side][carrierIdx];
+  const dir = attackDir(side, m.swapped);
+  const advanced = [...Array(TEAM_SIZE).keys()]
+    .slice(1)
+    .filter(i => i !== carrierIdx)
+    .sort((a, b) => (m.players[side][b].y - m.players[side][a].y) * dir)
+    .slice(0, 2);
+  let best = -1;
+  let bestD = Infinity;
+  for (let idx = 1; idx < TEAM_SIZE; idx++) {
+    if (idx === carrierIdx || advanced.includes(idx)) continue;
+    const d = dist(m.players[side][idx].x, m.players[side][idx].y, carrier.x, carrier.y);
+    if (d < bestD) {
+      bestD = d;
+      best = idx;
+    }
+  }
+  return best;
+}
+
 /**
  * Where an off-ball outfielder wants to be. The drifting formation anchor is
- * the default; chasing a loose ball, making a run into space and pressing the
- * carrier are the three overrides.
+ * the default; chasing a loose ball, making a run into space, offering a short
+ * option and pressing the carrier are the four overrides.
  */
 export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
   const p = m.players[side][idx];
@@ -127,6 +197,31 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
   }
 
   if (!m.owner) {
+    // A ball in the air is attacked where it comes down to head height, not
+    // where it is now. This is the receiving half of the cross, and it is the
+    // half that makes crossing a weapon: the ball is never steered onto a man,
+    // a man runs onto the ball. Without it a lofted ball played into the box
+    // arrived with the nearest forward still tracking a lead point a fifth of a
+    // second ahead of a ball that was going to travel for another half second,
+    // and the cross-and-header move 7.4 wants a share of the goals from could
+    // not happen however the ball was weighted.
+    const meet = m.passInFlight === side ? airMeetPoint(ball) : null;
+    if (meet) {
+      // Two men attack a ball in the box, not one. A single runner meets a
+      // cross often enough to make crossing work and not often enough to make
+      // it worth the possession it costs — measured across the ladder, a
+      // player who crossed scored 4.747 points a match against 4.773 for the
+      // same player who never did. A second man at the back post is what an
+      // attacking side actually does with a ball in the air, and it is the
+      // difference between the verb paying and the verb not quite paying.
+      const [first, second] = twoNearest(m, side, meet.x, meet.y);
+      if (idx === first) return meet;
+      if (idx === second && Math.abs(meet.y - attackGoalY(side, m.swapped)) < BACK_POST_R) {
+        const away = meet.x < CENTRE_X ? 1 : -1;
+        return { x: clamp(meet.x + away * BACK_POST_OFFSET, 20, PITCH_W - 20), y: meet.y };
+      }
+      return anchor;
+    }
     // One outfielder goes for it, aiming where the ball will be rather than
     // where it is; everyone else keeps shape.
     const lead = { x: ball.x + ball.vx * 0.22, y: ball.y + ball.vy * 0.22 };
@@ -153,7 +248,27 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
       const away = carrier.x < CENTRE_X ? 1 : -1;
       const lane = clamp(CENTRE_X + away * (40 + (idx % 2) * 46), 24, PITCH_W - 24);
       const depth = goalY - dir * (60 + (idx % 2) * 34);
-      return { x: lane, y: clamp(depth, 16, PITCH_L - 16) };
+      // Step off the man marking the lane rather than standing on him. A
+      // runner who arrives in the same place every time is a runner the pass
+      // is never on to, and a receiver who is not in space is why passing was
+      // a net loss: the ball was correctly aimed at a man who was covered.
+      return { x: clamp(lane + drift(m, side, lane, depth), 24, PITCH_W - 24), y: clamp(depth, 16, PITCH_L - 16) };
+    }
+    // One man always offers a short option, pulled into the space away from
+    // whoever is closing the carrier down. Without him the only pass on was a
+    // forty-yard ball to a marked forward.
+    if (idx === supportFor(m, side, m.owner.idx)) {
+      const marker = nearestOpponentTo(m, side, carrier.x, carrier.y);
+      const away = marker && marker.x > carrier.x ? -1 : 1;
+      const sx = clamp(carrier.x + away * SUPPORT_WIDE, 20, PITCH_W - 20);
+      const sy = clamp(carrier.y + dir * SUPPORT_AHEAD, 16, PITCH_L - 16);
+      // He steps off his own marker for the same reason the runners beyond him
+      // do, and leaving him out of it was the gap in the first pass at this:
+      // the short option is the pass a pressed carrier actually plays, so a
+      // short option standing on a defender is the pass that gets cut out. It
+      // is the difference between passing paying at every difficulty and
+      // passing paying everywhere except the one where you most need it.
+      return { x: clamp(sx + drift(m, side, sx, sy), 20, PITCH_W - 20), y: sy };
     }
     return anchor;
   }

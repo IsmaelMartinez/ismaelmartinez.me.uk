@@ -25,12 +25,16 @@ import {
   inSixYardBox,
   inPenaltyBox,
   dist,
+  type Point,
   type Side
 } from './pitch';
 import { TEAMS, type Team } from './teams';
 import {
+  ASSIST_DIVE_PENALTY,
   KEEPER_WALK,
   KEEPER_DIVE,
+  KEEPER_SMOTHER,
+  KEEPER_SMOTHER_R,
   KEEPER_HOLD,
   KEEPER_STEAL_R,
   KEEPER_STEAL_RATE,
@@ -113,7 +117,7 @@ export const CAPTURE_R = 10;
  * played through it. Passing is the main thing a good player does that a
  * button-masher does not, so it has to pay.
  */
-export const PASS_INTERCEPT_R = 6;
+export const PASS_INTERCEPT_R = 4;
 export const CONTROL_MAX = 330;
 /**
  * A keeper gathers loose balls up to this pace and no faster. Anything quicker
@@ -138,8 +142,23 @@ export const WIN_GRACE = 0.5;
  * Shot placement. Full stick asks for the ball this far off centre — a ball's
  * width inside the post, so the whole stick range is a reachable target. See
  * `shoot` for why the specification's wider-than-the-mouth envelope had to go.
+ *
+ * It is deliberately *not* congruent with `KEEPER_BAND`, the furthest off
+ * centre the keeper will ever stand, which is 20. When the two were equal the
+ * whole game collapsed into one number: the target and the man defending it
+ * lived on the same 72 px line, so dragging him to one end of it left the
+ * other end uncovered by construction and the routine solved the cabinet. The
+ * far corner is now 15 px beyond the furthest he stands, so moving him is
+ * worth something real and worth strictly less than the whole goal.
+ *
+ * Going the other way and pushing this out to `GOAL_HALF - 2` — which the
+ * first pass at this fix did, to make the span exactly twice the band — is
+ * what the sweep will not have. Two pixels inside the post is inside the
+ * spread of any shot, so full stick measured *worse* than three-quarter stick
+ * (0.271 against 0.403 from the six-yard box) and 7.3's aim monotonicity
+ * failed at the one place it most needs to hold.
  */
-export const AIM_SPAN = GOAL_HALF - 6;
+export const AIM_SPAN = GOAL_HALF - 7;
 /**
  * Shot pace. Steeper in the charge than the specification's 300 + 150 x power:
  * the charge is the one thing a player spends real time on before striking —
@@ -154,9 +173,18 @@ const SHOT_SPEED_CHARGE = 155;
  * charge's pace nor the charge's precision to trade: its own fixed pace and
  * spread are what keep a cross-and-header a real weapon from angles a ground
  * shot has no gap through, without letting it become the dominant one.
+ *
+ * Both moved this round, and the direction is the point. A cross that cannot
+ * be met is not a weapon and a header that cannot be scored is not a reason to
+ * cross; measured against a control that never crossed, the player who did was
+ * losing 4.807 points a match against 4.823 with the old numbers. A firmer,
+ * truer contact is also what the cabinet's header looks like — it is a
+ * deliberate strike, not a deflection. 7.3's header cell moves from 0.30 to
+ * 0.35 inside its 0.25-0.40 band, and 7.4's cap on the share of goals that may
+ * come from crosses and headers is still met with room to spare.
  */
-const HEADER_SPEED = 280;
-const HEADER_SPREAD = 7.5;
+const HEADER_SPEED = 295;
+const HEADER_SPREAD = 6;
 /** Placement error, before quality: a scuffed tap sprays, a struck shot does not. */
 const SPREAD_BASE = 8;
 const SPREAD_CHARGE = 5;
@@ -184,10 +212,16 @@ const RUSH_SCUFF = 0.55;
  * pass rather than to hammer the button. It is also the one term a player who
  * never passes can never collect.
  */
-const RUSH_ASSIST = 0.9;
+const RUSH_ASSIST = 1.1;
 /** Extra rush on a header met off a clearance rather than a delivered ball. */
 const RUSH_HOOF = 1;
-const ASSIST_WINDOW = 1;
+/**
+ * How long a completed pass keeps helping the man who received it. A second
+ * was shorter than the time it takes to receive a ball, turn and strike it, so
+ * three quarters of the passes that did lead to a shot were collecting nothing
+ * for it — which is most of why passing was a net loss.
+ */
+const ASSIST_WINDOW = 2;
 const RUSH_MAX = 2;
 /** Rush below this stays out of the sky; above it, some of them go over. */
 const SKY_GATE = 1.15;
@@ -212,6 +246,15 @@ export const SLIDE_TIME = 0.35;
 export const SLIDE_SPEED = 26 / SLIDE_TIME;
 export const SLIDE_COOLDOWN = 0.45;
 export const SLIDE_DOWN = 0.8;
+/**
+ * How hard a won challenge knocks the ball back through the tackle, and how
+ * long the man who lost it is off balance for. Both exist so that a won slide
+ * is worth the 0.8 s on the floor a lost one costs: the risk is priced in the
+ * failure case, which is the only place it can be priced without making the
+ * success case worthless.
+ */
+const KNOCK_SPEED = 70;
+const KNOCK_STUMBLE = 0.4;
 const BODY_STEAL_RATE = 1.1;
 const BODY_STEAL_R = 12;
 
@@ -236,8 +279,30 @@ export const AIR_STRIKE_MIN_TRAVEL = 40;
  * goals coming off crosses past the anti-goal 7.4 sets for it.
  */
 export const AIR_STRIKE_R = CAPTURE_R + 6;
+/**
+ * The same radius for a ball that was *delivered* — a cross, a corner, a
+ * lofted pass aimed at a man. A hoof forward has to be met on the same tight
+ * terms as before, because meeting one is what "hoof and hope" is made of; a
+ * ball played onto a runner's head is supposed to be meetable, and at the hoof
+ * radius it was not: the window a cross spends in the heading band is a few
+ * frames wide and arriving inside 16 px of it in those frames essentially
+ * never happened. Widening only the delivered case is what makes crossing a
+ * weapon without making punting one.
+ */
+export const CROSS_STRIKE_R = CAPTURE_R + 20;
 /** Lift on a lofted pass or cross; see `loftedPass` for why it is this low. */
 export const LOFT_LIFT = 150;
+/**
+ * A delivered cross is aimed to pass through heading height *over* its target
+ * rather than to land on him, so it is aimed this far beyond the man and timed
+ * to be at `CROSS_MEET_Z` when it reaches him.
+ */
+const CROSS_OVERSHOOT = 34;
+const CROSS_MEET_Z = 16;
+/** Nominal pace of a delivery, which sets its hang time. */
+const CROSS_PACE = 210;
+const CROSS_FLIGHT_MIN = 0.34;
+const CROSS_FLIGHT_MAX = 0.68;
 
 export type ContactType = 'ground' | 'volley' | 'header';
 
@@ -920,7 +985,7 @@ function groundPass(m: MatchState, side: Side, aimX: number, aimY: number, power
     // gives every defender on the line time to step across it, and half of
     // all passes were being read; this stays under CONTROL_MAX so the
     // receiver still takes it cleanly rather than having it bounce off him.
-    speed = clamp(240 + 120 * (d / 220), 240, 320);
+    speed = clamp(268 + 120 * (d / 220), 268, 326);
     const flight = d / speed;
     dx = t.x - p.x + t.fx * t.speed * flight + signed(m) * 5 * scale;
     dy = t.y - p.y + t.fy * t.speed * flight + signed(m) * 5 * scale;
@@ -939,6 +1004,62 @@ function groundPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   armKeeper(m, side);
 }
 
+/**
+ * How far along the line the ball is being lofted a teammate is standing, or 0
+ * if nobody is on it.
+ *
+ * **This does not steer the ball.** It answers one question — "is there a man
+ * out that way, and how far?" — and the only thing the answer is allowed to
+ * change is the *weight* of the ball. Direction stays exactly what the stick
+ * asked for, which is the specification's "purely directional, no assist" and,
+ * more to the point, is how B behaves on the cabinet this is a copy of: you
+ * point it and you hit it, and the game decides how hard.
+ *
+ * An earlier pass at this fix did steer it — it scored every teammate in a 50
+ * degree cone for how free he was and how near the goal, then aimed the ball at
+ * the winner with a lead on his run. That made the cross land, and it made it
+ * land the way a modern football game's assisted cross lands, which is not what
+ * B does on a Mega Drive. The reachability problem it was solving turns out to
+ * be entirely a problem of hang time, so hang time is all that is taken.
+ */
+function loftRange(m: MatchState, side: Side, idx: number, ax: number, ay: number): number {
+  const p = m.players[side][idx];
+  // A narrow corridor, not a catchment: a man has to be genuinely on the line
+  // of the ball, near enough to the width of the two of them at that range.
+  const cone = Math.cos((16 * Math.PI) / 180);
+  let best = 0;
+  for (let i = 1; i < TEAM_SIZE; i++) {
+    if (i === idx) continue;
+    const mate = m.players[side][i];
+    const dx = mate.x - p.x;
+    const dy = mate.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 34 || d > 200) continue;
+    if ((dx * ax + dy * ay) / d < cone) continue;
+    // The nearest man on the line is the man the ball is for; a ball weighted
+    // for someone behind him would sail over the one it was played to.
+    if (best === 0 || d < best) best = d;
+  }
+  return best;
+}
+
+/**
+ * Lift and pace for a lofted ball that has `range` px to travel before it wants
+ * to be at heading height.
+ *
+ * The overshoot is what makes it a cross rather than a lob: the ball is
+ * weighted to be still coming down at `CROSS_MEET_Z` as it crosses the man,
+ * travelling on past him, rather than dying at his feet. A lob that lands on a
+ * player is a ball he traps; a ball arriving over him at head height is a ball
+ * he heads, and 6.1 resolves the contact from the height.
+ */
+function loftWeight(range: number): { pace: number; vz: number } {
+  const drop = range + CROSS_OVERSHOOT;
+  const t = clamp(range / CROSS_PACE, CROSS_FLIGHT_MIN, CROSS_FLIGHT_MAX);
+  const vz = CROSS_MEET_Z / t + (GRAVITY * t) / 2;
+  return { pace: drop / ((2 * vz) / GRAVITY), vz };
+}
+
 function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power: number): void {
   const owner = m.owner;
   if (!owner) return;
@@ -950,9 +1071,27 @@ function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power
     dy = p.fy;
   }
   const len = Math.hypot(dx, dy) || 1;
-  const speed = 150 + 90 * clamp(power, 0, 1);
   p.fx = dx / len;
   p.fy = dy / len;
+  const range = loftRange(m, side, owner.idx, dx / len, dy / len);
+  if (range > 0) {
+    // There is a man on the line, so the ball is weighted to reach him at head
+    // height instead of at whatever range a fixed lift happened to give it.
+    // Fixed lift was why crossing did not exist: the ball crossed the heading
+    // band twice inside a tenth of a second and at a distance nobody had asked
+    // for, so the header 7.4 wants a share of the goals from never happened.
+    const w = loftWeight(range);
+    kick(m, (dx / len) * w.pace, (dy / len) * w.pace, w.vz);
+    m.lastContact = 'ground';
+    m.lastFromCross = true;
+    m.passInFlight = side;
+    m.passLofted = true;
+    m.passTarget = -1;
+    m.stats.passes[side]++;
+    armKeeper(m, side);
+    return;
+  }
+  const speed = 150 + 90 * clamp(power, 0, 1);
   // Lower than the specification's 210 + 60 x power. At that lift a cross
   // arcs to 42 px, twice the heading ceiling, and crosses the band on the way
   // up and again on the way down inside a tenth of a second either side —
@@ -970,19 +1109,46 @@ function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   armKeeper(m, side);
 }
 
+/**
+ * Where an airborne ball comes down through heading height, or null if it is
+ * not in the air or never gets that low on its own.
+ *
+ * This is what a striker runs onto, and it is the honest way to make a cross
+ * meetable: the man attacks the flight of the ball rather than the ball being
+ * steered onto the man. On the cabinet this is a copy of, pressing B toward the
+ * box and watching your centre-forward peel off to meet it is the whole of the
+ * cross-and-header move; here it is one override in `offBallTarget`.
+ *
+ * Horizontal drag is ignored over the fraction of a second involved — at
+ * `AIR_FRICTION` the ball loses about four per cent of its pace across a
+ * cross's whole hang time, which is under a pixel of run.
+ */
+export function airMeetPoint(ball: BallState): Point | null {
+  if (ball.z <= TRAP_Z && ball.vz <= 0) return null;
+  const disc = ball.vz * ball.vz - 2 * GRAVITY * (CROSS_MEET_Z - ball.z);
+  if (disc < 0) return null;
+  const t = (ball.vz + Math.sqrt(disc)) / GRAVITY;
+  if (t <= 0) return null;
+  return { x: ball.x + ball.vx * t, y: ball.y + ball.vy * t };
+}
+
 /** Deliver a cross onto a chosen landing marker; corners use this. */
 function crossTo(m: MatchState, side: Side, target: { x: number; y: number }): void {
   const owner = m.owner;
   if (!owner) return;
   const p = playerAt(m, owner);
+  // A corner is the one ball in the game that *is* aimed at a spot rather than
+  // in a direction, because 3's corner mechanic gives the player three landing
+  // markers to choose between — the readable version of the manual's numbered
+  // aim targets. Weighted the same way as any other loft, so it arrives over
+  // the marker at heading height and a runner meets it.
   const dx = target.x - p.x + signed(m) * 8;
   const dy = target.y - p.y + signed(m) * 8;
   const len = Math.hypot(dx, dy) || 1;
-  // Same trajectory as any other cross, timed to land on the chosen marker.
-  const flight = (2 * LOFT_LIFT) / GRAVITY;
+  const w = loftWeight(len);
   p.fx = dx / len;
   p.fy = dy / len;
-  kick(m, dx / flight, dy / flight, (GRAVITY * flight) / 2);
+  kick(m, (dx / len) * w.pace, (dy / len) * w.pace, w.vz);
   m.lastContact = 'ground';
   m.lastFromCross = true;
   m.passInFlight = side;
@@ -999,6 +1165,13 @@ function crossTo(m: MatchState, side: Side, target: { x: number; y: number }): v
  */
 function airStrike(m: MatchState, side: Side, idx: number, aim: number): void {
   const contact = resolveContact(m.ball.z);
+  // Meeting a ball that was deliberately delivered is a completed pass by
+  // another name, so it collects the same reward: the man striking it is not
+  // rushed and the keeper, who has been following the flight of the cross, is
+  // committing late. A ball met off a hoof collects neither — `shoot` charges
+  // that one `RUSH_HOOF` instead, which is what keeps the anti-goal in 7.4
+  // from being reached by punting the ball forward and running after it.
+  if (m.lastFromCross) m.assist = { side, t: ASSIST_WINDOW };
   m.owner = { side, idx };
   shoot(m, side, contact === 'header' ? 1 : 0.8, aim, contact);
 }
@@ -1016,7 +1189,7 @@ export function canAirStrike(m: MatchState, side: Side, idx: number): boolean {
   if (dist(m.ball.x, m.ball.y, m.kickFrom.x, m.kickFrom.y) < AIR_STRIKE_MIN_TRAVEL) return false;
   if (m.kickGrace && m.kickGrace.side === side && m.kickGrace.idx === idx) return false;
   const p = m.players[side][idx];
-  return dist(p.x, p.y, m.ball.x, m.ball.y) < AIR_STRIKE_R;
+  return dist(p.x, p.y, m.ball.x, m.ball.y) < (m.lastFromCross ? CROSS_STRIKE_R : AIR_STRIKE_R);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1038,13 +1211,18 @@ function armKeeper(m: MatchState, kickingSide: Side): void {
   const travel = (toPlane * speed) / along;
   const t = flightTime(travel, speed);
   if (!Number.isFinite(t) || t > 2.5) return;
+  // A ball that arrived off a completed pass or a delivered cross catches him
+  // still adjusting to where it came from, so he commits with half a dive. It
+  // is the whole reward for moving the ball rather than running with it.
+  const assisted = !!m.assist && m.assist.side === kickingSide;
   gk.dive = commitDive({
     restX: keeper.x,
     interceptX: ball.x + (ball.vx / speed) * travel,
     flightT: t,
     skill: gk.skill,
     speed,
-    rng: m.rng
+    rng: m.rng,
+    budgetScale: assisted ? ASSIST_DIVE_PENALTY : 1
   });
 }
 
@@ -1070,6 +1248,39 @@ function stepKeeper(m: MatchState, side: Side, dt: number): void {
   const rest = restPosition(gk.trackX, m.ball.y, goalY, dir);
   let tx = rest.x;
   let ty = rest.y;
+  // A man on the ball this close is followed across, not waited for.
+  //
+  // This is what pays for `KEEPER_BAND`. Holding a central position is the
+  // whole of the fix for "drag him one way and shoot the other", but a keeper
+  // who *only* ever holds it stops covering the forward running in off the
+  // wing, and the `dribbler` control's goals went from 0.44 a match to 0.64 at
+  // d = 0.65 on that alone. So the narrow band governs where he stands against
+  // a **shot**, which is where the exploit lived, and a **carrier** inside
+  // `KEEPER_SMOTHER_R` shades him back out toward his posts.
+  //
+  // It shades him sideways and nothing else. An earlier version of this also
+  // brought him out to meet the man, and a keeper who leaves his line at
+  // anything inside the whole penalty area is a keeper you walk round: the
+  // same `dribbler` went to 9.4 goals a match and the suite found a 13-goal
+  // scoreline. Coming out is `restPosition`'s job and it is already doing it.
+  const carrier =
+    m.owner && m.owner.side !== side && m.owner.idx !== 0
+      ? m.players[m.owner.side][m.owner.idx]
+      : null;
+  if (carrier) {
+    const depth = Math.abs(carrier.y - goalY);
+    if (depth < KEEPER_SMOTHER_R) {
+      const close = clamp(1 - depth / KEEPER_SMOTHER_R, 0, 1);
+      // The outer limit is his posts less a ball's width: following a man is
+      // the one thing that takes him wider than `KEEPER_BAND`, and even then
+      // he stays inside his own frame.
+      tx = clamp(
+        rest.x + (carrier.x - rest.x) * KEEPER_SMOTHER * close,
+        CENTRE_X - (GOAL_HALF - 6),
+        CENTRE_X + (GOAL_HALF - 6)
+      );
+    }
+  }
   const slow = Math.hypot(m.ball.vx, m.ball.vy) < 150;
   if (!m.owner && slow && inPenaltyBox(m.ball.x, m.ball.y, goalY) && m.ball.z < KEEPER_JUMP_Z) {
     tx = m.ball.x;
@@ -1510,23 +1721,44 @@ function graceProtected(m: MatchState, side: Side, idx: number): boolean {
   return false;
 }
 
+/**
+ * Take the ball off a carrier and put it where the man who won it can get to
+ * it.
+ *
+ * The direction here is the whole mechanic and the previous build had it
+ * backwards: the ball was knocked 14 px *beyond* the carrier, on the far side
+ * from the tackler, who was then locked in a third of a second of slide facing
+ * the wrong way. A slide that succeeded on the roll therefore handed the ball
+ * straight back — the tackler ended up in possession inside a second and a
+ * half about four times in a thousand, against six to eight times in a hundred
+ * for simply running at the carrier and not sliding at all, so the correct play
+ * was never to slide. Now the ball comes back *through* the challenge toward
+ * the tackler and past him, which is where a won tackle actually puts a
+ * football, and it is his to chase.
+ */
 function knockLoose(m: MatchState, side: Side, idx: number): void {
   if (!m.owner) return;
   const carrier = playerAt(m, m.owner);
+  const loser = m.owner;
   const p = m.players[side][idx];
-  const dx = carrier.x - p.x;
-  const dy = carrier.y - p.y;
+  const dx = p.x - carrier.x;
+  const dy = p.y - carrier.y;
   const len = Math.hypot(dx, dy) || 1;
-  m.ball.x = carrier.x + (dx / len) * 14;
-  m.ball.y = carrier.y + (dy / len) * 14;
+  m.ball.x = carrier.x + (dx / len) * Math.min(len * 0.6, 12);
+  m.ball.y = carrier.y + (dy / len) * Math.min(len * 0.6, 12);
   m.ball.z = 0;
-  m.ball.vx = (dx / len) * 60;
-  m.ball.vy = (dy / len) * 60;
+  m.ball.vx = (dx / len) * KNOCK_SPEED;
+  m.ball.vy = (dy / len) * KNOCK_SPEED;
   m.ball.vz = 0;
   m.owner = null;
   m.lastTouch = side;
   m.passInFlight = null;
   m.noScore = false;
+  // The man who lost it is off balance and cannot simply turn and stand on it
+  // again: the loose-ball scramble that follows is the one thing the tackler
+  // has bought, and without a grace on the loser he never wins it.
+  carrier.strike = Math.max(carrier.strike, KNOCK_STUMBLE);
+  m.kickGrace = { side: loser.side, idx: loser.idx, t: KICK_GRACE };
   m.winGrace = { side, idx, t: WIN_GRACE };
 }
 

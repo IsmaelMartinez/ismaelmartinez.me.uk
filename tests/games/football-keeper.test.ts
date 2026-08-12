@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { seededRandom } from './seeded-random';
 import { shootAt, type ShotOutcome } from './football-shot-harness';
 import {
-  ERROR_CAP,
+  ERROR_BASE,
+  ERROR_REACH,
   KEEPER_STEAL_R,
   catchProbability,
   commitDive,
@@ -245,19 +246,37 @@ describe('keeper: the pure pieces', () => {
     expect(diveProgress(9)).toBe(1);
   });
 
-  it('caps his misjudgement, so more time never means a bigger mistake', () => {
-    const rng = seededRandom(7);
-    const long = commitDive({
-      restX: CENTRE_X,
-      interceptX: CENTRE_X,
-      flightT: 2,
-      skill: 0.6,
-      speed: 450,
-      rng
-    });
-    expect(Math.abs(long.targetX - CENTRE_X)).toBeLessThanOrEqual(
-      ERROR_CAP * errorFraction(0.6, 450) + 1e-9
-    );
+  it('misjudges by more the further he has to go, and never by the clock', () => {
+    // The error is a function of the offset he has committed to covering, not
+    // of the dive budget the flight time hands him. That is what keeps 7.3's
+    // "falls with distance" honest at every aim: extra reading time used to
+    // buy a proportionally bigger mistake, which cancelled it.
+    const bound = (offset: number) =>
+      (ERROR_BASE + ERROR_REACH * Math.abs(offset)) * errorFraction(0.6, 450) + 1e-9;
+    const commit = (interceptX: number, flightT: number) =>
+      commitDive({
+        restX: CENTRE_X,
+        interceptX,
+        flightT,
+        skill: 0.6,
+        speed: 450,
+        rng: seededRandom(7)
+      });
+
+    // A keeper asked to stay where he is cannot be far wrong, however long he
+    // has to think about it.
+    for (const flightT of [0.05, 0.3, 2]) {
+      expect(Math.abs(commit(CENTRE_X, flightT).targetX - CENTRE_X)).toBeLessThanOrEqual(bound(0));
+    }
+    // A keeper asked to cover a corner can be, and the bound grows with the
+    // corner rather than with the clock.
+    for (const offset of [0, 12, 24, 36, 56]) {
+      const d = commit(CENTRE_X + offset, 0.3);
+      expect(Math.abs(d.targetX - (CENTRE_X + offset))).toBeLessThanOrEqual(bound(offset));
+    }
+    expect(bound(36)).toBeGreaterThan(bound(0));
+    // Identical seeds, identical offsets, four times the flight: same guess.
+    expect(commit(CENTRE_X + 36, 0.12).targetX).toBeCloseTo(commit(CENTRE_X + 36, 0.5).targetX, 9);
     expect(errorFraction(0.9, 450)).toBeLessThan(errorFraction(0.2, 450));
   });
 });

@@ -26,7 +26,21 @@ export type ShotOutcome = 'goal' | 'save' | 'off' | 'post';
 export interface ShotOptions {
   /** Distance from the shooter to the goal line, in pitch pixels. */
   distance: number;
-  /** Aim in [-1, 1] across the +-(GOAL_HALF + 14) envelope. */
+  /**
+   * Aim in [-1, 1], passed straight into `shoot`, which maps it across
+   * `+-AIM_SPAN` — a ball's width inside each post. Full stick is a legal
+   * target, not a structural miss. The number is deliberately *not* restated
+   * here; `AIM_SPAN` in `match.ts` is the one place it is written down.
+   *
+   * This line used to give the number, and gave the wrong one: it read
+   * `+-(GOAL_HALF + 14)`, the specification's original wider-than-the-mouth
+   * envelope, long after `shoot` had stopped implementing it. An independent
+   * audit built its own harness from this sentence, aimed at points it
+   * believed were inside the frame, and reported "81 of 320 cells at exactly
+   * 0 %" — an artefact of the stale docstring rather than a property of the
+   * game. The repo's own suite and a second audit were right. Naming the
+   * constant instead of copying its value is what stops it happening twice.
+   */
   aim: number;
   power: number;
   rng: () => number;

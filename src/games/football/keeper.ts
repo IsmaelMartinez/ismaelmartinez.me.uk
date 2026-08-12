@@ -13,16 +13,22 @@
  *    exactly 100%.
  *  - he acts on **both** paths: he rolls against shots crossing his plane and
  *    he strips a carrier who dribbles into his six-yard box.
- *  - the aim envelope is wider than the mouth, so aiming at a post genuinely
- *    risks missing. That is what makes power and placement trade off instead
- *    of one geometry lookup dominating.
+ *  - **where he stands and where the stick can put the ball are not the same
+ *    line.** `KEEPER_BAND` holds him near the middle of his goal; `AIM_SPAN`
+ *    reaches most of the way to a post. When the two were congruent the whole
+ *    cabinet reduced to one number — drag him one way, shoot the other — and
+ *    no amount of tuning inside that geometry could have fixed it.
+ *  - **his commit is a guess whose spread grows with what is asked of it.** A
+ *    ball at his chest he simply catches; a ball into a corner he has to pick
+ *    a side for. That, and not the size of his dive, is what makes placement a
+ *    gradient rather than a lookup.
  *
  * Deviations from the specification's section 6.5 numbers are deliberate and
  * are the price of hitting its section 7.3 acceptance bands; they are called
  * out at each constant.
  */
 import { clamp } from '../engine/math';
-import { CENTRE_X, GOAL_HALF, PITCH_L, SIX_DEPTH } from './pitch';
+import { CENTRE_X, PITCH_L, SIX_DEPTH } from './pitch';
 
 /** Walking pace along the line while the ball is live. */
 export const KEEPER_WALK = 120;
@@ -30,13 +36,26 @@ export const KEEPER_WALK = 120;
 /**
  * Lateral dive speed.
  *
- * The spec says 250 px/s. At 250 the keeper covers the full 42 px to either
- * post inside the flight time of *any* shot, which collapses 7.3's "aimed at a
- * post" and "aimed dead centre" cells onto the same probability and destroys
- * the aim monotonicity the same section demands. 90 px/s is the value at which
- * a post is a genuine stretch and the middle of the goal is not.
+ * At 26 px/s — the value this module shipped with — a committed dive covered
+ * 11.7 px at its absolute longest, which is a third of one post's worth of
+ * goal. The keeper's coverage was therefore his *standing* position and
+ * nothing else, and since that position was clamped to the same +-36 px band
+ * the aim scale mapped to, target and keeper lived on one congruent line: drag
+ * him to one end of it, shoot the other, and there was nothing between the
+ * ball and the net. The dive has to be a real act for a keeper who has been
+ * moved to still be defending anything.
+ *
+ * It is far below the specification's 250 all the same, and the reason is the
+ * opposite failure: at 250 he covers the whole mouth inside any flight time,
+ * every aim from the middle of the goal to the post measures the same, and
+ * 7.3's aim monotonicity has nothing left to be monotone in. Swept at this
+ * module's own rig, 105 px/s already flattened the response at 140 px to
+ * 0.169 across the whole stick and *fell* to 0.085 at the post. At 45 the
+ * budget runs from about 2 px on a shot from the six-yard box to 20 px on one
+ * from range, which is a real fraction of the distance to a corner and never
+ * the whole of it.
  */
-export const KEEPER_DIVE = 26;
+export const KEEPER_DIVE = 45;
 
 /** Seconds over which a dive reaches full extension. */
 export const DIVE_TIME = 0.28;
@@ -66,9 +85,42 @@ export const REACH_DIVE = 10;
  * reach covers a shot that would beat him comfortably from range.
  */
 export const KEEPER_LINE = 8;
-export const KEEPER_ADVANCE = 12;
+/**
+ * 18 rather than 12, and the six pixels are bought back from `KEEPER_BAND`. A
+ * keeper who now holds the middle of his goal has to make up for it somewhere,
+ * and coming to meet the ball is the move he has: it is what the cabinet's own
+ * keeper does as an attack arrives, and it is what keeps a shot from the edge
+ * of the six-yard box from being a formality.
+ */
+export const KEEPER_ADVANCE = 18;
+/**
+ * How far off centre he will ever *stand*.
+ *
+ * This is deliberately much narrower than `AIM_SPAN`, the band the stick maps
+ * a shot into, and the non-congruence is the point. When the two were equal
+ * the game reduced to one number — both the keeper and the target lived on the
+ * same 72 px line, so moving him to one end of it left the other end
+ * uncovered by construction and no dive could ever close the distance. A
+ * keeper who holds a central position takes the far corner away from *nobody*
+ * on geometry alone; what takes it away is the dive, which is a guess with a
+ * budget. Dragging him still pays — he is 20 px off his spot and the far
+ * corner is that much further from his hands — it simply is not a free goal.
+ */
+export const KEEPER_BAND = 20;
 /** How far behind the ball he always stays; he narrows angles, never dives past it. */
 export const KEEPER_STANDOFF = 20;
+/**
+ * How far across toward a carrier this close to goal the keeper shades, as a
+ * fraction of the distance between them, and the range over which it fades in.
+ *
+ * This is a *lateral* correction and deliberately nothing else: the keeper
+ * follows the man across his goal, he does not leave it. It is what lets
+ * `KEEPER_BAND` hold him central against a shot — which is where the
+ * drag-him-and-shoot-the-other-way exploit lived — without leaving him rooted
+ * to the middle while a forward runs in from the wing.
+ */
+export const KEEPER_SMOTHER = 0.8;
+export const KEEPER_SMOTHER_R = 60;
 /**
  * Over what depth his advance fades back to his line. It is a whole half of
  * the pitch rather than the width of the box, and that is what keeps 7.3's
@@ -203,7 +255,7 @@ export function restPosition(
     Math.max(0, depth - KEEPER_LINE - KEEPER_STANDOFF)
   );
   return {
-    x: clamp(trackX, CENTRE_X - (GOAL_HALF - 6), CENTRE_X + (GOAL_HALF - 6)),
+    x: clamp(trackX, CENTRE_X - KEEPER_BAND, CENTRE_X + KEEPER_BAND),
     y: goalY + dir * (KEEPER_LINE + advance)
   };
 }
@@ -247,15 +299,51 @@ export function keeperReach(progress: number): number {
 }
 
 /**
- * The most a keeper can misread a shot by, in pixels of lateral travel. The
- * error is a fraction of the dive he is able to make — a keeper who cannot
- * move cannot move wrongly, which is what keeps a point-blank shot at his
- * chest from being missed by a metre — but it stops growing here. Without the
- * cap a longer shot hands him a bigger budget and therefore a bigger mistake,
- * which cancels the extra reading time and breaks 7.3's "goal probability
- * falls with distance" on the dead-centre aim.
+ * How far wrong a commit can be, in pixels, as `ERROR_BASE + ERROR_REACH x the
+ * lateral offset he has committed to covering`.
+ *
+ * The second term is the whole of what makes placement a gradient rather than
+ * a lookup, and it replaces a flat cap that made the keeper's accuracy
+ * independent of what was asked of him. A keeper who has to stay where he is
+ * cannot be far wrong: that is `ERROR_BASE`, and it is why a shot struck at
+ * his chest is not a lottery. A keeper who has to *move* is guessing, and the
+ * further the ball is from where he stands the more of the answer is guessed
+ * rather than seen — so a ball placed at the post is missed by a distance
+ * proportional to how far out it was placed.
+ *
+ * `ERROR_REACH` being greater than one is deliberate and is what the constant
+ * is for. Past the dive budget the term stops behaving like a displacement and
+ * starts behaving like a coin: he still only travels `budget` pixels, so all
+ * the spread beyond that decides is *which way he goes*, weighted toward the
+ * ball by the offset itself. A keeper facing a shot into the corner picks a
+ * side; a keeper facing one at his chest does not have to pick anything. That
+ * is the difference the whole aim axis is made of, and at 140 px it is worth
+ * 0.168 dead centre against 0.327 at the post.
+ *
+ * Scaling the error on the offset rather than on the dive budget also fixes,
+ * structurally, the thing the flat cap existed to paper over: the error no
+ * longer depends on the flight time at all, so a longer shot buys the keeper
+ * reading time without also buying him a bigger mistake, and 7.3's "goal
+ * probability falls with distance" holds at every aim instead of only at the
+ * ones the cap happened to cover.
  */
-export const ERROR_CAP = 8;
+export const ERROR_BASE = 6;
+export const ERROR_REACH = 3;
+
+/**
+ * How much of his dive a keeper still has when the ball arrives off a
+ * completed pass, a delivered cross or a lay-off.
+ *
+ * This is the reward side of moving the ball, and it is the only channel
+ * through which passing can beat carrying without touching the shot model. A
+ * keeper set for the man who had the ball is not set for the man who has it
+ * now: he commits late, from the wrong foot, and gets roughly half the lateral
+ * budget he would have had against a striker who simply ran at him. It is a
+ * penalty on *his* execution rather than a bonus on the shooter's accuracy,
+ * which keeps 7.3's isolation rig — where no pass ever happened — reading the
+ * same numbers it always did.
+ */
+export const ASSIST_DIVE_PENALTY = 0.5;
 
 /** How badly he reads the shot, as a fraction of the dive available to him. */
 export function errorFraction(skill: number, speed: number): number {
@@ -287,11 +375,15 @@ export function commitDive(opts: {
   skill: number;
   speed: number;
   rng: () => number;
+  /** Fraction of his dive he still has; see `ASSIST_DIVE_PENALTY`. */
+  budgetScale?: number;
 }): KeeperDive {
-  const budget = diveBudget(opts.flightT);
+  const budget = diveBudget(opts.flightT) * clamp(opts.budgetScale ?? 1, 0, 1);
   const offset = opts.interceptX - opts.restX;
   const err =
-    randSigned(opts.rng) * Math.min(budget, ERROR_CAP) * errorFraction(opts.skill, opts.speed);
+    randSigned(opts.rng) *
+    (ERROR_BASE + ERROR_REACH * Math.abs(offset)) *
+    errorFraction(opts.skill, opts.speed);
   return {
     fromX: opts.restX,
     targetX: opts.restX + offset + err,

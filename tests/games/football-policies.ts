@@ -29,7 +29,14 @@ import {
 } from '../../src/games/football/pitch';
 
 export type Policy = (m: MatchState, dt: number) => MatchInput;
-export type PolicyName = 'passive' | 'dribbler' | 'masher' | 'competent' | 'expert';
+export type PolicyName =
+  | 'passive'
+  | 'dribbler'
+  | 'masher'
+  | 'competent'
+  | 'expert'
+  | 'winger'
+  | 'nearCamper';
 
 /** Quantise a vector to the eight directions a keyboard can express. */
 export function quantise8(x: number, y: number): { x: number; y: number } {
@@ -102,7 +109,21 @@ export function masher(
 export const MASH_REACTION = 0.17;
 
 /**
- * The camper: carry the ball to one fixed spot and strike it across the goal
+ * Which post a camper strikes at from his spot.
+ *
+ * `across` drags the ball over the face of goal to the far post; `near` hits
+ * the post he is stood beside. They are opposite stick deflections from the
+ * same position and they are **not** the same shot: the keeper stands on the
+ * angle bisector, so where he ends up decides which of the two is on, and the
+ * bisector is clamped inside his posts by `KEEPER_POST_INSET`. From wide
+ * enough the clamp binds and he can no longer reach the near-post line at all.
+ */
+export type CampAim = 'across' | 'near';
+
+export const CAMP_AIMS: readonly CampAim[] = ['across', 'near'];
+
+/**
+ * The camper: carry the ball to one fixed spot and strike it at one fixed post
  * from there, at the same 170 ms reaction as `competent`. Nothing else.
  *
  * This is the policy an independent audit found was the strongest thing on the
@@ -112,8 +133,18 @@ export const MASH_REACTION = 0.17;
  * bug rather than a spot on the pitch: any *fixed* position that beats playing
  * football means the geometry in front of goal has a hole in it, so the suite
  * sweeps the position rather than testing the one that was found.
+ *
+ * **The aim is swept for the same reason the position is, and it was not.**
+ * This function used to hard-code `across` — `const across = campX <= CENTRE_X
+ * ? 1 : -1` — so the whole 45-spot grid was swept with exactly the shot the
+ * previous round had just fixed, and never once with the opposite one. A
+ * fourth independent audit then found the near-post aim beating `competent`
+ * from those same spots at every difficulty (+0.163 to +0.280 points a match,
+ * t = 4.0 to 11.1), converting 0.955 against 0.369 for the across-goal aim
+ * from the same place. The suite could not see it because the aim was a
+ * constant. It is a parameter now, and both values are swept at every spot.
  */
-export function camper(campX: number, campDepth: number): Policy {
+export function camper(campX: number, campDepth: number, aim: CampAim = 'across'): Policy {
   let think = 0;
   let held: MatchInput = NEUTRAL_INPUT;
   let charging = 0;
@@ -133,9 +164,17 @@ export function camper(campX: number, campDepth: number): Policy {
     if (owns) {
       const spot = { x: campX, y: goalY - dir * campDepth };
       if (dist(p.x, p.y, spot.x, spot.y) < 12) {
-        // Across the goal, away from the near post: the shot the audit found.
-        const across = campX <= CENTRE_X ? 1 : -1;
-        held = { x: across, y: Math.sign(goalY - p.y), a: true, b: false, c: false };
+        // The stick maps straight onto `shoot`'s aim, which is a point across
+        // the mouth: positive is the right-hand side of the goal. So the near
+        // post is the side the spot itself is on and the far post is the other.
+        const near = campX <= CENTRE_X ? -1 : 1;
+        held = {
+          x: aim === 'near' ? near : -near,
+          y: Math.sign(goalY - p.y),
+          a: true,
+          b: false,
+          c: false
+        };
         charging = FULL_CHARGE_TICKS;
         return held;
       }
@@ -163,6 +202,97 @@ export const CAMP_SPOTS: Array<[number, number]> = (() => {
   }
   return out;
 })();
+
+/** The wide station the audit's `winger w130 d55` works from. */
+export const WING_LATERAL = 130;
+export const WING_DEPTH = 55;
+
+/**
+ * The wing-cross routine: carry the ball to a fixed wide station, put it in
+ * on the head of the most advanced teammate, and attack every dropping ball.
+ * Three verbs, one station, no reading of the game at all.
+ *
+ * This is the fourth exploit an independent audit has found in this cabinet
+ * and the second the suite was structurally unable to see: **there was no
+ * crossing or heading routine in the policy catalogue.** The cross-share cap
+ * in 7.4 was therefore only ever measured against `competent`, whose share is
+ * 0.13-0.22 — a cap that is never approached is not a cap, it is a comment.
+ * The audit measured it beating `expert` at every difficulty by +0.177 to
+ * +0.285 points a match at t = 8.9 to 10.8, taking 98-100 % of its goals out
+ * of the air against the specification's hard 0.45 ceiling. Reproduced here on
+ * the commit that adds it, at 150 matched pairs a rung: +0.907 ladder points
+ * against `expert` (+0.233 t=4.55 / +0.227 t=5.09 / +0.187 t=3.18 / +0.260
+ * t=5.45), +1.053 against `competent`, and an air-goal share of 0.983-0.997.
+ *
+ * It steers on `MASH_REACTION`, the same 170 ms as `competent` and nearly
+ * three times slower than `expert`'s 66 ms, so a margin it shows is a margin
+ * over a player who reacts at least as fast — never an input artefact. The
+ * audit's own rig ran it at that latency for exactly this reason.
+ */
+export function winger(
+  wing: -1 | 1,
+  lateral = WING_LATERAL,
+  depth = WING_DEPTH
+): Policy {
+  let think = 0;
+  let held: MatchInput = NEUTRAL_INPUT;
+  /** Ticks of a held button left to run before it is released. */
+  let pressing = 0;
+  /** Which button the current press is on, so releasing lets go of that one. */
+  let button: 'a' | 'b' = 'a';
+  return (m: MatchState, dt: number) => {
+    if (pressing > 0) {
+      pressing--;
+      if (pressing === 0) return { ...held, [button]: false };
+      return held;
+    }
+
+    const p = m.players[0][m.controlled];
+    const owns = !!m.owner && m.owner.side === 0 && m.owner.idx === m.controlled;
+    const dir = attackDir(0, m.swapped);
+    const goalY = attackGoalY(0, m.swapped);
+
+    // Attack every dropping ball, checked every tick rather than behind the
+    // reaction gate: the heading window is a handful of frames wide, and the
+    // game itself is asked whether the contact is on. This is the same reflex
+    // `competent` has, verbatim, so the two policies differ in what they do
+    // with the ball and not in how they meet it.
+    if (!owns && canAirStrike(m, 0, m.controlled)) {
+      const keeper = m.players[1][0];
+      const away = keeper.x <= CENTRE_X ? 1 : -1;
+      held = { x: away, y: Math.sign(goalY - p.y), a: true, b: false, c: false };
+      button = 'a';
+      pressing = 2;
+      return held;
+    }
+
+    think -= dt;
+    if (think > 0) return held;
+    think = MASH_REACTION;
+
+    if (owns) {
+      const spot = { x: CENTRE_X + wing * lateral, y: goalY - dir * depth };
+      const runner = advancedTeammate(m);
+      if (dist(p.x, p.y, spot.x, spot.y) < 14 && runner >= 0) {
+        const t = m.players[0][runner];
+        const q = quantise8(t.x - p.x, t.y - p.y);
+        held = { x: q.x, y: q.y, a: false, b: true, c: false };
+        // B is edge-triggered, so the press has to end for the next one to
+        // exist at all. Two ticks down, then let go.
+        button = 'b';
+        pressing = 2;
+        return held;
+      }
+      const q = quantise8(spot.x - p.x, spot.y - p.y);
+      held = { x: q.x, y: q.y, a: false, b: false, c: false };
+      return held;
+    }
+
+    const q = quantise8(m.ball.x - p.x, m.ball.y - p.y);
+    held = { x: q.x, y: q.y, a: false, b: false, c: false };
+    return held;
+  };
+}
 
 /**
  * A press has to fit inside its own cycle, and it has to end: a masher who
@@ -593,10 +723,30 @@ export function competentWithout(verb: 'passes' | 'crosses' | 'slides'): Policy 
   return makeHuman({ ...COMPETENT, [verb]: false });
 }
 
+/**
+ * The wing and the camp spot the named catalogue entries below stand on.
+ *
+ * They are representatives, not the whole claim: the sweeps in the suites pick
+ * their own spots off the grid. What these two are for is everything that
+ * needs *a* policy rather than a scan — the run ladder, the goal-mix shares,
+ * the double-figure ban — and they are the strongest members of their class
+ * that the grid scan found, so a cap they clear is a cap that holds.
+ *
+ * `(120, 78)` is the corner of the penalty box on the left. Aimed at the near
+ * post it measured +1.025 ladder points against `competent` at 80 pairs a rung
+ * and put a side in double figures in 78 of 300 group-stage matches, with a
+ * maximum scoreline of 15 — the audit's finding, spot for spot and number for
+ * number.
+ */
+export const WING_SIDE: -1 | 1 = 1;
+export const NEAR_CAMP_SPOT: [number, number] = [120, 78];
+
 export const POLICIES: Record<PolicyName, () => Policy> = {
   passive,
   dribbler,
   masher,
   competent,
-  expert
+  expert,
+  winger: () => winger(WING_SIDE),
+  nearCamper: () => camper(NEAR_CAMP_SPOT[0], NEAR_CAMP_SPOT[1], 'near')
 };

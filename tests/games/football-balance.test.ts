@@ -27,12 +27,11 @@ import {
   cpuSpeed,
   HUMAN_SPEED,
   TACKLE_R,
-  type MatchState,
   type PlayerState
 } from '../../src/games/football/match';
 import { HUMAN_TACKLE_BASE } from '../../src/games/football/ai';
 import { CENTRE_X, CENTRE_Y, TEAM_SIZE, dist } from '../../src/games/football/pitch';
-import { TEAMS, teamByCode, type Team } from '../../src/games/football/teams';
+import { TEAMS, teamByCode } from '../../src/games/football/teams';
 import {
   createRun,
   difficultyFor,
@@ -54,49 +53,30 @@ import {
   camper,
   masher,
   competentWithout,
+  CAMP_AIMS,
   CAMP_SPOTS,
   MASH_CADENCES,
+  type CampAim,
   type Policy,
   type PolicyName
 } from './football-policies';
+import {
+  AWAY,
+  DIFFICULTIES,
+  DT,
+  HOME,
+  ladderDiff,
+  ladderSe,
+  pairedAgainst,
+  pairedLine,
+  playMatch
+} from './football-paired';
 import { goalRate, lcg } from './football-shot-harness';
 
-const DT = 1 / 60;
 /** Matches per cell. The specification asks for at least 300. */
 const MATCHES = 300;
 /** Runs per policy for the run-level bands; each run is three to five matches. */
 const RUNS = 200;
-/** A match cannot legitimately outlast this many ticks; a hang fails loudly. */
-const TICK_CAP = 12000;
-
-const DIFFICULTIES = [0.25, 0.45, 0.65, 0.85] as const;
-
-/** A fixed, middling pairing so a cell measures the curve and not the draw. */
-const HOME = teamByCode('TOR');
-const AWAY = teamByCode('LUP');
-
-interface Played {
-  match: MatchState;
-  /** Real seconds the match occupied, stoppages and celebrations included. */
-  seconds: number;
-}
-
-function playMatch(
-  policy: Policy,
-  difficulty: number,
-  seed: number,
-  teams: [Team, Team] = [HOME, AWAY],
-  knockout = false
-): Played {
-  const m = createMatch({ rng: lcg(seed), difficulty, teams, knockout });
-  let ticks = 0;
-  while (m.phase !== 'over' && ticks < TICK_CAP) {
-    tickMatch(m, DT, policy(m, DT));
-    ticks++;
-  }
-  expect(ticks, 'match never finished').toBeLessThan(TICK_CAP);
-  return { match: m, seconds: ticks * DT };
-}
 
 interface Cell {
   goalsFor: number;
@@ -235,68 +215,12 @@ const MASH_MATCHES = 30;
  * adopting it is the durable half of this round's work — the balance numbers
  * will move again, but a comparison that cannot resolve its own claims will
  * keep producing findings like the ones this round is fixing.
+ *
+ * The machinery itself now lives in `football-paired.ts`, because this is no
+ * longer the only suite that makes policy claims and two copies of a
+ * comparison method is how two suites end up disagreeing about whether an
+ * exploit exists.
  */
-interface Paired {
-  /** Mean per-match difference in tournament points (2-1-0). */
-  pts: number;
-  ptsT: number;
-  /** Mean per-match difference in goal difference, which does not saturate. */
-  gd: number;
-  gdT: number;
-  n: number;
-}
-
-function meanT(xs: number[]): { mean: number; t: number } {
-  const mean = xs.reduce((sum, x) => sum + x, 0) / xs.length;
-  const variance =
-    xs.reduce((sum, x) => sum + (x - mean) * (x - mean), 0) / Math.max(1, xs.length - 1);
-  const se = Math.sqrt(variance / xs.length);
-  return { mean, t: se > 0 ? mean / se : 0 };
-}
-
-function points(m: MatchState): number {
-  if (m.score[0] > m.score[1]) return 2;
-  return m.score[0] === m.score[1] ? 1 : 0;
-}
-
-function goalDiff(m: MatchState): number {
-  return m.score[0] - m.score[1];
-}
-
-/** Play `n` matched pairs of `a` against `b` at one difficulty. */
-function pairedAgainst(
-  a: () => Policy,
-  b: () => Policy,
-  difficulty: number,
-  n: number,
-  seed0 = 1
-): Paired {
-  const pts: number[] = [];
-  const gds: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const seed = seed0 + i * 7919;
-    const withIt = playMatch(a(), difficulty, seed).match;
-    const without = playMatch(b(), difficulty, seed).match;
-    pts.push(points(withIt) - points(without));
-    gds.push(goalDiff(withIt) - goalDiff(without));
-  }
-  const p = meanT(pts);
-  const g = meanT(gds);
-  return { pts: p.mean, ptsT: p.t, gd: g.mean, gdT: g.t, n };
-}
-
-/** The paired difference summed over the ladder, the tournament's currency. */
-function ladderDiff(rows: Paired[]): number {
-  return rows.reduce((sum, r) => sum + r.pts, 0);
-}
-
-function pairedLine(rows: Paired[]): string {
-  return DIFFICULTIES.map(
-    (d, i) =>
-      `d=${d}: ${rows[i].pts.toFixed(3)} pts (t=${rows[i].ptsT.toFixed(2)}), ` +
-      `${rows[i].gd.toFixed(3)} gd (t=${rows[i].gdT.toFixed(2)})`
-  ).join(' | ');
-}
 
 /** Matched pairs per difficulty in the verb comparisons. */
 const VERB_PAIRS = 200;
@@ -783,35 +707,67 @@ const CAMP_FINALISTS = 3;
  * is over the whole attacking third: forty-five fixed positions, scanned
  * cheaply, and the three that come nearest re-measured against `competent` on
  * matched pairs. None of them may out-point him.
+ *
+ * **And over both aims, which it was not.** The sweep had exactly one blind
+ * spot and it was a fatal one: `camper` hard-coded the across-goal shot, so
+ * every one of the forty-five spots was measured with the shot the previous
+ * round had just fixed and not one of them with the near-post shot from the
+ * same place. A fourth audit found the near-post aim beating `competent` at
+ * every difficulty from spots this test had already certified — the sweep was
+ * as wide as it looked and half as deep. Ninety cells now, not forty-five, and
+ * the finalists are taken per aim so a strong spot on one aim cannot crowd the
+ * other out of the re-measure.
  */
 describe('no fixed camp position beats playing football', () => {
-  it('sweeps the attacking third and finds nothing better than a competent player', { timeout: 900000 }, () => {
-    const scan = CAMP_SPOTS.map(([x, depth]) => ({
-      x,
-      depth,
-      diff: ladderDiff(
-        DIFFICULTIES.map(d =>
-          pairedAgainst(
-            () => camper(x, depth),
-            () => POLICIES.competent(),
-            d,
-            CAMP_SCAN_PAIRS
+  it('sweeps the attacking third at both aims and finds nothing better than a competent player', { timeout: 1800000 }, () => {
+    const scan = CAMP_AIMS.flatMap((aim: CampAim) =>
+      CAMP_SPOTS.map(([x, depth]) => ({
+        x,
+        depth,
+        aim,
+        diff: ladderDiff(
+          DIFFICULTIES.map(d =>
+            pairedAgainst(
+              () => camper(x, depth, aim),
+              () => POLICIES.competent(),
+              d,
+              CAMP_SCAN_PAIRS
+            )
           )
         )
-      )
-    }));
-    const finalists = [...scan].sort((a, b) => b.diff - a.diff).slice(0, CAMP_FINALISTS);
+      }))
+    );
+    const finalists = CAMP_AIMS.flatMap((aim: CampAim) =>
+      scan
+        .filter(s => s.aim === aim)
+        .sort((a, b) => b.diff - a.diff)
+        .slice(0, CAMP_FINALISTS)
+    );
+    // Every finalist is re-measured and every failure reported together rather
+    // than the assertion stopping at the first. Which *aims* beat a competent
+    // player, and from where, is the whole content of the finding: an exploit
+    // that has now moved four times is not diagnosed by one spot's number.
+    const beat: string[] = [];
     for (const spot of finalists) {
       const rows = DIFFICULTIES.map(d =>
-        pairedAgainst(() => camper(spot.x, spot.depth), () => POLICIES.competent(), d, CAMP_PAIRS)
+        pairedAgainst(
+          () => camper(spot.x, spot.depth, spot.aim),
+          () => POLICIES.competent(),
+          d,
+          CAMP_PAIRS
+        )
       );
       const diff = ladderDiff(rows);
-      const label = `camp (${spot.x}, ${spot.depth}) = ${diff.toFixed(3)} ladder points against a competent player | ${pairedLine(rows)}`;
       // Two standard errors of the ladder sum at `CAMP_PAIRS` pairs is about
       // 0.25, so the bound is a real one rather than an allowance: a camp spot
       // worth even a third of the audit's +1.8 would fail it.
-      expect(diff, label).toBeLessThan(0.4);
+      if (diff < 0.4) continue;
+      beat.push(
+        `camp (${spot.x}, ${spot.depth}) aiming ${spot.aim} = ${diff.toFixed(3)} ` +
+          `+- ${ladderSe(rows).toFixed(3)} ladder points | ${pairedLine(rows)}`
+      );
     }
+    expect(beat, `camp spots that beat a competent player:\n  ${beat.join('\n  ')}`).toEqual([]);
   });
 });
 

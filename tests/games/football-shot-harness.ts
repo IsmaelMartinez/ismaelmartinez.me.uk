@@ -5,7 +5,11 @@
  * keeper maths, so the sweep and the game can never drift apart.
  *
  * No keeper is ever benched, parked or disabled here: that is the whole point
- * of the suite this rig serves.
+ * of the suite this rig serves. As of this round he is not *misplaced* either
+ * — he stands on the angle by default rather than in the middle of his goal,
+ * because a keeper parked on `CENTRE_X` is a keeper every offset shooter beats
+ * at the near post, and a rig that only ever fields him there cannot measure
+ * the shot that beats him. See `keeperX`.
  */
 import {
   createMatch,
@@ -48,13 +52,33 @@ export interface ShotOptions {
   /** Keeper rating 1..5 of the defending team. */
   keeperRating?: number;
   contact?: ContactType;
-  /** Lateral offset of the shooter from the centre of the pitch. */
+  /**
+   * Lateral offset of the shooter from the centre of the pitch. It moves the
+   * keeper too, unless `keeperX` pins him: he stands on the angle from the
+   * ball, so an offset shooter is by definition facing a keeper who has come
+   * across to his near post.
+   */
   offsetX?: number;
   /**
-   * Where the keeper is standing when the shot is struck. A cross drags his
-   * lagged tracking off centre, which is exactly why a header at the far post
-   * is a real weapon, so the header cells set this rather than pretending he
-   * is always on his spot.
+   * Where the keeper is standing when the shot is struck, **overriding** the
+   * default.
+   *
+   * The default is now `restPosition` with a tracker that has converged on the
+   * ball: the keeper is on the angle, which is where the game puts him when
+   * the ball has been in front of him long enough to be seen. Pinning him
+   * somewhere else is for cells that are *about* him being wrong-footed — a
+   * cross drags his lagged tracking off centre, which is exactly why a header
+   * at the far post is a real weapon, and the header cells say so explicitly.
+   *
+   * This parameter used to have no default at all and the keeper was simply
+   * parked at `CENTRE_X`. Every offset-shooter cell in the grid therefore
+   * measured a shot at a keeper standing in the middle of his goal, which is
+   * the one position from which the near post is never covered — so the sweep
+   * could not see that `KEEPER_POST_INSET` clamps him to `CENTRE_X +- 36` and
+   * that beyond about 55 px of ball offset the true bisector is outside his
+   * allowed frame, pinning him off the near-post line. An audit measured the
+   * near-post finish at 0.955 from a spot where the across-goal finish, which
+   * this rig did sweep, converts 0.369.
    */
   keeperX?: number;
 }
@@ -121,13 +145,22 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
   m.ball.vz = 0;
 
   const gk = m.players[1][0];
-  gk.x = opts.keeperX ?? CENTRE_X;
-  // "Correctly positioned" includes his depth: a keeper comes out to narrow
-  // the angle as a striker closes on him, and standing him on his line for a
-  // six-yard-box shot would sweep a keeper the game never fields.
-  gk.y = restPosition(gk.x, m.ball.y, goalY, -dir as 1 | -1).y;
+  // "Correctly positioned" includes his depth *and* his angle: a keeper comes
+  // out to narrow the angle as a striker closes on him, and he stands on the
+  // bisector from where he believes the ball is rather than in the middle of
+  // his goal. Standing him on his line, or on the centre spot of the mouth,
+  // for an offset shot would sweep a keeper the game never fields.
+  //
+  // The tracker is converged on the ball, which is the honest default for a
+  // shooter who has carried the ball to a spot: `trackLag` is a fifth of a
+  // second and the camping policies stand still for far longer than that. A
+  // cell that wants him caught mid-adjustment pins `keeperX` instead.
+  const trackX = opts.keeperX ?? m.ball.x;
+  const rest = restPosition(trackX, m.ball.y, goalY, -dir as 1 | -1);
+  gk.x = opts.keeperX ?? rest.x;
+  gk.y = rest.y;
   gk.speed = 0;
-  m.keepers[1].trackX = gk.x;
+  m.keepers[1].trackX = trackX;
   m.keepers[1].dive = null;
   m.keepers[1].parryLock = 0;
 

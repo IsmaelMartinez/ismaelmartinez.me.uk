@@ -40,8 +40,14 @@ import { createMatch, tickMatch, DRIBBLE_OFFSET } from '../../src/games/football
 import { teamByCode } from '../../src/games/football/teams';
 
 const DT = 1 / 60;
-/** Aim that puts the ball a few pixels inside the post. */
-const POST = 38 / 56;
+/**
+ * Full stick. The aim scale maps to reachable targets — see `shoot` in
+ * match.ts — so this asks for the ball a ball's width inside the post. The
+ * constant it replaces, `38 / 56`, was a point on the *interior* of the old
+ * over-wide envelope and sat on the shoulder of the response peak, which is
+ * how a sweep of it missed that the response collapsed to zero beyond it.
+ */
+const POST = 1;
 
 function rate(
   opts: Parameters<typeof shootAt>[0] extends infer T
@@ -74,7 +80,7 @@ describe('keeper: the 7.3 acceptance bands', () => {
     ['from the six-yard box dead centre', { distance: 25, aim: 0, power: 1 }, 0.12, 0.25],
     [
       'a header from a cross at a tight angle',
-      { distance: 34, aim: POST, power: 1, offsetX: 34, keeperX: 184, contact: 'header' as const },
+      { distance: 34, aim: -POST, power: 1, offsetX: 34, keeperX: 184, contact: 'header' as const },
       0.25,
       0.4
     ]
@@ -101,9 +107,11 @@ describe('keeper: monotonicity', () => {
   it('goal chance rises as the aim moves from centre toward a post', { timeout: 30000 }, () => {
     const centre = goalRate({ distance: 140, aim: 0, power: 1 }, 1500);
     const mid = goalRate({ distance: 140, aim: 0.45, power: 1 }, 1500);
+    const wide = goalRate({ distance: 140, aim: 0.8, power: 1 }, 1500);
     const post = goalRate({ distance: 140, aim: POST, power: 1 }, 1500);
     expect(mid).toBeGreaterThan(centre);
-    expect(post).toBeGreaterThan(mid);
+    expect(wide).toBeGreaterThan(mid);
+    expect(post).toBeGreaterThan(wide);
   });
 
   it('goal chance falls with distance at a fixed power and aim', { timeout: 30000 }, () => {
@@ -120,7 +128,7 @@ describe('keeper: monotonicity', () => {
 describe('keeper: nothing is ever certain', () => {
   it('never returns exactly 0.0 or exactly 1.0 anywhere on the grid', { timeout: 120000 }, () => {
     const distances = [30, 70, 110, 150, 190, 230];
-    const aims = [0, 0.25, 0.5, POST];
+    const aims = [0, 0.25, 0.5, 0.75, POST];
     const powers = [0.35, 0.6, 1];
     const ratings = [2, 3, 4];
     let cells = 0;
@@ -189,6 +197,38 @@ describe('keeper: the pure pieces', () => {
       expect(rest.x).toBeLessThanOrEqual(CENTRE_X + GOAL_HALF);
       expect(rest.y).toBeGreaterThan(0);
     }
+  });
+
+  it('comes out to narrow the angle as the ball nears, and never past it', () => {
+    // The direction of this term was backwards in the audited build: the
+    // keeper stood on his line for a shot from six yards and thirty pixels off
+    // it for one from the halfway line. It is also the honest answer to why a
+    // close-range shot is not a certainty — the ball crosses his plane before
+    // it has spread far from the striker's foot.
+    const near = restPosition(CENTRE_X, 40, 0, 1);
+    const far = restPosition(CENTRE_X, 300, 0, 1);
+    expect(near.y).toBeGreaterThan(far.y);
+    for (const ballY of [14, 20, 30, 60, 120, 240, 400]) {
+      const rest = restPosition(CENTRE_X, ballY, 0, 1);
+      expect(rest.y, `keeper stays behind a ball at ${ballY}`).toBeLessThan(ballY);
+      expect(rest.y, `keeper never behind his own line at ${ballY}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('has no cliff at the edge of his reach', () => {
+    // The audit's exactly-100 % cell came from a hard `gap > reach` return
+    // that fired before any roll. The curve now passes through a half chance
+    // at full stretch and decays from there to a floor it never leaves.
+    const reach = 30;
+    const at = saveProbability(reach, reach, 380, 0.45);
+    const just = saveProbability(reach + 1, reach, 380, 0.45);
+    expect(at).toBeGreaterThan(0.35);
+    expect(at).toBeLessThan(0.65);
+    expect(at - just).toBeLessThan(0.05);
+    // Miles away and still not a formality.
+    expect(saveProbability(90, reach, 380, 0.45)).toBeGreaterThan(0);
+    // And a shot straight at him is never a formality the other way either.
+    expect(saveProbability(0, reach, 380, 0.9)).toBeLessThan(1);
   });
 
   it('gives a longer shot more time and therefore a bigger dive', () => {

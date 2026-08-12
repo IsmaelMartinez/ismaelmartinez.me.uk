@@ -29,7 +29,7 @@ import {
 } from '../../src/games/football/pitch';
 
 export type Policy = (m: MatchState, dt: number) => MatchInput;
-export type PolicyName = 'passive' | 'dribbler' | 'competent' | 'expert';
+export type PolicyName = 'passive' | 'dribbler' | 'masher' | 'competent' | 'expert';
 
 /** Quantise a vector to the eight directions a keyboard can express. */
 export function quantise8(x: number, y: number): { x: number; y: number } {
@@ -52,6 +52,30 @@ export function dribbler(): Policy {
     const target = m.owner && m.owner.side === 0 ? goalPoint(m) : { x: m.ball.x, y: m.ball.y };
     const q = quantise8(target.x - p.x, target.y - p.y);
     return { x: q.x, y: q.y, a: false, b: false, c: false };
+  };
+}
+
+/**
+ * The button-masher: run at the ball, run at the goal once you have it, and
+ * hammer A on a fixed cycle. No aiming, no passing, no reading — the strategy
+ * a player finds in the first thirty seconds and never has to leave.
+ *
+ * This policy exists because an independent audit found it was the *best*
+ * available strategy, beating both scripted humans at nearly every difficulty,
+ * and the suite could not see it. It is now the control that pins "skill beats
+ * mashing": the period is swept, because a masher that only loses at one
+ * cadence has not been fixed.
+ */
+export function masher(period = 21): Policy {
+  let tick = 0;
+  return (m: MatchState) => {
+    const p = m.players[0][m.controlled];
+    const owns = !!m.owner && m.owner.side === 0;
+    const target = owns ? goalPoint(m) : { x: m.ball.x, y: m.ball.y };
+    const q = quantise8(target.x - p.x, target.y - p.y);
+    const a = tick % period < Math.max(1, Math.round(period / 2));
+    tick++;
+    return { x: q.x, y: q.y, a, b: false, c: false };
   };
 }
 
@@ -91,7 +115,7 @@ const DEFENSIVE_REACTION = 0.12;
 interface HumanOptions {
   reaction: number;
   shootRange: number;
-  /** Where across the mouth this player puts a shot, 0..1. */
+/** Where across the mouth this player puts a shot, 0..1. */
   aim: number;
   /**
    * How far his intent wanders either side of that, per shot. Nobody hits the
@@ -160,7 +184,11 @@ function makeHuman(opts: HumanOptions): Policy {
         const side = keeper.x <= CENTRE_X ? 1 : -1;
         // Toward the post the keeper is further from, give or take: the
         // wander is drawn from the match's own RNG so a seeded match still
-        // replays identically.
+        // replays identically. The magnitudes are on the stick scale where
+        // full deflection asks for the ball a ball's width inside the post
+        // (`AIM_SPAN`); they were raised when that scale changed, because a
+        // decent human aims at the same *place* and the number the stick has
+        // to read to express it is not a property of the player.
         const wander = (m.rng() * 2 - 1) * opts.aimSpread;
         held = {
           x: side * Math.max(0, opts.aim + wander),
@@ -264,8 +292,8 @@ export function competent(): Policy {
   return makeHuman({
     reaction: 0.17,
     shootRange: 200,
-    aim: 0.58,
-    aimSpread: 0.38,
+    aim: 0.82,
+    aimSpread: 0.3,
     chargeTicks: 33,
     crosses: true
   });
@@ -275,8 +303,8 @@ export function expert(): Policy {
   return makeHuman({
     reaction: 0.066,
     shootRange: 205,
-    aim: 0.62,
-    aimSpread: 0.2,
+    aim: 0.9,
+    aimSpread: 0.18,
     chargeTicks: 28,
     crosses: true
   });
@@ -285,6 +313,7 @@ export function expert(): Policy {
 export const POLICIES: Record<PolicyName, () => Policy> = {
   passive,
   dribbler,
+  masher,
   competent,
   expert
 };

@@ -7,9 +7,10 @@
  * The contract here is the opposite and it is load-bearing:
  *
  *  - the keeper is a **probabilistic obstacle**. Being within reach is a save
- *    *roll*, never a guarantee, and being out of reach is only a goal if the
- *    ball is actually on target. No configuration of distance, aim, power and
- *    skill produces exactly 0% or exactly 100%.
+ *    *roll*, never a guarantee, and being out of reach is a fingertip chance,
+ *    not a formality: `reach` scales the curve, it does not terminate it. No
+ *    configuration of distance, aim, power and skill produces exactly 0% or
+ *    exactly 100%.
  *  - he acts on **both** paths: he rolls against shots crossing his plane and
  *    he strips a carrier who dribbles into his six-yard box.
  *  - the aim envelope is wider than the mouth, so aiming at a post genuinely
@@ -21,7 +22,7 @@
  * out at each constant.
  */
 import { clamp } from '../engine/math';
-import { CENTRE_X, GOAL_HALF, BOX_DEPTH, SIX_DEPTH } from './pitch';
+import { CENTRE_X, GOAL_HALF, PITCH_L, SIX_DEPTH } from './pitch';
 
 /** Walking pace along the line while the ball is live. */
 export const KEEPER_WALK = 120;
@@ -35,18 +36,49 @@ export const KEEPER_WALK = 120;
  * the aim monotonicity the same section demands. 90 px/s is the value at which
  * a post is a genuine stretch and the middle of the goal is not.
  */
-export const KEEPER_DIVE = 40;
+export const KEEPER_DIVE = 26;
 
 /** Seconds over which a dive reaches full extension. */
 export const DIVE_TIME = 0.28;
 
-/** Standing reach, and the extra a full-stretch dive adds. */
-export const REACH_BASE = 15;
-export const REACH_DIVE = 17;
+/**
+ * The longest window a dive can travel for. A dive is a single committed act,
+ * not an indefinite slide along the line: without this cap a shot from 240 px
+ * hands the keeper twice the lateral budget of one from 140 px purely because
+ * it takes longer to arrive, and long-range placement becomes *harder* than
+ * close-range placement. Capping the window is what keeps 7.3's "falls with
+ * distance" true at the post as well as through the middle.
+ */
+export const DIVE_WINDOW = 0.45;
 
-/** He stands this far off his line, and comes this far further out. */
+/** Standing reach, and the extra a full-stretch dive adds. */
+export const REACH_BASE = 26;
+export const REACH_DIVE = 10;
+
+/**
+ * He stands this far off his line, and comes this far further out *as the ball
+ * comes to him*. The direction of that second term is load-bearing and the
+ * previous build had it backwards: a keeper advances to narrow the shooting
+ * angle when a striker is on top of him and retreats to his line when the ball
+ * is out at the halfway line. Coming out is also the only honest answer to
+ * "why is a shot from six yards not a certain goal" — the ball crosses his
+ * plane before it has spread far from the striker's foot, so his standing
+ * reach covers a shot that would beat him comfortably from range.
+ */
 export const KEEPER_LINE = 8;
-export const KEEPER_ADVANCE = 22;
+export const KEEPER_ADVANCE = 12;
+/** How far behind the ball he always stays; he narrows angles, never dives past it. */
+export const KEEPER_STANDOFF = 20;
+/**
+ * Over what depth his advance fades back to his line. It is a whole half of
+ * the pitch rather than the width of the box, and that is what keeps 7.3's
+ * "falls with distance" honest: the angle he cuts off is a fraction of the way
+ * from the striker to the goal, so a *sharp* fade makes a shot from forty
+ * pixels harder than one from eighty and inverts the distance response. A slow
+ * fade leaves pace and dive time — the two effects that should carry it — in
+ * charge of how distance is felt.
+ */
+const ADVANCE_FADE = PITCH_L / 2;
 
 /** A caught ball is held this long before the keeper must distribute. */
 export const KEEPER_HOLD = 1.2;
@@ -70,29 +102,43 @@ export const PARRY_LOCK = 0.4;
 export const KEEPER_JUMP_Z = 22;
 
 /**
- * Save-curve constants. The shape is the spec's — falls with the gap between
- * hand and ball, falls with pace — but the coefficients are fitted so the
- * seven bands in 7.3 hold simultaneously. `SAVE_GAP` is large because the
- * whole difference between a shot at the keeper and one at the post has to
- * live in this term once the dive budget is realistic.
+ * Save-curve constants.
+ *
+ * The shape is the spec's in spirit — it falls with the gap between hand and
+ * ball and falls with pace — but it is a **logistic in `gap / reach` with no
+ * cliff at `gap = reach`**, and that is the fix for the audit's exactly-100 %
+ * cell. The previous curve was linear inside the reach envelope and hard-cut
+ * outside it, so any shot the keeper could not physically get to was a
+ * certainty, and 7.3's "no cell may be exactly 0 % or exactly 100 %" was
+ * violated in the direction opposite to the original absorber bug.
+ *
+ * Now the reach envelope is where the curve passes through a half chance
+ * rather than where it stops, and a shot well past his hands still runs into
+ * `SAVE_FLOOR`: a trailing hand, a boot, a deflection off his body. It is
+ * small enough to be a footnote in play and large enough that no cell in the
+ * sweep is ever a certainty.
  */
-const SAVE_BASE = 1.165;
-const SAVE_GAP = 0.57;
-const SAVE_SPEED_DIV = 900;
-const SAVE_MIN = 0.04;
-const SAVE_MAX = 0.99;
+const SAVE_SHARP = 3.2;
+const SAVE_CEIL = 1.05;
+const SAVE_PACE_DIV = 760;
+/**
+ * The desperation chance a beaten keeper still has while the ball is inside
+ * his frame. Callers pass 0 for a ball that is going wide anyway — he is not
+ * credited with saving shots that were missing the goal.
+ */
+export const SAVE_FLOOR = 0.02;
+const SAVE_MAX = 0.985;
 /**
  * How much of the save curve the keeper's own skill is worth. The spec's
  * 0.72 + 0.28 x skill left a five-rated keeper at full difficulty only 7 %
  * better than a one-rated keeper on the easiest setting — with the dive budget
  * as small as it has to be for aim placement to matter, skill has almost
  * nothing else to act through, so the run's curve could not be felt in front
- * of goal at all. The span is nearly doubled and the floor lifted to keep a
- * middling keeper on exactly the same curve, so 7.3's bands are untouched
- * while the ends of the ladder pull apart.
+ * of goal at all. The span is widened and the floor set so a middling keeper
+ * sits on 1.0, which is the curve 7.3's bands are fitted to.
  */
-const SKILL_FLOOR = 0.62;
-const SKILL_SPAN = 0.5;
+const SKILL_FLOOR = 0.6;
+const SKILL_SPAN = 0.89;
 
 /** Ground friction, shared with match.ts so flight times agree. */
 export const BALL_FRICTION = 0.55;
@@ -100,19 +146,35 @@ export const BALL_FRICTION = 0.55;
 /**
  * Keeper skill 0..1 from the team's Keeper rating and the match difficulty.
  * Even a 1-rated keeper on the easiest setting is a real obstacle; even a
- * 5-rated one at full difficulty leaves a gap. The difficulty term is wider
- * than the specification's 0.55 + 0.45 x d: with the dive budget as small as
- * aim placement requires, the keeper is the only channel that can carry the
- * run's curve in front of goal, and at the spec's spread a final-day keeper
- * was barely distinguishable from a group-stage one.
+ * 5-rated one at full difficulty leaves a gap.
+ *
+ * The difficulty term is far wider than the specification's 0.55 + 0.45 x d
+ * and wider again than this module's first attempt at it. The keeper is where
+ * most of 7.2's difficulty curve has to live — the speed ledger forbids buying
+ * the CPU pace, and its passing and pressing move goals *against* rather than
+ * goals *for* — so a group-stage keeper and a final keeper have to be visibly
+ * different men. The slope is pinned so that d = 0.55, the difficulty 7.3's
+ * isolation rig sweeps at, lands on exactly the same skill as before: the
+ * shot-model bands and the ladder can then be read independently of one
+ * another.
  */
 export function keeperSkill(rating: number, difficulty: number): number {
-  return 0.3 + 0.5 * (rating / 5) * (0.42 + 0.16 * clamp(difficulty, 0, 1));
+  return 0.3 + 0.5 * (rating / 5) * (0.133 + 0.667 * clamp(difficulty, 0, 1));
 }
 
-/** Exponential lag on the keeper's lateral tracking: he guesses, never knows. */
+/**
+ * Exponential lag on the keeper's lateral tracking: he guesses, never knows.
+ *
+ * Longer than the specification's 0.22 - 0.12 x skill, and deliberately so.
+ * This lag is the only channel through which *moving the ball* is rewarded in
+ * front of goal: a side that switches play, crosses, or lays the ball off
+ * across the face leaves the keeper trailing the ball by a real distance, and
+ * a player who simply runs at the goal and strikes finds him already there.
+ * At the specification's value the trail was four or five pixels and passing
+ * bought nothing a straight run did not.
+ */
 export function trackLag(skill: number): number {
-  return 0.22 - 0.12 * clamp(skill, 0, 1);
+  return 0.44 - 0.2 * clamp(skill, 0, 1);
 }
 
 /** Advance the delayed copy of the ball's lateral coordinate. */
@@ -132,7 +194,14 @@ export function restPosition(
   dir: 1 | -1
 ): { x: number; y: number } {
   const depth = Math.abs(ballY - goalY);
-  const advance = clamp((depth - SIX_DEPTH) / (BOX_DEPTH * 2), 0, 1) * KEEPER_ADVANCE;
+  // Out as the ball comes in, back on his line as it goes away, and never in
+  // front of the ball: he narrows the angle, he does not leave the goal open
+  // behind him.
+  const near = 1 - clamp((depth - SIX_DEPTH) / ADVANCE_FADE, 0, 1);
+  const advance = Math.min(
+    KEEPER_ADVANCE * near,
+    Math.max(0, depth - KEEPER_LINE - KEEPER_STANDOFF)
+  );
   return {
     x: clamp(trackX, CENTRE_X - (GOAL_HALF - 6), CENTRE_X + (GOAL_HALF - 6)),
     y: goalY + dir * (KEEPER_LINE + advance)
@@ -164,7 +233,7 @@ export function speedAfter(speed: number, t: number): number {
  */
 export function diveBudget(flightT: number): number {
   if (!Number.isFinite(flightT)) return KEEPER_DIVE * DIVE_TIME;
-  return KEEPER_DIVE * Math.max(0, flightT);
+  return KEEPER_DIVE * clamp(flightT, 0, DIVE_WINDOW);
 }
 
 /** How extended he is when the ball arrives, 0..1. */
@@ -240,15 +309,16 @@ export function saveProbability(
   gap: number,
   reach: number,
   speed: number,
-  skill: number
+  skill: number,
+  floor: number = SAVE_FLOOR
 ): number {
-  const raw =
-    SAVE_BASE - SAVE_GAP * (gap / Math.max(1, reach)) - (speed - 260) / SAVE_SPEED_DIV;
-  const skilled = clamp(raw, SAVE_MIN, SAVE_MAX) * (SKILL_FLOOR + SKILL_SPAN * clamp(skill, 0, 1));
-  // Clamped again after the skill term: the span deliberately runs past 1 at
-  // the top of the ladder, and the guarantee that no keeper is ever a certainty
-  // is the regression this whole module exists to hold.
-  return clamp(skilled, SAVE_MIN, SAVE_MAX);
+  // Half a chance exactly at full stretch, and a smooth fall either side of
+  // it. There is no cliff: `reach` is a scale, not a wall.
+  const q = gap / Math.max(1, reach);
+  const shape = 1 / (1 + Math.exp(SAVE_SHARP * (q - 1)));
+  const ceiling =
+    (SAVE_CEIL - (speed - 260) / SAVE_PACE_DIV) * (SKILL_FLOOR + SKILL_SPAN * clamp(skill, 0, 1));
+  return clamp(ceiling * shape, floor, SAVE_MAX);
 }
 
 /** Chance a save is held rather than spilled. Hard shots are parried. */
@@ -272,11 +342,19 @@ export function resolveSave(opts: {
   speed: number;
   skill: number;
   rng: () => number;
+  /**
+   * Floor under the save chance. `SAVE_FLOOR` for a ball inside the frame,
+   * which is what stops any cell of the sweep being a certain goal; 0 for one
+   * that is missing anyway, so he is never credited with a save on a shot
+   * flying past the post.
+   */
+  floor?: number;
 }): KeeperOutcome {
-  if (opts.gap > opts.reach) return 'beaten';
-  if (opts.rng() >= saveProbability(opts.gap, opts.reach, opts.speed, opts.skill)) {
-    return 'beaten';
-  }
+  // No `gap > reach` short circuit. That early return was the audit's
+  // exactly-100 % cell: it fired before any roll, so every shot he could not
+  // physically reach was a certainty rather than a probability.
+  const p = saveProbability(opts.gap, opts.reach, opts.speed, opts.skill, opts.floor ?? SAVE_FLOOR);
+  if (opts.rng() >= p) return 'beaten';
   return opts.rng() < catchProbability(opts.speed) ? 'caught' : 'parried';
 }
 

@@ -85,8 +85,13 @@ describe('kickoff assignment', () => {
   });
 
   it('restarts with the conceding side after a goal', () => {
-    const m = fresh();
-    const log = playMatch(m, competent());
+    // Several seeds, because one match is not guaranteed to contain a goal and
+    // this is an assertion about what happens *after* one, not about how often
+    // they arrive.
+    const log: MatchEvent[] = [];
+    for (let seed = 1; seed <= 6; seed++) {
+      log.push(...playMatch(fresh({ rng: seededRandom(seed * 7919 + 3) }), competent()));
+    }
     const goals = log.filter(e => e.type === 'goal');
     expect(goals.length).toBeGreaterThan(0);
     for (const goal of goals) {
@@ -347,6 +352,7 @@ describe('contact and tackling', () => {
       down: 0,
       slideCd: 0,
       press: 0,
+      strike: 0,
       slideRolled: false
     };
     const headOn = { ...carrier, x: 100, y: 112, speed: 74 };

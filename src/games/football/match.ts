@@ -38,6 +38,7 @@ import {
   KEEPER_JUMP_Z,
   PARRY_LOCK,
   REACH_BASE,
+  SAVE_FLOOR,
   commitDive,
   diveProgress,
   flightTime,
@@ -100,6 +101,19 @@ const BOUNCE_Z = 0.5;
 const BOUNCE_H = 0.8;
 
 export const CAPTURE_R = 10;
+/**
+ * How near an opponent has to be to cut out a pass that is on its way to a
+ * teammate — tighter than `CAPTURE_R`, because a firm ball played into a man
+ * has to be stepped in front of rather than merely stood near.
+ *
+ * This is the difference between "short passing is viable" and a coin flip:
+ * with fourteen players inside a 340 x 520 pitch, any lane wide enough to pass
+ * through was also wide enough for whoever was covering it, which made the
+ * policy that hammered the ball up the pitch strictly better than the one that
+ * played through it. Passing is the main thing a good player does that a
+ * button-masher does not, so it has to pay.
+ */
+export const PASS_INTERCEPT_R = 6;
 export const CONTROL_MAX = 330;
 /**
  * A keeper gathers loose balls up to this pace and no faster. Anything quicker
@@ -114,11 +128,85 @@ export const KEEPER_TRAP_MAX = 200;
  * Without the tighter radius half of every shot is deflected before it reaches
  * the keeper and shot power stops mattering again.
  */
-export const BLOCK_R = 4;
+export const BLOCK_R = 5;
 export const TACKLE_R = 15;
 export const DRIBBLE_OFFSET = 8;
 export const KICK_GRACE = 0.35;
 export const WIN_GRACE = 0.5;
+
+/**
+ * Shot placement. Full stick asks for the ball this far off centre — a ball's
+ * width inside the post, so the whole stick range is a reachable target. See
+ * `shoot` for why the specification's wider-than-the-mouth envelope had to go.
+ */
+export const AIM_SPAN = GOAL_HALF - 6;
+/**
+ * Shot pace. Steeper in the charge than the specification's 300 + 150 x power:
+ * the charge is the one thing a player spends real time on before striking —
+ * half a second in which a defender can close him down — and it has to be the
+ * difference between a shot and a scuff. At the specification's spread a tap
+ * arrived at 78 % of a full strike's pace and the meter was decoration.
+ */
+const SHOT_SPEED_BASE = 295;
+const SHOT_SPEED_CHARGE = 155;
+/**
+ * A header takes its aim from the stick with no charge, so it has neither the
+ * charge's pace nor the charge's precision to trade: its own fixed pace and
+ * spread are what keep a cross-and-header a real weapon from angles a ground
+ * shot has no gap through, without letting it become the dominant one.
+ */
+const HEADER_SPEED = 280;
+const HEADER_SPREAD = 7.5;
+/** Placement error, before quality: a scuffed tap sprays, a struck shot does not. */
+const SPREAD_BASE = 8;
+const SPREAD_CHARGE = 5;
+const SPREAD_RANGE_DIV = 34;
+const SPREAD_RUSH = 0.45;
+/** A defender this close is in the way of the swing. */
+export const STRIKE_PRESSURE_R = 30;
+/**
+ * What spoils a strike, and by how much. Every term is something a player can
+ * do something about: back off the pressure, slow down, get the run and the
+ * shot on the same line, shoot from a sensible distance, and do not swing at
+ * it again while still off balance from the last one.
+ */
+const RUSH_PRESSED = 0.8;
+const RUSH_PACE = 0.5;
+const RUSH_ACROSS = 0.5;
+const RUSH_RANGE = 0.5;
+const RUSH_OFF_BALANCE = 0.5;
+const RUSH_SCUFF = 0.55;
+/**
+ * How much a shot taken off a completed pass is *un*-rushed by it, and how
+ * long that lasts. This is the reward side of the same coin as the rest of the
+ * rush terms: a chance that was made by moving the ball is a better chance
+ * than one taken by running at the goal with it, which is the whole reason to
+ * pass rather than to hammer the button. It is also the one term a player who
+ * never passes can never collect.
+ */
+const RUSH_ASSIST = 0.9;
+/** Extra rush on a header met off a clearance rather than a delivered ball. */
+const RUSH_HOOF = 1;
+const ASSIST_WINDOW = 1;
+const RUSH_MAX = 2;
+/** Rush below this stays out of the sky; above it, some of them go over. */
+const SKY_GATE = 1.15;
+const SKY_CHANCE = 0.95;
+const SKY_LIFT_MIN = 140;
+const SKY_LIFT_MAX = 260;
+/**
+ * How long a striker is off balance afterwards, and how much of his pace he
+ * loses while he is. A clean strike costs him almost nothing; a wild one costs
+ * him half a second of the chase for his own rebound. There are no fouls in
+ * this game, so position is the only price a bad decision can be charged.
+ */
+export const STRIKE_RECOVER_MIN = 0.2;
+export const STRIKE_RECOVER_MAX = 0.65;
+export const STRIKE_SLOW = 0.5;
+/** A blind clearance: shorter than a pass and steered only roughly. */
+const CLEAR_SPEED_BASE = 235;
+const CLEAR_SPEED_CHARGE = 110;
+const CLEAR_SCATTER = 0.75;
 
 export const SLIDE_TIME = 0.35;
 export const SLIDE_SPEED = 26 / SLIDE_TIME;
@@ -139,8 +227,15 @@ export const HEADER_Z = 30;
  * of every side's goals on the end of a cross nobody ever played.
  */
 export const AIR_STRIKE_MIN_TRAVEL = 40;
-/** How near an airborne ball a player has to be to attack it. */
-export const AIR_STRIKE_R = CAPTURE_R + 12;
+/**
+ * How near an airborne ball a player has to be to attack it. Tighter than the
+ * trap radius plus twelve it started at: a header has to be *met*, and at the
+ * wider radius a player who simply held A collected every ball that passed
+ * through heading height anywhere near him, which turned hammering the button
+ * into an aerial threat with a hundred per cent uptime and pushed the share of
+ * goals coming off crosses past the anti-goal 7.4 sets for it.
+ */
+export const AIR_STRIKE_R = CAPTURE_R + 6;
 /** Lift on a lofted pass or cross; see `loftedPass` for why it is this low. */
 export const LOFT_LIFT = 150;
 
@@ -172,6 +267,8 @@ export interface PlayerState {
   slideCd: number;
   /** >0 while carrying out a press order. */
   press: number;
+  /** >0 while off balance from a strike: no second strike, and slower. */
+  strike: number;
   /** True once this slide has rolled against a carrier. */
   slideRolled: boolean;
 }
@@ -294,6 +391,13 @@ export interface MatchState {
   lastFromCross: boolean;
   /** A pass in flight, so a teammate's capture counts as completed. */
   passInFlight: Side | null;
+  /**
+   * Seconds left on the window in which a completed pass is still helping the
+   * man who received it, and the side it belongs to. A ball laid off into
+   * space arrives with the defence still adjusting to it, so the shot that
+   * follows is a made chance rather than a snatched one.
+   */
+  assist: { side: Side; t: number } | null;
   /** True while the pass in flight is a lofted one rather than along the deck. */
   passLofted: boolean;
   /**
@@ -353,6 +457,7 @@ function freshPlayer(x: number, y: number, dir: 1 | -1): PlayerState {
     down: 0,
     slideCd: 0,
     press: 0,
+    strike: 0,
     slideRolled: false
   };
 }
@@ -417,6 +522,7 @@ export function createMatch(opts: MatchOptions = {}): MatchState {
     lastContact: 'ground',
     lastFromCross: false,
     passInFlight: null,
+    assist: null,
     passLofted: false,
     passTarget: -1,
     lastOwnerSide: null,
@@ -507,6 +613,8 @@ function endSpell(m: MatchState): void {
 
 function takePossession(m: MatchState, side: Side, idx: number, won: boolean): void {
   if (m.lastOwnerSide !== null && m.lastOwnerSide !== side) {
+    // The other side has it: whatever the pass before it created is gone.
+    m.assist = null;
     m.stats.turnovers++;
     m.log.push({ type: 'turnover', side });
     // A possession spell is the *team's*, not one player's: it survives every
@@ -561,9 +669,96 @@ function signed(m: MatchState): number {
 }
 
 /**
- * Fire at goal. The aim envelope is +-(GOAL_HALF + 14) against a +-GOAL_HALF
- * mouth, so a player can hit either post and can genuinely miss — that width
- * is what makes placement a real decision instead of a keyhole to find.
+ * How badly a strike is being rushed, 0 (a set player with time) to 1 (flat
+ * out, off balance, with a defender on him).
+ *
+ * This is the term that makes shot *quality* something a player earns rather
+ * than something the charge meter hands out, and it is the direct answer to
+ * the audit's dominant strategy: running at the ball and hammering A produced
+ * shots as accurate as a set finish, so there was never a reason to do
+ * anything else. Three things spoil a strike, all of them things a good player
+ * can avoid and a masher cannot:
+ *
+ *  - **pressure**: a defender inside `STRIKE_PRESSURE_R` is in the way of the
+ *    swing. A blind shot out of a crowd is a poor shot.
+ *  - **balance**: the faster he is travelling and the further the shot he is
+ *    attempting is from the line he is running along, the more he is striking
+ *    across his own body. Slowing down, or picking the shot that matches the
+ *    run, is free and costs only the moment it takes to decide.
+ *  - **being off-balance already**: a strike inside the recovery from the last
+ *    one is a swipe, not a shot.
+ */
+function strikeRush(
+  m: MatchState,
+  side: Side,
+  p: PlayerState,
+  targetX: number,
+  goalY: number,
+  power: number
+): number {
+  let nearest = Infinity;
+  for (let idx = 1; idx < TEAM_SIZE; idx++) {
+    const o = m.players[1 - side][idx];
+    if (o.down > 0) continue;
+    nearest = Math.min(nearest, dist(o.x, o.y, p.x, p.y));
+  }
+  const pressed = 1 - clamp((nearest - CAPTURE_R) / (STRIKE_PRESSURE_R - CAPTURE_R), 0, 1);
+  const dx = targetX - p.x;
+  const dy = goalY - p.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const align = clamp((p.fx * dx + p.fy * dy) / len, 0, 1);
+  const pace = clamp(p.speed / HUMAN_SPEED, 0, 1);
+  const range = clamp(len / SHOOT_RANGE, 0, 1);
+  return clamp(
+    RUSH_PRESSED * pressed +
+      RUSH_PACE * pace +
+      RUSH_ACROSS * pace * (1 - align) +
+      RUSH_RANGE * range +
+      RUSH_SCUFF * (1 - clamp(power, 0, 1)) +
+      (p.strike > 0 ? RUSH_OFF_BALANCE : 0) -
+      (m.assist && m.assist.side === side ? RUSH_ASSIST : 0),
+    0,
+    RUSH_MAX
+  );
+}
+
+/**
+ * How much unintended lift a rushed strike gets — the shot that sails over the
+ * bar.
+ *
+ * This is the honest source of off-target shooting, and it is what lets the
+ * aim scale stay inside the frame (see `shoot`) without every shot being on
+ * target. A set player striking a still ball from the edge of the six-yard box
+ * never skies one; a player at a dead sprint, with a defender on him, hammering
+ * it from thirty yards, regularly does. It costs the mash strategy far more
+ * than it costs a player who picks his moment, and it costs nothing at all in
+ * 7.3's isolation rig, where the shooter is stationary and unpressed — which is
+ * why the keeper bands and the shot bands can be read independently.
+ */
+function skyLift(m: MatchState, rush: number): number {
+  const wild = clamp((rush - SKY_GATE) / (RUSH_MAX - SKY_GATE), 0, 1);
+  if (wild <= 0 || m.rng() >= wild * SKY_CHANCE) return 0;
+  return SKY_LIFT_MIN + (SKY_LIFT_MAX - SKY_LIFT_MIN) * m.rng();
+}
+
+/**
+ * Fire at goal.
+ *
+ * **The aim scale maps to targets that are actually reachable.** Full stick
+ * asks for the ball `AIM_SPAN` off centre, a ball's width inside the post, and
+ * everything between centre and there is a legal target — so goal probability
+ * rises all the way from the middle of the goal to the post, which is what
+ * 7.3 asks for. The specification's +-(GOAL_HALF + 14) envelope against a
+ * +-GOAL_HALF mouth could not deliver that: a quarter of the stick's range was
+ * a *structural* miss at every distance, power and skill (twenty of the
+ * audit's hundred and twenty grid cells measured exactly zero), and because
+ * the miss arrived before the keeper did, the response peaked in the interior
+ * and collapsed toward the post — the opposite of the required monotonicity.
+ *
+ * Missing is still entirely possible; it comes from execution rather than from
+ * the stick. `strikeRush` widens the spread until a post-aimed shot taken at a
+ * sprint with a defender on the shoulder is as likely to go wide as in, which
+ * is why placement is worth having only when the rest of the play earns it.
  */
 export function shoot(
   m: MatchState,
@@ -579,40 +774,78 @@ export function shoot(
   const d = dist(p.x, p.y, CENTRE_X, goalY);
   const scale = accuracyScale(m.teams[side]);
   const header = contact === 'header';
+  const aimed = CENTRE_X + clamp(aim, -1, 1) * AIM_SPAN;
+  // A header off a ball that was deliberately delivered is a made chance; one
+  // off a hopeful punt up the pitch is a hopeful header, and it is scored as
+  // one. Without the distinction, hammering the ball forward and running on to
+  // it is a scoring strategy in its own right — the "hoof and hope" the
+  // specification names as an anti-goal, arrived at by a player who never
+  // aimed a cross in his life.
+  const hoofed = header && !m.lastFromCross;
+  const rush = clamp(
+    strikeRush(m, side, p, aimed, goalY, header ? 1 : power) + (hoofed ? RUSH_HOOF : 0),
+    0,
+    RUSH_MAX
+  );
   const spread =
-    (signed(m) * (9 - 5 * clamp(power, 0, 1)) + signed(m) * (d / 45) + (header ? signed(m) * 13 : 0)) *
-    scale;
-  const targetX = clamp(CENTRE_X + clamp(aim, -1, 1) * (GOAL_HALF + 14) + spread, 6, PITCH_W - 6);
+    (signed(m) * (SPREAD_BASE - SPREAD_CHARGE * clamp(power, 0, 1)) +
+      signed(m) * (d / SPREAD_RANGE_DIV) +
+      (header ? signed(m) * HEADER_SPREAD : 0)) *
+    scale *
+    (1 + SPREAD_RUSH * rush);
+  const targetX = clamp(aimed + spread, 6, PITCH_W - 6);
+  // A strike leaves him off balance, and the worse the strike the longer for.
+  // This is the cost the audit found missing: a wild swipe has to be worth
+  // less than a struck shot, and with no fouls in the game the only currency
+  // available is the striker's own position.
+  p.strike = STRIKE_RECOVER_MIN + (STRIKE_RECOVER_MAX - STRIKE_RECOVER_MIN) * clamp(rush / RUSH_MAX, 0, 1);
   const dx = targetX - p.x;
   const dy = goalY - p.y;
   const len = Math.hypot(dx, dy) || 1;
-  const speed = header ? 250 : 300 + 150 * clamp(power, 0, 1);
+  const speed = header ? HEADER_SPEED : SHOT_SPEED_BASE + SHOT_SPEED_CHARGE * clamp(power, 0, 1);
   p.fx = dx / len;
   p.fy = dy / len;
   const fromCross = m.lastFromCross;
-  kick(m, (dx / len) * speed, (dy / len) * speed, 0);
+  const lift = skyLift(m, rush);
+  kick(m, (dx / len) * speed, (dy / len) * speed, lift);
   m.lastContact = contact;
   m.lastFromCross = fromCross;
   m.passInFlight = null;
   m.stats.shots[side]++;
-  const onTarget = Math.abs(targetX - CENTRE_X) < GOAL_HALF;
+  const onTarget = lift === 0 && Math.abs(targetX - CENTRE_X) < GOAL_HALF - 2;
   if (onTarget) m.stats.onTarget[side]++;
   m.log.push({ type: 'shot', side, onTarget, contact });
   m.stats.shotDistance[side] += d;
   armKeeper(m, side);
 }
 
-/** Out of shooting range A is a clearance driven up-pitch. A manual quirk. */
+/**
+ * Out of shooting range A is a clearance driven up-pitch. A manual quirk, and
+ * also the move a player who is simply hammering the button spends most of his
+ * match making — so it carries the same off-balance cost as a shot. Hoofing
+ * the ball away is a legitimate way out of trouble; doing it every second
+ * without ever looking up has to leave you flat-footed for the second ball,
+ * because that is the only thing standing between "clear it" and a dominant
+ * strategy with no downside at all.
+ */
 function clearUpfield(m: MatchState, side: Side, power: number, aim: number): void {
   const owner = m.owner;
   if (!owner) return;
   const p = playerAt(m, owner);
   const dir = attackDir(side, m.swapped);
-  const lateral = clamp(aim, -1, 1) * 0.6;
+  const goalY = attackGoalY(side, m.swapped);
+  const rush = strikeRush(m, side, p, CENTRE_X, goalY, clamp(power, 0, 1));
+  // A hoof is blind: the more rushed it is, the less it resembles the
+  // direction it was aimed in. Without this the clearance is a free, accurate
+  // reset that empties your own half every time, which is a large part of what
+  // made hammering the button a defensive strategy as well as an attacking one.
+  const lateral = clamp(clamp(aim, -1, 1) * 0.6 + signed(m) * CLEAR_SCATTER * (rush / RUSH_MAX), -1, 1);
   const len = Math.hypot(lateral, 1);
-  const speed = 250 + 110 * clamp(power, 0, 1);
+  const speed = CLEAR_SPEED_BASE + CLEAR_SPEED_CHARGE * clamp(power, 0, 1);
   p.fx = lateral / len;
   p.fy = (dir as number) / len;
+  p.strike =
+    STRIKE_RECOVER_MIN + (STRIKE_RECOVER_MAX - STRIKE_RECOVER_MIN) * clamp(rush / RUSH_MAX, 0, 1);
   kick(m, (lateral / len) * speed, ((dir as number) / len) * speed, 150);
   m.lastContact = 'ground';
   m.lastFromCross = false;
@@ -778,6 +1011,7 @@ function airStrike(m: MatchState, side: Side, idx: number, aim: number): void {
  */
 export function canAirStrike(m: MatchState, side: Side, idx: number): boolean {
   if (m.owner) return false;
+  if (m.players[side][idx].strike > 0) return false;
   if (m.ball.z < TRAP_Z || m.ball.z > HEADER_Z) return false;
   if (dist(m.ball.x, m.ball.y, m.kickFrom.x, m.kickFrom.y) < AIR_STRIKE_MIN_TRAVEL) return false;
   if (m.kickGrace && m.kickGrace.side === side && m.kickGrace.idx === idx) return false;
@@ -871,7 +1105,17 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
   if (speed < 40) return;
   const gap = Math.abs(m.ball.x - keeper.x);
   const reach = gk.dive ? keeperReach(diveProgress(gk.dive.elapsed)) : REACH_BASE;
-  const outcome = resolveSave({ gap, reach, speed, skill: gk.skill, rng: m.rng });
+  // The desperation floor applies only to a ball that is actually going in:
+  // he is never credited with saving one that was missing the goal anyway.
+  const inFrame = Math.abs(m.ball.x - CENTRE_X) < GOAL_HALF;
+  const outcome = resolveSave({
+    gap,
+    reach,
+    speed,
+    skill: gk.skill,
+    rng: m.rng,
+    floor: inFrame ? SAVE_FLOOR : 0
+  });
   if (outcome === 'beaten') return;
 
   m.stats.saves[side]++;
@@ -928,11 +1172,19 @@ function stepTimers(p: PlayerState, dt: number): void {
   p.down = Math.max(0, p.down - dt);
   p.slideCd = Math.max(0, p.slideCd - dt);
   p.press = Math.max(0, p.press - dt);
+  p.strike = Math.max(0, p.strike - dt);
   if (p.slide === 0) p.slideRolled = false;
 }
 
+/**
+ * Movement pace for one player: slower carrying the ball, slower still while
+ * off balance from a strike. Both factors only ever *reduce* a speed, so the
+ * 6.9 speed ledger — the CPU is never quicker than the human — is untouched.
+ */
 function carrySpeed(m: MatchState, side: Side, idx: number, base: number): number {
-  return m.owner && m.owner.side === side && m.owner.idx === idx ? base * DRIBBLE_FACTOR : base;
+  const p = m.players[side][idx];
+  const carrying = !!m.owner && m.owner.side === side && m.owner.idx === idx;
+  return base * (carrying ? DRIBBLE_FACTOR : 1) * (p.strike > 0 ? STRIKE_SLOW : 1);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1052,7 +1304,10 @@ function humanAction(m: MatchState, input: MatchInput, dt: number): void {
   const owns = !!m.owner && m.owner.side === 0 && m.owner.idx === m.controlled;
 
   if (owns) {
-    if (aPressed) {
+    // A striker still off balance from the last swing cannot line up another:
+    // this is the cooldown half of the strike cost, and it is what turns a
+    // fixed-cadence A-mash into a sequence of half-made contacts.
+    if (aPressed && m.players[0][m.controlled].strike === 0) {
       m.charging = true;
       m.charge = 0;
     }
@@ -1174,7 +1429,7 @@ function stepCpuSide(m: MatchState, dt: number): void {
     }
     if (m.owner && m.owner.side === 1 && m.owner.idx === idx) continue;
     const t = offBallTarget(m, 1, idx);
-    moveToward(p, t.x, t.y, speed * OFFBALL_FACTOR, dt);
+    moveToward(p, t.x, t.y, carrySpeed(m, 1, idx, speed * OFFBALL_FACTOR), dt);
     clampToPitch(p);
   }
   cpuAirStrike(m);
@@ -1209,6 +1464,7 @@ function stepCpuCarrier(m: MatchState, dt: number): void {
   const plan = m.cpuPlan;
   const p = m.players[1][owner.idx];
   if (plan.action === 'shoot') {
+    if (p.strike > 0) return;
     shoot(m, 1, plan.power, plan.aim, 'ground');
     m.cpuPlan = null;
     return;
@@ -1224,7 +1480,7 @@ function stepCpuCarrier(m: MatchState, dt: number): void {
     return;
   }
   const t = dribbleTarget(m, 1, owner.idx);
-  moveToward(p, t.x, t.y, cpuSpeed(m.difficulty) * DRIBBLE_FACTOR, dt);
+  moveToward(p, t.x, t.y, carrySpeed(m, 1, owner.idx, cpuSpeed(m.difficulty)), dt);
   clampToPitch(p);
 }
 
@@ -1364,13 +1620,16 @@ function tryCapture(m: MatchState): void {
   let best: Owner | null = null;
   let bestD = speed > CONTROL_MAX ? BLOCK_R : CAPTURE_R;
   for (const side of [0, 1] as const) {
+    // Cutting out a pass that is on takes more than standing in its corridor;
+    // receiving one takes only the usual first touch.
+    const intercepting = m.passInFlight !== null && m.passInFlight !== side && speed <= CONTROL_MAX;
     for (let idx = 0; idx < TEAM_SIZE; idx++) {
       if (m.kickGrace && m.kickGrace.side === side && m.kickGrace.idx === idx) continue;
       if (idx === 0 && speed > KEEPER_TRAP_MAX) continue;
       const p = m.players[side][idx];
       if (p.down > 0) continue;
       const d = dist(p.x, p.y, m.ball.x, m.ball.y);
-      if (d < bestD) {
+      if (d < Math.min(bestD, intercepting ? PASS_INTERCEPT_R : bestD)) {
         bestD = d;
         best = { side, idx };
       }
@@ -1393,6 +1652,7 @@ function tryCapture(m: MatchState): void {
   if (m.passInFlight === best.side && best.idx !== 0) {
     m.stats.passesCompleted[best.side]++;
     if (!m.passLofted) m.stats.groundPassesCompleted[best.side]++;
+    m.assist = { side: best.side, t: ASSIST_WINDOW };
   }
   takePossession(m, best.side, best.idx, false);
 }
@@ -1410,7 +1670,9 @@ function stepBall(m: MatchState, dt: number, events: MatchEvent[]): void {
     checkLines(m, events, true);
     return;
   }
+  const prevX = ball.x;
   const prevY = ball.y;
+  const prevZ = ball.z;
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
   if (ball.z > 0 || ball.vz !== 0) {
@@ -1438,22 +1700,39 @@ function stepBall(m: MatchState, dt: number, events: MatchEvent[]): void {
   if (m.owner || m.phase !== 'play') return;
   keeperPlane(m, 1, prevY, events);
   if (m.owner || m.phase !== 'play') return;
-  checkLines(m, events, false);
+  checkLines(m, events, false, { x: prevX, y: prevY, z: prevZ });
 }
 
-/** Goals, woodwork and the three ways the ball leaves the field. */
-function checkLines(m: MatchState, events: MatchEvent[], carried: boolean): void {
+/**
+ * Goals, woodwork and the three ways the ball leaves the field.
+ *
+ * The lateral position is taken at the point the ball *crosses* the line, not
+ * at the first frame after it: at shot pace the ball travels five to eight
+ * pixels a tick, so sampling after the crossing put near-post shots into the
+ * woodwork band by up to a tick's worth of drift and made a well-placed finish
+ * measurably worse than a slightly worse-placed one.
+ */
+function checkLines(
+  m: MatchState,
+  events: MatchEvent[],
+  carried: boolean,
+  prev?: { x: number; y: number; z: number }
+): void {
   const ball = m.ball;
   for (const line of [0, PITCH_L]) {
     const crossed = line === 0 ? ball.y <= 0 : ball.y >= PITCH_L;
     if (!crossed) continue;
     const scoring = (attackGoalY(0, m.swapped) === line ? 0 : 1) as Side;
-    const lateral = Math.abs(ball.x - CENTRE_X);
-    if (ball.z < GOAL_HEIGHT && lateral < GOAL_HALF - 2 && !m.noScore) {
+    const span = prev ? ball.y - prev.y : 0;
+    const t = prev && span !== 0 ? clamp((line - prev.y) / span, 0, 1) : 1;
+    const crossX = prev ? prev.x + (ball.x - prev.x) * t : ball.x;
+    const crossZ = prev ? prev.z + (ball.z - prev.z) * t : ball.z;
+    const lateral = Math.abs(crossX - CENTRE_X);
+    if (crossZ < GOAL_HEIGHT && lateral < GOAL_HALF - 2 && !m.noScore) {
       scoreGoal(m, scoring, events, carried);
       return;
     }
-    if (!carried && ball.z < GOAL_HEIGHT && lateral <= GOAL_HALF + 2) {
+    if (!carried && crossZ < GOAL_HEIGHT && lateral <= GOAL_HALF + 2) {
       // Woodwork: back into play with the pace bled off.
       const dir = line === 0 ? 1 : -1;
       ball.y = line + dir * 2;
@@ -1695,6 +1974,10 @@ export function tickMatch(
   if (m.winGrace) {
     m.winGrace.t -= dt;
     if (m.winGrace.t <= 0) m.winGrace = null;
+  }
+  if (m.assist) {
+    m.assist.t -= dt;
+    if (m.assist.t <= 0) m.assist = null;
   }
   if (m.restart) {
     m.restart.elapsed += dt;

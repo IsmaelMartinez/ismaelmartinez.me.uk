@@ -47,8 +47,24 @@ export function cpuLatency(d: number): number {
   return clamp(0.375 - 0.3 * clamp(d, 0, 1), 0.1, 0.4);
 }
 
-/** How far from goal a shot is still a shot rather than a clearance. */
-export const SHOOT_RANGE = 230;
+/**
+ * How far from goal a shot is still a shot rather than a clearance.
+ *
+ * Tighter than the specification's 230 px, which is 44 % of the length of the
+ * pitch, and the change is the single biggest lever against the audit's
+ * dominant strategy. Shot *value* could not be the lever: 7.3 pins a shot from
+ * 240 px at 0.15-0.28 against one from 140 px at 0.30-0.45, so a speculative
+ * effort from range is deliberately worth two thirds of a good one and a
+ * player who takes half as many again of them comes out ahead on volume
+ * however the conversion curve is shaped. What has to go is the *count*: A
+ * pressed from three quarters of the way up the pitch is now the clearance the
+ * position deserves, so hammering the button from anywhere buys hoofs rather
+ * than chances, and the shot count converges on the five to ten a match 7.4
+ * asks for whatever cadence the button is being hit at. 190 px is the
+ * specification's own idea of a shooting position — it is the range its
+ * `competent` player is described as shooting from.
+ */
+export const SHOOT_RANGE = 190;
 
 /** Seconds a pressed teammate chases regardless of shape. */
 export const PRESS_TIME = 1.2;

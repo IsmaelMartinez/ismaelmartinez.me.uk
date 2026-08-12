@@ -15,7 +15,7 @@ import {
   type ContactType,
   type MatchState
 } from '../../src/games/football/match';
-import { KEEPER_LINE, keeperSkill } from '../../src/games/football/keeper';
+import { keeperSkill, restPosition } from '../../src/games/football/keeper';
 import { CENTRE_X, PITCH_L, TEAM_SIZE, attackGoalY } from '../../src/games/football/pitch';
 import { teamByCode } from '../../src/games/football/teams';
 
@@ -108,12 +108,19 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
 
   const gk = m.players[1][0];
   gk.x = opts.keeperX ?? CENTRE_X;
-  gk.y = goalY - dir * KEEPER_LINE;
+  // "Correctly positioned" includes his depth: a keeper comes out to narrow
+  // the angle as a striker closes on him, and standing him on his line for a
+  // six-yard-box shot would sweep a keeper the game never fields.
+  gk.y = restPosition(gk.x, m.ball.y, goalY, -dir as 1 | -1).y;
   gk.speed = 0;
   m.keepers[1].trackX = gk.x;
   m.keepers[1].dive = null;
   m.keepers[1].parryLock = 0;
 
+  // 7.3's header cell is "a header from a cross", and the game distinguishes
+  // that from a header met off a hopeful clearance, so the rig has to say
+  // which one it is asking about.
+  m.lastFromCross = (opts.contact ?? 'ground') === 'header';
   shoot(m, 0, opts.power, opts.aim, opts.contact ?? 'ground');
 
   for (let i = 0; i < 300; i++) {

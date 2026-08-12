@@ -252,6 +252,12 @@ const weapons = [
     bottom: var(--space-md);
     left: 50%;
     transform: translateX(-50%);
+    /* Above both overlays. The round overlay is raised in the same breath that
+       awards the 250-point round bonus, the likeliest moment a run beats its
+       best, so without this the one-time record toast is spent behind a dimmed
+       and blurred panel and never fires again. The other five cabinets carry a
+       verbatim copy of this block and the same latent stacking bug. */
+    z-index: 2;
     display: flex;
     flex-direction: column;
     align-items: center;

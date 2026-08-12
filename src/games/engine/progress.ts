@@ -5,17 +5,17 @@
  * always on, and finishing a run of the newest unlocked cabinet powers the
  * next one. "Finished a run" is recorded by `markDone`, called from the door
  * every scored run already passes through — `scoreboard.ts`'s commit path —
- * plus one direct call in Tank Duel's match end, whose completed matches can
- * advance the chain without ever reaching the leaderboard. Only the floor
- * reads this state: the game pages themselves are never gated, so a direct
- * URL to a still-shrouded cabinet keeps working.
+ * plus one direct call in Tank Duel's match end, for the two-player matches
+ * that finish without ever reaching the leaderboard. Only the floor reads this
+ * state: the game pages themselves are never gated, so a direct URL to a
+ * still-shrouded cabinet keeps working.
  *
  * The `arcade-done-*` key family is deliberately NOT derivable from
  * `arcade-best-*`, even though the seed below makes them look equivalent:
- * Tank Duel marks done on any completed 2P match and on CPU matches where
- * the player took at least one round — runs that never bank a personal best
- * (only a won CPU match reaches the board). Deriving done from best would
- * re-stall the chain on exactly those runs, so keep both families.
+ * Tank Duel marks done on any completed two-player match, and a two-player
+ * match banks no personal best (one person drives both tanks, so its score
+ * reaches neither board). Deriving done from best would re-stall the chain on
+ * exactly those runs, so keep both families.
  *
  * The pure floor rule lives in `visibleCabinets`, apart from the guarded
  * storage reads, so it stays unit-testable without a DOM.

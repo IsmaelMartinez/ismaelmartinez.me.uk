@@ -29,8 +29,13 @@ export interface ScoreLedger {
    * Returns the points awarded, so the caller can float exactly that number.
    */
   damage(shooter: number | null, target: number, hp: number): number;
-  /** A shell detonated on a tank. Worth nothing when it was the shooter's own. */
-  directHit(shooter: number, target: number): number;
+  /**
+   * A shell detonated on a tank. Worth nothing when it was the shooter's own,
+   * and nothing on a wreck: `targetHp` is the armour the tank had when the
+   * shell arrived, and a tank already at zero pays no bonus (a MIRV's later
+   * warheads would otherwise each collect one off a tank that is already dead).
+   */
+  directHit(shooter: number, target: number, targetHp: number): number;
   /** The round's winner takes a flat bonus; a mutual kill (null) takes none. */
   roundWin(winner: number | null): number;
   /** Surviving armour, folded in once when the match ends. */
@@ -54,8 +59,10 @@ export function createScoreLedger(): ScoreLedger {
       if (shooter === null || shooter === target) return 0;
       return add(shooter, Math.round(hp) * DAMAGE_POINTS);
     },
-    directHit(shooter, target) {
-      if (shooter === target) return 0;
+    directHit(shooter, target, targetHp) {
+      // The same guard `damage` applies through the hp actually removed: a
+      // wreck has no armour left to take, so shelling it earns nothing.
+      if (shooter === target || targetHp <= 0) return 0;
       return add(shooter, DIRECT_HIT_POINTS);
     },
     roundWin(winner) {

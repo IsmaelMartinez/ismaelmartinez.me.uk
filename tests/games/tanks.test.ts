@@ -301,8 +301,24 @@ describe('scoring', () => {
 
   it('pays a bonus for putting a shell on the enemy hull', () => {
     const ledger = createScoreLedger();
-    expect(ledger.directHit(PLAYER, FOE)).toBe(DIRECT_HIT_POINTS);
+    expect(ledger.directHit(PLAYER, FOE, 100)).toBe(DIRECT_HIT_POINTS);
     expect(ledger.total(PLAYER)).toBe(DIRECT_HIT_POINTS);
+  });
+
+  it('pays nothing for shelling a wreck, however many shells land on it', () => {
+    // Regression: the bonus was paid on any shell that detonated on a hull,
+    // live or not, while the damage it carried was correctly worth nothing to
+    // a tank already at zero. A MIRV's five warheads keep flying until the
+    // last one lands, so a finishing kill collected four more bonuses off the
+    // corpse — and that inflated total is what reached the world board.
+    const ledger = createScoreLedger();
+    expect(ledger.directHit(PLAYER, FOE, 6)).toBe(DIRECT_HIT_POINTS); // the kill
+    expect(ledger.damage(PLAYER, FOE, 6)).toBe(6);
+    for (let warhead = 0; warhead < 4; warhead++) {
+      expect(ledger.directHit(PLAYER, FOE, 0)).toBe(0);
+      expect(ledger.damage(PLAYER, FOE, 0)).toBe(0);
+    }
+    expect(ledger.total(PLAYER)).toBe(DIRECT_HIT_POINTS + 6);
   });
 
   it('pays the round winner a flat bonus, and nobody on a mutual kill', () => {
@@ -317,7 +333,7 @@ describe('scoring', () => {
     const ledger = createScoreLedger();
     // A shell that lands on the tank that fired it.
     expect(ledger.damage(PLAYER, PLAYER, 40)).toBe(0);
-    expect(ledger.directHit(PLAYER, PLAYER)).toBe(0);
+    expect(ledger.directHit(PLAYER, PLAYER, 100)).toBe(0);
     // A drop into a crater has no shooter at all.
     expect(ledger.damage(null, PLAYER, 30)).toBe(0);
     expect(ledger.damage(null, FOE, 30)).toBe(0);
@@ -368,7 +384,7 @@ describe('scoring', () => {
     };
     for (let round = 0; round < 5; round++) {
       for (let shot = 0; shot < 4; shot++) {
-        ledger.directHit(PLAYER, FOE);
+        ledger.directHit(PLAYER, FOE, 100);
         ledger.damage(PLAYER, FOE, 25);
         play();
         ledger.damage(FOE, PLAYER, 25); // the CPU shooting back

@@ -1,3 +1,10 @@
+/**
+ * Locale-relative path of the Connect section that replaced the old Connect
+ * page. Prefix with getLocalizedPath(); the `id="connect"` in
+ * src/pages/[lang]/about.astro and the astro.config.mjs redirects must match.
+ */
+export const connectAnchorPath = '/about#connect';
+
 export interface SocialLink {
   name: string;
   url: string;

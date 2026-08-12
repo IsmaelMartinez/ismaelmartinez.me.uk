@@ -1,5 +1,6 @@
 ---
 import { useTranslations, getLocalizedPath } from '../i18n/translations';
+import { connectAnchorPath } from '../data/links';
 
 interface Props {
   lang: 'en' | 'es' | 'cat';
@@ -21,7 +22,7 @@ const t = useTranslations(lang);
       <a href={getLocalizedPath('/projects', lang)} class="btn btn-primary">
         {t('nav.projects')} →
       </a>
-      <a href={getLocalizedPath('/connect', lang)} class="btn btn-outline">
+      <a href={getLocalizedPath(connectAnchorPath, lang)} class="btn btn-outline">
         {t('cta.connect')}
       </a>
     </div>

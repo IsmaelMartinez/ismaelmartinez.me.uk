@@ -115,8 +115,9 @@ export const MASH_REACTION = 0.17;
  * the post he is stood beside. They are opposite stick deflections from the
  * same position and they are **not** the same shot: the keeper stands on the
  * angle bisector, so where he ends up decides which of the two is on, and the
- * bisector is clamped inside his posts by `KEEPER_POST_INSET`. From wide
- * enough the clamp binds and he can no longer reach the near-post line at all.
+ * bisector is clamped into the frame `postFrame` allows him. Until round six
+ * that frame was a band drawn on the goal *line* (`GOAL_HALF - 6`), so from
+ * wide enough it bound and he could not reach the near-post line at all.
  */
 export type CampAim = 'across' | 'near';
 
@@ -223,6 +224,14 @@ export const WING_DEPTH = 55;
  * the commit that adds it, at 150 matched pairs a rung: +0.907 ladder points
  * against `expert` (+0.233 t=4.55 / +0.227 t=5.09 / +0.187 t=3.18 / +0.260
  * t=5.45), +1.053 against `competent`, and an air-goal share of 0.983-0.997.
+ *
+ * Answered in the commit after, at the same 150 pairs: -0.373 against `expert`
+ * on this wing and -1.200 on the other, -0.053 against `competent`, and a
+ * champion rate of 0.580 against the expert's 0.705 where it was 0.940 against
+ * 0.782. It is not a dead routine — it still takes thirteen shots and scores
+ * 2.3 goals a match at d = 0.25 against a competent player's 2.5, which is the
+ * owner's steer for the round: a cross is supposed to be dangerous, it is just
+ * not supposed to be better than football.
  *
  * It steers on `MASH_REACTION`, the same 170 ms as `competent` and nearly
  * three times slower than `expert`'s 66 ms, so a margin it shows is a margin
@@ -736,7 +745,12 @@ export function competentWithout(verb: 'passes' | 'crosses' | 'slides'): Policy 
  * post it measured +1.025 ladder points against `competent` at 80 pairs a rung
  * and put a side in double figures in 78 of 300 group-stage matches, with a
  * maximum scoreline of 15 — the audit's finding, spot for spot and number for
- * number.
+ * number. Answered: -2.193 ladder points at 150 pairs, 7.39 goals a match down
+ * to 1.85, no double figures anywhere and a biggest scoreline of 5. Note that
+ * it does not shoot from `(120, 78)` — it holds the aim through the whole
+ * 0.55 s charge, so it drifts goalwards and releases from about 75 px off
+ * centre at 25-50 px of depth, which is exactly the region the keeper's frame
+ * clamp had him pinned out of.
  */
 export const WING_SIDE: -1 | 1 = 1;
 export const NEAR_CAMP_SPOT: [number, number] = [120, 78];

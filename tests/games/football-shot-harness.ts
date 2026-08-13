@@ -74,11 +74,13 @@ export interface ShotOptions {
    * parked at `CENTRE_X`. Every offset-shooter cell in the grid therefore
    * measured a shot at a keeper standing in the middle of his goal, which is
    * the one position from which the near post is never covered — so the sweep
-   * could not see that `KEEPER_POST_INSET` clamps him to `CENTRE_X +- 36` and
-   * that beyond about 55 px of ball offset the true bisector is outside his
-   * allowed frame, pinning him off the near-post line. An audit measured the
-   * near-post finish at 0.955 from a spot where the across-goal finish, which
-   * this rig did sweep, converts 0.369.
+   * could not see that the keeper's frame was clamped to `CENTRE_X +- 36` and
+   * that beyond about 55 px of ball offset the true bisector was outside it,
+   * pinning him off the near-post line. An audit measured the near-post finish
+   * at 0.955 from a spot where the across-goal finish, which this rig did
+   * sweep, converts 0.369. The frame is `postFrame` now and travels with him;
+   * with the keeper standing where the game actually puts him, this rig's
+   * widest cells read 0.20-0.23 either side.
    */
   keeperX?: number;
 }

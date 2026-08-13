@@ -641,19 +641,34 @@ describe('each revived verb earns its place', () => {
     // measured identical to him and the suite saw a verb in perfect health.
     const played = playMatch(POLICIES.competent(), 0.45, 12345).match;
     expect(played.stats.groundPasses[0], 'the competent player passes').toBeGreaterThan(0);
-    expect(
-      played.stats.passes[0] - played.stats.groundPasses[0],
-      'the competent player crosses'
-    ).toBeGreaterThan(0);
     expect(played.stats.slides[0], 'the competent player slides').toBeGreaterThan(0);
 
     const noPass = playMatch(competentWithout('passes'), 0.45, 12345).match;
     expect(noPass.stats.groundPasses[0], 'the control never passes').toBe(0);
-    const noCross = playMatch(competentWithout('crosses'), 0.45, 12345).match;
-    expect(
-      noCross.stats.passes[0] - noCross.stats.groundPasses[0],
-      'the control never crosses'
-    ).toBe(0);
+
+    // Crossing is summed over three seeds for the same reason sliding is
+    // below, and it is a fixture guard rather than a bound: the policy's own
+    // gates put its cross count at nought-to-one a match (7.4's flow section
+    // says so in as many words, and the goal-mix floor it feeds is 0.03), so
+    // whether one particular seeded match contains one is a coin toss that
+    // moves whenever anything about the simulation moves. It went to tails in
+    // round six — the seed's match now plays out differently because the
+    // keeper stands somewhere else, not because the policy crosses less — and
+    // a guard that flips on that is a guard that will keep flipping. The teeth
+    // are intact: the player has to cross at least once across the three, and
+    // the control has to cross exactly zero times in all of them, which is the
+    // thing that was actually false when this fault hid (the policy played
+    // *zero* lofted balls a match, so "no crosses" measured identical to it).
+    let crossed = 0;
+    let controlCrossed = 0;
+    for (const seed of [12345, 999, 4242]) {
+      const withIt = playMatch(POLICIES.competent(), 0.45, seed).match;
+      const noCross = playMatch(competentWithout('crosses'), 0.45, seed).match;
+      crossed += withIt.stats.passes[0] - withIt.stats.groundPasses[0];
+      controlCrossed += noCross.stats.passes[0] - noCross.stats.groundPasses[0];
+    }
+    expect(crossed, 'the competent player crosses').toBeGreaterThan(0);
+    expect(controlCrossed, 'the control never crosses').toBe(0);
     // The slide count is the whole side's, and the human's five off-ball
     // teammates are AI and slide on their own account, so the control cannot
     // reach zero here the way the other two do — what it can do is slide

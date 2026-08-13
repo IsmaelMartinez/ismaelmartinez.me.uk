@@ -13,12 +13,17 @@ import { shootAt, type ShotOutcome } from './football-shot-harness';
 import {
   ERROR_BASE,
   ERROR_REACH,
+  KEEPER_JUMP_Z,
+  KEEPER_LINE,
   KEEPER_STEAL_R,
   REACH_BASE,
   REACH_BODY,
   REACH_DIVE,
+  airborne,
   approachGap,
   narrowAngleX,
+  postFrame,
+  squareness,
   catchProbability,
   commitDive,
   diveBudget,
@@ -292,13 +297,88 @@ describe('keeper: the pure pieces', () => {
     // a narrow target rather than an open goal.
     const boxCorner = narrowAngleX(CENTRE_X + 108, 78, 20);
     expect(boxCorner).toBeGreaterThan(CENTRE_X + 12);
-    // And he never leaves his own frame.
+    // And he never leaves his own frame — where the frame is the one he is
+    // actually standing in, which is `postFrame`: his posts, widened by the
+    // allowance he has to leave his goal by at all.
+    //
+    // This assertion used to read `<= GOAL_HALF` and that bound was the bug
+    // rather than the contract. A band drawn on the goal *line* is the wrong
+    // shape for a keeper standing two strides in front of it, and an audit
+    // measured what it cost: the bisector from any ball more than about 55 px
+    // off centre falls outside it, so `restPosition` returned the clamp — a
+    // constant 206.0, six pixels inside the near post — for every ball wider
+    // than that, and the near-post finish from out there converted 0.91 to
+    // 0.95 against 0.23 to 0.74 for the same shot dragged across goal. He was
+    // not on the angle at all in the one region where the angle is the whole
+    // of the danger.
+    //
+    // The bound below is what "covering your near post" means for a keeper who
+    // may leave his goal at all: one budget, spent forward against a ball he
+    // is facing and sideways against one at a tight angle, and he may be
+    // outside the upright by the size of that budget and not a pixel more. It
+    // is self-limiting — the budget is `KEEPER_ADVANCE` at most and fades with
+    // distance — and with nothing to spend it collapses to the goal frame.
     for (const ballX of [-200, 0, CENTRE_X, 340, 600]) {
-      for (const depth of [1, 12, 40, 300]) {
-        const x = narrowAngleX(ballX, depth, 20);
-        expect(Math.abs(x - CENTRE_X)).toBeLessThanOrEqual(GOAL_HALF);
+      for (const allowance of [0, 6, 12, 26]) {
+        for (const depth of [1, 12, 40, 300]) {
+          const x = narrowAngleX(ballX, depth, 20, allowance);
+          expect(
+            Math.abs(x - CENTRE_X),
+            `ball ${ballX} at ${depth} px, allowance ${allowance}`
+          ).toBeLessThanOrEqual(postFrame(allowance));
+        }
       }
     }
+    // With no allowance to spend — on his line, or with the ball over his head
+    // — that frame is the goal and nothing more.
+    expect(postFrame(0)).toBe(GOAL_HALF);
+    expect(narrowAngleX(600, 40, 20)).toBeLessThanOrEqual(CENTRE_X + GOAL_HALF);
+  });
+
+  it('steps out from his near post only as far as he has left his line', () => {
+    // The near-post lane, measured as arithmetic rather than as a goal rate,
+    // because this is the thing the round changed and a rate can be tuned
+    // around it: as the ball goes wider the keeper has to keep moving toward
+    // the post it is threatening, not stop dead six pixels inside it.
+    const at = (offset: number) => restPosition(CENTRE_X + offset, 45, 0, 1).x;
+    let prev = at(0);
+    for (const offset of [40, 55, 70, 85, 100, 120]) {
+      const x = at(offset);
+      expect(x, `keeper at ball offset +${offset}`).toBeGreaterThan(prev);
+      prev = x;
+    }
+  });
+
+  it('does not come out to a ball that is in the air', () => {
+    // There is no shooting angle to narrow against a cross. A keeper who holds
+    // an advanced near-post position while the delivery goes over him is a
+    // keeper stranded in front of his own goal, and that is exactly what the
+    // wing-cross routine was living on.
+    const deck = restPosition(CENTRE_X + 130, 55, 0, 1, 0);
+    const overhead = restPosition(CENTRE_X + 130, 55, 0, 1, KEEPER_JUMP_Z);
+    expect(overhead.y, 'back on his line while the ball is up').toBeLessThan(deck.y);
+    expect(overhead.y).toBeCloseTo(KEEPER_LINE, 6);
+    // ...and being back on his line puts him back inside his goal frame.
+    expect(Math.abs(overhead.x - CENTRE_X)).toBeLessThanOrEqual(GOAL_HALF);
+    expect(Math.abs(deck.x - CENTRE_X)).toBeGreaterThan(GOAL_HALF - 6);
+    expect(airborne(0)).toBe(0);
+    expect(airborne(KEEPER_JUMP_Z * 2)).toBe(1);
+  });
+
+  it('advances on a ball it is facing and holds its post on one it is not', () => {
+    // `squareness` is the other half of the same idea and it is why the frame
+    // above can be widened without the keeper charging out to the corner flag:
+    // the advance is worth making in proportion to how much goal there is in
+    // front of the ball, so from the byline he sets rather than comes.
+    expect(squareness(CENTRE_X, 60)).toBe(1);
+    // Anywhere in front of the mouth is still square, so nothing about a shot
+    // from the centre line moves — which is what keeps 7.3's grid identical.
+    expect(squareness(CENTRE_X + GOAL_HALF, 60)).toBe(1);
+    expect(squareness(CENTRE_X + 130, 60)).toBeLessThan(0.75);
+    expect(squareness(CENTRE_X + 130, 60)).toBeGreaterThan(0);
+    const square = restPosition(CENTRE_X, 60, 0, 1);
+    const tight = restPosition(CENTRE_X + 130, 60, 0, 1);
+    expect(tight.y, 'less advanced from a tight angle').toBeLessThan(square.y);
   });
 
   it('measures the gap as how near the ball passed him', () => {

@@ -24,6 +24,17 @@
  *    could fix it without leaving him rooted to his spot against a genuine
  *    run. On the bisector, a wide position buys a narrow target: he covers his
  *    near post and the shooter is squeezing the ball past his body.
+ *  - **the frame he keeps inside travels with him, and it is one budget spent
+ *    two ways.** `postFrame` is his posts widened by the allowance he has to
+ *    leave his goal by at all, and `squareness` decides how much of that
+ *    allowance goes forward rather than sideways. A band drawn on the goal
+ *    *line* is the wrong shape for a keeper standing in front of it, and it
+ *    pinned him off the near-post line for every ball more than about 55 px
+ *    wide — which is where the fourth audit found a 0.91-0.95 finish.
+ *  - **he does not come out to a ball in the air** (`airborne`). There is no
+ *    shooting angle to narrow against a cross, and holding an advanced
+ *    near-post position while the delivery goes over him is how he ends up
+ *    stranded for the header.
  *  - **his reach is a radius, so what counts is how near the ball passed
  *    him**, not the difference of two lateral coordinates. A shot dragged
  *    across the goal from a tight angle crosses his plane wide of him but
@@ -124,19 +135,34 @@ export const KEEPER_LINE = 8;
  */
 export const KEEPER_ADVANCE = 26;
 /**
- * How far inside his posts he will ever stand. The bisector does the work of
- * deciding *where*; this only keeps him inside his own frame, and it is the
- * specification's own bound (6.5's `mouthCentre +- (GOAL_HALF - 6)`).
+ * The frame he keeps inside: his own posts, widened by the allowance he has to
+ * leave his goal by at all.
  *
- * The constant it replaces was a hard `+-20` band around the centre of the
- * goal, introduced to stop a shooter dragging him off his spot.
- * It could not work and the audit measured why: a keeper pinned near the
- * middle covers the *centre* of the goal from every angle, so the reward for
- * getting wide was a free far post rather than a hard finish. The bisector
- * needs no band, because a keeper on the angle is already where the ball has
- * to pass.
+ * The bound this replaces was `GOAL_HALF - 6` measured from the centre of the
+ * goal — the specification's 6.5 number, which is written for a keeper
+ * standing *on* his line and is simply the wrong shape for one who is not. A
+ * fourth independent audit found what that costs: `restPosition` returned a
+ * constant 206.0 for every ball more than about 55 px off centre, because the
+ * bisector from a wide ball falls outside a band drawn on the goal line, so
+ * the keeper stopped tracking the near post exactly where the near post starts
+ * being the whole of the danger. Measured, the near-post finish converted
+ * 0.911 at 80 px of offset and 0.951 at 120 px, against 0.23-0.74 for the same
+ * shot dragged across goal — and both of the camp spots the whole-grid sweep
+ * still flagged were shots struck from inside that pinned region.
+ *
+ * The allowance is the same one `restPosition` spends on coming out, and that
+ * is the idea: a keeper has one budget for leaving his goal, and he spends it
+ * *forward* against a ball he is facing and *sideways* against one at a tight
+ * angle. Nobody comes twenty pixels off his line for a ball on the byline; he
+ * goes across and takes his near post, and taking it means standing beside the
+ * upright rather than six pixels inside it. It cannot run away with him: the
+ * budget is `KEEPER_ADVANCE` at most and fades with distance, so the widest
+ * frame the model can produce is one stride either side of the posts, and on
+ * his line it is exactly the goal.
  */
-export const KEEPER_POST_INSET = GOAL_HALF - 6;
+export function postFrame(allowance: number): number {
+  return GOAL_HALF + Math.max(0, allowance);
+}
 /** How far behind the ball he always stays; he narrows angles, never dives past it. */
 export const KEEPER_STANDOFF = 6;
 /**
@@ -276,9 +302,15 @@ export function trackBall(prevX: number, ballX: number, skill: number, dt: numbe
  * against the near post, which is where the ball has to pass to be squeezed
  * across goal. The reward for a wide position is a difficult finish.
  */
-export function narrowAngleX(ballX: number, ballDepth: number, standDepth: number): number {
-  const inside = (x: number) =>
-    clamp(x, CENTRE_X - KEEPER_POST_INSET, CENTRE_X + KEEPER_POST_INSET);
+export function narrowAngleX(
+  ballX: number,
+  ballDepth: number,
+  standDepth: number,
+  /** How far outside his posts he is allowed to be; see `postFrame`. */
+  allowance = 0
+): number {
+  const frame = postFrame(allowance);
+  const inside = (x: number) => clamp(x, CENTRE_X - frame, CENTRE_X + frame);
   if (ballDepth <= standDepth + 1) return inside(ballX);
   // Unit vectors from the ball to each post, in a frame where the goal line is
   // depth 0 and the ball is out at `ballDepth`.
@@ -295,27 +327,82 @@ export function narrowAngleX(ballX: number, ballDepth: number, standDepth: numbe
 }
 
 /**
+ * How much of a ball is *in the air*, 0 on the deck and 1 above heading height.
+ *
+ * There is no angle to narrow against a ball nobody is about to shoot. A
+ * keeper does not stand two strides off his line while a cross is over his
+ * head — he gets back and sets, because the ball is going to come down
+ * somewhere behind him and the only thing worth covering is the goal. Coming
+ * out to a ball in flight is how a keeper ends up stranded in front of his own
+ * six-yard line watching a header loop in, and this cabinet was doing it every
+ * single time: the wing-cross routine dragged him to a near-post position
+ * against the *carrier* and then left him there, twenty pixels off his line
+ * and fifty pixels wide, while the delivery went over him. Dropping the
+ * advance while the ball is up is what lets him be back on his line and inside
+ * his frame when the header is struck.
+ *
+ * It is only the advance that goes; he still stands on the angle, and he still
+ * tracks. And it costs nothing in 7.3's isolation rig, where the ball is
+ * struck off the deck from a standing start.
+ */
+export function airborne(ballZ: number): number {
+  return clamp(ballZ / KEEPER_JUMP_Z, 0, 1);
+}
+
+/**
+ * How square the ball is to the goal: 1 anywhere in front of the mouth,
+ * falling toward 0 out by the corner flag.
+ *
+ * Coming out is what a keeper does to a ball he is *facing*. From a tight
+ * angle it is the wrong move and every coach says so: there is almost no goal
+ * left to narrow — the mouth is foreshortened to nothing from out there —
+ * while advancing hands the striker the whole of the goal behind you for a
+ * cutback and takes you off the near post, which is the only thing worth
+ * standing on. So this is how the keeper's one allowance for leaving his goal
+ * is *split*: forward against a square ball, sideways against a tight one.
+ *
+ * Measured from the *posts* rather than from the centre spot, so a ball
+ * anywhere in front of the mouth buys the full advance and nothing about a
+ * shot from in front of goal changes: at `ballX = CENTRE_X` this returns
+ * exactly 1, which is what keeps every cell of 7.3's isolation grid — all of
+ * which shoot from the centre line — arithmetically identical to before.
+ */
+export function squareness(ballX: number, depth: number): number {
+  const wide = Math.max(0, Math.abs(ballX - CENTRE_X) - GOAL_HALF);
+  if (wide <= 0) return 1;
+  return depth / Math.hypot(wide, depth);
+}
+
+/**
  * Where the keeper wants to stand: on the angle from the delayed ball line,
- * inside his posts, and off his line when the ball is still a long way out.
+ * inside the frame his allowance buys him, and off his line when the ball is
+ * still a long way out.
  */
 export function restPosition(
   trackX: number,
   ballY: number,
   goalY: number,
-  dir: 1 | -1
+  dir: 1 | -1,
+  /** Ball height. A ball in the air is a cross, not a shot; see `airborne`. */
+  ballZ = 0
 ): { x: number; y: number } {
   const depth = Math.abs(ballY - goalY);
-  // Out as the ball comes in, back on his line as it goes away, and never in
-  // front of the ball: he narrows the angle, he does not leave the goal open
-  // behind him.
+  // One allowance for leaving his goal at all: it grows as the ball comes in,
+  // fades back to nothing as it goes away, and is withdrawn entirely while the
+  // ball is over his head, because there is no shot to narrow.
   const near = 1 - clamp((depth - SIX_DEPTH) / ADVANCE_FADE, 0, 1);
+  const allowance = KEEPER_ADVANCE * near * (1 - airborne(ballZ));
+  // Spent forward in proportion to how square the ball is — and never past the
+  // ball itself: he narrows the angle, he does not leave the goal open behind
+  // him. Whatever is not spent coming out is what lets him get across to his
+  // near post instead, through `postFrame`.
   const advance = Math.min(
-    KEEPER_ADVANCE * near,
+    allowance * squareness(trackX, depth),
     Math.max(0, depth - KEEPER_LINE - KEEPER_STANDOFF)
   );
   const standDepth = KEEPER_LINE + advance;
   return {
-    x: narrowAngleX(trackX, depth, standDepth),
+    x: narrowAngleX(trackX, depth, standDepth, allowance),
     y: goalY + dir * standDepth
   };
 }
@@ -456,7 +543,20 @@ export const ASSIST_DIVE_PENALTY = 0.5;
  * his body rather than from his standing position, and he has to find the
  * ground again before he is the obstacle he was.
  *
- * It is deliberately smaller than `REACT_TIME`: he is late, not absent.
+ * It is deliberately smaller than `REACT_TIME`: he is late, not absent — and
+ * **the caller has to cap it at the ball's own flight time**, which is what
+ * makes that sentence true instead of merely intended. A flat subtraction
+ * cannot express "late" on its own, because whether 0.12 s is a stumble or an
+ * eternity depends entirely on how long the ball is in the air. A first-time
+ * volley struck fifty pixels out arrives in about a tenth of a second:
+ * uncapped, the loss ate the *whole* of the keeper's reaction, his reach
+ * collapsed from the 24 px he would have had to the 12 px of his own body, and
+ * that shot measured 0.93 in real matches against the 0.33 the isolation rig
+ * gives the same strike from the same place. That was the sharp end of the
+ * audit's 0.92-0.98 conversion finding, and it was arithmetic rather than
+ * balance: the closer the chance, the more totally the penalty applied, which
+ * is backwards. The nearer the ball, the less of his reaction there was to
+ * lose in the first place.
  */
 export const ASSIST_REACT_LOSS = 0.12;
 

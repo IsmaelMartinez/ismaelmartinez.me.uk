@@ -220,6 +220,69 @@ const RUSH_SCUFF = 0.55;
  * never passes can never collect.
  */
 const RUSH_ASSIST = 1.1;
+/**
+ * How much of that relief a **first-time** contact collects — a header or a
+ * volley met on the drop, off a cross.
+ *
+ * The relief above is paid for having *time on the ball*: a man who has
+ * received a pass, taken a touch and set himself is not rushed, and that is
+ * the whole reason to move the ball rather than run with it. A man throwing
+ * his head or his boot at a dropping cross has no time at all. It is the
+ * hardest contact in the game and it was being scored as the calmest: the
+ * catalogue's wing-cross routine took 98-100 % of its goals out of the air and
+ * converted the ones met with the keeper wrong-footed at 0.86-0.94, against
+ * the 0.30-0.60 band 7.3 writes for the very same shot in isolation — where no
+ * assist exists, because the rig strikes the ball directly. The two numbers
+ * were measuring the same header with and without a reward it should never
+ * have collected.
+ *
+ * What the cross buys is that the keeper is beaten, not that the striker is
+ * composed, and the keeper side of the window is untouched. A quarter is left
+ * rather than none because a ball *delivered* onto a runner is still an easier
+ * contact than a hoof he has chased down — which is what `RUSH_HOOF` prices,
+ * and it is charged on top of this one.
+ */
+const AIR_ASSIST_SHARE = 0.25;
+/**
+ * How much a first-time contact is spoiled by the pace of the ball it is
+ * meeting, and the pace at which that reaches its full cost.
+ *
+ * This is the term `strikeRush` was missing, and its absence is the other half
+ * of why the cross-to-volley window measured as a certainty. Every other rush
+ * term asks what the *striker* is doing — how fast he is running, whether he
+ * is across his own body, whether someone is on him — and none of them asked
+ * the one question a first-time contact is actually about: how quickly the
+ * ball is arriving. A ball dropping on your head at walking pace is a free
+ * header. A cross whipped across the six-yard box at three hundred is the
+ * hardest ball in football to hit, and putting it over the bar from six yards
+ * is the most ordinary thing a striker does. The cabinet was scoring the
+ * second as though it were the first.
+ *
+ * It is what makes a whipped delivery a trade rather than a free upgrade: pace
+ * on the cross is what beats the keeper across his goal, and it is the same
+ * pace the man meeting it has to control. A floated ball is easier to strike
+ * and easier to defend; that is the choice the mechanic now offers, and it is
+ * the choice the real game offers.
+ *
+ * It is deliberately a small term, and the size is measured rather than
+ * chosen. Most of what makes a cross answerable again is the keeper being back
+ * on his line while it is over his head (`airborne`); this is the last quarter
+ * of a point. Swept against the catalogue at 70 matched pairs a rung, the wing
+ * routine's ladder margin over a competent player runs +0.171 at 0 / -0.071 at
+ * 0.25 / -0.086 at 0.35 / -0.214 at 0.5, while what a competent player's *own*
+ * crossing is worth him runs -0.014 / +0.086 / -0.029 / -0.114 — so past about
+ * a third the term stops answering the exploit and starts taxing the verb, and
+ * a verb that is a net loss is fault two of the four this cabinet has already
+ * had to fix once.
+ *
+ * It costs nothing in 7.3's isolation rig, and that is a property of the rig
+ * rather than an exemption: the rig strikes a ball that is sitting still at
+ * the shooter's feet, so there is no arriving pace to charge. The header cells
+ * there measure the *placement* of a header against a keeper in a stated
+ * position, which is what they were written to measure, and they are unmoved.
+ */
+const RUSH_MEET = 0.25;
+const MEET_PACE_DIV = 300;
 /** Extra rush on a header met off a clearance rather than a delivered ball. */
 const RUSH_HOOF = 1;
 /**
@@ -801,7 +864,9 @@ function strikeRush(
   p: PlayerState,
   targetX: number,
   goalY: number,
-  power: number
+  power: number,
+  /** Share of the assist relief this contact is entitled to; see `AIR_ASSIST_SHARE`. */
+  assistShare = 1
 ): number {
   let nearest = Infinity;
   for (let idx = 1; idx < TEAM_SIZE; idx++) {
@@ -823,7 +888,7 @@ function strikeRush(
       RUSH_RANGE * range +
       RUSH_SCUFF * (1 - clamp(power, 0, 1)) +
       (p.strike > 0 ? RUSH_OFF_BALANCE : 0) -
-      (m.assist && m.assist.side === side ? RUSH_ASSIST : 0),
+      (m.assist && m.assist.side === side ? RUSH_ASSIST * assistShare : 0),
     0,
     RUSH_MAX
   );
@@ -872,7 +937,9 @@ export function shoot(
   side: Side,
   power: number,
   aim: number,
-  contact: ContactType
+  contact: ContactType,
+  /** Pace of the ball being met first time, if it was moving; see `RUSH_MEET`. */
+  meetSpeed = 0
 ): void {
   const owner = m.owner;
   if (!owner) return;
@@ -890,7 +957,19 @@ export function shoot(
   // aimed a cross in his life.
   const hoofed = header && !m.lastFromCross;
   const rush = clamp(
-    strikeRush(m, side, p, aimed, goalY, header ? 1 : power) + (hoofed ? RUSH_HOOF : 0),
+    strikeRush(
+      m,
+      side,
+      p,
+      aimed,
+      goalY,
+      header ? 1 : power,
+      // A first-time contact has no time on the ball, so it collects only a
+      // token of the relief a completed pass hands the man who receives it.
+      contact === 'ground' ? 1 : AIR_ASSIST_SHARE
+    ) +
+      (hoofed ? RUSH_HOOF : 0) +
+      RUSH_MEET * clamp(meetSpeed / MEET_PACE_DIV, 0, 1),
     0,
     RUSH_MAX
   );
@@ -1214,8 +1293,11 @@ function airStrike(m: MatchState, side: Side, idx: number, aim: number): void {
   // that one `RUSH_HOOF` instead, which is what keeps the anti-goal in 7.4
   // from being reached by punting the ball forward and running after it.
   if (m.lastFromCross) m.assist = { side, t: ASSIST_WINDOW };
+  // The pace he is having to control, read before possession flattens the
+  // ball's velocity to zero. This is the whole of `RUSH_MEET`'s input.
+  const meetSpeed = Math.hypot(m.ball.vx, m.ball.vy);
   m.owner = { side, idx };
-  shoot(m, side, contact === 'header' ? 1 : 0.8, aim, contact);
+  shoot(m, side, contact === 'header' ? 1 : 0.8, aim, contact, meetSpeed);
 }
 
 /**
@@ -1265,6 +1347,24 @@ function armKeeper(m: MatchState, kickingSide: Side): void {
   // A ball that arrived off a completed pass or a delivered cross catches him
   // still adjusting to where it came from, so he commits with half a dive. It
   // is the whole reward for moving the ball rather than running with it.
+  //
+  // The reaction loss is capped by the ball's own flight, and that cap is
+  // where the audit's 0.92-0.98 conversion actually lived: a flat 0.12 s
+  // against a volley that arrives in a tenth of a second is not "late", it is
+  // "absent", and it was taking the keeper's reach down to his own body
+  // precisely on the chances that were already the best in the game. See
+  // `ASSIST_REACT_LOSS`.
+  //
+  // Scaling the two penalties by how far the delivery had *already* dragged
+  // him off the ball was tried here as well — the reading of the audit's third
+  // finding under which the window and the tracker lag double-count the same
+  // fact — and measured backwards. Paired against the catalogue, at a 60 px
+  // span it cost the competent player 0.58 goals a match at d = 0.25 and the
+  // wing-cross routine 0.06, because a keeper beaten by a *cross* is beaten
+  // laterally by more than his reach either way while the ground pass the
+  // window exists to reward leaves him ten to twenty pixels wrong. It taxed
+  // passing, which is the verb the reward was written for, and left the cross
+  // where it was. The flight-time cap is the honest cap; that one was not.
   const assisted = !!m.assist && m.assist.side === kickingSide;
   gk.dive = commitDive({
     restX: keeper.x,
@@ -1274,7 +1374,7 @@ function armKeeper(m: MatchState, kickingSide: Side): void {
     speed,
     rng: m.rng,
     budgetScale: assisted ? ASSIST_DIVE_PENALTY : 1,
-    late: assisted ? ASSIST_REACT_LOSS : 0
+    late: assisted ? Math.min(ASSIST_REACT_LOSS, t) : 0
   });
 }
 
@@ -1297,7 +1397,7 @@ function stepKeeper(m: MatchState, side: Side, dt: number): void {
   }
 
   gk.trackX = trackBall(gk.trackX, m.ball.x, gk.skill, dt);
-  const rest = restPosition(gk.trackX, m.ball.y, goalY, dir);
+  const rest = restPosition(gk.trackX, m.ball.y, goalY, dir, m.ball.z);
   let tx = rest.x;
   let ty = rest.y;
   // There is no separate "shade across toward a close carrier" term any more,

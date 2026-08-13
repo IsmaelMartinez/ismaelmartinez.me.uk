@@ -204,9 +204,61 @@ export const CAMP_SPOTS: Array<[number, number]> = (() => {
   return out;
 })();
 
-/** The wide station the audit's `winger w130 d55` works from. */
+/**
+ * The wide station the audit's `winger w130 d55` worked from. It is the
+ * function's default argument and it is **no longer the claim**.
+ *
+ * This constant was the fifth blind spot in as many rounds, and the most
+ * embarrassing, because the file it lives in already argues the general case
+ * at length. `CAMP_SPOTS` sweeps forty-five positions and the docstring under
+ * it says why: "any fixed position that beats playing football means the
+ * geometry in front of goal has a hole in it", and "patching the corner of the
+ * box would have moved the exploit rather than removed it". Both sentences are
+ * about camps. The wing routine was then pinned to a single point — one
+ * lateral, one depth — and swept only across the *side*, which is the one axis
+ * a mirror-symmetric pitch guarantees nothing lives on.
+ *
+ * It had moved by 25 px of depth. At `(130, 55)` the routine measures -0.053
+ * ladder points against `competent` and -0.373 against `expert`, the answered,
+ * healthy numbers the previous round recorded. Change nothing but the depth
+ * and `(1, 130, 30)` scores 4.38 goals a match at d = 0.25 against 2.11,
+ * reaches eleven, and puts a side in double figures in 3 of 300 matches where
+ * the pinned station's biggest scoreline in 1,200 matches is six.
+ * `(-1, 90, 30)` beats `competent` by +0.740 and `expert` by +0.420.
+ *
+ * So the station is swept now, exactly as the camps are. See `WING_STATIONS`.
+ */
 export const WING_LATERAL = 130;
 export const WING_DEPTH = 55;
+
+/**
+ * Wing stations swept across the flank: six laterals from just outside the
+ * six-yard box to the touchline, at five depths from close to the goal line to
+ * the edge of the penalty area. Thirty stations, swept on **both** flanks,
+ * which is sixty — the same treatment `CAMP_SPOTS` gets, for the reason
+ * `CAMP_SPOTS` already gives.
+ *
+ * The depth is the axis that matters and it is the one that was pinned. 30 px
+ * is about the six-yard line, 65 px is short of the penalty spot, and the
+ * routine's whole character changes across that span. Deep, it stands and
+ * crosses from outside the danger, and the keeper has the delivery in view the
+ * whole way. Shallow, it whips the ball flat across the face of goal — and
+ * that is the delivery that leaves `gk.trackX` 30-50 px stale and the keeper
+ * set on the wrong lateral spot when the header is met. The station is not the
+ * bug; the lag is. But a grid that cannot reach the station cannot reach the
+ * bug either, and for five rounds this one could not.
+ *
+ * The laterals bracket the corner of the penalty area (`BOX_HALF` is 108) so
+ * the sweep holds both the cut-back position inside the box and the proper
+ * touchline cross outside it.
+ */
+export const WING_STATIONS: Array<[number, number]> = (() => {
+  const out: Array<[number, number]> = [];
+  for (const lateral of [90, 105, 120, 130, 145, 165]) {
+    for (const depth of [30, 40, 50, 55, 65]) out.push([lateral, depth]);
+  }
+  return out;
+})();
 
 /**
  * The wing-cross routine: carry the ball to a fixed wide station, put it in
@@ -733,13 +785,14 @@ export function competentWithout(verb: 'passes' | 'crosses' | 'slides'): Policy 
 }
 
 /**
- * The wing and the camp spot the named catalogue entries below stand on.
+ * The camp spot the named catalogue entry below stands on; the wing stations
+ * are `WING_REPS`, immediately after.
  *
  * They are representatives, not the whole claim: the sweeps in the suites pick
- * their own spots off the grid. What these two are for is everything that
- * needs *a* policy rather than a scan — the run ladder, the goal-mix shares,
- * the double-figure ban — and they are the strongest members of their class
- * that the grid scan found, so a cap they clear is a cap that holds.
+ * their own spots off the grid. What they are for is everything that needs *a*
+ * policy rather than a scan — the run ladder, the goal-mix shares, the
+ * double-figure ban — and they are the strongest members of their class that
+ * the grid scan found, so a cap they clear is a cap that holds.
  *
  * `(120, 78)` is the corner of the penalty box on the left. Aimed at the near
  * post it measured +1.025 ladder points against `competent` at 80 pairs a rung
@@ -752,8 +805,37 @@ export function competentWithout(verb: 'passes' | 'crosses' | 'slides'): Policy 
  * centre at 25-50 px of depth, which is exactly the region the keeper's frame
  * clamp had him pinned out of.
  */
-export const WING_SIDE: -1 | 1 = 1;
 export const NEAR_CAMP_SPOT: [number, number] = [120, 78];
+
+/**
+ * The wing stations the caps that need *a* policy are measured against, and
+ * the sentence above — "they are the strongest members of their class that the
+ * grid scan found" — is now true of the wing as well as of the camp.
+ *
+ * It was not. The catalogue winger stood on `(1, 130, 55)`, which the round-6
+ * scan over `WING_STATIONS` ranks **fifty-third of sixty**. Every cap that
+ * asks the catalogue for "the wing routine" — the air-goals rate, the
+ * double-figure ban — was therefore measured against one of the weakest
+ * stations on the flank, which is why they were green on a build where the
+ * strongest station reaches eleven.
+ *
+ * Two representatives rather than one, because the two caps rank the grid
+ * differently and picking either winner alone re-opens the other's blind spot:
+ *
+ *   - `(-1, 90, 30)` is the ladder winner. +0.740 ladder points against
+ *     `competent` (SE 0.130) and +0.420 against `expert` (SE 0.113) at 150
+ *     matched pairs a rung, and 4.17 air goals a match at d = 0.25 against
+ *     7.2's 3.4 ceiling.
+ *   - `(1, 130, 30)` is the scoreline winner: 4.38 goals a match at d = 0.25,
+ *     a biggest scoreline of eleven and 3 of 300 matches in double figures.
+ *
+ * Both are shallow. That is the finding, not a coincidence — see
+ * `WING_STATIONS`.
+ */
+export const WING_REPS: Array<[-1 | 1, number, number]> = [
+  [-1, 90, 30],
+  [1, 130, 30]
+];
 
 export const POLICIES: Record<PolicyName, () => Policy> = {
   passive,
@@ -761,6 +843,6 @@ export const POLICIES: Record<PolicyName, () => Policy> = {
   masher,
   competent,
   expert,
-  winger: () => winger(WING_SIDE),
+  winger: () => winger(WING_REPS[0][0], WING_REPS[0][1], WING_REPS[0][2]),
   nearCamper: () => camper(NEAR_CAMP_SPOT[0], NEAR_CAMP_SPOT[1], 'near')
 };

@@ -164,7 +164,7 @@ export function postFrame(allowance: number): number {
   return GOAL_HALF + Math.max(0, allowance);
 }
 /** How far behind the ball he always stays; he narrows angles, never dives past it. */
-export const KEEPER_STANDOFF = 6;
+export const KEEPER_STANDOFF = 8;
 /**
  * Over what depth his advance fades back to his line. It is a whole half of
  * the pitch rather than the width of the box, and that is what keeps 7.3's
@@ -191,7 +191,26 @@ export const KEEPER_STEAL_RATE = 2.6;
  */
 export const KEEPER_BODY_R = 10;
 
-/** A parried ball cannot be parried again for this long. */
+/**
+ * How long a keeper is on the floor after pushing one away.
+ *
+ * It is a *handicap*, not an exemption, and the distinction is the whole of
+ * this constant's history. `keeperPlane` used to open with
+ * `if (gk.parryLock > 0) return;`, so for the whole window the ball crossing his
+ * line was not resolved at all — no gap, no reach, no roll, not even the
+ * desperation floor. An audit found 1,175 follow-ups after a parry and 1,175
+ * goals, conversion exactly 1.000, which the module's own contract forbids in
+ * its first paragraph: no configuration may be exactly 0 % or exactly 100 %.
+ * A keeper on the ground is not a keeper who has left the pitch.
+ *
+ * So the window now buys two things, both of them real and neither of them a
+ * free goal. His reach fades from his own body back to whatever he would
+ * otherwise have had, in proportion to how much of the lock is left — he is
+ * getting up, and at the instant of the parry he is flat. And a save he does
+ * make while he is down he *keeps*: a man on the floor smothers the ball rather
+ * than palming it out again, which is the loop the lock exists to prevent and
+ * the only part of the old behaviour worth keeping.
+ */
 export const PARRY_LOCK = 0.4;
 
 /** Ball height a keeper can still claim; outfielders stop at 6. */
@@ -347,6 +366,66 @@ export function narrowAngleX(
  */
 export function airborne(ballZ: number): number {
   return clamp(ballZ / KEEPER_JUMP_Z, 0, 1);
+}
+
+/**
+ * What the keeper's lateral tracker is chasing: the ball on the deck, and where
+ * the ball is *coming down* once it is in the air.
+ *
+ * Round 5 withdrew the keeper's **advance** while the ball was over his head and
+ * left his **lateral** position reading a lagged copy of `ball.x`. That half-fix
+ * is the generator of the whole cross exploit, and it is arithmetic rather than
+ * balance. `restPosition` puts him on the angle from where his tracker says the
+ * ball is; the tracker is an exponential lag on `ball.x` with a time constant of
+ * about 0.16 s; and a ball whipped across the face of goal at 200-300 px/s
+ * therefore leaves that copy 30-50 px stale — against a standing reach of
+ * `REACH_BASE` = 26. Instrumented at every aerial contact, the conversion cliff
+ * sat exactly on that reach: 0.068-0.108 under 25 px of lag, 0.565 at 30-40 and
+ * 0.754 at 40-60. Past his own reach he is not a keeper who guessed wrong, he is
+ * a keeper who is not there, and a fixed wing routine that engineers a median
+ * contact lag of 29-32 px was worth twice what being the expert is worth.
+ *
+ * A keeper does not track the *ball* while a cross is in the air. He reads the
+ * flight and sets where it is coming down, which is the same point the strikers
+ * are running onto — `airMeetPoint`. So the tracker's target is blended from
+ * `ball.x` toward that point in proportion to `airborne(ballZ)`, on exactly the
+ * reasoning that withdraws the advance: there is no shot to narrow against a
+ * ball in flight, and the only thing worth covering is where it is going to be
+ * struck from.
+ *
+ * Two properties are load-bearing and both are the point of doing it here rather
+ * than as an override at the call site.
+ *
+ * **On the deck it is not a change at all.** `airborne(0)` is 0, so a ball at a
+ * striker's feet returns `ballX` exactly, and every cell of 7.3's isolation grid
+ * — all of which strike a still ball off the deck, headers included, since a
+ * header only leaves the ground on a rush the rig never generates — is
+ * arithmetically identical to before. Measured cell for cell over the 162-cell
+ * distance x aim x power grid at 2,000 seeds: identical to the last goal.
+ *
+ * **It is scaled, not absolute, and it is applied at `restPosition`'s input
+ * rather than inside the tracker.** The lag itself is untouched: `trackBall`
+ * goes on chasing `ball.x` exactly as before, from the moment the ball leaves
+ * the crosser's boot, and `1 - airborne(ballZ)` of what the keeper sets from is
+ * still that lagged copy. Only the part of the reading that corresponds to the
+ * ball genuinely being *up* is taken from the landing point. Putting the blend
+ * inside the tracker instead was tried first and measured worse for a reason
+ * worth recording: the `airborne` ramp then acts as a second low-pass on top of
+ * the exponential one, so the keeper spends the first half of the flight
+ * chasing the crosser's own position and arrives with 30-70 px still to find.
+ * Measured over live play, in-box aerial contacts past his standing reach ran
+ * 44 % that way against 8 % this way.
+ *
+ * And he still has to *get there*: his body walks to the new spot at
+ * `KEEPER_WALK`, 120 px/s, so a cross that genuinely changes his mind — one
+ * whipped across him with a third of a second of hang time — still arrives
+ * before he does. That is the honest residual, and it is the one this leaves in
+ * place. What a cross can no longer do is beat him by arithmetic, at 30-50 px
+ * against a 26 px reach, on a ball he has watched the whole way.
+ */
+export function trackTarget(trackX: number, meetX: number | null, ballZ: number): number {
+  if (meetX === null) return trackX;
+  return trackX + (meetX - trackX) * airborne(ballZ);
 }
 
 /**
@@ -543,20 +622,33 @@ export const ASSIST_DIVE_PENALTY = 0.5;
  * his body rather than from his standing position, and he has to find the
  * ground again before he is the obstacle he was.
  *
- * It is deliberately smaller than `REACT_TIME`: he is late, not absent — and
- * **the caller has to cap it at the ball's own flight time**, which is what
- * makes that sentence true instead of merely intended. A flat subtraction
- * cannot express "late" on its own, because whether 0.12 s is a stumble or an
- * eternity depends entirely on how long the ball is in the air. A first-time
- * volley struck fifty pixels out arrives in about a tenth of a second:
- * uncapped, the loss ate the *whole* of the keeper's reaction, his reach
- * collapsed from the 24 px he would have had to the 12 px of his own body, and
- * that shot measured 0.93 in real matches against the 0.33 the isolation rig
- * gives the same strike from the same place. That was the sharp end of the
- * audit's 0.92-0.98 conversion finding, and it was arithmetic rather than
- * balance: the closer the chance, the more totally the penalty applied, which
- * is backwards. The nearer the ball, the less of his reaction there was to
- * lose in the first place.
+ * It is deliberately smaller than `REACT_TIME`: he is late, not absent. **The
+ * caller has to cap it at the ball's own flight time**, and it has to charge it
+ * only where the sentence above is true — on a ball switched from one man to
+ * another, not on a cross the keeper has watched arc into his own six-yard box.
+ * `armKeeper` owns that second condition and sets out at length what it was
+ * worth: the cap is arithmetically a *no-op* for any flight shorter than this
+ * constant, because `keeperPlane` reads `keeperReach(elapsed - late)` with
+ * `elapsed` equal to the flight, so the difference is exactly zero and
+ * `keeperReach(0)` is `REACH_BODY`. Charged against a first-time header from six
+ * yards that took the keeper's reach from 21.3 px to 12 px against a 22 px gap
+ * — a 0.52 chance turned into a 0.93 one, on the best chance in the game.
+ *
+ * A flat subtraction cannot express "late" on its own, because whether 0.12 s is
+ * a stumble or an eternity depends entirely on how long the ball is in the air.
+ * The cap keeps it from going negative; restricting it to ground contacts keeps
+ * it from being charged where the keeper was never surprised at all.
+ *
+ * **Left deliberately un-rescaled, and this is a real loose end rather than a
+ * finished thought.** The obvious next step — charge the loss as a *share* of
+ * the reaction he actually had, `min(ASSIST_REACT_LOSS, t x share)` — was built
+ * and measured this round and measured backwards on the acceptance criteria: at
+ * a half share it cost the scripted competent player 26 % of his goals a match
+ * (2.57 to 1.90 at d = 0.25) against 6 % for the wing routine, because a ground
+ * pass into the box is the shot the reward exists for and a header is not. It
+ * widened every wing station's ladder margin rather than closing it. Making
+ * that change work means re-deriving the passing reward at the same time, which
+ * is a round of its own and not this one's.
  */
 export const ASSIST_REACT_LOSS = 0.12;
 

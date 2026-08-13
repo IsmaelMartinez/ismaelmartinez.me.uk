@@ -40,6 +40,7 @@ import {
   KEEPER_JUMP_Z,
   PARRY_LOCK,
   REACH_BASE,
+  REACH_BODY,
   SAVE_FLOOR,
   approachGap,
   commitDive,
@@ -50,6 +51,7 @@ import {
   resolveSave,
   restPosition,
   trackBall,
+  trackTarget,
   type KeeperDive
 } from './keeper';
 import {
@@ -243,46 +245,47 @@ const RUSH_ASSIST = 1.1;
  * and it is charged on top of this one.
  */
 const AIR_ASSIST_SHARE = 0.25;
-/**
- * How much a first-time contact is spoiled by the pace of the ball it is
- * meeting, and the pace at which that reaches its full cost.
+/*
+ * `RUSH_MEET` and `MEET_PACE_DIV` were here, and this note is deliberately kept
+ * where they were rather than deleted with them.
  *
- * This is the term `strikeRush` was missing, and its absence is the other half
- * of why the cross-to-volley window measured as a certainty. Every other rush
- * term asks what the *striker* is doing — how fast he is running, whether he
- * is across his own body, whether someone is on him — and none of them asked
- * the one question a first-time contact is actually about: how quickly the
- * ball is arriving. A ball dropping on your head at walking pace is a free
- * header. A cross whipped across the six-yard box at three hundred is the
- * hardest ball in football to hit, and putting it over the bar from six yards
- * is the most ordinary thing a striker does. The cabinet was scoring the
- * second as though it were the first.
+ * They charged a first-time contact for the pace of the ball it was meeting,
+ * and the intention was good: a ball dropping on your head at walking pace is a
+ * free header, a cross whipped across the six-yard box at three hundred is the
+ * hardest ball in football to hit. The implementation could not deliver it, and
+ * the constant is removed rather than retuned because **a lever that measures
+ * identically at every value is worse than no lever at all** — the next round
+ * reads it as a live knob and tunes against it.
  *
- * It is what makes a whipped delivery a trade rather than a free upgrade: pace
- * on the cross is what beats the keeper across his goal, and it is the same
- * pace the man meeting it has to control. A floated ball is easier to strike
- * and easier to defend; that is the choice the mechanic now offers, and it is
- * the choice the real game offers.
+ * Two independent reasons, both measured.
  *
- * It is deliberately a small term, and the size is measured rather than
- * chosen. Most of what makes a cross answerable again is the keeper being back
- * on his line while it is over his head (`airborne`); this is the last quarter
- * of a point. Swept against the catalogue at 70 matched pairs a rung, the wing
- * routine's ladder margin over a competent player runs +0.171 at 0 / -0.071 at
- * 0.25 / -0.086 at 0.35 / -0.214 at 0.5, while what a competent player's *own*
- * crossing is worth him runs -0.014 / +0.086 / -0.029 / -0.114 — so past about
- * a third the term stops answering the exploit and starts taxing the verb, and
- * a verb that is a net loss is fault two of the four this cabinet has already
- * had to fix once.
+ * **It was inert.** The only channel it reached the outcome through was the
+ * spread multiplier `1 + SPREAD_RUSH x rush`, and at its maximum it widened a
+ * header's placement spread by about 0.4 px against an 84 px goal mouth. Swept
+ * over 36 stations x 4,000 seeds a cell, the whole dynamic range of the
+ * constant — a dead ball against the fastest delivery the game can produce —
+ * moved a header from 0.0881 to 0.0860 and a volley from 0.2944 to 0.2932. That
+ * is a fifth of the sampling error of the suites that were supposed to be
+ * measuring it. (It also saturates at `MEET_PACE_DIV`, so meet speeds 300 and
+ * 600 were arithmetically the same cell.)
  *
- * It costs nothing in 7.3's isolation rig, and that is a property of the rig
- * rather than an exemption: the rig strikes a ball that is sitting still at
- * the shooter's feet, so there is no arriving pace to charge. The header cells
- * there measure the *placement* of a header against a keeper in a stated
- * position, which is what they were written to measure, and they are unmoved.
+ * **And the trade it claimed to price did not exist.** "A floated ball is
+ * easier to strike and easier to defend; that is the choice the mechanic now
+ * offers" — the player has no such choice. `loftedPass` weights a ball aimed at
+ * a man on the line through `loftWeight(range)`, which is a pure function of
+ * the range to that man; `power` is only consulted when there is *nobody* on
+ * the line, i.e. when the ball is not a cross to anyone. So the term was not
+ * pricing a decision, it was taxing a distance.
+ *
+ * What it was actually bought to answer — "pace on the cross is what beats the
+ * keeper across his goal" — was never a balance fact. It was the keeper setting
+ * his lateral position from a lagged copy of the ball, and it is fixed at the
+ * generator now: see `trackTarget` in keeper.ts. A first-time contact is still
+ * priced as harder than a set one, twice over and through channels that do
+ * measure — `AIR_ASSIST_SHARE` above, which hands an aerial contact a quarter of
+ * the relief a completed pass gives a man with time on the ball, and
+ * `HEADER_SPREAD`, which only headers pay.
  */
-const RUSH_MEET = 0.25;
-const MEET_PACE_DIV = 300;
 /** Extra rush on a header met off a clearance rather than a delivered ball. */
 const RUSH_HOOF = 1;
 /**
@@ -937,9 +940,7 @@ export function shoot(
   side: Side,
   power: number,
   aim: number,
-  contact: ContactType,
-  /** Pace of the ball being met first time, if it was moving; see `RUSH_MEET`. */
-  meetSpeed = 0
+  contact: ContactType
 ): void {
   const owner = m.owner;
   if (!owner) return;
@@ -967,9 +968,7 @@ export function shoot(
       // A first-time contact has no time on the ball, so it collects only a
       // token of the relief a completed pass hands the man who receives it.
       contact === 'ground' ? 1 : AIR_ASSIST_SHARE
-    ) +
-      (hoofed ? RUSH_HOOF : 0) +
-      RUSH_MEET * clamp(meetSpeed / MEET_PACE_DIV, 0, 1),
+    ) + (hoofed ? RUSH_HOOF : 0),
     0,
     RUSH_MAX
   );
@@ -1293,11 +1292,8 @@ function airStrike(m: MatchState, side: Side, idx: number, aim: number): void {
   // that one `RUSH_HOOF` instead, which is what keeps the anti-goal in 7.4
   // from being reached by punting the ball forward and running after it.
   if (m.lastFromCross) m.assist = { side, t: ASSIST_WINDOW };
-  // The pace he is having to control, read before possession flattens the
-  // ball's velocity to zero. This is the whole of `RUSH_MEET`'s input.
-  const meetSpeed = Math.hypot(m.ball.vx, m.ball.vy);
   m.owner = { side, idx };
-  shoot(m, side, contact === 'header' ? 1 : 0.8, aim, contact, meetSpeed);
+  shoot(m, side, contact === 'header' ? 1 : 0.8, aim, contact);
 }
 
 /**
@@ -1328,6 +1324,16 @@ function armKeeper(m: MatchState, kickingSide: Side): void {
   const ball = m.ball;
   const speed = Math.hypot(ball.vx, ball.vy);
   if (speed < 60) return;
+  // He does not commit a dive to a ball that is on its way *up*. This is the
+  // third place the same idea has had to be written down, and it was the
+  // load-bearing one: `airborne` withdraws his advance while a cross is over
+  // his head and `trackTarget` puts him on the landing spot, and both of them
+  // are dead letters if he has already committed — `stepKeeper` returns early
+  // for a diving keeper, so for the whole flight of the delivery he neither
+  // tracks nor walks, he slides along a line he picked when the ball left the
+  // crosser's boot. A lofted ball is not a shot. He stays on his feet, keeps
+  // reading it, and commits when somebody actually strikes it.
+  if (ball.vz > 0) return;
   const along = -dir * ball.vy;
   if (along <= 0) return;
   const toPlane = (keeper.y - ball.y) * -dir;
@@ -1365,7 +1371,31 @@ function armKeeper(m: MatchState, kickingSide: Side): void {
   // window exists to reward leaves him ten to twenty pixels wrong. It taxed
   // passing, which is the verb the reward was written for, and left the cross
   // where it was. The flight-time cap is the honest cap; that one was not.
-  const assisted = !!m.assist && m.assist.side === kickingSide;
+  //
+  // ...and it is charged on a ball switched from one man to another **on the
+  // deck**, not on a cross. That is what the penalty says it models — "a keeper
+  // set for the man who had the ball is not set for the man who has it now" —
+  // and a delivery he has watched arc into his own six-yard box is the one ball
+  // on the pitch he is *not* surprised by. He has had its whole flight to set
+  // his feet, and since round 6 he spends that flight on his line
+  // (`airborne`), on the landing spot (`trackTarget`) and on his feet rather
+  // than mid-dive (the `ball.vz > 0` gate above), all of which exist precisely
+  // so that he is ready for the header.
+  //
+  // Charging it anyway was worth 0.52 to 0.93 on the best chance in the game.
+  // Worked through on the shot the wing routine plays — a header met 22 px in
+  // front of him, `HEADER_SPEED`, aimed full stick — the flight is 0.075 s, so
+  // `min(ASSIST_REACT_LOSS, t)` is the whole flight, `elapsed - late` is zero,
+  // and `keeperReach(0)` is `REACH_BODY`. His reach fell from 21.3 px to 12 px
+  // against a 22 px gap, `gap / reach` went from 1.03 to 1.83, and the save
+  // logistic fell off the end of its own curve. The cap the docstring credits
+  // with fixing that is arithmetically a no-op for every flight under
+  // `ASSIST_REACT_LOSS`, which is every finish inside about 35 px.
+  //
+  // Crossing keeps the half-dive penalty, which is the part that is about his
+  // *legs* rather than his reading, and keeps everything `AIR_ASSIST_SHARE`
+  // hands the striker. What it stops collecting is a keeper with no hands.
+  const assisted = !!m.assist && m.assist.side === kickingSide && m.lastContact === 'ground';
   gk.dive = commitDive({
     restX: keeper.x,
     interceptX: ball.x + ball.vx * nearest,
@@ -1397,7 +1427,20 @@ function stepKeeper(m: MatchState, side: Side, dt: number): void {
   }
 
   gk.trackX = trackBall(gk.trackX, m.ball.x, gk.skill, dt);
-  const rest = restPosition(gk.trackX, m.ball.y, goalY, dir, m.ball.z);
+  // He sets from his lagged copy of the ball on the deck and from where the
+  // ball is *coming down* while it is over his head — the same point the
+  // strikers are running onto. See `trackTarget`. The lag above is untouched
+  // and `airborne` is 0 on the deck, so nothing about a ball at a striker's
+  // feet changes; only a delivery in flight reads differently, and only in
+  // proportion to how far up it is.
+  const meet = airMeetPoint(m.ball);
+  const rest = restPosition(
+    trackTarget(gk.trackX, meet ? meet.x : null, m.ball.z),
+    m.ball.y,
+    goalY,
+    dir,
+    m.ball.z
+  );
   let tx = rest.x;
   let ty = rest.y;
   // There is no separate "shade across toward a close carrier" term any more,
@@ -1426,7 +1469,6 @@ function stepKeeper(m: MatchState, side: Side, dt: number): void {
  */
 function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEvent[]): void {
   const gk = m.keepers[side];
-  if (gk.parryLock > 0) return;
   const keeper = m.players[side][0];
   const goalY = ownGoalY(side, m.swapped);
   const dir = attackDir(side, m.swapped);
@@ -1466,7 +1508,14 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
   // A keeper who was never armed — a loose ball rolling in, a deflection — has
   // had all the time in the world and is simply set; one who was armed is
   // measured from the moment the ball was struck.
-  const reach = gk.dive ? keeperReach(gk.dive.elapsed - gk.dive.late) : REACH_BASE;
+  const standing = gk.dive ? keeperReach(gk.dive.elapsed - gk.dive.late) : REACH_BASE;
+  // ...and a keeper who is still on the floor from the last save reaches with
+  // what he can get off the ground, fading back to that as he gets up. This
+  // used to be an early `return` at the top of the function and it was the
+  // audit's second exactly-100 % cell: 1,175 follow-ups inside the lock, 1,175
+  // goals. See `PARRY_LOCK`. He is handicapped, not absent.
+  const down = clamp(gk.parryLock / PARRY_LOCK, 0, 1);
+  const reach = REACH_BODY + (standing - REACH_BODY) * (1 - down);
   // The desperation floor applies only to a ball that is actually going in:
   // he is never credited with saving one that was missing the goal anyway.
   const inFrame = Math.abs(m.ball.x - CENTRE_X) < GOAL_HALF;
@@ -1482,7 +1531,10 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
 
   m.stats.saves[side]++;
   gk.dive = null;
-  if (outcome === 'caught') {
+  // A save made from the floor is held rather than spilled: he is already down
+  // on top of the ball, and a second parry inside the same window is the
+  // rebound loop the lock is actually there to prevent.
+  if (outcome === 'caught' || down > 0) {
     m.stats.catches[side]++;
     m.ball.x = keeper.x;
     m.ball.y = keeper.y;

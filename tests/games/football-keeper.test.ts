@@ -16,6 +16,7 @@ import {
   KEEPER_JUMP_Z,
   KEEPER_LINE,
   KEEPER_STEAL_R,
+  PARRY_LOCK,
   REACH_BASE,
   REACH_BODY,
   REACH_DIVE,
@@ -37,7 +38,8 @@ import {
   saveProbability,
   speedAfter,
   trackBall,
-  trackLag
+  trackLag,
+  trackTarget
 } from '../../src/games/football/keeper';
 import {
   CENTRE_X,
@@ -365,6 +367,39 @@ describe('keeper: the pure pieces', () => {
     expect(airborne(KEEPER_JUMP_Z * 2)).toBe(1);
   });
 
+  /**
+   * The other half of the same idea, and the half round 5 left out: withdrawing
+   * his *advance* while the ball is over his head does nothing about his
+   * *lateral* position, which `restPosition` still took from a lagged copy of
+   * `ball.x`. A cross whipped across the face at 200-300 px/s leaves that copy
+   * 30-50 px stale against a 26 px standing reach, and instrumented over live
+   * play the wing routine's median contact lag was 29-32 px — more than half its
+   * contacts past his own reach, by arithmetic rather than by beating him.
+   *
+   * `trackTarget` reads the landing point instead, in proportion to how far up
+   * the ball is. The three properties asserted here are the whole contract.
+   */
+  it('sets from where a ball in the air is coming down, not from where it was', () => {
+    const meetX = CENTRE_X;
+    const stale = CENTRE_X + 130;
+    // On the deck it is the identity, exactly. This is what keeps every cell of
+    // 7.3's isolation grid — which strikes a still ball off the ground —
+    // arithmetically unchanged, and it was verified cell for cell over the
+    // 162-cell distance x aim x power grid at 2,000 seeds a cell.
+    expect(trackTarget(stale, meetX, 0)).toBe(stale);
+    // With no ball in the air there is no landing point and nothing to blend.
+    expect(trackTarget(stale, null, KEEPER_JUMP_Z)).toBe(stale);
+    // Over his head he reads the landing point.
+    expect(trackTarget(stale, meetX, KEEPER_JUMP_Z * 2)).toBeCloseTo(meetX, 6);
+    // And in between it is *scaled*, not switched: the lagged copy is still
+    // most of what he has while the ball is low, so a delivery he has not had
+    // time to read still beats him.
+    const half = trackTarget(stale, meetX, KEEPER_JUMP_Z / 2);
+    expect(half).toBeGreaterThan(meetX);
+    expect(half).toBeLessThan(stale);
+    expect(half).toBeCloseTo(stale + (meetX - stale) * 0.5, 6);
+  });
+
   it('advances on a ball it is facing and holds its post on one it is not', () => {
     // `squareness` is the other half of the same idea and it is why the frame
     // above can be widened without the keeper charging out to the corner flag:
@@ -478,6 +513,51 @@ describe('keeper: parries', () => {
       const speed = Math.hypot(v.vx, v.vy);
       expect(speed).toBeGreaterThanOrEqual(incoming * 0.4 - 1e-9);
       expect(speed).toBeLessThanOrEqual(incoming * 0.55 + 1e-9);
+    }
+  });
+
+  /**
+   * `PARRY_LOCK` is a handicap, not an exemption.
+   *
+   * `keeperPlane` used to open with `if (gk.parryLock > 0) return;`, so for the
+   * 0.4 s after a parry the ball crossing his line was not resolved at all: no
+   * gap, no reach, no roll, not even `SAVE_FLOOR`. An audit found 1,175
+   * follow-ups and 1,175 goals. Through the isolation rig, 102 of the 120
+   * (distance, offset, aim, lock) cells converted above 0.99 and most of them
+   * read exactly 1.000 on all 500 seeds.
+   *
+   * The whole-grid sweep lives in `football-exploits.test.ts`; this pins the
+   * shape of the fix, which is what stops it being undone by a refactor. He
+   * reaches with his body at the instant of the parry and with everything he
+   * would otherwise have had by the end of the window, so a follow-up is a
+   * better chance the sooner it comes and never a certainty. Measured pooled
+   * over that grid: 0.359 at the full lock, 0.306 at half of it, 0.287 standing.
+   */
+  it('gives a follow-up inside the lock a roll rather than a free goal', () => {
+    const cells: Array<[number, number, number]> = [
+      [12, -55, 0],
+      [25, 0, 1],
+      [45, 55, -1],
+      [78, 0, 0.5]
+    ];
+    for (const [distance, offsetX, aim] of cells) {
+      const rates = [PARRY_LOCK, PARRY_LOCK / 2, 0].map(parryLock => {
+        let goals = 0;
+        for (let i = 0; i < 400; i++) {
+          const opts = { distance, aim, power: 1, offsetX, parryLock, rng: seededRandom(i * 7919 + 13) };
+          if (shootAt(opts) === 'goal') goals++;
+        }
+        return goals / 400;
+      });
+      const label = `${distance} px, offset ${offsetX}, aim ${aim}: ${rates.map(r => r.toFixed(3)).join(' / ')}`;
+      // Never a certainty, at any point in the window.
+      for (const r of rates) expect(r, `${label} is still a roll`).toBeLessThan(0.99);
+      // ...and the handicap is real and fades: flat on the floor is the best
+      // moment to shoot, back on his feet is the worst.
+      expect(rates[0], `${label} costs him most at the instant of the parry`).toBeGreaterThan(
+        rates[2]
+      );
+      expect(rates[1], `${label} fades as he gets up`).toBeLessThanOrEqual(rates[0] + 0.02);
     }
   });
 });

@@ -4,6 +4,7 @@ import {
   createMatch,
   tickMatch,
   resolveContact,
+  shoot,
   slideChance,
   scorerList,
   cpuSpeed,
@@ -444,6 +445,65 @@ describe('contact and tackling', () => {
     expect(front).toBeGreaterThan(back);
     expect(front).toBeGreaterThan(0.45);
     expect(front).toBeLessThan(0.62);
+  });
+});
+
+describe('the keeper against a delivery in flight', () => {
+  /**
+   * He stays on his feet while a cross is over his head, and this is the third
+   * place the same idea has had to be written down.
+   *
+   * `airborne` withdraws his advance while the ball is up and `trackTarget` puts
+   * him on the landing spot, and **both of them were dead letters** because
+   * `armKeeper` committed him to a *dive* the instant the delivery was played:
+   * `stepKeeper` returns early for a diving keeper, so for the whole flight of
+   * the cross he neither tracked nor walked, he slid along a line he chose when
+   * the ball left the crosser's boot, at `KEEPER_DIVE` = 45 px/s against the
+   * 120 px/s he walks at, toward where the *cross* would pass him rather than
+   * where it was going to be met.
+   *
+   * A lofted ball is not a shot. Measured over 900 matches a cell, letting him
+   * read it instead took the strongest wing station's air goals from 4.54 a
+   * match at d = 0.25 to 2.97 and its double-figure scorelines from 8 in 900 to
+   * none.
+   */
+  /** Put the human in possession out on the flank, facing the goal. */
+  function onTheBall(m: MatchState, offsetX: number, depth: number): void {
+    const goalY = attackGoalY(0, m.swapped);
+    const dir = m.swapped ? -1 : 1;
+    looseBallAt(m, CENTRE_X + offsetX, goalY - dir * depth);
+    const p = m.players[0][6];
+    p.x = CENTRE_X + offsetX;
+    p.y = goalY - dir * depth;
+    p.fx = 0;
+    p.fy = dir;
+    p.speed = 0;
+    m.controlled = 6;
+    m.owner = { side: 0, idx: 6 };
+    m.ball.x = p.x;
+    m.ball.y = p.y + dir * DRIBBLE_OFFSET;
+    m.keepers[1].dive = null;
+    m.kickGrace = null;
+    m.prev = { a: false, b: false, c: false };
+  }
+
+  it('stays on its feet for a lofted ball and commits when one is struck', () => {
+    // B is the lofted ball: a cross, a lofted pass, a corner. It leaves the
+    // boot climbing, and he must not commit to it.
+    const cross = fresh();
+    const dir = cross.swapped ? -1 : 1;
+    onTheBall(cross, 130, 55);
+    tickMatch(cross, DT, { x: 0, y: dir, a: false, b: true, c: false });
+    expect(cross.ball.vz, 'B really did loft it').toBeGreaterThan(0);
+    expect(cross.keepers[1].dive, 'no dive committed to a ball on its way up').toBeNull();
+
+    // A struck at goal off the deck is the ball he is there for, and he
+    // commits to that one exactly as before.
+    const shot = fresh();
+    onTheBall(shot, 0, 120);
+    shoot(shot, 0, 1, 0, 'ground');
+    expect(shot.ball.vz, 'a struck shot stays down').toBe(0);
+    expect(shot.keepers[1].dive, 'he commits to a ball struck at him').not.toBeNull();
   });
 });
 

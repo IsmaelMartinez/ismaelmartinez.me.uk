@@ -17,6 +17,10 @@ import {
   TRAP_Z,
   VOLLEY_Z,
   HEADER_Z,
+  AIR_STRIKE_MIN_TRAVEL,
+  AIR_STRIKE_R,
+  CROSS_STRIKE_R,
+  canAirStrike,
   type MatchEvent,
   type MatchState
 } from '../../src/games/football/match';
@@ -30,7 +34,7 @@ import {
   attackGoalY
 } from '../../src/games/football/pitch';
 import { firstKit, teamByCode } from '../../src/games/football/teams';
-import { shotArmed } from '../../src/games/football/render';
+import { aCue, airArmed, shotArmed } from '../../src/games/football/render';
 import { SHOOT_RANGE } from '../../src/games/football/ai';
 import { passive, competent } from './football-policies';
 
@@ -194,6 +198,215 @@ describe('the shooting-range cue', () => {
     // A teammate on the ball the stick is not holding.
     m.owner = { side: 0, idx: m.controlled === 1 ? 2 : 1 };
     expect(shotArmed(m)).toBe(false);
+  });
+});
+
+/**
+ * Switching players with C.
+ *
+ * A playtester stopped using the button because it was unpredictable enough to
+ * be worse than nothing, and regularly left him driving a man running away
+ * from the ball. The cause was not the ranking. `updateControlled` runs at the
+ * top of every tick, *before* `humanAction`, and hands the stick to whoever is
+ * 30 px nearer the ball than the current man — and a C press picks the second
+ * or third nearest almost by definition, so the auto-switcher took the pick
+ * back on the very next frame. The press looked like it did nothing, or like
+ * it did something at random.
+ */
+describe('switching players with C', () => {
+  const NEUTRAL = { x: 0, y: 0, a: false, b: false, c: false };
+  const PRESS_C = { ...NEUTRAL, c: true };
+
+  /** The human outfielder actually nearest the ball right now. */
+  function nearestOutfielder(m: MatchState): number {
+    let best = 1;
+    let bestD = Infinity;
+    for (let idx = 1; idx < TEAM_SIZE; idx++) {
+      const p = m.players[0][idx];
+      const d = Math.hypot(p.x - m.ball.x, p.y - m.ball.y);
+      if (d < bestD) {
+        bestD = d;
+        best = idx;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * A loose ball with the human outfielders strung out behind it and both
+   * sides well clear of capture range, so nothing but the switch itself moves
+   * the cursor.
+   */
+  function strungOut(m: MatchState): void {
+    looseBallAt(m, CENTRE_X, CENTRE_Y);
+    for (let idx = 1; idx < TEAM_SIZE; idx++) {
+      m.players[0][idx].x = CENTRE_X;
+      m.players[0][idx].y = CENTRE_Y + 40 + idx * 40;
+    }
+    for (let idx = 0; idx < TEAM_SIZE; idx++) {
+      m.players[1][idx].x = 40;
+      m.players[1][idx].y = 40;
+    }
+    m.controlled = nearestOutfielder(m);
+  }
+
+  it('keeps the man it picked instead of handing him straight back', () => {
+    const m = fresh();
+    strungOut(m);
+    const before = m.controlled;
+    tickMatch(m, DT, PRESS_C);
+    const picked = m.controlled;
+    expect(picked, 'C moved the cursor').not.toBe(before);
+    // Four frames is long enough for the auto-switcher to have fired several
+    // times and short enough that nobody has walked anywhere.
+    for (let i = 0; i < 4; i++) tickMatch(m, DT, NEUTRAL);
+    expect(m.controlled, 'the pick survived the auto-switcher').toBe(picked);
+  });
+
+  it('gives the cursor back to the nearest man once the hold runs out', () => {
+    const m = fresh();
+    strungOut(m);
+    tickMatch(m, DT, PRESS_C);
+    const picked = m.controlled;
+    for (let i = 0; i < 90; i++) tickMatch(m, DT, NEUTRAL);
+    expect(m.controlled, 'the hold expired').not.toBe(picked);
+    expect(m.controlled).toBe(nearestOutfielder(m));
+  });
+
+  /**
+   * A man on the floor or halfway through a slide does not answer the stick at
+   * all — `stepHumanSide` drives a sliding player along his own facing whatever
+   * the input says. That was survivable while the auto-switcher was undoing
+   * the pick a frame later; with the pick now sticking for a second it is not.
+   */
+  it('will not hand over a man who cannot be driven', () => {
+    for (const state of ['slide', 'down'] as const) {
+      const m = fresh();
+      strungOut(m);
+      // Take out the two men C would otherwise reach for.
+      const order = [...Array(TEAM_SIZE).keys()]
+        .slice(1)
+        .sort(
+          (a, b) =>
+            Math.hypot(m.players[0][a].x - m.ball.x, m.players[0][a].y - m.ball.y) -
+            Math.hypot(m.players[0][b].x - m.ball.x, m.players[0][b].y - m.ball.y)
+        );
+      m.players[0][order[1]][state] = 0.3;
+      m.players[0][order[2]][state] = 0.3;
+      tickMatch(m, DT, PRESS_C);
+      expect([order[1], order[2]], `picked a ${state}ing man`).not.toContain(m.controlled);
+    }
+  });
+});
+
+/**
+ * The air-strike cue, which is the same argument as the shooting-range one
+ * made about the other half of the A button.
+ *
+ * Off the ball, A is a header or a volley when `canAirStrike` says so and a
+ * slide tackle when it does not — and a slide tackle costs its whole cooldown,
+ * so guessing wrong does not merely waste the press, it takes the man out of
+ * the move. Nothing on screen said which you were about to get, and a
+ * playtester called it the most confusing thing in the cabinet: deliver a
+ * cross, run in, press A, find out. `airArmed` turns the marker and the HUD
+ * arrow sky blue while the window is open.
+ *
+ * The cue must not be allowed to drift from `humanAction`'s own branch, so it
+ * is asserted against `canAirStrike` — which is that branch's condition — over
+ * every axis the predicate reads, rather than at a couple of spots.
+ */
+describe('the air-strike cue', () => {
+  /** A loose ball in the air, delivered from far enough away to be strikable. */
+  function loose(m: MatchState, z: number, gap: number): void {
+    m.phase = 'play';
+    m.phaseTimer = 0;
+    const p = m.players[0][m.controlled];
+    p.x = CENTRE_X;
+    p.y = CENTRE_Y;
+    p.strike = 0;
+    m.owner = null;
+    m.kickGrace = null;
+    m.ball.x = CENTRE_X + gap;
+    m.ball.y = CENTRE_Y;
+    m.ball.z = z;
+    m.kickFrom = { x: CENTRE_X, y: CENTRE_Y - AIR_STRIKE_MIN_TRAVEL - gap - 10 };
+  }
+
+  it('agrees with the branch it cues, over height and distance', () => {
+    const m = fresh();
+    for (const fromCross of [false, true]) {
+      m.lastFromCross = fromCross;
+      for (let z = 0; z <= HEADER_Z + 10; z += 2) {
+        for (let gap = 0; gap <= CROSS_STRIKE_R + 10; gap += 2) {
+          loose(m, z, gap);
+          expect(airArmed(m), `cross=${fromCross} z=${z} gap=${gap}`).toBe(
+            canAirStrike(m, 0, m.controlled)
+          );
+        }
+      }
+    }
+  });
+
+  /**
+   * The reach is the one axis the cue could plausibly have got wrong by
+   * copying a constant, so it is pinned on both sides of both radii: a cross
+   * may be met from further out than a loose ball in play.
+   */
+  it('reaches further for a cross than for any other ball in the air', () => {
+    const m = fresh();
+    const z = (TRAP_Z + VOLLEY_Z) / 2;
+    m.lastFromCross = false;
+    loose(m, z, AIR_STRIKE_R - 2);
+    expect(airArmed(m), 'inside the open-play radius').toBe(true);
+    loose(m, z, AIR_STRIKE_R + 2);
+    expect(airArmed(m), 'outside the open-play radius').toBe(false);
+    m.lastFromCross = true;
+    loose(m, z, AIR_STRIKE_R + 2);
+    expect(airArmed(m), 'a cross reaches past the open-play radius').toBe(true);
+    loose(m, z, CROSS_STRIKE_R + 2);
+    expect(airArmed(m), 'but not past its own').toBe(false);
+  });
+
+  /** The ball on the deck, or at somebody's feet, is a slide tackle. */
+  it('stays off for a ball nobody can head', () => {
+    const m = fresh();
+    m.lastFromCross = true;
+    loose(m, TRAP_Z - 1, 4);
+    expect(airArmed(m), 'rolling along the floor').toBe(false);
+    loose(m, HEADER_Z + 1, 4);
+    expect(airArmed(m), 'over everybody').toBe(false);
+    loose(m, HEADER_Z - 1, 4);
+    expect(airArmed(m), 'inside the window, for contrast').toBe(true);
+    m.owner = { side: 1, idx: 3 };
+    expect(airArmed(m), 'a ball already under control').toBe(false);
+  });
+
+  /**
+   * The two cues are three states of one signal, and the marker can only wear
+   * one colour, so the mapping is pinned rather than left to the draw call.
+   */
+  it('resolves to one colour with the shooting-range cue', () => {
+    const m = fresh();
+    m.lastFromCross = true;
+    loose(m, HEADER_Z - 4, 4);
+    expect(aCue(m)).toBe('air');
+    // The ball at his feet inside range is a shot, and a shot wins.
+    const goalY = attackGoalY(0, m.swapped);
+    const dir = goalY === 0 ? 1 : -1;
+    const p = m.players[0][m.controlled];
+    p.x = CENTRE_X;
+    p.y = goalY + dir * (SHOOT_RANGE - 10);
+    m.ball.z = 0;
+    m.owner = { side: 0, idx: m.controlled };
+    expect(shotArmed(m)).toBe(true);
+    expect(aCue(m)).toBe('shot');
+    // Out of range with the ball at his feet, A is a hoof: no cue at all.
+    p.y = goalY + dir * (SHOOT_RANGE + 10);
+    expect(aCue(m)).toBe('idle');
+    // And a loose ball on the deck is a slide tackle: likewise none.
+    m.owner = null;
+    loose(m, 0, 4);
+    expect(aCue(m)).toBe('idle');
   });
 });
 

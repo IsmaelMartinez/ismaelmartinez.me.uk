@@ -70,6 +70,7 @@ import {
   ballSize,
   createSpriteSheet,
   facingIndex,
+  type ACue,
   type PlayerSprites,
   type SpriteSheet
 } from './sprites';
@@ -84,7 +85,7 @@ import {
   type Team
 } from './teams';
 import type { MatchState, PlayerState } from './match';
-import { SHOOT_RANGE, scorerList } from './match';
+import { SHOOT_RANGE, canAirStrike, scorerList } from './match';
 import { DIVE_WINDOW, SHOOTOUT_ZONES, type ShootoutState } from './shootout';
 import { standings, type RunState, type TableRow } from './tournament';
 
@@ -152,6 +153,39 @@ export function shotArmed(m: MatchState): boolean {
   if (!owner || owner.side !== 0 || owner.idx !== m.controlled) return false;
   const p = m.players[0][owner.idx];
   return Math.hypot(p.x - CENTRE_X, p.y - attackGoalY(0, m.swapped)) <= SHOOT_RANGE;
+}
+
+/**
+ * True when the A button under the player's thumb is a **header or volley**
+ * rather than a slide tackle: nobody is on the ball, it is in the air at a
+ * height this man can meet, and he is inside the meeting radius.
+ *
+ * This is the other half of the same idea as `shotArmed`, and it was the half
+ * that was missing. Delivering a cross, running in and pressing A was a guess
+ * — the reward is a strike on goal and the forfeit is a slide tackle and its
+ * cooldown, with nothing on screen saying which press you were about to make.
+ * The window is short, only `CROSS_STRIKE_R` wide, and it closes the instant
+ * anybody touches the ball, so it is exactly the boundary a cue is for. The
+ * marker at the man's feet and the HUD arrow both go sky blue while it is
+ * open, which is the same two things `shotArmed` already turns red; nothing
+ * modern goes on the pitch for it either.
+ *
+ * It delegates to `canAirStrike` rather than restating it, because a cue that
+ * disagrees with the branch it cues is worse than no cue: a test sweeps the
+ * two together over the whole box.
+ */
+export function airArmed(m: MatchState): boolean {
+  return canAirStrike(m, 0, m.controlled);
+}
+
+/**
+ * Which of the marker's three colours this frame earns. There is no tie to
+ * break: `shotArmed` wants the ball at the man's feet and `airArmed` wants it
+ * loose and off the deck.
+ */
+export function aCue(m: MatchState): ACue {
+  if (shotArmed(m)) return 'shot';
+  return airArmed(m) ? 'air' : 'idle';
 }
 
 /**
@@ -730,16 +764,16 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     ctx!.drawImage(sprites.ball(m.ball.z), Math.round(sx - size / 2), Math.round(sy - size / 2));
   }
 
-  function drawTriangle(m: MatchState, armed: boolean): void {
+  function drawTriangle(m: MatchState, cue: ACue): void {
     if (m.switchFlash > 0 && Math.floor(m.switchFlash * 4) % 2 === 1) return;
     const p = m.players[0][m.controlled];
     if (!p) return;
     const sx = Math.round(p.x - camera.x - TRIANGLE_W / 2);
     const sy = Math.round(p.y - camera.y + PLAYER_H / 2 + 2);
-    ctx!.drawImage(sprites.triangle(armed), sx, sy);
+    ctx!.drawImage(sprites.triangle(cue), sx, sy);
   }
 
-  function drawHud(m: MatchState, view: MatchView, armed: boolean): void {
+  function drawHud(m: MatchState, view: MatchView, cue: ACue): void {
     fill(ctx!, HUD_X, 0, HUD_W, FB_H, PALETTE.hudPanel);
     fill(ctx!, HUD_X, 0, 1, FB_H, PALETTE.hudRule);
     const cx = HUD_X + HUD_W / 2;
@@ -759,9 +793,13 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     });
 
     // Which way the human is kicking, so a swapped half is never a surprise —
-    // and, in the shot cue's red, that the goal it points at is in range.
+    // and, in the cue's colour, what the A button is about to do: red that the
+    // goal it points at is in shooting range, sky blue that the ball overhead
+    // is one this man may head or volley.
     const down = attackDir(0, m.swapped) === 1;
-    triangleRows(ctx!, cx - 5, 52, 10, 8, down ? 'down' : 'up', armed ? PALETTE.shotArmed : PALETTE.hudDim);
+    const arrow =
+      cue === 'shot' ? PALETTE.shotArmed : cue === 'air' ? PALETTE.airArmed : PALETTE.hudDim;
+    triangleRows(ctx!, cx - 5, 52, 10, 8, down ? 'down' : 'up', arrow);
 
     drawRadar(m);
 
@@ -853,8 +891,8 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     for (const entry of order) drawPlayer(entry.p, entry.side, entry.idx, m);
 
     drawBall(m);
-    const armed = shotArmed(m);
-    drawTriangle(m, armed);
+    const cue = aCue(m);
+    drawTriangle(m, cue);
 
     const banner = view.banner === undefined ? bannerFor(m) : view.banner;
     if (banner) {
@@ -867,7 +905,7 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
     if (view.attract) drawAttractPrompt();
     ctx!.restore();
 
-    drawHud(m, view, armed);
+    drawHud(m, view, cue);
   }
 
   /**
@@ -993,10 +1031,16 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       const ink = inkOn(team.primary);
       drawText(ctx!, team.code, cx + 5, cy + 5, { scale: 2, color: ink });
       drawText(ctx!, team.name, cx + 5, cy + 23, { color: ink });
-      if (i === view.cursor && Math.floor(view.clock * 2) % 2 === 0) {
-        // The cursor blinks on the same half-second beat as PRESS START.
+      if (i === view.cursor) {
+        // The outline is solid and the arrow blinks on the same half-second
+        // beat as PRESS START. Blinking both was the whole cursor going away
+        // for half of every second, which on a twelve-cell grid reads as no
+        // cursor at all rather than as an animated one — the selection has to
+        // be legible in every frame, and only the attract-beat is decoration.
         frame(ctx!, cx - 2, cy - 2, cellW + 4, cellH + 4, 2, PALETTE.white);
-        triangleRows(ctx!, cx - 12, cy + cellH / 2 - 5, 8, 10, 'right', PALETTE.white);
+        if (Math.floor(view.clock * 2) % 2 === 0) {
+          triangleRows(ctx!, cx - 12, cy + cellH / 2 - 5, 8, 10, 'right', PALETTE.white);
+        }
       }
     }
 
@@ -1049,15 +1093,23 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
         fill(ctx!, x + 40 + pip * 12, ry, 10, 7, pip < values[i] ? PALETTE.pipFull : PALETTE.pipEmpty);
       }
     }
-    const yesX = x + 32;
-    const noX = x + w - 60;
-    highlightBar(x + 6, y + h - 18, w - 12, 12);
-    drawText(ctx!, text.yes, yesX, y + h - 16, {
-      color: confirmYes ? PALETTE.menuSelected : PALETTE.white
-    });
-    drawText(ctx!, text.no, noX, y + h - 16, {
-      color: confirmYes ? PALETTE.white : PALETTE.menuSelected
-    });
+    const barY = y + h - 18;
+    highlightBar(x + 6, barY, w - 12, 12);
+    // The pick gets a plate, not merely a different ink. Drawing the selected
+    // word in blue and the unselected one in white on an orange bar was read
+    // backwards in playtest, and it deserved to be: white is the brighter of
+    // the two, so it reads as the lit option whichever way round the code
+    // means it. A filled cursor plate under white letters is the cabinet's own
+    // idiom — the corner landing markers do exactly this — and it cannot be
+    // read the other way about.
+    confirmOption(text.yes, x + 32, barY, confirmYes);
+    confirmOption(text.no, x + w - 60, barY, !confirmYes);
+  }
+
+  /** One word of the YES/NO bar; the picked one sits on a filled plate. */
+  function confirmOption(label: string, x: number, barY: number, picked: boolean): void {
+    if (picked) fill(ctx!, x - 3, barY + 1, textWidth(label) + 6, 10, PALETTE.menuSelected);
+    drawText(ctx!, label, x, barY + 2, { color: picked ? PALETTE.white : PALETTE.menuText });
   }
 
   /** The menu's three-band highlight bar: light over base over dark. */

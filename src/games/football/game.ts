@@ -198,6 +198,32 @@ export function initFootballGame(): void {
   });
 
   /**
+   * How much of the viewport's height the page keeps for itself, in CSS px.
+   *
+   * Upright, that is the sticky nav, the section padding, the header row, the
+   * tagline, the hint and the instructions, and the number only has to be
+   * generous because height is not the binding constraint in a column layout.
+   *
+   * The landscape block in `football.astro` hides the h1, the tagline, the
+   * hint and the instructions and lets the nav scroll away, so what is left is
+   * the 44 px header row plus its 4 px margin and the section's 4 px of
+   * padding at each end: 56, measured. Reserving 160 there over-reserved by a
+   * hundred pixels, and on a 390 px-tall phone that cost a whole integer step
+   * — the screen came out at 3x (320 x 224 CSS) inside a wide black bezel when
+   * 4x needs only 299 px of the 390.
+   *
+   * 60 rather than 56 so a rounding or a font metric cannot push the cabinet
+   * off the bottom of the fold, and no lower: 54 would buy a third step at
+   * dpr 2 as well, and 54 is less than the chrome actually measures.
+   *
+   * The query is the stylesheet's own and has to stay in step with it.
+   */
+  const RESERVE = 160;
+  const RESERVE_LANDSCAPE = 60;
+  const LANDSCAPE = '(orientation: landscape) and (max-height: 500px)';
+  const reserve = () => (window.matchMedia(LANDSCAPE).matches ? RESERVE_LANDSCAPE : RESERVE);
+
+  /**
    * Size the visible canvas so one framebuffer pixel is always the same whole
    * block of device pixels.
    *
@@ -219,7 +245,7 @@ export function initFootballGame(): void {
     const availW = box ? box.clientWidth : FB_W;
     // Height is never the binding constraint at 320:224 inside a column
     // layout, but a landscape phone is exactly where it would be.
-    const availH = Math.max(FB_H, window.innerHeight - 160);
+    const availH = Math.max(FB_H, window.innerHeight - reserve());
     const dpr = window.devicePixelRatio || 1;
     const next = integerScale(availW, availH, dpr);
     // The ratio is part of the answer, not just the scale: the same whole
@@ -818,6 +844,12 @@ export function initFootballGame(): void {
       case 'select':
         if (!confirming) {
           confirming = true;
+          // The box always opens on YES. Leaving the last answer in place
+          // meant that backing out of one team opened the next one pre-set to
+          // NO, so the obvious second press cancelled it too — a cursor that
+          // remembers a *refusal* is a cursor that punishes changing your
+          // mind.
+          confirmYes = true;
           audio.playSfx('blip');
           return;
         }

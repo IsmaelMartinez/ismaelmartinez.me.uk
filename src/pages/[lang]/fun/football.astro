@@ -380,8 +380,13 @@ const t = useTranslations(lang);
    * static here and scrolls away with the rest of the page.
    */
   @media (orientation: landscape) and (max-height: 500px) {
-    :global(.nav) {
-      position: static;
+    /*
+     * Layout.astro reads this; see the note on its `.nav` rule for why a
+     * `:global(.nav) { position: static }` here never won the cascade and
+     * left the sticky nav sitting on the framebuffer's first 57 rows.
+     */
+    :global(:root) {
+      --nav-position: static;
     }
 
     .football-section {

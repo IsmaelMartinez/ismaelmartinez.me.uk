@@ -544,6 +544,11 @@ export interface MatchState {
   controlled: number;
   /** Counts down a second of 2 Hz flash on the control triangle. */
   switchFlash: number;
+  /**
+   * Seconds left on a C press's claim over the auto-switcher. See
+   * `cycleControl` — without it a manual pick survived about one frame.
+   */
+  manualHold: number;
   kickoffSide: Side;
   lastTouch: Side;
   /** Index of the last player of each side to kick the ball. */
@@ -682,6 +687,7 @@ export function createMatch(opts: MatchOptions = {}): MatchState {
     keepers: [freshKeeper(teams[0], 0, difficulty), freshKeeper(teams[1], 1, difficulty)],
     controlled: 6,
     switchFlash: 0,
+    manualHold: 0,
     kickoffSide: half === 0 ? 0 : 1,
     lastTouch: 0,
     lastKicker: [6, 6],
@@ -1607,11 +1613,15 @@ function carrySpeed(m: MatchState, side: Side, idx: number, base: number): numbe
 /** Nearest human outfielder to the ball, with a 30 px hysteresis band. */
 function updateControlled(m: MatchState, dt: number): void {
   m.switchFlash = Math.max(0, m.switchFlash - dt);
+  m.manualHold = Math.max(0, m.manualHold - dt);
   if (m.owner && m.owner.side === 0 && m.owner.idx !== 0) {
     if (m.controlled !== m.owner.idx) {
       m.controlled = m.owner.idx;
       m.switchFlash = 1;
     }
+    // Somebody of ours is on the ball: the stick belongs to him and there is
+    // nothing left for a manual pick to be holding out against.
+    m.manualHold = 0;
     return;
   }
   const cur = m.players[0][m.controlled];
@@ -1631,25 +1641,58 @@ function updateControlled(m: MatchState, dt: number): void {
   // touch it at all: holding the cursor on him would leave the player driving
   // a man who can do nothing while his own cross drops on somebody's head.
   const stuck = !!m.kickGrace && m.kickGrace.side === 0 && m.kickGrace.idx === m.controlled;
-  if (best !== m.controlled && (stuck || curD - bestD > 30)) {
+  // A manual pick outranks the distance rule but not the kick-grace escape:
+  // holding the cursor on a man who cannot touch the ball is the one case
+  // where the player is better served by being overruled.
+  if (best !== m.controlled && (stuck || (m.manualHold === 0 && curD - bestD > 30))) {
     m.controlled = best;
     m.switchFlash = 1;
+    m.manualHold = 0;
   }
 }
 
-/** C out of possession cycles control through the three nearest teammates. */
+/**
+ * How long a C press keeps the man it picked, in seconds. It is the length of
+ * `switchFlash`, so the marker stops flashing at the moment the auto-switcher
+ * is allowed to have its say again — the player is told when his pick expires
+ * rather than having to time it.
+ */
+const MANUAL_HOLD = 1;
+
+/**
+ * C out of possession cycles control through the three nearest teammates.
+ *
+ * Two things made this unpredictable enough to stop using, and both of them
+ * are here rather than in the ranking.
+ *
+ * `updateControlled` runs at the top of every tick, *before* this, and hands
+ * the stick to whoever is 30 px nearer the ball than the current man. A C
+ * press picks the second or third nearest almost by definition, so the auto
+ * switcher took the pick straight back on the very next frame — the button
+ * looked like it did nothing, or worse, like it did something at random. The
+ * pick now claims the stick for `MANUAL_HOLD`.
+ *
+ * And the ranking could hand over a man who was on the floor or halfway
+ * through a slide, neither of whom answers the stick at all: `stepHumanSide`
+ * drives a sliding player along his own facing regardless of input. That was
+ * survivable while the auto-switcher was undoing it a frame later and is not
+ * survivable now that the pick sticks, so those men are no longer candidates.
+ */
 function cycleControl(m: MatchState): void {
   const ranked = [...Array(TEAM_SIZE).keys()]
     .slice(1)
+    .filter(idx => m.players[0][idx].down === 0 && m.players[0][idx].slide === 0)
     .sort(
       (a, b) =>
         dist(m.players[0][a].x, m.players[0][a].y, m.ball.x, m.ball.y) -
         dist(m.players[0][b].x, m.players[0][b].y, m.ball.x, m.ball.y)
     )
     .slice(0, 3);
+  if (ranked.length === 0) return;
   const at = ranked.indexOf(m.controlled);
   m.controlled = ranked[(at + 1) % ranked.length];
   m.switchFlash = 1;
+  m.manualHold = MANUAL_HOLD;
 }
 
 /** B out of possession orders the nearest teammate to close the carrier down. */

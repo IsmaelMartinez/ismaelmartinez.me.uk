@@ -97,7 +97,8 @@ export interface SnakeState {
    * Cells the ladder has claimed but that are not solid yet, each with the
    * steps of grace it has left. *Every* claimed cell starts here, whether or
    * not something stood on it: the cell stays passable, renders as a pulsing
-   * ghost, and only sets once it has been clear for WALL_GRACE_STEPS steps.
+   * ghost, and only sets once it has been clear — and so on screen — for
+   * WALL_GRACE_STEPS consecutive steps.
    * The player watches the walls close in instead of dying to geometry that
    * appeared out of nowhere.
    *
@@ -154,13 +155,23 @@ function advanceArena(state: SnakeState): void {
 
 /**
  * Counts the claimed cells down and turns them solid. The countdown only runs
- * while the cell is clear, so a cell under the snake, an apple or a bonus
- * waits to be vacated and *then* still ghosts for its full grace — nothing
- * goes solid without WALL_GRACE_STEPS steps of visible warning first.
+ * while the cell is clear, and restarts whenever it is covered, so a cell under
+ * the snake, an apple or a bonus waits to be vacated and *then* still ghosts
+ * for its full grace — nothing goes solid without WALL_GRACE_STEPS consecutive
+ * steps of visible warning first.
  */
 function settleWalls(state: SnakeState): void {
   for (const [i, left] of state.pendingWalls) {
-    if (standingOn(state, i)) continue;
+    if (standingOn(state, i)) {
+      // Restarted, not paused. The ghost renders *under* the snake, the apple
+      // and the bonus, so while a cell is covered the player is being shown
+      // nothing; resuming a half-spent countdown on the step it is uncovered
+      // would reveal the cell and set it a step or two later, which is the
+      // no-warning wall this whole mechanism exists to prevent. The grace only
+      // means anything measured from the moment the ghost is visible again.
+      state.pendingWalls.set(i, WALL_GRACE_STEPS);
+      continue;
+    }
     if (left > 1) {
       state.pendingWalls.set(i, left - 1);
       continue;

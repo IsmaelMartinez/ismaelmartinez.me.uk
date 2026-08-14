@@ -74,8 +74,8 @@ function legalStep(state: SnakeState, d: Vec, ignoreWalls?: Set<number>): boolea
 /**
  * Mirror of the rules' own `standingOn`: true while the snake, the apple or
  * the bonus sits on the cell. That is exactly the condition under which a
- * claimed cell's countdown pauses, so a test that tracks how long a ghost has
- * been *visible warning* has to pause on the same condition.
+ * claimed cell's countdown restarts, so a test that tracks how long a ghost has
+ * been *visible warning* has to restart on the same condition.
  */
 function occupiedCell(state: SnakeState, i: number): boolean {
   if (state.snake.some(s => cellIndex(s.x, s.y) === i)) return true;
@@ -494,6 +494,8 @@ describe('the arena ladder gives warning before a wall sets', () => {
     let promotions = 0;
     /** Steps a claimed cell spent waiting under the snake, apple or bonus. */
     let heldWhileOccupied = 0;
+    /** Of those, the ones that threw away warning the player had already seen. */
+    let gracesRestarted = 0;
     /** Walls that set in the cell the head was one step from entering. */
     let aheadOfHead = 0;
     // Violations are counted rather than asserted per step: 1,200 runs is a
@@ -506,11 +508,13 @@ describe('the arena ladder gives warning before a wall sets', () => {
       const random = seededRandom(run * 7919 + 13);
       const state = createSnakeState(random);
       /**
-       * Steps a cell has ghosted *in the clear* — the warning the player can
-       * actually act on. Counted the way the rules count it: a cell claimed
-       * before this step gets one step of grace off this step only when
-       * nothing stood on it, so a cell that spends its wait under the snake
-       * ages not at all and still owes its full grace once it is vacated.
+       * *Consecutive* steps a cell has ghosted in the clear — the warning the
+       * player can actually act on, since the ghost is drawn under the snake
+       * and a covered one is showing nobody anything. Counted the way the
+       * rules count it: a cell claimed before this step gets one step of grace
+       * off this step only when nothing stood on it, and a step spent covered
+       * does not merely fail to age it, it puts the cell back to owing its
+       * full grace from the moment it is visible again.
        */
       const ghostAge = new Map<number, number>();
 
@@ -536,6 +540,8 @@ describe('the arena ladder gives warning before a wall sets', () => {
         for (const i of claimedBefore) {
           if (occupiedCell(state, i)) {
             heldWhileOccupied++;
+            if ((ghostAge.get(i) ?? 0) > 0) gracesRestarted++;
+            ghostAge.set(i, 0);
             continue;
           }
           ghostAge.set(i, (ghostAge.get(i) ?? 0) + 1);
@@ -549,8 +555,8 @@ describe('the arena ladder gives warning before a wall sets', () => {
             : [...state.walls].filter(i => !wallsBefore.has(i));
 
         for (const i of fresh) {
-          // Every wall that sets has ghosted, in the clear, for its full grace
-          // first — including any that sets in the cell straight ahead.
+          // Every wall that sets has ghosted, in the clear and unbroken, for
+          // its full grace first — including any that sets straight ahead.
           const age = ghostAge.get(i) ?? 0;
           if (age < WALL_GRACE_STEPS) unwarned.push(`run ${run} step ${n} cell ${i} age ${age}`);
           if (i === ahead) aheadOfHead++;
@@ -583,9 +589,13 @@ describe('the arena ladder gives warning before a wall sets', () => {
     expect(steps).toBeGreaterThan(50_000);
     expect(rungs).toBeGreaterThan(500);
     expect(promotions).toBeGreaterThan(500);
-    // …and the paused countdown is genuinely exercised, so the age above is
-    // measuring warning the player saw rather than steps on a clock.
+    // …and the restarted countdown is genuinely exercised, so the age above is
+    // measuring warning the player saw rather than steps on a clock. The second
+    // floor is the one that makes it a *consecutive* count: without cells that
+    // were covered after their warning had already started, resetting the age
+    // and merely pausing it would assert exactly the same thing.
     expect(heldWhileOccupied).toBeGreaterThan(0);
+    expect(gracesRestarted).toBeGreaterThan(0);
     // The audit's own headline case does occur — walls do set right in front
     // of the head — but every one of them ghosted there first.
     expect(aheadOfHead).toBeGreaterThan(0);

@@ -39,6 +39,8 @@ import {
   persuadedCivilians,
   vipOf,
   escorting,
+  vipAtExtraction,
+  EXTRACTION_RADIUS,
   type World
 } from './sim';
 import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus, type MissionSpec } from './missions';
@@ -48,7 +50,6 @@ const CANVAS_W = (MAP_W + MAP_H) * VIEW.halfW;
 const CANVAS_H = (MAP_W + MAP_H) * VIEW.halfH + VIEW.originY + 12;
 const BOOST_DURATION = 4;
 const BOOST_COOLDOWN = 14;
-const EXTRACTION_RADIUS = 1.5;
 
 const FACADES = ['#313853', '#3a2e4c', '#2b3c4c', '#3d3446'];
 const NEON = ['#22d3ee', '#38bdf8', '#818cf8', '#2dd4bf'];
@@ -469,20 +470,6 @@ export function initSyndicateGame(): void {
     return livingAgents(world).some(a => Math.hypot(a.x - ex, a.y - ey) <= EXTRACTION_RADIUS);
   }
 
-  /**
-   * The escort's win test. Deliberately about the asset and not the squad: an
-   * agent alone on the pad must not extract a mission whose whole point is
-   * what it brought with it.
-   */
-  function vipAtExtraction(): boolean {
-    if (extraction < 0) return false;
-    const vip = vipOf(world);
-    if (!vip || !vip.alive || !escorting(vip)) return false;
-    const ex = (extraction % MAP_W) + 0.5;
-    const ey = Math.floor(extraction / MAP_W) + 0.5;
-    return Math.hypot(vip.x - ex, vip.y - ey) <= EXTRACTION_RADIUS;
-  }
-
   function update(dt: number) {
     clock += dt;
     fx.update(dt);
@@ -544,7 +531,7 @@ export function initSyndicateGame(): void {
       persuadedCivilians(world),
       atExtraction,
       holdProgress,
-      vipAtExtraction()
+      vipAtExtraction(world, extraction)
     );
     if (status === 'won') completeMission();
     else if (status === 'lost') endCampaign(false);
@@ -1165,7 +1152,7 @@ export function initSyndicateGame(): void {
       spec.objective === 'secure'
         ? agentAtExtraction()
         : spec.objective === 'escort'
-          ? vipAtExtraction()
+          ? vipAtExtraction(world, extraction)
           : persuadedCivilians(world) >= spec.persuadeQuota;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 4);
     const colour = open ? '#4ade80' : '#94a3b8';

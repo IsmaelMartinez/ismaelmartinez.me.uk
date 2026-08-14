@@ -13,6 +13,7 @@ import {
   queueDirection,
   step,
   stepInterval,
+  WALL_GRACE_STEPS,
   type SnakeState,
   type StepEvent,
   type Vec
@@ -54,6 +55,75 @@ function eatSafely(state: SnakeState, random: () => number): StepEvent {
   state.food = { x: state.snake[0].x + dir.x, y: state.snake[0].y + dir.y };
   queueDirection(state, dir);
   return step(state, random);
+}
+
+/**
+ * True when the head may move `d` this step: on the board, off the walls, and
+ * clear of the body the tail is about to vacate. `ignoreWalls` lets a caller
+ * ask the counterfactual — what would have been legal without those walls.
+ */
+function legalStep(state: SnakeState, d: Vec, ignoreWalls?: Set<number>): boolean {
+  const x = state.snake[0].x + d.x;
+  const y = state.snake[0].y + d.y;
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+  const i = cellIndex(x, y);
+  if (state.walls.has(i) && !ignoreWalls?.has(i)) return false;
+  return !state.snake.slice(0, -1).some(s => s.x === x && s.y === y);
+}
+
+/**
+ * Mirror of the rules' own `standingOn`: true while the snake, the apple or
+ * the bonus sits on the cell. That is exactly the condition under which a
+ * claimed cell's countdown restarts, so a test that tracks how long a ghost has
+ * been *visible warning* has to restart on the same condition.
+ */
+function occupiedCell(state: SnakeState, i: number): boolean {
+  if (state.snake.some(s => cellIndex(s.x, s.y) === i)) return true;
+  if (cellIndex(state.food.x, state.food.y) === i) return true;
+  if (state.bonus && cellIndex(state.bonus.pos.x, state.bonus.pos.y) === i) return true;
+  return false;
+}
+
+/**
+ * A novice's play: head for the apple, take any legal cell when that is
+ * blocked, and dither one turn in twenty. Deliberately not a solver — the
+ * point is to generate the ordinary mid-board traffic that walks into rungs.
+ *
+ * It does heed the one thing the game asks of a player: it stays off a
+ * ghosting cell, and off any cell whose every way out is wall or ghost, when
+ * it has somewhere else to go. The whole contract of the grace is that the
+ * warning buys agency, so a run played by an actor that ignores every warning
+ * would only ever prove the actor careless — the test below asserts that the
+ * closing geometry cannot strand a player who *does* read it.
+ */
+function playNovice(state: SnakeState, random: () => number): void {
+  const head = state.snake[0];
+  const dx = state.food.x - head.x;
+  const dy = state.food.y - head.y;
+  const toward: Vec[] = [];
+  if (dx) toward.push({ x: Math.sign(dx), y: 0 });
+  if (dy) toward.push({ x: 0, y: Math.sign(dy) });
+  if (Math.abs(dy) > Math.abs(dx)) toward.reverse();
+  const options = [...toward, ...TURNS].filter(
+    d => legalStep(state, d) && !(d.x === -state.direction.x && d.y === -state.direction.y)
+  );
+  /** True when the cell is somewhere the snake could still be next step. */
+  const open = (x: number, y: number, body: Vec[]) => {
+    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+    const i = cellIndex(x, y);
+    if (state.walls.has(i) || state.pendingWalls.has(i)) return false;
+    return !body.some(s => s.x === x && s.y === y);
+  };
+  const clear = options.filter(d => open(head.x + d.x, head.y + d.y, state.snake.slice(0, -1)));
+  const pick =
+    clear.find(d => {
+      const c = { x: head.x + d.x, y: head.y + d.y };
+      const body = state.snake.slice(0, -2);
+      return TURNS.some(n => open(c.x + n.x, c.y + n.y, body));
+    }) ??
+    clear[0] ??
+    options[0];
+  if (pick && random() > 0.05) queueDirection(state, pick);
 }
 
 /** Fast-forwards the apple count so the next eat lands on `rung`. */
@@ -301,17 +371,26 @@ describe('the arena ladder', () => {
     expect(step(state, random)).toBe('ate');
 
     const under = [cellIndex(4, 4), cellIndex(4, 5), cellIndex(5, 5)];
+    const clear = cellIndex(5, 4);
     expect(state.arena).toBe(1);
     expect(state.alive).toBe(true);
-    for (const i of under) {
-      expect(state.pendingWalls.has(i)).toBe(true);
+    // Nothing sets on the step the rung lands — the cell under the snake and
+    // the free fourth cell of the post both start as ghosts.
+    for (const i of [...under, clear]) {
+      expect(state.pendingWalls.get(i)).toBe(WALL_GRACE_STEPS);
       expect(state.walls.has(i)).toBe(false);
     }
-    // The fourth cell of that post was free, so it went solid straight away.
-    expect(state.walls.has(cellIndex(5, 4))).toBe(true);
 
-    // Walking away lets each claimed cell set, one per step as the tail clears.
-    for (let n = 0; n < 3; n++) {
+    // Walking away, the free cell sets as soon as its grace runs out; the
+    // cells under the snake wait to be vacated and then serve their own.
+    for (let n = 0; n < WALL_GRACE_STEPS; n++) {
+      state.food = { x: 0, y: 0 };
+      expect(step(state, random)).toBe('moved');
+    }
+    expect(state.walls.has(clear)).toBe(true);
+    expect(state.pendingWalls.has(cellIndex(5, 5))).toBe(true);
+
+    for (let n = 0; n < under.length; n++) {
       state.food = { x: 0, y: 0 };
       expect(step(state, random)).toBe('moved');
     }
@@ -325,7 +404,7 @@ describe('the arena ladder', () => {
     const state = createSnakeState(random);
     primeRung(state, ARENA_WALLS.length - 1, random);
     expect(state.arena).toBe(ARENA_WALLS.length - 1);
-    expect(state.walls.size).toBeGreaterThan(0);
+    expect(state.pendingWalls.size).toBeGreaterThan(0);
 
     for (let n = 0; n < 15; n++) {
       expect(eatSafely(state, random)).toBe('ate');
@@ -339,5 +418,204 @@ describe('the arena ladder', () => {
         expect(state.pendingWalls.has(bonus)).toBe(false);
       }
     }
+    // The ghosts of that last rung have had every step of the loop to set.
+    expect(state.walls.size).toBeGreaterThan(0);
+  });
+
+  it('leaves no dead ends and no sealed pockets at any cumulative rung', () => {
+    // The other half of the authoring proof above: not only is every free cell
+    // reachable, none of them is a cul-de-sac the snake can enter and not
+    // leave. Cheap to state, and it is what makes the ladder survivable.
+    const walls = new Set<number>();
+    for (let rung = 0; rung < ARENA_WALLS.length; rung++) {
+      for (const i of ARENA_WALLS[rung]) walls.add(i);
+      const deadEnds: number[] = [];
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const i = cellIndex(x, y);
+          if (walls.has(i)) continue;
+          const exits = TURNS.filter(d => {
+            const nx = x + d.x;
+            const ny = y + d.y;
+            if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return false;
+            return !walls.has(cellIndex(nx, ny));
+          });
+          if (exits.length < 2) deadEnds.push(i);
+        }
+      }
+      expect(deadEnds).toEqual([]);
+    }
+  });
+});
+
+/**
+ * Regression cover for #259: the ladder used to turn a claimed cell solid on
+ * the spot whenever nothing stood on it, which could put a fresh wall in the
+ * cell the head was one step from entering — 2.8% of rung transitions across
+ * the August 2026 audit, and 0.04% of them with no legal move left at all.
+ */
+describe('the arena ladder gives warning before a wall sets', () => {
+  it('ghosts the cell straight ahead rather than sealing it (issue #259 repro)', () => {
+    const random = seededRandom(11);
+    const state = createSnakeState(random);
+    // The issue's deterministic case: the snake runs along row 4 into the
+    // first rung's top-left corner post, and eats the apple that lands it.
+    state.snake = [
+      { x: 2, y: 4 },
+      { x: 1, y: 4 },
+      { x: 0, y: 4 }
+    ];
+    state.direction = { x: 1, y: 0 };
+    state.foodsEaten = ARENA_EVERY - 1;
+    state.food = { x: 3, y: 4 };
+    expect(step(state, random)).toBe('ate');
+    expect(state.arena).toBe(1);
+
+    // (4,4) is the very next cell the head enters. It belongs to the rung, so
+    // it is claimed — but as a ghost, not as geometry that kills the moment it
+    // appears. It may still set there later, once its grace has run.
+    const ahead = cellIndex(4, 4);
+    expect(ARENA_WALLS[1]).toContain(ahead);
+    expect(state.walls.has(ahead)).toBe(false);
+    expect(state.pendingWalls.get(ahead)).toBe(WALL_GRACE_STEPS);
+
+    // Before the fix this step was the death. Now the player crosses the ghost
+    // and has WALL_GRACE_STEPS of it to steer away.
+    state.food = { x: 0, y: 0 };
+    expect(step(state, random)).toBe('moved');
+    expect(state.alive).toBe(true);
+    expect(state.snake[0]).toEqual({ x: 4, y: 4 });
+  });
+
+  it('never sets a wall without the full grace, nor seals the head in', () => {
+    let rungs = 0;
+    let steps = 0;
+    /** Steps on which at least one claimed cell turned solid. */
+    let promotions = 0;
+    /** Steps a claimed cell spent waiting under the snake, apple or bonus. */
+    let heldWhileOccupied = 0;
+    /** Of those, the ones that threw away warning the player had already seen. */
+    let gracesRestarted = 0;
+    /** Walls that set in the cell the head was one step from entering. */
+    let aheadOfHead = 0;
+    /** Walls that set after having been covered — the restart does not starve. */
+    let setAfterCover = 0;
+    // Violations are counted rather than asserted per step: 1,200 runs is a
+    // few hundred thousand steps, and one assertion each dominates the clock.
+    const unwarned: string[] = [];
+    const underSnake: string[] = [];
+    const sealedTheHeadIn: string[] = [];
+
+    for (let run = 0; run < 1200; run++) {
+      const random = seededRandom(run * 7919 + 13);
+      const state = createSnakeState(random);
+      /**
+       * *Consecutive* frames a cell has been drawn as a ghost the player could
+       * see — which is what the grace promises, and not the same thing as the
+       * countdown's own decrements. Counted from the rendered state after each
+       * step rather than from the cells pending before it, for two reasons that
+       * both hid a step's worth of warning. A cell this step's rung claims is
+       * on screen as a ghost the moment the step ends, so that frame is the
+       * first of its grace even though no countdown has visited it yet. And the
+       * step that turns a cell solid renders it as a wall, not a ghost, so it
+       * must not be credited as warning: the count stops at the last frame the
+       * cell was still pending. Add those two together on the old counter and
+       * they cancelled, which is exactly how it reported four for a vacated
+       * cell the player saw ghost three times.
+       */
+      const ghostAge = new Map<number, number>();
+      /** Claimed cells that have been hidden at least once since they were claimed. */
+      const wasCovered = new Set<number>();
+
+      for (let n = 0; n < 4000 && state.alive; n++) {
+        playNovice(state, random);
+        // Snapshotted rather than diffed by size: a wall that skips the ghost
+        // stage entirely — the bug this test exists for — has to be visible
+        // here even though nothing ever tracked it as pending.
+        const wallsBefore = new Set(state.walls);
+        const arenaBefore = state.arena;
+        step(state, random);
+        steps++;
+        if (!state.alive) break;
+        if (state.arena > arenaBefore) rungs++;
+
+        // Read off the frame this step just produced: every cell still claimed
+        // is drawn, and `game.ts` draws the ghosts under the food, the bonus
+        // and the snake, so a covered one shows the player nothing at all.
+        for (const i of state.pendingWalls.keys()) {
+          if (occupiedCell(state, i)) {
+            heldWhileOccupied++;
+            if ((ghostAge.get(i) ?? 0) > 0) gracesRestarted++;
+            ghostAge.set(i, 0);
+            wasCovered.add(i);
+            continue;
+          }
+          ghostAge.set(i, (ghostAge.get(i) ?? 0) + 1);
+        }
+
+        const head = state.snake[0];
+        const ahead = cellIndex(head.x + state.direction.x, head.y + state.direction.y);
+        const fresh =
+          state.walls.size === wallsBefore.size
+            ? []
+            : [...state.walls].filter(i => !wallsBefore.has(i));
+
+        for (const i of fresh) {
+          // Every wall that sets has ghosted, in the clear and unbroken, for
+          // its full grace first — including any that sets straight ahead.
+          const age = ghostAge.get(i) ?? 0;
+          if (age < WALL_GRACE_STEPS) unwarned.push(`run ${run} step ${n} cell ${i} age ${age}`);
+          if (i === ahead) aheadOfHead++;
+          if (wasCovered.has(i)) setAfterCover++;
+          if (state.snake.some(s => cellIndex(s.x, s.y) === i)) {
+            underSnake.push(`run ${run} step ${n} cell ${i}`);
+          }
+        }
+        for (const i of fresh) {
+          ghostAge.delete(i);
+          wasCovered.delete(i);
+        }
+
+        // Checked where the walls *land*, not where the rung advances: with a
+        // grace in front of every claim, a rung's cells set several steps
+        // after the apple that claimed them, so gating this on the rung would
+        // never look at the step that can actually do the harm. Geometry must
+        // never be what takes the head's last move away — if it has none now,
+        // it had none ignoring the walls that just set either.
+        if (fresh.length) {
+          promotions++;
+          const ignore = new Set(fresh);
+          const boxedIn = !TURNS.some(d => legalStep(state, d));
+          if (boxedIn && TURNS.some(d => legalStep(state, d, ignore))) {
+            sealedTheHeadIn.push(`run ${run} step ${n}: sealed by ${fresh.join(',')}`);
+          }
+        }
+      }
+    }
+
+    // Guard against the runs dying too early to prove anything, and against
+    // either check going vacuous: both read `fresh`, so a change that stopped
+    // walls promoting would silently empty them.
+    expect(steps).toBeGreaterThan(50_000);
+    expect(rungs).toBeGreaterThan(500);
+    expect(promotions).toBeGreaterThan(500);
+    // …and the restarted countdown is genuinely exercised, so the age above is
+    // measuring warning the player saw rather than steps on a clock. The second
+    // floor is the one that makes it a *consecutive* count: without cells that
+    // were covered after their warning had already started, resetting the age
+    // and merely pausing it would assert exactly the same thing.
+    expect(heldWhileOccupied).toBeGreaterThan(0);
+    expect(gracesRestarted).toBeGreaterThan(0);
+    // A restart is a delay, not a reprieve: cells that spent time hidden do
+    // still set once they have been left alone for the grace. Without this the
+    // frame count above could pass by never promoting a covered cell at all —
+    // and that is the path whose count was one short.
+    expect(setAfterCover).toBeGreaterThan(0);
+    // The audit's own headline case does occur — walls do set right in front
+    // of the head — but every one of them ghosted there first.
+    expect(aheadOfHead).toBeGreaterThan(0);
+    expect(unwarned).toEqual([]);
+    expect(underSnake).toEqual([]);
+    expect(sealedTheHeadIn).toEqual([]);
   });
 });

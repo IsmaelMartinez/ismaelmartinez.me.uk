@@ -82,6 +82,11 @@ export interface LevelDef {
    * ends immediately with whatever has been rescued so far. Tuned so a player
    * who cranks the release rate clears comfortably — the timer punishes
    * trickling, not playing.
+   *
+   * A level without one runs under no clock at all, not a hidden fallback:
+   * every countdown a level runs under is on screen. A level whose crowd can no
+   * longer reach the exit therefore never ends by itself — the player ends it
+   * with the Nuke button, which stall.ts explains and the HUD points at.
    */
   timeLimit?: number;
   /**
@@ -107,6 +112,29 @@ function paintShape(bmp: TerrainBitmap, shape: Shape): void {
     const colH = Math.max(1, Math.round(shape.h * t));
     bmp.fillRect(shape.x + i, shape.y + shape.h - colH, 1, colH);
   }
+}
+
+/** Pick-one blasts a level grants when it does not author its own count. */
+export const DEFAULT_BOMBER_STOCK = 2;
+
+/**
+ * The hand a level actually deals: its authored skills, plus the universal
+ * bomber reserve for the levels that leave `bomber` out.
+ *
+ * Shared rather than spelled out at each call site because the reserve is a real
+ * move the player has — two blasts they were never charged for — and a headless
+ * playthrough that dealt itself a different hand from the browser would be
+ * proving a strategy nobody can actually play.
+ */
+export function levelStock(def: LevelDef): Record<Skill, number> {
+  return {
+    blocker: def.stock.blocker ?? 0,
+    digger: def.stock.digger ?? 0,
+    basher: def.stock.basher ?? 0,
+    builder: def.stock.builder ?? 0,
+    floater: def.stock.floater ?? 0,
+    bomber: def.stock.bomber ?? DEFAULT_BOMBER_STOCK
+  };
 }
 
 /** Every hatch a level spawns from — the primary plus the optional second. */

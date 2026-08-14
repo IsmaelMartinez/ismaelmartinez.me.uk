@@ -34,6 +34,7 @@ import {
   buildLevel,
   atExit,
   levelHatches,
+  levelStock,
   LEVELS,
   LEVEL_W,
   LEVEL_H,
@@ -42,6 +43,7 @@ import {
   EXIT_HALF_W,
   type Hatch
 } from './levels';
+import { createStallWatch, levelEnding } from './stall';
 import { levelSelectItems, loadClearedLevels, saveClearedLevels } from './progress';
 import { exitArrowAngle, rescueProgress } from './hud';
 import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
@@ -49,7 +51,6 @@ import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
 const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
 const NUKE_INTERVAL = 4; // ticks between successive detonations during a nuke
-const DEFAULT_BOMBER_STOCK = 2; // pick-one blasts each level grants when unspecified
 
 // Deliberately NOT engine/effects: these debris motes fade on a life*2 ramp
 // and step from 2px to 1px as they die, which the shared module's
@@ -146,6 +147,7 @@ export function initLemmingsGame(): void {
   const levelNum = el('level-num');
   const bestLevel = el('best-level');
   const levelHint = el('level-hint');
+  const stuckHint = el('stuck-hint');
   const skillButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.skill-btn'));
 
   const strings = {
@@ -356,6 +358,13 @@ export function initLemmingsGame(): void {
   let runScore = 0;
   let combo = newCombo();
   let levelTicks = 0;
+  // Watches the field for a standstill. It ends nothing: it raises the "you look
+  // stuck" hint, and it says which tick the level is billed for (see stall.ts).
+  const stall = createStallWatch();
+  // The tick the field last changed before the player conceded, captured when
+  // they hit Nuke — the chain that follows keeps the field moving, so by the
+  // time it resolves the watcher can no longer tell where the waiting ended.
+  let concededAt: number | null = null;
   // Progress lives in its own key; older installs stored it as the table's
   // "score", which loadClearedLevels migrates on first read.
   let cleared = loadClearedLevels(board.best(), LEVELS.length);
@@ -409,12 +418,14 @@ export function initLemmingsGame(): void {
     nuking = false;
     combo = newCombo();
     levelTicks = 0;
-    stock = blankStock();
-    for (const key of SKILL_ORDER) stock[key] = def.stock[key] ?? 0;
+    stall.reset();
+    concededAt = null;
+    setStuckHint(false);
     // The bomber (pick-one blast) is the single-critter counterpart to the
     // always-available nuke, so every level grants a small reserve rather than
-    // authoring it into each hand-tuned stock — unless a level sets its own.
-    stock.bomber = def.stock.bomber ?? DEFAULT_BOMBER_STOCK;
+    // authoring it into each hand-tuned stock — `levelStock` deals that hand,
+    // and the playthrough harness deals itself the same one.
+    stock = levelStock(def);
     selected = SKILL_ORDER.find(s => stock[s] > 0) ?? null;
     levelNum.textContent = (index + 1).toString();
     neededCount.textContent = def.needed.toString();
@@ -425,6 +436,27 @@ export function initLemmingsGame(): void {
     levelHint.hidden = !hint;
     syncHud();
     syncToolbar();
+  }
+
+  /**
+   * Raises or withdraws the standstill notice.
+   *
+   * The wording is written into the element and cleared out of it again, rather
+   * than sitting there permanently behind a `hidden` attribute that comes and
+   * goes. `role="status"` makes this a live region, and assistive technology
+   * announces a change to a region's *contents*; an element whose text never
+   * changes is not a change, so a hint driven by `hidden` alone could go up on
+   * screen and never be spoken. The locale's own string still comes from
+   * `useTranslations` at build time, parked in `data-hint` until it is needed,
+   * and the page hides the element while it is empty.
+   *
+   * The equality guard matters as much as the write: `update` calls this on
+   * every one of the sixty ticks a second, and rewriting the same sentence
+   * would re-announce it each time.
+   */
+  function setStuckHint(on: boolean) {
+    const text = on ? (stuckHint.dataset.hint ?? '') : '';
+    if (stuckHint.textContent !== text) stuckHint.textContent = text;
   }
 
   function syncHud() {
@@ -508,10 +540,22 @@ export function initLemmingsGame(): void {
     }
   }
 
+  /**
+   * The player's way out, and the only one: a level whose crowd can no longer
+   * reach the exit is never ended for them (see stall.ts), so this button is
+   * what makes such a level escapable. It clears the field, which resolves the
+   * level through its ordinary `settled` ending a few ticks later.
+   *
+   * Conceding also freezes what the level is billed for at the tick the field
+   * last moved, so a player who wins the quota, watches a straggler pace a
+   * pocket, and then nukes to move on is not charged for the wait.
+   */
   function startNuke() {
     if (phase !== 'playing' || nuking) return;
     nuking = true;
     nukeTimer = 0;
+    concededAt = levelTicks - stall.idleTicks;
+    setStuckHint(false);
     spawned = def.spawnCount; // no more critters emerge
     audio.playSfx('explosion');
   }
@@ -538,14 +582,25 @@ export function initLemmingsGame(): void {
   }
 
   /**
-   * Ends the level. `timedOut` is the caller's verdict on *why* it ended (the
-   * clock, rather than the crowd resolving) — finishLevel never re-derives it
-   * from tick state, so a quota failure that merely coincides with the final
-   * tick is not mislabelled as a timeout.
+   * Ends the level. `endedBy` is the caller's verdict on *why* it ended (the
+   * level's authored clock, rather than the crowd resolving) — finishLevel never
+   * re-derives it from tick state, so a quota failure that merely coincides with
+   * the final tick is not mislabelled as a timeout.
+   *
+   * Billing, per ending. Both of the endings the *level* reaches are scored on
+   * the ticks that genuinely elapsed: a crowd that resolves itself is billed for
+   * the run it took, and an authored clock running out is billed for the whole
+   * clock — which is what a countdown the player watched expiring has to cost,
+   * and pays no speed bonus on a level whose par the clock outlasts. Only the
+   * one ending the *player* reaches is scored anywhere else: conceding freezes
+   * the bill at the tick the field last moved, so the standstill the game itself
+   * asked them to sit through before offering the Nuke button is not charged for.
    */
-  function finishLevel(timedOut = false) {
+  function finishLevel(endedBy: 'clock' | null = null) {
     if (phase === 'result') return;
     phase = 'result';
+    const atTick = concededAt ?? levelTicks;
+    setStuckHint(false);
     syncToolbar();
     audio.stop();
     const won = saved >= def.needed;
@@ -554,7 +609,7 @@ export function initLemmingsGame(): void {
       saved,
       needed: def.needed,
       spawnCount: def.spawnCount,
-      ticks: levelTicks,
+      ticks: atTick,
       par: def.par
     });
     runScore += bonuses.total;
@@ -583,7 +638,7 @@ export function initLemmingsGame(): void {
     } else if (won) {
       emoji = '🎉';
       title = strings.complete;
-    } else if (timedOut) {
+    } else if (endedBy === 'clock') {
       emoji = '⏰';
       title = strings.timeUp;
     }
@@ -679,16 +734,33 @@ export function initLemmingsGame(): void {
     critters = critters.filter(c => isActive(c));
     syncHud();
 
-    // The level ends once everyone has emerged and no critter can still be
-    // rescued: any stragglers are blockers, which never leave on their own and
-    // — with no one else left to dig them free — are stuck for good. A timed
-    // level also ends the moment its clock runs out, stranding whoever is
-    // still in the field — except during a nuke: the player already conceded,
-    // so the chain plays out and the result reads as the failure it is rather
-    // than a timeout coaching them to speed up.
-    const timedOut = !nuking && def.timeLimit !== undefined && levelTicks >= def.timeLimit;
-    const done = spawned >= def.spawnCount && critters.every(c => c.state === 'blocker');
-    if (done || timedOut) finishLevel(timedOut && !done);
+    // Whether the level is over is decided in one pure place (stall.ts), which
+    // the headless playthrough harness calls too — the loop and the harness
+    // agreeing on when a level ends is the whole point of the helper, since a
+    // harness that ends levels on its own terms once certified twenty-five
+    // levels the browser would happily hang on.
+    stall.observe({
+      critters,
+      saved,
+      spawned,
+      terrainVersion: bmp.version,
+      stock: SKILL_ORDER.reduce((n, s) => n + stock[s], 0)
+    });
+    // A frozen field ends nothing. It offers the player the way out instead: a
+    // line of text naming the Nuke button, which appears once the field has
+    // gone nowhere for a while and withdraws itself the moment anything moves
+    // again. Guessing wrong here costs that sentence and nothing else, which is
+    // the whole reason the hint replaced the automatic ending it used to drive.
+    setStuckHint(stall.stuck && !nuking);
+    const ending = levelEnding({
+      allOut: spawned >= def.spawnCount,
+      onlyBlockersLeft: critters.every(c => c.state === 'blocker'),
+      ticks: levelTicks,
+      timeLimit: def.timeLimit,
+      conceded: nuking
+    });
+    if (ending === 'settled') finishLevel();
+    else if (ending === 'clock') finishLevel('clock');
   }
 
   // --- Rendering ---
@@ -1014,6 +1086,9 @@ export function initLemmingsGame(): void {
     vignetteLayer.draw(ctx);
 
     // Timed levels wear their clock top-centre, flashing red for the last 10s.
+    // Every countdown a level runs under is on screen: an untimed level has no
+    // clock behind the scenes either, and nothing but this one can end a level
+    // on time the player was never shown.
     if (phase === 'playing' && def.timeLimit !== undefined) {
       const remaining = Math.max(0, def.timeLimit - levelTicks);
       const secs = Math.ceil(remaining / 60);

@@ -150,6 +150,25 @@ const hintAttrs = Object.fromEntries(
         </div>
 
         <p id="level-hint" class="level-hint" hidden></p>
+        {/*
+          Shown by the game once the field has gone nowhere for a while, and
+          withdrawn the moment anything moves. It is a hint, not a verdict:
+          nothing in the game ends on a standstill, so this is what makes a level
+          whose crowd can no longer reach the exit escapable rather than hung.
+
+          `role="status"` so it is announced without stealing focus — which is
+          also why it ships empty with its wording parked in `data-hint`. A live
+          region is announced when its *contents* change, so the game writes the
+          sentence in and clears it out again; revealing text that was there all
+          along may never be spoken. The element stays empty rather than hidden
+          between hints, and the `:empty` rule below keeps it off the page.
+        */}
+        <p
+          id="stuck-hint"
+          class="stuck-hint"
+          role="status"
+          data-hint={t('fun.lemmings.stuckHint')}
+        ></p>
 
         <div class="skill-bar">
           {skills.map((skill, i) => (
@@ -166,7 +185,12 @@ const hintAttrs = Object.fromEntries(
             <label for="spawn-slider">{t('fun.lemmings.spawnRate')}</label>
             <input type="range" id="spawn-slider" min="1" max="10" value="1" />
           </div>
-          <button id="nuke-btn" class="btn nuke-btn">💥 {t('fun.lemmings.nuke')}</button>
+          <button
+            id="nuke-btn"
+            class="btn nuke-btn"
+            title={t('fun.lemmings.nukeTitle')}
+            aria-label={`${t('fun.lemmings.nuke')} — ${t('fun.lemmings.nukeTitle')}`}
+          >💥 {t('fun.lemmings.nuke')}</button>
         </div>
 
         <p class="keys-hint">{t('fun.lemmings.hint')}</p>
@@ -421,6 +445,30 @@ const hintAttrs = Object.fromEntries(
 
   .level-hint::before {
     content: '💡 ';
+  }
+
+  /* Amber rather than the level hint's green: this one is about the run being
+     in trouble, and the two can be on screen together. */
+  .stuck-hint {
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  /* The live region is always in the document so changes to it are announced;
+     what comes and goes is its text, so an empty one takes no space. */
+  .stuck-hint:empty {
+    display: none;
+  }
+
+  .stuck-hint::before {
+    content: '🐛 ';
   }
 
   .level-grid {

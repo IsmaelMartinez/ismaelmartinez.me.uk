@@ -44,8 +44,8 @@ export const ARENA_EVERY = 8;
  * its floor (22), which is where a run used to stop offering anything new.
  *
  * Authored light on purpose — short bars and posts, never a maze. Every rung
- * leaves the free cells mutually reachable; the test suite proves it rather
- * than trusting the eye.
+ * leaves the free cells mutually reachable and none of them a cul-de-sac; the
+ * test suite proves both rather than trusting the eye.
  */
 export const ARENA_WALLS: readonly (readonly number[])[] = [
   [],
@@ -94,12 +94,15 @@ export interface SnakeState {
   /** Solid cells. The head dies on one. */
   walls: Set<number>;
   /**
-   * Cells the ladder has claimed but that were still occupied when the rung
-   * arrived. They stay passable and turn solid the moment they are vacated,
-   * so a wall never materialises underneath the snake — the player watches
-   * them close in instead of dying to geometry that appeared out of nowhere.
+   * Cells the ladder has claimed but that are not solid yet, each with the
+   * steps of grace it has left. *Every* claimed cell starts here, whether or
+   * not something stood on it: the cell stays passable, renders as a pulsing
+   * ghost, and only sets once it has been clear for WALL_GRACE_STEPS steps.
+   * So a wall never materialises underneath the snake, nor in the cell the
+   * head is one step from entering — the player watches them close in instead
+   * of dying to geometry that appeared out of nowhere.
    */
-  pendingWalls: Set<number>;
+  pendingWalls: Map<number, number>;
 }
 
 export type StepEvent = 'moved' | 'ate' | 'ate-bonus' | 'died';
@@ -121,6 +124,13 @@ function standingOn(state: SnakeState, i: number): boolean {
   return false;
 }
 
+/**
+ * Steps a claimed cell must sit clear, ghosting, before it turns solid. At the
+ * speed floor (70ms a step) four steps is 280ms of warning, which clears human
+ * simple reaction time; earlier in a run it is closer to half a second.
+ */
+export const WALL_GRACE_STEPS = 4;
+
 /** Claims the walls of every rung the apple count has now reached. */
 function advanceArena(state: SnakeState): void {
   const rung = Math.min(
@@ -130,17 +140,25 @@ function advanceArena(state: SnakeState): void {
   while (state.arena < rung) {
     state.arena++;
     for (const i of ARENA_WALLS[state.arena]) {
-      if (state.walls.has(i)) continue;
-      if (standingOn(state, i)) state.pendingWalls.add(i);
-      else state.walls.add(i);
+      if (state.walls.has(i) || state.pendingWalls.has(i)) continue;
+      state.pendingWalls.set(i, WALL_GRACE_STEPS);
     }
   }
 }
 
-/** Turns claimed cells solid once whatever stood on them has moved off. */
+/**
+ * Counts the claimed cells down and turns them solid. The countdown only runs
+ * while the cell is clear, so a cell under the snake, an apple or a bonus
+ * waits to be vacated and *then* still ghosts for its full grace — nothing
+ * goes solid without WALL_GRACE_STEPS steps of visible warning first.
+ */
 function settleWalls(state: SnakeState): void {
-  for (const i of state.pendingWalls) {
+  for (const [i, left] of state.pendingWalls) {
     if (standingOn(state, i)) continue;
+    if (left > 1) {
+      state.pendingWalls.set(i, left - 1);
+      continue;
+    }
     state.pendingWalls.delete(i);
     state.walls.add(i);
   }
@@ -174,7 +192,7 @@ export function createSnakeState(random: () => number = Math.random): SnakeState
     alive: true,
     arena: 0,
     walls: new Set<number>(),
-    pendingWalls: new Set<number>()
+    pendingWalls: new Map<number, number>()
   };
   state.food = freeCell(state, random) ?? { x: 15, y: 10 };
   return state;
@@ -239,6 +257,11 @@ export function step(state: SnakeState, random: () => number = Math.random): Ste
     }
   }
 
+  // Ghosts age (and any that ran out set) *before* this step's rung claims its
+  // own cells, so a freshly claimed cell always gets its full grace rather
+  // than being counted down on the very step it appeared.
+  settleWalls(state);
+
   let event: StepEvent = ateBonus ? 'ate-bonus' : 'moved';
   if (ate) {
     state.score += FOOD_POINTS;
@@ -254,6 +277,5 @@ export function step(state: SnakeState, random: () => number = Math.random): Ste
     event = 'ate';
   }
 
-  settleWalls(state);
   return event;
 }

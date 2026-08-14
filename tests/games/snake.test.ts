@@ -13,6 +13,7 @@ import {
   queueDirection,
   step,
   stepInterval,
+  WALL_GRACE_STEPS,
   type SnakeState,
   type StepEvent,
   type Vec
@@ -54,6 +55,39 @@ function eatSafely(state: SnakeState, random: () => number): StepEvent {
   state.food = { x: state.snake[0].x + dir.x, y: state.snake[0].y + dir.y };
   queueDirection(state, dir);
   return step(state, random);
+}
+
+/**
+ * True when the head may move `d` this step: on the board, off the walls, and
+ * clear of the body the tail is about to vacate. `ignoreWalls` lets a caller
+ * ask the counterfactual — what would have been legal without those walls.
+ */
+function legalStep(state: SnakeState, d: Vec, ignoreWalls?: Set<number>): boolean {
+  const x = state.snake[0].x + d.x;
+  const y = state.snake[0].y + d.y;
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+  const i = cellIndex(x, y);
+  if (state.walls.has(i) && !ignoreWalls?.has(i)) return false;
+  return !state.snake.slice(0, -1).some(s => s.x === x && s.y === y);
+}
+
+/**
+ * A novice's play: head for the apple, take any legal cell when that is
+ * blocked, and dither one turn in twenty. Deliberately not a solver — the
+ * point is to generate the ordinary mid-board traffic that walks into rungs.
+ */
+function playNovice(state: SnakeState, random: () => number): void {
+  const head = state.snake[0];
+  const dx = state.food.x - head.x;
+  const dy = state.food.y - head.y;
+  const toward: Vec[] = [];
+  if (dx) toward.push({ x: Math.sign(dx), y: 0 });
+  if (dy) toward.push({ x: 0, y: Math.sign(dy) });
+  if (Math.abs(dy) > Math.abs(dx)) toward.reverse();
+  const pick = [...toward, ...TURNS].find(
+    d => legalStep(state, d) && !(d.x === -state.direction.x && d.y === -state.direction.y)
+  );
+  if (pick && random() > 0.05) queueDirection(state, pick);
 }
 
 /** Fast-forwards the apple count so the next eat lands on `rung`. */
@@ -301,17 +335,26 @@ describe('the arena ladder', () => {
     expect(step(state, random)).toBe('ate');
 
     const under = [cellIndex(4, 4), cellIndex(4, 5), cellIndex(5, 5)];
+    const clear = cellIndex(5, 4);
     expect(state.arena).toBe(1);
     expect(state.alive).toBe(true);
-    for (const i of under) {
-      expect(state.pendingWalls.has(i)).toBe(true);
+    // Nothing sets on the step the rung lands — the cell under the snake and
+    // the free fourth cell of the post both start as ghosts.
+    for (const i of [...under, clear]) {
+      expect(state.pendingWalls.get(i)).toBe(WALL_GRACE_STEPS);
       expect(state.walls.has(i)).toBe(false);
     }
-    // The fourth cell of that post was free, so it went solid straight away.
-    expect(state.walls.has(cellIndex(5, 4))).toBe(true);
 
-    // Walking away lets each claimed cell set, one per step as the tail clears.
-    for (let n = 0; n < 3; n++) {
+    // Walking away, the free cell sets as soon as its grace runs out; the
+    // cells under the snake wait to be vacated and then serve their own.
+    for (let n = 0; n < WALL_GRACE_STEPS; n++) {
+      state.food = { x: 0, y: 0 };
+      expect(step(state, random)).toBe('moved');
+    }
+    expect(state.walls.has(clear)).toBe(true);
+    expect(state.pendingWalls.has(cellIndex(5, 5))).toBe(true);
+
+    for (let n = 0; n < under.length; n++) {
       state.food = { x: 0, y: 0 };
       expect(step(state, random)).toBe('moved');
     }
@@ -325,7 +368,7 @@ describe('the arena ladder', () => {
     const state = createSnakeState(random);
     primeRung(state, ARENA_WALLS.length - 1, random);
     expect(state.arena).toBe(ARENA_WALLS.length - 1);
-    expect(state.walls.size).toBeGreaterThan(0);
+    expect(state.pendingWalls.size).toBeGreaterThan(0);
 
     for (let n = 0; n < 15; n++) {
       expect(eatSafely(state, random)).toBe('ate');
@@ -339,5 +382,149 @@ describe('the arena ladder', () => {
         expect(state.pendingWalls.has(bonus)).toBe(false);
       }
     }
+    // The ghosts of that last rung have had every step of the loop to set.
+    expect(state.walls.size).toBeGreaterThan(0);
+  });
+
+  it('leaves no dead ends and no sealed pockets at any cumulative rung', () => {
+    // The other half of the authoring proof above: not only is every free cell
+    // reachable, none of them is a cul-de-sac the snake can enter and not
+    // leave. Cheap to state, and it is what makes the ladder survivable.
+    const walls = new Set<number>();
+    for (let rung = 0; rung < ARENA_WALLS.length; rung++) {
+      for (const i of ARENA_WALLS[rung]) walls.add(i);
+      const deadEnds: number[] = [];
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const i = cellIndex(x, y);
+          if (walls.has(i)) continue;
+          const exits = TURNS.filter(d => {
+            const nx = x + d.x;
+            const ny = y + d.y;
+            if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return false;
+            return !walls.has(cellIndex(nx, ny));
+          });
+          if (exits.length < 2) deadEnds.push(i);
+        }
+      }
+      expect(deadEnds).toEqual([]);
+    }
+  });
+});
+
+/**
+ * Regression cover for #259: the ladder used to turn a claimed cell solid on
+ * the spot whenever nothing stood on it, which could put a fresh wall in the
+ * cell the head was one step from entering — 2.8% of rung transitions across
+ * the August 2026 audit, and 0.04% of them with no legal move left at all.
+ */
+describe('the arena ladder gives warning before a wall sets', () => {
+  it('does not seal the cell straight ahead of the head (issue #259 repro)', () => {
+    const random = seededRandom(11);
+    const state = createSnakeState(random);
+    // The issue's deterministic case: the snake runs along row 4 into the
+    // first rung's top-left corner post, and eats the apple that lands it.
+    state.snake = [
+      { x: 2, y: 4 },
+      { x: 1, y: 4 },
+      { x: 0, y: 4 }
+    ];
+    state.direction = { x: 1, y: 0 };
+    state.foodsEaten = ARENA_EVERY - 1;
+    state.food = { x: 3, y: 4 };
+    expect(step(state, random)).toBe('ate');
+    expect(state.arena).toBe(1);
+
+    // (4,4) is the very next cell the head enters. It belongs to the rung, so
+    // it is claimed — but as a ghost, never as geometry that kills on contact.
+    const ahead = cellIndex(4, 4);
+    expect(ARENA_WALLS[1]).toContain(ahead);
+    expect(state.walls.has(ahead)).toBe(false);
+    expect(state.pendingWalls.get(ahead)).toBe(WALL_GRACE_STEPS);
+
+    // Before the fix this step was the death. Now the player crosses the ghost
+    // and has WALL_GRACE_STEPS of it to steer away.
+    state.food = { x: 0, y: 0 };
+    expect(step(state, random)).toBe('moved');
+    expect(state.alive).toBe(true);
+    expect(state.snake[0]).toEqual({ x: 4, y: 4 });
+  });
+
+  it('never sets a wall without the full grace, across many seeded runs', () => {
+    let rungs = 0;
+    let steps = 0;
+    /** Walls that set in the cell the head was one step from entering. */
+    let aheadOfHead = 0;
+    // Violations are counted rather than asserted per step: 1,200 runs is a
+    // few hundred thousand steps, and one assertion each dominates the clock.
+    const unwarned: string[] = [];
+    const underSnake: string[] = [];
+    const rungsThatTookTheLastMove: string[] = [];
+
+    for (let run = 0; run < 1200; run++) {
+      const random = seededRandom(run * 7919 + 13);
+      const state = createSnakeState(random);
+      /** Steps a cell has been a visible ghost for, cleared when it stops. */
+      const ghostAge = new Map<number, number>();
+
+      for (let n = 0; n < 4000 && state.alive; n++) {
+        playNovice(state, random);
+        // Snapshotted rather than diffed by size: a wall that skips the ghost
+        // stage entirely — the bug this test exists for — has to be visible
+        // here even though nothing ever tracked it as pending.
+        const wallsBefore = new Set(state.walls);
+        const arenaBefore = state.arena;
+        step(state, random);
+        steps++;
+        if (!state.alive) break;
+
+        const head = state.snake[0];
+        const ahead = cellIndex(head.x + state.direction.x, head.y + state.direction.y);
+        const fresh =
+          state.walls.size === wallsBefore.size
+            ? []
+            : [...state.walls].filter(i => !wallsBefore.has(i));
+
+        for (const i of fresh) {
+          // Every wall that sets has ghosted, in the clear, for its full grace
+          // first — including any that sets in the cell straight ahead.
+          const age = ghostAge.get(i) ?? 0;
+          if (age < WALL_GRACE_STEPS) unwarned.push(`run ${run} step ${n} cell ${i} age ${age}`);
+          if (i === ahead) aheadOfHead++;
+          if (state.snake.some(s => cellIndex(s.x, s.y) === i)) {
+            underSnake.push(`run ${run} step ${n} cell ${i}`);
+          }
+        }
+
+        if (state.arena > arenaBefore) {
+          rungs++;
+          // A rung must never be what takes the last move away: whatever the
+          // head can do now, it could do ignoring the walls that just set.
+          const ignore = new Set(fresh);
+          const moves = TURNS.filter(d => legalStep(state, d)).length;
+          const counterfactual = TURNS.filter(d => legalStep(state, d, ignore)).length;
+          if (moves !== counterfactual) {
+            rungsThatTookTheLastMove.push(`run ${run} step ${n}: ${moves} vs ${counterfactual}`);
+          }
+        }
+
+        for (const i of ghostAge.keys()) {
+          if (!state.pendingWalls.has(i)) ghostAge.delete(i);
+        }
+        for (const i of state.pendingWalls.keys()) {
+          ghostAge.set(i, (ghostAge.get(i) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Guard against the runs dying too early to prove anything.
+    expect(steps).toBeGreaterThan(50_000);
+    expect(rungs).toBeGreaterThan(500);
+    // The audit's own headline case does occur — walls do set right in front
+    // of the head — but every one of them ghosted there first.
+    expect(aheadOfHead).toBeGreaterThan(0);
+    expect(unwarned).toEqual([]);
+    expect(underSnake).toEqual([]);
+    expect(rungsThatTookTheLastMove).toEqual([]);
   });
 });

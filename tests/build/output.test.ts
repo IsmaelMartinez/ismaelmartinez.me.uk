@@ -77,4 +77,28 @@ describe.skipIf(!hasDist)('build output', () => {
       });
     }
   });
+
+  /**
+   * Asserted against the built page rather than a test fixture, because the
+   * defect is in the markup the server renders and a hand-written skeleton
+   * could not have caught it. Microcity's Retire button once carried an
+   * aria-label holding the *hint*, which replaced the visible "Retire" as the
+   * accessible name: voice control had nothing to match on and screen readers
+   * announced a name that did not contain the label (WCAG 2.5.3). The hint
+   * belongs in `title`, which is a description, not a name.
+   */
+  describe('Microcity retire controls keep their visible label as their name', () => {
+    for (const locale of locales) {
+      it(`${locale}/fun/city keeps the label in the name and guards the run`, () => {
+        const html = readFileSync(`dist/${locale}/fun/city/index.html`, 'utf-8');
+        const buttons = html.match(/<button[^>]*id="retire[^"]*"[^>]*>/g) ?? [];
+        // The control itself plus the two answers on its confirmation.
+        expect(buttons).toHaveLength(3);
+        for (const button of buttons) expect(button).not.toContain('aria-label');
+        expect(html).toContain('id="retire-btn"');
+        expect(html).toContain('id="retire-overlay"');
+        expect(html).toContain('role="alertdialog"');
+      });
+    }
+  });
 });

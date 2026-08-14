@@ -58,7 +58,7 @@ const PAGE_HTML = `
     <div id="start-overlay"><button id="start-btn">Found</button></div>
     <div id="over-overlay" style="display: none;">
       <span id="over-icon">💸</span>
-      <h2 id="over-title">Bankrupt!</h2>
+      <h2 id="over-title" tabindex="-1">Bankrupt!</h2>
       <p id="over-desc">The city treasury ran dry.</p>
       <p><strong id="final-months">0</strong><strong id="final-pop">0</strong></p>
       <div class="hs-panel" id="highscores" data-hs-game="city" hidden
@@ -77,7 +77,7 @@ const PAGE_HTML = `
       <button id="restart-btn">New City</button>
     </div>
     <div id="retire-overlay" style="display: none;" tabindex="-1"
-         role="alertdialog" aria-modal="true"
+         role="alertdialog"
          aria-labelledby="retire-confirm-title" aria-describedby="retire-confirm-desc">
       <h2 id="retire-confirm-title">Retire this city?</h2>
       <p id="retire-confirm-desc">The run ends here.</p>
@@ -465,8 +465,8 @@ describe('Microcity retire confirmation', () => {
    * game: a player can open the prompt and then click a nav link, and focus
    * leaves `#city-root` entirely. A trap scoped to the root stops seeing keys at
    * that moment — Escape does nothing and Tab walks out into the page behind a
-   * dialog still advertising `role="alertdialog" aria-modal="true"` — which
-   * strands a keyboard-only player in a modal that is not modal.
+   * dialog that is still on screen — which strands a keyboard-only player in
+   * front of a prompt none of their keys can answer.
    */
   it('keeps trapping once focus has left the game root', () => {
     foundCity();
@@ -503,5 +503,51 @@ describe('Microcity retire confirmation', () => {
     expect(overlayShown()).toBe(true);
     expect(document.getElementById('over-title')!.textContent).toBe('City Retired');
     expect(finalPop()).toBe('16');
+  });
+
+  /**
+   * The other half of the care the cancel path already takes. Confirming tears
+   * down the prompt that held focus, so something in the result has to catch
+   * it: left alone the keyboard lands on `document.body`, the next Tab restarts
+   * at the top of the document instead of in the overlay that just appeared,
+   * and a screen reader is told nothing about how the run ended.
+   */
+  it('moves focus into the result on confirm', () => {
+    // A city with nothing to post, so the board asks for no initials and the
+    // overlay's own heading is the only thing that can be holding focus.
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    document.getElementById('start-btn')!.click();
+    retire();
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.getElementById('over-overlay')!.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(document.getElementById('over-title'));
+  });
+
+  it('hands that focus straight to the initials prompt when the run charts', () => {
+    foundCity();
+    retire();
+
+    // Ordering, not decoration: the heading takes focus before the board opens,
+    // so a run with a name to enter still ends up in the box it must type into.
+    expect(document.getElementById('over-overlay')!.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(document.querySelector('.hs-input'));
+  });
+
+  /**
+   * The trap lives on the document, which survives a ClientRouter swap even
+   * though this page's DOM does not. Retiring it on `astro:before-swap` — the
+   * same idiom every other document-reaching listener here uses — is what stops
+   * a dead prompt from swallowing the next page's keys until one is pressed.
+   */
+  it('releases the trap when the page swaps out from under an open prompt', () => {
+    foundCity();
+    retireBtn().click();
+    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(true);
+
+    document.dispatchEvent(new Event('astro:before-swap'));
+
+    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(false);
+    expect(pressFrom(navLink(), 'Escape').defaultPrevented).toBe(false);
   });
 });

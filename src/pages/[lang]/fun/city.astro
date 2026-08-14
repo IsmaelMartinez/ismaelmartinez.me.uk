@@ -103,7 +103,11 @@ const tools = [
           <div id="over-overlay" class="game-overlay" style="display: none;">
             <div class="overlay-content">
               <span id="over-icon" class="play-icon">💸</span>
-              <h2 id="over-title">{t('fun.city.gameOver')}</h2>
+              <!-- Focusable so the end of a run can be handed somewhere: the
+                   overlay arrives over a dismissed prompt (retire) or out of
+                   the blue (bankruptcy), and a heading that names which one it
+                   was is what a screen reader should read next. -->
+              <h2 id="over-title" tabindex="-1">{t('fun.city.gameOver')}</h2>
               <p id="over-desc">{t('fun.city.gameOverDesc')}</p>
               <p class="final-stats">
                 {t('fun.city.monthsLabel')}: <strong id="final-months">0</strong> ·
@@ -118,14 +122,20 @@ const tools = [
                different button in a different place: a stray coordinate that
                lands on Retire can no longer end the run on its own. Cancel is
                the primary action and takes focus, so a keyboard or screen
-               reader user lands on the safe answer first. -->
+               reader user lands on the safe answer first.
+
+               Deliberately no `aria-modal`: this overlay is painted over the
+               canvas alone, so the toolbar, the speed buttons and the site
+               chrome stay pointer-reachable while it is open. Only the keyboard
+               is trapped. Claiming modality would tell assistive technology the
+               rest of the page is inert when it demonstrably is not, so the
+               prompt claims to be an alertdialog and nothing more. -->
           <div
             id="retire-overlay"
             class="game-overlay"
             style="display: none;"
             tabindex="-1"
             role="alertdialog"
-            aria-modal="true"
             aria-labelledby="retire-confirm-title"
             aria-describedby="retire-confirm-desc"
           >

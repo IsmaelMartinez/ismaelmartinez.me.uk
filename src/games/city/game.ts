@@ -455,8 +455,11 @@ export function initCityGame(): void {
 
   /**
    * Escape is the expected way out of a prompt, and the Tab cycle keeps a
-   * keyboard user inside the two answers for as long as the dialog claims to
-   * be modal — without it, `aria-modal` would be a promise the page breaks.
+   * keyboard user among the two answers while it is open. A courtesy, not a
+   * claim: the prompt covers only the canvas, so the page behind it stays
+   * pointer-reachable and the markup declares no `aria-modal` (see the note in
+   * city.astro). Trapping the keys is still the kinder default, since Tabbing
+   * blind out of a visible dialog is how a keyboard user gets stranded.
    *
    * Bound on `document`, because the overlay covers the canvas and nothing
    * else: a click on the toolbar, the site header or the page background puts
@@ -464,16 +467,10 @@ export function initCityGame(): void {
    * that follow. The trap has to reach as far as focus can go, which is the
    * whole document. It is attached only while the prompt is open and removed
    * again when it closes, so no handler outlives the dialog it belongs to —
-   * which is what keeps a ClientRouter swap from stacking dead listeners on a
-   * document that survives the swap.
+   * and a swap that tears the page out from under an open prompt is caught by
+   * the `astro:before-swap` retirement wired below, as everywhere else here.
    */
   function onConfirmKeydown(e: KeyboardEvent) {
-    // A swap can tear the page out from under an open prompt, leaving this
-    // listener attached to the surviving document with nothing left to trap.
-    if (!retireOverlay.isConnected) {
-      document.removeEventListener('keydown', onConfirmKeydown);
-      return;
-    }
     if (phase !== 'confirm') return;
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -512,6 +509,12 @@ export function initCityGame(): void {
     finalMonthsEl.textContent = month.toString();
     finalPopEl.textContent = peakPop.toString();
     overOverlay.style.display = 'flex';
+    // Confirming dismisses the prompt that held focus, so without this the
+    // keyboard lands on `document.body` and the next Tab restarts at the top of
+    // the page — the cancel path already hands focus back, and the terminal path
+    // owes the same. Ahead of `board.show`, which takes focus for the initials
+    // prompt when the run charts; this is where it lands when it does not.
+    overTitleEl.focus();
     board.show(peakPop);
   }
 
@@ -1790,6 +1793,15 @@ export function initCityGame(): void {
     if (phase !== 'confirm') return;
     gameOver('retired');
   });
+  // The trap is bound on the document, which outlives a ClientRouter swap even
+  // though this page's DOM does not. Both close paths lift it, but a swap over
+  // an open prompt is neither, so it retires here like every other listener in
+  // the engine that reaches past the game root.
+  const onSwap = () => {
+    document.removeEventListener('keydown', onConfirmKeydown);
+    document.removeEventListener('astro:before-swap', onSwap);
+  };
+  document.addEventListener('astro:before-swap', onSwap);
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

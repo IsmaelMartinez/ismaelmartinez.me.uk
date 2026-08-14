@@ -1,14 +1,21 @@
 /** @vitest-environment jsdom */
 /**
- * Critter Rescue's *own* end conditions, driven through the real game loop.
+ * Critter Rescue's escape hatch and its *own* end conditions, driven through the
+ * real game loop.
  *
  * The headless playthrough harness in lemmings.test.ts re-implements the loop
  * so it can play twenty-five levels in milliseconds, which means it proves the
- * levels are solvable but proves nothing about game.ts — the module that
- * actually decides when a level is over. That gap is what let a level hang in
- * the browser while the whole suite stayed green. These tests close it: they
- * mount the page's markup, call `initLemmingsGame`, and step the loop frame by
- * frame, so the assertions below fail if `update`'s end conditions change.
+ * levels are escapable but proves nothing about game.ts — the module that
+ * actually decides when a level is over and when the player is told they look
+ * stuck. That gap is what let a level hang in the browser while the whole suite
+ * stayed green. These tests close it: they mount the page's markup, call
+ * `initLemmingsGame`, and step the loop frame by frame, so the assertions below
+ * fail if `update`'s end conditions or the stuck hint change.
+ *
+ * The guarantee they carry is the one the cabinet now makes: not that no level
+ * runs forever, but that no level is ever *unescapable*. A level whose crowd can
+ * no longer reach the exit stays open for as long as the player wants it open —
+ * the game only ever offers the hint — and the Nuke button always ends it.
  *
  * jsdom has no canvas, so `getContext` is stubbed with a do-nothing 2D context
  * (the game's drawing is not under test here); everything else — the fixed
@@ -17,7 +24,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { initLemmingsGame } from '../../src/games/lemmings/game';
 import { LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
-import { STUCK_TICKS, ABANDONED_TICKS } from '../../src/games/lemmings/stall';
+import { STUCK_TICKS } from '../../src/games/lemmings/stall';
 import { levelBonuses } from '../../src/games/lemmings/score';
 
 const SKILLS = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
@@ -32,7 +39,6 @@ const GAME_HTML = `
        data-t-complete="Level Complete!"
        data-t-failed="Not Enough Rescued"
        data-t-time-up="Time Up!"
-       data-t-stalled="Rescue Stalled"
        data-t-victory="Every Critter Home!"
        data-t-complete-desc="You rescued {n} of {m}!"
        data-t-failed-desc="Only {n} of {m} made it. Try again!"
@@ -73,6 +79,7 @@ const GAME_HTML = `
       <button id="retry-btn"></button>
     </div>
     <p id="level-hint" hidden></p>
+    <p id="stuck-hint" role="status" hidden>Nothing has moved for a while.</p>
     <div class="skill-bar">
       ${SKILLS.map(
         s => `<button class="skill-btn" data-skill="${s}"><span class="skill-count">0</span></button>`
@@ -173,6 +180,10 @@ function startLevel(index: number): void {
 const num = (id: string) => Number(document.getElementById(id)!.textContent);
 const resultShown = () =>
   (document.getElementById('result-overlay') as HTMLElement).style.display === 'flex';
+/** Whether the "you look stuck, here is the way out" notice is on screen. */
+const stuckShown = () => !(document.getElementById('stuck-hint') as HTMLElement).hidden;
+/** The player's escape hatch, pressed. */
+const pressNuke = () => (document.getElementById('nuke-btn') as HTMLButtonElement).click();
 const skillCount = (skill: string) =>
   Number(document.querySelector(`.skill-btn[data-skill="${skill}"] .skill-count`)!.textContent);
 
@@ -188,6 +199,20 @@ function runUntilResult(maxTicks: number): number | null {
   for (let ticks = TICKS_PER_FRAME; ticks <= maxTicks; ticks += TICKS_PER_FRAME) {
     step();
     if (resultShown()) return ticks;
+  }
+  return null;
+}
+
+/**
+ * Steps until the stuck notice appears, returning the ticks it took (or null),
+ * and failing if the level resolves on its own along the way — which is the
+ * thing that must never happen again.
+ */
+function runUntilStuck(maxTicks: number): number | null {
+  for (let ticks = TICKS_PER_FRAME; ticks <= maxTicks; ticks += TICKS_PER_FRAME) {
+    step();
+    expect(resultShown()).toBe(false);
+    if (stuckShown()) return ticks;
   }
   return null;
 }
@@ -220,28 +245,42 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('game loop — a level always ends', () => {
-  it('ends an untouched level once the field stops changing, framed as a stall', () => {
+describe('game loop — no level is ever unescapable', () => {
+  it('hangs an untouched level, raises the hint, and lets the nuke end it', () => {
     // Issue #256's headline repro: level 2 needs a basher, so with no input at
     // all every critter paces between the left wall and the pillar — nobody
-    // dies, nobody blocks, and the crowd end condition never matches. The
-    // abandoned-field fallback is the only thing that ends it, and this is the
-    // test that fails if it stops being applied to untimed levels.
+    // dies, nobody blocks, and the crowd end condition never matches. The game
+    // does not resolve that on the player's behalf, deliberately: it says so and
+    // hands them the way out.
     expect(LEVELS[1].timeLimit).toBeUndefined();
     startLevel(1);
 
-    // The crowd is still spreading out well past the short standstill window,
-    // so nothing resolves on the player's behalf while there is anything left
-    // to see; the level only gives up after a full minute of a frozen field.
-    const ended = runUntilResult(ABANDONED_TICKS * 2);
+    // Nothing is claimed while the crowd is still spreading out.
+    step(STUCK_TICKS / TICKS_PER_FRAME);
+    expect(stuckShown()).toBe(false);
+
+    // Once the field has genuinely frozen, the hint appears — and stays, with
+    // the level still open however long it is left. This is the assertion that
+    // fails if an automatic ending is ever put back.
+    let hintedAt: number | null = null;
+    for (let ticks = TICKS_PER_FRAME; ticks <= 12000; ticks += TICKS_PER_FRAME) {
+      step();
+      expect(resultShown()).toBe(false);
+      if (hintedAt === null && stuckShown()) hintedAt = ticks;
+    }
+    expect(hintedAt).not.toBeNull();
+    expect(stuckShown()).toBe(true);
+
+    // And the button the hint names ends it, every time, with no clock involved.
+    pressNuke();
+    expect(stuckShown()).toBe(false);
+    const ended = runUntilResult(1200);
     expect(ended).not.toBeNull();
-    expect(ended!).toBeGreaterThan(ABANDONED_TICKS);
     expect(num('saved-count')).toBe(0);
-    expect(document.getElementById('result-title')!.textContent).toBe('Rescue Stalled');
-    expect(document.getElementById('result-emoji')!.textContent).toBe('🧱');
+    expect(document.getElementById('result-title')!.textContent).toBe('Not Enough Rescued');
   });
 
-  it('ends a timed level on its own clock rather than the fallback', () => {
+  it('ends a timed level on its own clock, untouched', () => {
     const level = LEVELS[13];
     expect(level.timeLimit).toBe(2700);
     startLevel(13);
@@ -298,40 +337,58 @@ describe('game loop — a level always ends', () => {
       par: LEVELS[12].par
     }).time;
 
-  it('leaves a won level open while the player still has a skill to spend', () => {
-    // The regression: a player who pens the surplus crowd and then reads the
-    // terrain for a while is playing, not stalling. Closing the level under
-    // them takes every remaining rescue and the perfect bonus with it, so the
-    // frozen field alone is not enough — a blocker, a pair of umbrellas and the
-    // bomber reserve are all still in hand here, and the level must wait.
+  it('never closes a won level under the player, and pays the speed bonus when they end it', () => {
+    // The regression that killed the previous two attempts: a player who pens
+    // the surplus crowd and then reads the terrain is playing, not stalling, and
+    // closing the level under them takes every remaining rescue and the perfect
+    // bonus with it. So the frozen field never ends anything — it only offers
+    // the hint — and the level waits for as long as it is left waiting.
     const ticks = winAndPenLevel13();
-    step((STUCK_TICKS * 3) / TICKS_PER_FRAME);
-    expect(resultShown()).toBe(false);
-    expect(num('out-count')).toBeGreaterThan(1);
+    const hinted = runUntilStuck(STUCK_TICKS * 12);
+    expect(hinted).not.toBeNull();
+    // The notice goes up exactly `STUCK_TICKS` after the field last moved, and
+    // nothing has moved since, so this is the tick the level should be scored on
+    // — known to within the one frame the loop steps in.
+    const frozeAt = ticks + hinted! - STUCK_TICKS;
 
-    // It does end, though — a minute of a field going nowhere is nobody
-    // playing — and it reads as the win it is, not as a stall or a timeout.
-    const rest = runUntilResult(ABANDONED_TICKS * 2);
+    // Left alone from here it simply stays open, for as long as it is left.
+    const idled = STUCK_TICKS * 8;
+    for (let t = 0; t < idled / TICKS_PER_FRAME; t++) {
+      step();
+      expect(resultShown()).toBe(false);
+    }
+    expect(num('out-count')).toBeGreaterThan(1);
+    expect(stuckShown()).toBe(true);
+
+    // The player ends it when they are ready, and it reads as the win it is.
+    pressNuke();
+    const rest = runUntilResult(1200);
     expect(rest).not.toBeNull();
-    const endedAt = ticks + STUCK_TICKS * 3 + rest!;
+    const endedAt = ticks + hinted! + idled + rest!;
     expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
-    // And the speed bonus survives the wait: the level is billed at the tick
-    // the field froze, so the window spent confirming it never eats the bonus.
-    // What is paid is therefore at least a full window's worth more than
-    // billing the resolution tick would give — `endedAt` is only known to a
-    // frame here, and a whole window is far wider than that slack.
+    // And the speed bonus survives the wait: the level is billed where the field
+    // froze, so neither the staring nor the nuke chain that ended it eats the
+    // bonus. Bracketed both ways by one frame's slack, since the bonus falls off
+    // with the billed tick and `frozeAt` is only known that precisely.
     expect(document.getElementById('bonus-time-row')!.hidden).toBe(false);
     const paid = Number(document.getElementById('bonus-time-val')!.textContent!.slice(1));
     expect(paid).toBeGreaterThan(0);
-    expect(paid).toBeGreaterThanOrEqual(bonusAt(endedAt - ABANDONED_TICKS));
+    expect(paid).toBeGreaterThanOrEqual(bonusAt(frozeAt + TICKS_PER_FRAME));
+    expect(paid).toBeLessThanOrEqual(bonusAt(Math.max(0, frozeAt - TICKS_PER_FRAME)));
+    // Which is a real difference, not a rounding one: billing the tick it
+    // actually closed on would have paid far less.
     expect(paid).toBeGreaterThan(bonusAt(endedAt));
-    expect(endedAt - ABANDONED_TICKS).toBeLessThan(LEVELS[12].par);
+    expect(frozeAt).toBeLessThan(LEVELS[12].par);
   });
 
-  it('resolves a won level at once when nothing is left to change it', () => {
-    // The same frozen field, but with the stock spent: there is now no move the
-    // player could make, so waiting out the long window would be dead time. The
-    // level resolves on the short one instead.
+  it('holds a won level open even with the whole stock spent', () => {
+    // The same frozen field with nothing left to spend on it. An earlier round
+    // took this as licence to close the level automatically, on the reasoning
+    // that the player could no longer change anything — but `levelStock` hands
+    // out a two-bomber reserve nobody is forced to spend, so "no stock left" was
+    // a state the fast path could barely reach, and the levels that did reach it
+    // were closed for the player rather than by them. Nothing ends here either:
+    // the hint goes up and the button stays the only way out.
     winAndPenLevel13();
     const stockLeft = () => SKILLS.reduce((n, s) => n + skillCount(s), 0);
     // Pen the right-hand stream too, then spend the rest on whoever is pacing
@@ -349,17 +406,45 @@ describe('game loop — a level always ends', () => {
     expect(stockLeft()).toBe(0);
     expect(resultShown()).toBe(false);
 
-    const rest = runUntilResult(ABANDONED_TICKS);
-    expect(rest).not.toBeNull();
-    // Seconds, not a minute: the short standstill window plus whatever was
-    // still in flight when the last skill was spent.
-    expect(rest!).toBeLessThan(ABANDONED_TICKS / 2);
-    // More than the two blockers are still standing there, so this is the
-    // standstill ending and not the "everyone out, only blockers left" one.
+    // A long wait with an empty hand still resolves nothing, and the hint is up.
+    for (let ticks = TICKS_PER_FRAME; ticks <= STUCK_TICKS * 8; ticks += TICKS_PER_FRAME) {
+      step();
+      expect(resultShown()).toBe(false);
+    }
+    expect(stuckShown()).toBe(true);
+    // More than the two blockers are still standing there, so the crowd's own
+    // "everyone out, only blockers left" ending genuinely has not matched.
     expect(num('out-count')).toBeGreaterThan(2);
+
+    pressNuke();
+    const rest = runUntilResult(1200);
+    expect(rest).not.toBeNull();
     expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
     expect(Number(document.getElementById('bonus-time-val')!.textContent!.slice(1))).toBeGreaterThan(
       0
     );
+  });
+
+  it('withdraws the hint as soon as the field moves again', () => {
+    // A hint that misfires must cost a line of text and nothing more, so it has
+    // to be able to take itself back. Freeze level 13's left stream behind a
+    // blocker, wait for the notice, then spend a skill: the field has changed,
+    // the player is evidently still there, and the notice goes away by itself.
+    winAndPenLevel13();
+    expect(runUntilStuck(STUCK_TICKS * 12)).not.toBeNull();
+
+    // Whoever is left is pacing the left-hand pen, so sweep it until a tap
+    // connects and a skill is actually spent.
+    const stockLeft = () => SKILLS.reduce((n, s) => n + skillCount(s), 0);
+    const before = stockLeft();
+    let ticks = 0;
+    while (stockLeft() === before && ticks < 3000) {
+      tap(60 + ((ticks / TICKS_PER_FRAME) % 8) * 12, 154);
+      step();
+      ticks += TICKS_PER_FRAME;
+    }
+    expect(stockLeft()).toBeLessThan(before);
+    expect(stuckShown()).toBe(false);
+    expect(resultShown()).toBe(false);
   });
 });

@@ -30,7 +30,6 @@ import {
   createStallWatch,
   levelEnding,
   STUCK_TICKS,
-  ABANDONED_TICKS,
   type FieldState,
   type LevelEnding,
   type EndConditionState
@@ -569,13 +568,13 @@ function countSolid(bmp: TerrainBitmap, x: number): number {
 /**
  * Headless playthrough harness: runs a level exactly as the game loop does —
  * spawning on an interval (alternating hatches when a level has two), stepping
- * every critter each tick, banking exits, and resolving the level on the game's
- * own end conditions (everyone out and only blockers left; or the quota met and
- * the field frozen; or an authored `timeLimit` running out) — while a
- * `strategy` callback assigns skills from the level's stock, the same decisions
- * a player makes with taps. This is the automated stand-in for the manual
- * "guide the crowd home with each skill" verification, so a timed level's test
- * proves it is winnable on the clock.
+ * every critter each tick, counting bomber fuses down and detonating them,
+ * banking exits, and resolving the level on the game's own end conditions
+ * (everyone out and only blockers left; or an authored `timeLimit` running out)
+ * — while a `strategy` callback assigns skills from the level's stock, the same
+ * decisions a player makes with taps. This is the automated stand-in for the
+ * manual "guide the crowd home with each skill" verification, so a timed level's
+ * test proves it is winnable on the clock.
  *
  * The ending itself is not re-implemented here: `levelEnding` (stall.ts) is the
  * one composition, and game.ts calls the same function on the same facts. That
@@ -584,12 +583,17 @@ function countSolid(bmp: TerrainBitmap, x: number): number {
  * how twenty-five green playthroughs coexisted with a level that hung in the
  * browser. There is now nothing production applies that the harness does not.
  *
+ * `nukeWhenStuck` models the player the game now talks to. Nothing ends a level
+ * on a standstill any more; the game raises a hint naming the Nuke button and
+ * waits. A player who takes that hint is what the harness plays by default, so a
+ * level that has run out of ways home still terminates here — through the same
+ * concede-and-clear-the-field path the browser runs, not through a rule the test
+ * invented. Turn it off to ask the other question: what a level does when nobody
+ * touches it, which is the diagnosis the sentinel below records.
+ *
  * `maxTicks` is the harness's own runaway guard, independent of anything under
- * test: a run that reaches it is a level no end condition ever answered for,
- * reported as `endedAt === null`. With the standstill fallback in place that
- * should now be unreachable in a real level, and `endedBy` is what says *how*
- * a level ended — `'stalled'` meaning the fallback was the only thing that
- * ended it, which is exactly the population the sentinel below counts.
+ * test: a run that reaches it is a level nothing ever answered for, reported as
+ * `endedAt === null`.
  */
 type LevelDef = (typeof LEVELS)[number];
 
@@ -597,6 +601,8 @@ interface SimApi {
   critters: Critter[];
   bmp: TerrainBitmap;
   assign(c: Critter, skill: Skill): boolean;
+  /** The player's escape hatch, exactly as the 💥 button drives it. */
+  nuke(): void;
 }
 
 interface PlayOutcome {
@@ -605,30 +611,38 @@ interface PlayOutcome {
   endedAt: number | null;
   /**
    * The tick the level is *billed* for, which is what the end-of-level bonuses
-   * are scored on (game.ts hands `finishLevel` the same number): a `decided`
-   * ending spends STUCK_TICKS confirming the field is frozen, and that window
-   * is bookkeeping rather than play time.
+   * are scored on (game.ts scores `finishLevel` on the same number): the last
+   * tick the field actually moved, so a wait in front of a motionless field —
+   * or the nuke chain that ends it — never eats the speed bonus.
    */
   ticks: number;
   /** `levelEnding`'s verdict, or null when nothing ended the level. */
   endedBy: LevelEnding | null;
+  /** Whether the run reached its ending by the player conceding. */
+  nuked: boolean;
 }
+
+/** game.ts's NUKE_INTERVAL: ticks between successive detonations in the chain. */
+const NUKE_INTERVAL = 4;
 
 function playLevel(
   level: LevelDef,
   strategy: (api: SimApi) => void,
-  { interval = 24, maxTicks = 12000 } = {}
+  { interval = 24, maxTicks = 12000, nukeWhenStuck = true } = {}
 ): PlayOutcome {
   const bmp = buildLevel(level);
-  // The same hand the browser deals, bomber reserve included: how much is left
-  // unspent is part of the end condition, so a harness holding a different
-  // stock would be asking a different question.
+  // The same hand the browser deals, bomber reserve included — and, since the
+  // reserve is only a real move if it goes off, the fuses below are counted down
+  // and detonated here too.
   const stock = levelStock(level);
   let critters: Critter[] = [];
   let saved = 0;
   let spawned = 0;
   let spawnTimer = 0;
   let id = 1;
+  let nuking = false;
+  let nukeTimer = 0;
+  let concededAt: number | null = null;
   const world: CritterWorld = {
     width: bmp.width,
     height: bmp.height,
@@ -650,12 +664,35 @@ function playLevel(
     }
     return false;
   };
+  /** game.ts's `detonate`: a real crater, and the critter is gone. */
+  const detonate = (c: Critter) => {
+    c.alive = false;
+    c.state = 'splatted';
+    bmp.eraseCircle(c.x, Math.round(c.y - CRITTER_H / 2), 8);
+  };
 
   const hatches = levelHatches(level);
   const stall = createStallWatch();
   const stockLeft = () => Object.values(stock).reduce((n, v) => n + v, 0);
+  // The last tick the field moved, which is what the level is billed for.
+  let billed = 0;
+  /** game.ts's `startNuke`: no more spawns, and the billing clock stops here. */
+  const nuke = () => {
+    if (nuking) return;
+    nuking = true;
+    nukeTimer = 0;
+    concededAt = billed;
+    spawned = level.spawnCount;
+  };
   for (let tick = 1; tick <= maxTicks; tick++) {
-    if (spawned < level.spawnCount) {
+    if (nuking) {
+      nukeTimer++;
+      if (nukeTimer >= NUKE_INTERVAL) {
+        nukeTimer = 0;
+        const victim = critters.find(isActive);
+        if (victim) detonate(victim);
+      }
+    } else if (spawned < level.spawnCount) {
       if (spawnTimer <= 0) {
         const h = hatches[spawned % hatches.length];
         critters.push(createCritter(id++, h.x, h.y, h.dir));
@@ -665,11 +702,23 @@ function playLevel(
         spawnTimer--;
       }
     }
-    strategy({ critters, bmp, assign });
+    strategy({ critters, bmp, assign, nuke });
     for (const c of critters) {
       if (!isActive(c)) continue;
+      // A lit fuse burns down whatever the critter is doing and blows at zero,
+      // exactly as game.ts's update does — a bomber the harness dealt itself but
+      // never fired would be a skill that does nothing here and something in the
+      // browser.
+      if (c.fuse >= 0) {
+        c.fuse--;
+        if (c.fuse <= 0) {
+          detonate(c);
+          continue;
+        }
+      }
       stepCritter(c, world);
-      if (isActive(c) && atExit(c, level)) {
+      // A lit fuse is a commitment: game.ts refuses the rescue at the door.
+      if (isActive(c) && c.fuse < 0 && atExit(c, level)) {
         c.state = 'exited';
         c.alive = false;
         saved++;
@@ -678,31 +727,31 @@ function playLevel(
     critters = critters.filter(isActive);
     // The game's own end condition, called rather than copied (game.ts `update`
     // reaches this same function with these same facts).
-    const unspent = stockLeft();
     stall.observe({
       critters,
       saved,
       spawned,
       terrainVersion: bmp.version,
-      stock: unspent
+      stock: stockLeft()
     });
+    billed = tick - stall.idleTicks;
+    // The standstill ends nothing; it raises the on-screen hint, and this is the
+    // player reading it and reaching for the button the hint names.
+    if (nukeWhenStuck && stall.stuck) nuke();
     const endedBy = levelEnding({
       allOut: spawned >= level.spawnCount,
       onlyBlockersLeft: critters.every(c => c.state === 'blocker'),
-      stockLeft: unspent,
-      idleTicks: stall.idleTicks,
       ticks: tick,
       timeLimit: level.timeLimit,
-      conceded: false
+      conceded: nuking
     });
     if (endedBy) {
-      // Billed as game.ts bills it: a standstill ending is charged to the tick
-      // the field froze, not to the window spent confirming it.
-      const standstill = endedBy === 'decided' || endedBy === 'stalled';
-      return { saved, endedAt: tick, ticks: standstill ? tick - stall.idleTicks : tick, endedBy };
+      // Billed as game.ts bills it: at the last tick the field moved, or at the
+      // tick the player conceded when they did.
+      return { saved, endedAt: tick, ticks: concededAt ?? billed, endedBy, nuked: nuking };
     }
   }
-  return { saved, endedAt: null, ticks: maxTicks, endedBy: null };
+  return { saved, endedAt: null, ticks: concededAt ?? billed, endedBy: null, nuked: nuking };
 }
 
 /**
@@ -715,12 +764,12 @@ function playLevel(
  *
  * And it has to resolve *promptly*: `endedAt` is bounded well under the
  * harness's runaway guard, so a run that only limps home because the guard is
- * generous fails rather than passing on a technicality. The bound is the
- * standstill fallback plus a full playthrough's worth of ticks — the slowest
- * shipped solution at the slowest release rate the slider offers takes under
- * 2,000, so this is roomy without being meaningless.
+ * generous fails rather than passing on a technicality. The bound is the time it
+ * takes the hint to appear plus a full playthrough's worth of ticks — the
+ * slowest shipped solution at the slowest release rate the slider offers takes
+ * under 2,000, so this is roomy without being meaningless.
  */
-const RESOLVE_BY = ABANDONED_TICKS + 4000;
+const RESOLVE_BY = STUCK_TICKS + 4000;
 
 function expectCleared(level: LevelDef, outcome: PlayOutcome): void {
   expect(outcome.endedAt).not.toBeNull();
@@ -978,9 +1027,8 @@ describe('levels — solvable playthroughs', () => {
     });
     expect(outcome.saved).toBe(0);
     // And with the crowd left pacing above the steel, nothing in the level's
-    // own rules ends it: the fallback is what does, a minute after the last
-    // critter covered new ground.
-    expect(outcome.endedBy).toBe('stalled');
+    // own rules ends it — the player does, by taking the hint and conceding.
+    expect(outcome.nuked).toBe(true);
   });
 
   it('16: ramps over the steel wall that bashers cannot dent', () => {
@@ -1005,9 +1053,8 @@ describe('levels — solvable playthroughs', () => {
     });
     expect(outcome.saved).toBe(0);
     // And with the crowd left pacing at the steel, nothing in the level's own
-    // rules ends it: the fallback is what does, a minute after the last critter
-    // covered new ground.
-    expect(outcome.endedBy).toBe('stalled');
+    // rules ends it — the player does, by taking the hint and conceding.
+    expect(outcome.nuked).toBe(true);
   });
 
   it('17: umbrellas for the high stream only — the low stream walks home', () => {
@@ -1046,9 +1093,8 @@ describe('levels — solvable playthroughs', () => {
     });
     expect(outcome.saved).toBe(0);
     // And with the crowd left pacing above the steel, nothing in the level's
-    // own rules ends it: the fallback is what does, a minute after the last
-    // critter covered new ground.
-    expect(outcome.endedBy).toBe('stalled');
+    // own rules ends it — the player does, by taking the hint and conceding.
+    expect(outcome.nuked).toBe(true);
   });
 
   it('19: bridges the gap for the left crowd while the right crowd strolls in, on the clock', () => {
@@ -1215,60 +1261,84 @@ describe('levels — solvable playthroughs', () => {
   });
 });
 
-describe('levels — every level resolves', () => {
+describe('levels — no level is ever unescapable', () => {
   // A crowd can run out of ways home without anyone dying: a walker pacing a
   // pocket it cannot climb out of is neither dead nor a blocker, so the "all
-  // out, only blockers left" end condition never matches it. These are the
-  // cases that used to run forever, leaving the Nuke button as the only way
-  // out of a level the instructions never mention. What answers them is the
-  // standstill fallback, and `endedBy === 'stalled'` names exactly the runs it
-  // was the only thing to end.
+  // out, only blockers left" end condition never matches it. Ten of the levels
+  // can reach that state, and the game deliberately does not end them — three
+  // rounds of trying to tell "stuck" from "thinking" automatically each took a
+  // run off a player who was still playing. What answers them instead is the
+  // player: the game says the crowd looks stuck and names the Nuke button, and
+  // the button always works. These tests prove both halves — that the levels
+  // really are hung on their own (the diagnosis), and that the player's way out
+  // always resolves them (the guarantee).
 
-  /** Every level, played by nobody. */
-  const untouched = () => LEVELS.map(level => playLevel(level, () => {}));
+  /** Every level, played by nobody who ever reaches for the button. */
+  const abandoned = () =>
+    LEVELS.map(level => playLevel(level, () => {}, { nukeWhenStuck: false, maxTicks: 8000 }));
 
-  it('ten of the twenty-five levels end on nothing but the fallback', () => {
-    // The sentinel behind the whole fix. Left to themselves, ten of the levels
-    // reach a state none of their own rules answer for — no clock, no blockers,
-    // nobody dying — and these are exactly the ten that used to run forever. It
-    // is the same population that reported no resolution at all before the
-    // fallback existed, so the fallback is load-bearing rather than decorative.
+  it('ten of the twenty-five levels never resolve on their own', () => {
+    // The diagnosis, kept as the record of which levels carry the underlying
+    // terrain problem. Left to themselves, ten of them reach a state none of
+    // their own rules answer for — no clock, no blockers, nobody dying — and
+    // run until the harness's guard stops them. It is not a defect the fix
+    // pretends away: those crowds genuinely cannot get home, and what changed is
+    // that the player is now told so and handed the way out.
+    //
     // If a terrain change frees one of these crowds the count moves, and the
     // number here should be re-measured rather than deleted.
-    const byEnding = untouched().reduce<Record<string, number>>((tally, o) => {
-      const key = o.endedBy ?? 'never';
-      tally[key] = (tally[key] ?? 0) + 1;
-      return tally;
-    }, {});
-    expect(byEnding.stalled).toBe(10);
-    // And nothing at all is left hanging, which is the guarantee itself.
-    expect(byEnding.never).toBeUndefined();
+    const hung = abandoned().filter(o => o.endedAt === null);
+    expect(hung).toHaveLength(10);
+    // And every one of them is genuinely stuck rather than merely slow: the
+    // field had gone still long enough for the game to have raised the hint.
+    for (const o of hung) expect(o.nuked).toBe(false);
   });
 
-  it('2: an untouched level ends only because the field stops changing', () => {
+  it('every level, including all ten, is resolvable by the player', () => {
+    // The guarantee itself, and the headline the fix now makes: a player who
+    // takes the hint the game gives them ends the level, on every level, with no
+    // input beyond the button. Nothing here waits on a clock the player cannot
+    // see, and nothing ends a level the player has not ended.
+    for (const level of LEVELS) {
+      const outcome = playLevel(level, () => {});
+      expect(outcome.endedAt).not.toBeNull();
+      expect(outcome.endedAt).toBeLessThan(RESOLVE_BY);
+    }
+  });
+
+  it('2: an untouched level hangs, and the hint fires before the nuke ends it', () => {
     // The issue's headline repro: level 2 needs a basher, so with no player
     // input at all every critter paces between the left wall and the pillar,
-    // forever. Nothing in the level's own rules stops it — the crowd is neither
-    // settled nor decided, since a full stock of skills means the player could
-    // still turn it around — so the abandoned-field fallback is what ends it,
-    // one minute after the last critter covered new ground.
-    const outcome = playLevel(LEVELS[1], () => {});
-    expect(outcome.endedBy).toBe('stalled');
-    expect(outcome.saved).toBe(0);
-    expect(outcome.endedAt! - outcome.ticks).toBe(ABANDONED_TICKS);
+    // forever. Nothing in the level's own rules stops it, and nothing in the
+    // game's does either — so it is still running when the guard trips.
+    const abandonedRun = playLevel(LEVELS[1], () => {}, { nukeWhenStuck: false, maxTicks: 8000 });
+    expect(abandonedRun.endedAt).toBeNull();
+    expect(abandonedRun.saved).toBe(0);
+
+    // The same level, played by someone who reads the hint. It ends — promptly,
+    // and by their own hand.
+    const escaped = playLevel(LEVELS[1], () => {});
+    expect(escaped.nuked).toBe(true);
+    expect(escaped.endedBy).toBe('settled');
+    expect(escaped.endedAt).not.toBeNull();
+    expect(escaped.endedAt).toBeLessThan(RESOLVE_BY);
+    // The wait in front of the frozen field is not billed to the player: the
+    // level is scored at the tick it last moved, a full window earlier.
+    expect(escaped.endedAt! - escaped.ticks).toBeGreaterThanOrEqual(STUCK_TICKS);
   });
 
   it('10 and 20: a stranded critter no longer hangs a level that was already won', () => {
     // Both levels are cleared by the builder placements the playthrough tests
     // above aim at, and both leave one critter pacing an 8px pocket afterwards
     // — quota met, crowd going nowhere, and skills still in hand, so the game
-    // keeps offering the player the chance to go back for it. What it no longer
-    // does is run on forever; and because the level is billed at the tick the
-    // field froze rather than the tick it was cut off, the speed bonus these
-    // two could never earn now pays. If a future terrain or skill change frees
-    // that critter, `endedBy` flips to 'settled' here and this expectation
-    // should be updated rather than removed: the guarantee under test is that
-    // the level ends, and is scored on the play rather than on the wait.
+    // keeps offering the player the chance to go back for it, for as long as
+    // they want. What ends it is the player, and because the level is billed at
+    // the tick the field froze rather than the tick they conceded, the speed
+    // bonus these two could never earn now pays. If a future terrain or skill
+    // change frees that critter, `nuked` flips to false here and this
+    // expectation should be updated rather than removed: the guarantee under
+    // test is that the level ends, and is scored on the play rather than on the
+    // wait.
     let dug = false;
     let built10 = false;
     const ten = playLevel(LEVELS[9], ({ critters, assign }) => {
@@ -1284,9 +1354,10 @@ describe('levels — every level resolves', () => {
       }
     });
     expect(ten.saved).toBeGreaterThanOrEqual(LEVELS[9].needed);
-    expect(ten.endedBy).toBe('stalled');
+    expect(ten.nuked).toBe(true);
+    expect(ten.endedBy).toBe('settled');
     expect(ten.endedAt).toBeLessThan(RESOLVE_BY);
-    expect(ten.ticks).toBe(ten.endedAt! - ABANDONED_TICKS);
+    expect(ten.endedAt! - ten.ticks).toBeGreaterThanOrEqual(STUCK_TICKS);
     expect(timeBonusFor(LEVELS[9], ten)).toBeGreaterThan(0);
 
     let bashed = false;
@@ -1311,22 +1382,54 @@ describe('levels — every level resolves', () => {
       }
     });
     expect(twenty.saved).toBeGreaterThanOrEqual(LEVELS[19].needed);
-    expect(twenty.endedBy).toBe('stalled');
+    expect(twenty.nuked).toBe(true);
+    expect(twenty.endedBy).toBe('settled');
     expect(twenty.endedAt).toBeLessThan(RESOLVE_BY);
-    expect(twenty.ticks).toBe(twenty.endedAt! - ABANDONED_TICKS);
+    expect(twenty.endedAt! - twenty.ticks).toBeGreaterThanOrEqual(STUCK_TICKS);
     expect(timeBonusFor(LEVELS[19], twenty)).toBeGreaterThan(0);
   });
 
-  it('an authored clock still ends its level, standstill or not', () => {
+  it('an authored clock still ends its level, with nobody touching anything', () => {
     // A `timeLimit` is a race the level was designed around and the only ending
-    // with a countdown on screen, so it must survive the standstill rework:
-    // level 14 stalls at its clock (2,700) rather than waiting out the minute
-    // the abandoned-field fallback would take.
+    // with a countdown on screen, so it must survive the rework: level 14 ends
+    // at its clock (2,700) even when the player never reaches for the button.
     const timed = LEVELS[13];
     expect(timed.timeLimit).toBeDefined();
-    const outcome = playLevel(timed, () => {}, { interval: 80 });
+    const outcome = playLevel(timed, () => {}, { interval: 80, nukeWhenStuck: false });
     expect(outcome.endedAt).toBe(timed.timeLimit);
     expect(outcome.endedBy).toBe('clock');
+    expect(outcome.nuked).toBe(false);
+  });
+
+  it('a lit bomber fuse really goes off, so the dealt reserve is a real move', () => {
+    // The harness deals itself the same two-bomber reserve the browser grants,
+    // which is only honest if it also burns the fuse down and detonates. Level 2
+    // is the hung repro: spend a blast on the first critter out and the crowd is
+    // one smaller and the terrain has a fresh crater, neither of which happens
+    // if the fuse is merely handed out.
+    let lit: Critter | null = null;
+    let versionAtLight = -1;
+    let versionAtEnd = -1;
+    playLevel(
+      LEVELS[1],
+      ({ critters, bmp, assign }) => {
+        if (!lit) {
+          const c = critters.find(x => x.state === 'walker');
+          if (c && assign(c, 'bomber')) {
+            lit = c;
+            versionAtLight = bmp.version;
+          }
+        }
+        versionAtEnd = bmp.version;
+      },
+      { maxTicks: BOMBER_FUSE + 400, nukeWhenStuck: false }
+    );
+    expect(lit).not.toBeNull();
+    expect(lit!.fuse).toBeLessThanOrEqual(0);
+    expect(isActive(lit!)).toBe(false);
+    expect(lit!.state).toBe('splatted');
+    // The blast is a real crater, not just a retired critter.
+    expect(versionAtEnd).toBeGreaterThan(versionAtLight);
   });
 });
 
@@ -1398,12 +1501,10 @@ describe('stall — standstill detection', () => {
 });
 
 describe('stall — the end-of-level verdict', () => {
-  /** A level mid-play: everyone out, quota met, field moving, skills in hand. */
+  /** A level mid-play: everyone out, crowd still walking, no authored clock. */
   const state = (over: Partial<EndConditionState> = {}): EndConditionState => ({
     allOut: true,
     onlyBlockersLeft: false,
-    stockLeft: 2,
-    idleTicks: 0,
     ticks: 1000,
     conceded: false,
     ...over
@@ -1411,8 +1512,8 @@ describe('stall — the end-of-level verdict', () => {
 
   it('says nothing while the level is still being played', () => {
     expect(levelEnding(state())).toBeNull();
-    // Nor while the hatch is still emptying, whatever the field is doing.
-    expect(levelEnding(state({ allOut: false, stockLeft: 0, idleTicks: STUCK_TICKS }))).toBeNull();
+    // Nor while the hatch is still emptying.
+    expect(levelEnding(state({ allOut: false }))).toBeNull();
   });
 
   it('settles a crowd that is all blockers, ahead of every other ending', () => {
@@ -1424,36 +1525,19 @@ describe('stall — the end-of-level verdict', () => {
     ).toBe('settled');
   });
 
-  it('holds a frozen field open for as long as the player can still act', () => {
-    // The regression this guards: a player who pens the surplus crowd behind
-    // blockers and then spends ten seconds reading the terrain has done nothing
-    // wrong, and must not have the level — and the rescues still on the field —
-    // taken off them. Eight seconds of standstill is not an answer while a
-    // single skill is left to spend.
-    for (const idleTicks of [STUCK_TICKS, STUCK_TICKS * 2, ABANDONED_TICKS - 1]) {
-      expect(levelEnding(state({ idleTicks }))).toBeNull();
-    }
-    expect(levelEnding(state({ idleTicks: ABANDONED_TICKS }))).toBe('stalled');
-    // On a level that already runs a countdown the player can see, that
-    // countdown is the backstop and the long window never fires at all.
-    expect(levelEnding(state({ idleTicks: ABANDONED_TICKS, ticks: 2699, timeLimit: 2700 }))).toBeNull();
-    expect(levelEnding(state({ idleTicks: ABANDONED_TICKS, ticks: 2700, timeLimit: 2700 }))).toBe(
-      'clock'
-    );
-  });
-
-  it('decides a frozen field the moment nothing is left to change it', () => {
-    // Stock spent, field still: won or lost, the level is over and waiting out
-    // the long window would just be dead time.
-    expect(levelEnding(state({ stockLeft: 0, idleTicks: STUCK_TICKS - 1 }))).toBeNull();
-    expect(levelEnding(state({ stockLeft: 0, idleTicks: STUCK_TICKS }))).toBe('decided');
+  it('never ends an untimed level, however long it has gone nowhere', () => {
+    // The load-bearing negative, and the whole change of approach. Three
+    // automatic endings lived here in turn, and each one took a run off a player
+    // who was still playing: a hidden clock, then a standstill window, then a
+    // stock-gated window with a minute-long backstop that ended the run and
+    // submitted it. Nothing may end an untimed level but the crowd resolving or
+    // the player conceding, so a level left running for an hour is still open.
+    expect(levelEnding(state({ ticks: 60 * 60 * 60 }))).toBeNull();
   });
 
   it('ends a timed level on its clock, and only a timed one', () => {
     expect(levelEnding(state({ ticks: 2699, timeLimit: 2700 }))).toBeNull();
     expect(levelEnding(state({ ticks: 2700, timeLimit: 2700 }))).toBe('clock');
-    // An untimed level has no clock behind the scenes: however long it runs,
-    // only the field going still ever ends it.
     expect(levelEnding(state({ ticks: 100000 }))).toBeNull();
   });
 
@@ -1461,6 +1545,13 @@ describe('stall — the end-of-level verdict', () => {
     // The nuke chain is already ending the level; a timeout framing would coach
     // them to speed up instead of reading as the failure they chose.
     expect(levelEnding(state({ ticks: 2700, timeLimit: 2700, conceded: true }))).toBeNull();
+  });
+
+  it('settles the empty field a nuke leaves behind', () => {
+    // The player's escape hatch resolves the level through the ordinary crowd
+    // ending: once the chain has cleared the field there is nobody left who is
+    // not a blocker, so `settled` answers even though the player conceded.
+    expect(levelEnding(state({ onlyBlockersLeft: true, conceded: true }))).toBe('settled');
   });
 });
 

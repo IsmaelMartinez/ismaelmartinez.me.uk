@@ -147,13 +147,13 @@ export function initLemmingsGame(): void {
   const levelNum = el('level-num');
   const bestLevel = el('best-level');
   const levelHint = el('level-hint');
+  const stuckHint = el('stuck-hint');
   const skillButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.skill-btn'));
 
   const strings = {
     complete: root.dataset.tComplete || 'Level Complete!',
     failed: root.dataset.tFailed || 'Not Enough Rescued',
     timeUp: root.dataset.tTimeUp || 'Time Up!',
-    stalled: root.dataset.tStalled || 'Rescue Stalled',
     victory: root.dataset.tVictory || 'Every Critter Home!',
     completeDesc: root.dataset.tCompleteDesc || 'You rescued {n} of {m}!',
     failedDesc: root.dataset.tFailedDesc || 'Only {n} of {m} made it. Try again!',
@@ -358,9 +358,13 @@ export function initLemmingsGame(): void {
   let runScore = 0;
   let combo = newCombo();
   let levelTicks = 0;
-  // Watches the field for a standstill so a decided level resolves there and
-  // then, rather than sitting out the fallback clock (see stall.ts).
+  // Watches the field for a standstill. It ends nothing: it raises the "you look
+  // stuck" hint, and it says which tick the level is billed for (see stall.ts).
   const stall = createStallWatch();
+  // The tick the field last changed before the player conceded, captured when
+  // they hit Nuke — the chain that follows keeps the field moving, so by the
+  // time it resolves the watcher can no longer tell where the waiting ended.
+  let concededAt: number | null = null;
   // Progress lives in its own key; older installs stored it as the table's
   // "score", which loadClearedLevels migrates on first read.
   let cleared = loadClearedLevels(board.best(), LEVELS.length);
@@ -415,6 +419,8 @@ export function initLemmingsGame(): void {
     combo = newCombo();
     levelTicks = 0;
     stall.reset();
+    concededAt = null;
+    stuckHint.hidden = true;
     // The bomber (pick-one blast) is the single-critter counterpart to the
     // always-available nuke, so every level grants a small reserve rather than
     // authoring it into each hand-tuned stock — `levelStock` deals that hand,
@@ -513,12 +519,33 @@ export function initLemmingsGame(): void {
     }
   }
 
+  /**
+   * The player's way out, and the only one: a level whose crowd can no longer
+   * reach the exit is never ended for them (see stall.ts), so this button is
+   * what makes such a level escapable. It clears the field, which resolves the
+   * level through its ordinary `settled` ending a few ticks later.
+   *
+   * Conceding also freezes what the level is billed for at the tick the field
+   * last moved, so a player who wins the quota, watches a straggler pace a
+   * pocket, and then nukes to move on is not charged for the wait.
+   */
   function startNuke() {
     if (phase !== 'playing' || nuking) return;
     nuking = true;
     nukeTimer = 0;
+    concededAt = billedTicks();
+    stuckHint.hidden = true;
     spawned = def.spawnCount; // no more critters emerge
     audio.playSfx('explosion');
+  }
+
+  /**
+   * The tick the level is scored on: the last one on which the field actually
+   * changed. Time spent staring at a motionless field is not time the player
+   * played, and charging it would quietly eat the speed bonus.
+   */
+  function billedTicks(): number {
+    return levelTicks - stall.idleTicks;
   }
 
   /**
@@ -543,22 +570,20 @@ export function initLemmingsGame(): void {
   }
 
   /**
-   * Ends the level. `endedBy` is the caller's verdict on *why* it ended (a
-   * clock, rather than the crowd resolving) — finishLevel never re-derives it
-   * from tick state, so a quota failure that merely coincides with the final
-   * tick is not mislabelled as a timeout. `'clock'` is a level's authored
-   * `timeLimit`; `'stalled'` is a field that stopped changing, which is not a
-   * race the player lost but a crowd that ran out of ways home, so it gets its
-   * own framing — and only when the quota was missed, since the same standstill
-   * on a met quota is simply the win arriving.
+   * Ends the level. `endedBy` is the caller's verdict on *why* it ended (the
+   * level's authored clock, rather than the crowd resolving) — finishLevel never
+   * re-derives it from tick state, so a quota failure that merely coincides with
+   * the final tick is not mislabelled as a timeout.
    *
-   * `atTick` is the level's length for scoring, which is the elapsed tick for
-   * every ending but a standstill: there the caller bills the tick the field
-   * froze, so the seconds spent confirming it never eat the speed bonus.
+   * The level is scored on `billedTicks`, or on the tick the player conceded
+   * when they did: either way the score is taken where the field last moved, not
+   * where the level happened to close.
    */
-  function finishLevel(endedBy: 'clock' | 'stalled' | null = null, atTick = levelTicks) {
+  function finishLevel(endedBy: 'clock' | null = null) {
     if (phase === 'result') return;
     phase = 'result';
+    const atTick = concededAt ?? billedTicks();
+    stuckHint.hidden = true;
     syncToolbar();
     audio.stop();
     const won = saved >= def.needed;
@@ -599,9 +624,6 @@ export function initLemmingsGame(): void {
     } else if (endedBy === 'clock') {
       emoji = '⏰';
       title = strings.timeUp;
-    } else if (endedBy === 'stalled') {
-      emoji = '🧱';
-      title = strings.stalled;
     }
     resultEmoji.textContent = emoji;
     resultTitle.textContent = title;
@@ -700,31 +722,28 @@ export function initLemmingsGame(): void {
     // agreeing on when a level ends is the whole point of the helper, since a
     // harness that ends levels on its own terms once certified twenty-five
     // levels the browser would happily hang on.
-    const stockLeft = SKILL_ORDER.reduce((n, s) => n + stock[s], 0);
     stall.observe({
       critters,
       saved,
       spawned,
       terrainVersion: bmp.version,
-      stock: stockLeft
+      stock: SKILL_ORDER.reduce((n, s) => n + stock[s], 0)
     });
+    // A frozen field ends nothing. It offers the player the way out instead: a
+    // line of text naming the Nuke button, which appears once the field has
+    // gone nowhere for a while and withdraws itself the moment anything moves
+    // again. Guessing wrong here costs that sentence and nothing else, which is
+    // the whole reason the hint replaced the automatic ending it used to drive.
+    stuckHint.hidden = !stall.stuck || nuking;
     const ending = levelEnding({
       allOut: spawned >= def.spawnCount,
       onlyBlockersLeft: critters.every(c => c.state === 'blocker'),
-      stockLeft,
-      idleTicks: stall.idleTicks,
       ticks: levelTicks,
       timeLimit: def.timeLimit,
       conceded: nuking
     });
-    // A standstill ending is billed to the tick the field actually froze: the
-    // window the game spends being sure is bookkeeping, not time the player
-    // played, and charging it would quietly eat the speed bonus. It also always
-    // passes the 'stalled' framing, which `finishLevel` only reaches for when
-    // the quota was missed — a standstill on a met quota is a win, not a stall.
     if (ending === 'settled') finishLevel();
     else if (ending === 'clock') finishLevel('clock');
-    else if (ending) finishLevel('stalled', levelTicks - stall.idleTicks);
   }
 
   // --- Rendering ---
@@ -1050,10 +1069,9 @@ export function initLemmingsGame(): void {
     vignetteLayer.draw(ctx);
 
     // Timed levels wear their clock top-centre, flashing red for the last 10s.
-    // Every level that runs under a countdown shows it: an untimed level has no
-    // clock behind the scenes either, only the standstill check, which ends a
-    // level for something the player can see on the field rather than for time
-    // they were never told about.
+    // Every countdown a level runs under is on screen: an untimed level has no
+    // clock behind the scenes either, and nothing but this one can end a level
+    // on time the player was never shown.
     if (phase === 'playing' && def.timeLimit !== undefined) {
       const remaining = Math.max(0, def.timeLimit - levelTicks);
       const secs = Math.ceil(remaining / 60);

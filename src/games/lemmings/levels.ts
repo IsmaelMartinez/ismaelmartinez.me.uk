@@ -83,10 +83,10 @@ export interface LevelDef {
    * who cranks the release rate clears comfortably — the timer punishes
    * trickling, not playing.
    *
-   * A level without one runs under no clock at all, not a hidden fallback: what
-   * stops it running forever is the standstill check in stall.ts, which ends it
-   * for a field that has stopped changing rather than for time the HUD never
-   * showed. Every countdown a level runs under is on screen.
+   * A level without one runs under no clock at all, not a hidden fallback:
+   * every countdown a level runs under is on screen. A level whose crowd can no
+   * longer reach the exit therefore never ends by itself — the player ends it
+   * with the Nuke button, which stall.ts explains and the HUD points at.
    */
   timeLimit?: number;
   /**
@@ -121,10 +121,10 @@ export const DEFAULT_BOMBER_STOCK = 2;
  * The hand a level actually deals: its authored skills, plus the universal
  * bomber reserve for the levels that leave `bomber` out.
  *
- * Shared rather than spelled out at each call site because the reserve decides
- * whether the player still has a move to make, and a headless playthrough that
- * dealt itself a different hand from the browser would be answering a different
- * question about when the level is over.
+ * Shared rather than spelled out at each call site because the reserve is a real
+ * move the player has — two blasts they were never charged for — and a headless
+ * playthrough that dealt itself a different hand from the browser would be
+ * proving a strategy nobody can actually play.
  */
 export function levelStock(def: LevelDef): Record<Skill, number> {
   return {

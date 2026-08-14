@@ -1,0 +1,56 @@
+---
+/**
+ * The arcade toast stack: transient notices a cabinet raises through
+ * `createToaster` in src/games/engine/toast.ts, which is the required shared
+ * channel for toast *behaviour*. This component is the matching channel for
+ * their markup and presentation, so restyling the floor's toasts is one edit
+ * rather than one per cabinet.
+ *
+ * Drop it inside the positioned wrapper that holds the game canvas and its
+ * overlays; the game then mounts it with
+ * `createToaster(document.getElementById('toast-area'))`. The `.toast`
+ * children are created at runtime by that module, never here, which is why
+ * their rule is declared with `:global`.
+ *
+ * The stack has to paint above the cabinets' `.game-overlay` panels: a run's
+ * one-time new-record toast fires in the same breath that raises the
+ * game-over or round overlay, and behind a dimmed, blurred panel it is spent
+ * without ever being seen. Three cabinets give that overlay `z-index: 2` and
+ * the stack precedes the overlays in DOM order, so this must be strictly
+ * greater than 2 — an equal value loses the tie to the later sibling. Tank
+ * Duel's local `z-index: 2` (PR #251) worked only because its own overlay set
+ * no z-index at all.
+ */
+---
+
+<div id="toast-area" class="toast-area"></div>
+
+<style>
+  .toast-area {
+    position: absolute;
+    bottom: var(--space-md);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    pointer-events: none;
+  }
+
+  .toast-area :global(.toast) {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    font-size: 0.8rem;
+    padding: var(--space-xs) var(--space-md);
+    border-radius: 999px;
+    animation: toastIn 0.2s ease;
+    white-space: nowrap;
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>

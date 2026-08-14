@@ -2,6 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -67,7 +68,7 @@ const weapons = [
 
         <div class="game-area">
           <canvas id="game-canvas"></canvas>
-          <div id="toast-area" class="toast-area"></div>
+          <ToastArea />
           <div id="start-overlay" class="game-overlay">
             <div class="overlay-content">
               <span class="play-icon">🎯</span>
@@ -245,39 +246,6 @@ const weapons = [
     /* Dragging on the battlefield aims the shot, so don't scroll the page */
     touch-action: none;
     cursor: crosshair;
-  }
-
-  .toast-area {
-    position: absolute;
-    bottom: var(--space-md);
-    left: 50%;
-    transform: translateX(-50%);
-    /* Above both overlays. The round overlay is raised in the same breath that
-       awards the 250-point round bonus, the likeliest moment a run beats its
-       best, so without this the one-time record toast is spent behind a dimmed
-       and blurred panel and never fires again. The other five cabinets carry a
-       verbatim copy of this block and the same latent stacking bug. */
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-xs);
-    pointer-events: none;
-  }
-
-  .toast-area :global(.toast) {
-    background: rgba(0, 0, 0, 0.8);
-    color: #fff;
-    font-size: 0.8rem;
-    padding: var(--space-xs) var(--space-md);
-    border-radius: 999px;
-    animation: toastIn 0.2s ease;
-    white-space: nowrap;
-  }
-
-  @keyframes toastIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 
   .local-note {

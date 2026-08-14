@@ -143,7 +143,14 @@ const buildingHeight = (tile: CityTile): number => {
   return ZONE_TOP_HEIGHT[tile.type][level];
 };
 
-type Phase = 'idle' | 'play' | 'over';
+/**
+ * `confirm` is a live run held still while the retire prompt is open. It is a
+ * phase rather than a flag beside one so every existing `phase !== 'play'`
+ * guard covers it for free: the simulation stops, the canvas stops accepting
+ * builds, and — the point — a city cannot go bankrupt underneath the prompt
+ * and stack a game-over overlay behind it.
+ */
+type Phase = 'idle' | 'play' | 'confirm' | 'over';
 
 export function initCityGame(): void {
   const root = document.getElementById('city-root');
@@ -165,6 +172,19 @@ export function initCityGame(): void {
   const overOverlay = el('over-overlay');
   const startBtn = el('start-btn');
   const restartBtn = el('restart-btn');
+  const retireBtn = el('retire-btn') as HTMLButtonElement;
+  const retireOverlay = el('retire-overlay');
+  const retireConfirmBtn = el('retire-confirm') as HTMLButtonElement;
+  const retireCancelBtn = el('retire-cancel') as HTMLButtonElement;
+  const overIconEl = el('over-icon');
+  const overTitleEl = el('over-title');
+  const overDescEl = el('over-desc');
+  // The bankruptcy copy is server-rendered and localised; capture it so the
+  // retirement variant can be swapped in and back out without a second set of
+  // data-t attributes for strings the page already carries.
+  const bankruptIcon = overIconEl.textContent ?? '';
+  const bankruptTitle = overTitleEl.textContent ?? '';
+  const bankruptDesc = overDescEl.textContent ?? '';
   const moneyEl = el('money');
   const popEl = el('population');
   const jobsEl = el('jobs');
@@ -197,6 +217,10 @@ export function initCityGame(): void {
     crimeAlert: root.dataset.tCrimeAlert || 'Crime is rising. Build a police station!',
     densityUnlocked: root.dataset.tDensityUnlocked || 'High-density zoning unlocked!',
     newRecord: root.dataset.tNewRecord || 'New record population!',
+    retired: root.dataset.tRetired || 'City Retired',
+    retiredDesc:
+      root.dataset.tRetiredDesc ||
+      'You called time on a solvent city. Its peak population goes to the board.',
     events: {
       grant: root.dataset.tEventGrant || 'Government grant awarded',
       protest: root.dataset.tEventProtest || 'Tax protest at the town hall',
@@ -401,17 +425,96 @@ export function initCityGame(): void {
     refreshDerivedState();
     renderObjective();
     board.hide();
+    retireOverlay.style.display = 'none';
     phase = 'play';
+    retireBtn.disabled = false;
     audio.start();
   }
 
-  function gameOver() {
+  /**
+   * Opens the retire prompt over a live run. Focus moves to Cancel rather than
+   * Confirm so the keyboard's own default answer — the one Enter reaches — is
+   * the one that keeps the city.
+   */
+  function openRetireConfirm() {
+    if (phase !== 'play') return;
+    phase = 'confirm';
+    retireOverlay.style.display = 'flex';
+    document.addEventListener('keydown', onConfirmKeydown);
+    retireCancelBtn.focus();
+  }
+
+  /** Dismisses the prompt and hands the run back, focus included. */
+  function closeRetireConfirm() {
+    if (phase !== 'confirm') return;
+    phase = 'play';
+    retireOverlay.style.display = 'none';
+    document.removeEventListener('keydown', onConfirmKeydown);
+    retireBtn.focus();
+  }
+
+  /**
+   * Escape is the expected way out of a prompt, and the Tab cycle keeps a
+   * keyboard user among the two answers while it is open. A courtesy, not a
+   * claim: the prompt covers only the canvas, so the page behind it stays
+   * pointer-reachable and the markup declares no `aria-modal` (see the note in
+   * city.astro). Trapping the keys is still the kinder default, since Tabbing
+   * blind out of a visible dialog is how a keyboard user gets stranded.
+   *
+   * Bound on `document`, because the overlay covers the canvas and nothing
+   * else: a click on the toolbar, the site header or the page background puts
+   * focus outside `#city-root`, and a root-scoped listener never sees the keys
+   * that follow. The trap has to reach as far as focus can go, which is the
+   * whole document. It is attached only while the prompt is open and removed
+   * again when it closes, so no handler outlives the dialog it belongs to —
+   * and a swap that tears the page out from under an open prompt is caught by
+   * the `astro:before-swap` retirement wired below, as everywhere else here.
+   */
+  function onConfirmKeydown(e: KeyboardEvent) {
+    if (phase !== 'confirm') return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeRetireConfirm();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    // Two answers, so a Tab in either direction is the same toggle between
+    // them; from anywhere else it re-enters the dialog at the safe answer.
+    (document.activeElement === retireCancelBtn ? retireConfirmBtn : retireCancelBtn).focus();
+  }
+
+  /**
+   * The single terminal path. Bankruptcy is the involuntary way in; retiring
+   * is the voluntary one, and both post the same number — `peakPop`, the very
+   * figure banked live during the run — so ending a solvent city on purpose
+   * can neither be worth less than losing it nor be worth more than it earned.
+   * Without the retire door only failures ever reached `board.show`, which is
+   * why the shared board held nothing but collapsed cities.
+   */
+  function gameOver(reason: 'bankrupt' | 'retired') {
     phase = 'over';
-    audio.playSfx('gameover');
+    retireBtn.disabled = true;
+    retireOverlay.style.display = 'none';
+    // Confirming leaves the prompt without going through closeRetireConfirm,
+    // so the trap is lifted here too rather than only on cancel.
+    document.removeEventListener('keydown', onConfirmKeydown);
+    audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
     audio.stop();
+    const retired = reason === 'retired';
+    overIconEl.textContent = retired ? '🏁' : bankruptIcon;
+    overTitleEl.textContent = retired ? strings.retired : bankruptTitle;
+    overTitleEl.classList.toggle('retired', retired);
+    overDescEl.textContent = retired ? strings.retiredDesc : bankruptDesc;
     finalMonthsEl.textContent = month.toString();
     finalPopEl.textContent = peakPop.toString();
     overOverlay.style.display = 'flex';
+    // Confirming dismisses the prompt that held focus, so without this the
+    // keyboard lands on `document.body` and the next Tab restarts at the top of
+    // the page — the cancel path already hands focus back, and the terminal path
+    // owes the same. Ahead of `board.show`, which takes focus for the initials
+    // prompt when the run charts; this is where it lands when it does not.
+    overTitleEl.focus();
     board.show(peakPop);
   }
 
@@ -595,7 +698,7 @@ export function initCityGame(): void {
         showToast(`${event.emoji} ${strings.events[event.id]}${delta}`);
       }
       refreshDerivedState();
-      if (money < 0) gameOver();
+      if (money < 0) gameOver('bankrupt');
     }
   }
 
@@ -1681,6 +1784,24 @@ export function initCityGame(): void {
   });
   document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));
+
+  // Guarded on the phase as well as the disabled attribute: a retire outside
+  // a live run would post a stale (or empty) peak from the idle board.
+  retireBtn.addEventListener('click', openRetireConfirm);
+  retireCancelBtn.addEventListener('click', closeRetireConfirm);
+  retireConfirmBtn.addEventListener('click', () => {
+    if (phase !== 'confirm') return;
+    gameOver('retired');
+  });
+  // The trap is bound on the document, which outlives a ClientRouter swap even
+  // though this page's DOM does not. Both close paths lift it, but a swap over
+  // an open prompt is neither, so it retires here like every other listener in
+  // the engine that reaches past the game root.
+  const onSwap = () => {
+    document.removeEventListener('keydown', onConfirmKeydown);
+    document.removeEventListener('astro:before-swap', onSwap);
+  };
+  document.addEventListener('astro:before-swap', onSwap);
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

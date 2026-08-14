@@ -27,6 +27,11 @@ import {
   LEVEL_H,
   STALL_TIME_LIMIT
 } from '../../src/games/lemmings/levels';
+import {
+  createStallWatch,
+  STUCK_TICKS,
+  type FieldState
+} from '../../src/games/lemmings/stall';
 import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
 import { exitArrowAngle, rescueProgress } from '../../src/games/lemmings/hud';
 import {
@@ -562,16 +567,21 @@ function countSolid(bmp: TerrainBitmap, x: number): number {
  * Headless playthrough harness: runs a level exactly as the game loop does —
  * spawning on an interval (alternating hatches when a level has two), stepping
  * every critter each tick, banking exits, and resolving the level on the game's
- * own end condition (everyone out and only blockers left, or the clock —
- * authored or fallback — running out) — while a `strategy` callback assigns
- * skills from the level's stock, the same decisions a player makes with taps.
- * This is the automated stand-in for the manual "guide the crowd home with each
- * skill" verification, so a timed level's test proves it is winnable on the
- * clock.
+ * own end conditions (everyone out and only blockers left; or the quota met and
+ * the field frozen; or an authored `timeLimit` running out) — while a
+ * `strategy` callback assigns skills from the level's stock, the same decisions
+ * a player makes with taps. This is the automated stand-in for the manual
+ * "guide the crowd home with each skill" verification, so a timed level's test
+ * proves it is winnable on the clock.
  *
- * `maxTicks` is the harness's own runaway guard, deliberately kept above every
- * level's clock: a run that reaches it is a level that never resolved, which is
- * reported as `endedAt === null` rather than quietly passing.
+ * It deliberately does *not* apply `STALL_TIME_LIMIT`. That fallback clock is
+ * the production backstop, and a harness that mirrors it can never report a
+ * level that hangs — every run would resolve at the cap and the runaway
+ * sentinel below would be unreachable, which is exactly the hole this harness
+ * used to have. The cap's own behaviour is proved against the real game loop in
+ * lemmings-dom.test.ts instead; here `maxTicks` is the harness's own guard,
+ * independent of anything under test, and a run that reaches it is a level that
+ * never resolved on its own — reported as `endedAt === null`.
  */
 type LevelDef = (typeof LEVELS)[number];
 
@@ -583,10 +593,21 @@ interface SimApi {
 
 interface PlayOutcome {
   saved: number;
-  /** Tick the game's end condition fired on, or null if it never did. */
+  /** Tick the level resolved on, or null if it never did inside `maxTicks`. */
   endedAt: number | null;
-  /** True when the crowd resolved itself; false when a clock cut the level off. */
-  resolved: boolean;
+  /**
+   * The tick the level is *billed* for, which is what the end-of-level bonuses
+   * are scored on (game.ts hands `finishLevel` the same number): a `decided`
+   * ending spends STUCK_TICKS confirming the field is frozen, and that window
+   * is bookkeeping rather than play time.
+   */
+  ticks: number;
+  /**
+   * How it ended: `settled` (everyone out, only blockers left), `decided`
+   * (quota met and the field frozen), `clock` (an authored `timeLimit`), or
+   * null when nothing ended it.
+   */
+  endedBy: 'settled' | 'decided' | 'clock' | null;
 }
 
 function playLevel(
@@ -631,7 +652,8 @@ function playLevel(
   };
 
   const hatches = levelHatches(level);
-  const limit = levelTimeLimit(level);
+  const stall = createStallWatch();
+  const stockLeft = () => Object.values(stock).reduce((n, v) => n + v, 0);
   for (let tick = 1; tick <= maxTicks; tick++) {
     if (spawned < level.spawnCount) {
       if (spawnTimer <= 0) {
@@ -654,25 +676,58 @@ function playLevel(
       }
     }
     critters = critters.filter(isActive);
-    // The game's own end condition, mirrored (game.ts `update`): everyone has
-    // emerged and whoever is left can never leave on their own, or the clock
-    // ran out.
-    const done = spawned >= level.spawnCount && critters.every(c => c.state === 'blocker');
-    if (done || tick >= limit) return { saved, endedAt: tick, resolved: done };
+    // The game's own end conditions, mirrored (game.ts `update`): everyone has
+    // emerged and whoever is left can never leave on their own; or the quota is
+    // met and the field has frozen; or an authored clock ran out.
+    stall.observe({
+      critters,
+      saved,
+      spawned,
+      terrainVersion: bmp.version,
+      stock: stockLeft()
+    });
+    const allOut = spawned >= level.spawnCount;
+    const settled = allOut && critters.every(c => c.state === 'blocker');
+    const decided = !settled && allOut && saved >= level.needed && stall.stuck;
+    if (settled || decided) {
+      return {
+        saved,
+        endedAt: tick,
+        ticks: decided ? tick - stall.idleTicks : tick,
+        endedBy: settled ? 'settled' : 'decided'
+      };
+    }
+    if (level.timeLimit !== undefined && tick >= level.timeLimit) {
+      return { saved, endedAt: tick, ticks: tick, endedBy: 'clock' };
+    }
   }
-  return { saved, endedAt: null, resolved: false };
+  return { saved, endedAt: null, ticks: maxTicks, endedBy: null };
 }
 
 /**
  * Every playthrough asserts two things, and the first one matters as much as
- * the second: the level has to *resolve*. A level whose crowd settles into a
- * state the end condition never matches (walkers pacing a pocket they cannot
- * climb out of) used to run until the harness loop simply fell out, and a test
- * that only counted rescues passed anyway. `endedAt` is null exactly then.
+ * the second: the level has to *resolve* — on its own, with no clock rescuing
+ * it. A level whose crowd settles into a state no end condition matches
+ * (walkers pacing a pocket they cannot climb out of) runs until the harness's
+ * runaway guard, and `endedAt` is null exactly then. That sentinel is real:
+ * ten of the twenty-five levels hit it when nobody plays them (see the
+ * untouched-level test below), so a strategy that leaves the crowd hanging
+ * fails here rather than passing on a technicality.
  */
 function expectCleared(level: LevelDef, outcome: PlayOutcome): void {
   expect(outcome.endedAt).not.toBeNull();
   expect(outcome.saved).toBeGreaterThanOrEqual(level.needed);
+}
+
+/** The speed bonus a run would be paid, scored exactly as `finishLevel` scores it. */
+function timeBonusFor(level: LevelDef, outcome: PlayOutcome): number {
+  return levelBonuses({
+    saved: outcome.saved,
+    needed: level.needed,
+    spawnCount: level.spawnCount,
+    ticks: outcome.ticks,
+    par: level.par
+  }).time;
 }
 
 describe('levels — solvable playthroughs', () => {
@@ -912,8 +967,10 @@ describe('levels — solvable playthroughs', () => {
       const w = critters.find(c => c.state === 'walker' && c.y === 119 && c.x >= 100 && c.x <= 200);
       if (w && assign(w, 'digger')) dug = true;
     });
-    expect(outcome.endedAt).not.toBeNull();
     expect(outcome.saved).toBe(0);
+    // And with the crowd left pacing above the steel, nothing in the level's
+    // own rules ends it — that is the fallback clock's job (lemmings-dom.test.ts).
+    expect(outcome.endedAt).toBeNull();
   });
 
   it('16: ramps over the steel wall that bashers cannot dent', () => {
@@ -936,8 +993,10 @@ describe('levels — solvable playthroughs', () => {
         if (c.state === 'walker' && c.dir === 1 && c.x >= 144 && c.x <= 148) assign(c, 'basher');
       }
     });
-    expect(outcome.endedAt).not.toBeNull();
     expect(outcome.saved).toBe(0);
+    // And with the crowd left pacing at the steel, nothing in the level's own
+    // rules ends it — that is the fallback clock's job (lemmings-dom.test.ts).
+    expect(outcome.endedAt).toBeNull();
   });
 
   it('17: umbrellas for the high stream only — the low stream walks home', () => {
@@ -974,8 +1033,10 @@ describe('levels — solvable playthroughs', () => {
       const w = critters.find(c => c.state === 'walker' && c.y === 123 && c.x >= 120 && c.x <= 220);
       if (w && assign(w, 'digger')) dug = true;
     });
-    expect(outcome.endedAt).not.toBeNull();
     expect(outcome.saved).toBe(0);
+    // And with the crowd left pacing above the steel, nothing in the level's
+    // own rules ends it — that is the fallback clock's job (lemmings-dom.test.ts).
+    expect(outcome.endedAt).toBeNull();
   });
 
   it('19: bridges the gap for the left crowd while the right crowd strolls in, on the clock', () => {
@@ -1147,32 +1208,38 @@ describe('levels — every level resolves', () => {
   // pocket it cannot climb out of is neither dead nor a blocker, so the "all
   // out, only blockers left" end condition never matches it. These are the
   // cases that used to run forever, leaving the Nuke button as the only way
-  // out of a level the instructions never mention.
+  // out of a level the instructions never mention. Two things answer that, and
+  // they are proved in different places: the fallback clock every untimed level
+  // runs under, which only the real game loop applies (lemmings-dom.test.ts),
+  // and the standstill check below, which the harness mirrors.
 
-  it('2: an untouched level still ends — the crowd bounces until the stall cap', () => {
+  it('2: an untouched level never resolves itself — hence the fallback clock', () => {
     // The issue's headline repro: level 2 needs a basher, so with no player
-    // input at all every critter paces between the left wall and the pillar.
+    // input at all every critter paces between the left wall and the pillar,
+    // forever. Nothing in the level's own rules stops it, which is exactly why
+    // the game runs a clock over the top of them.
     const outcome = playLevel(LEVELS[1], () => {});
-    expect(outcome.endedAt).toBe(STALL_TIME_LIMIT);
-    expect(outcome.resolved).toBe(false);
+    expect(outcome.endedAt).toBeNull();
     expect(outcome.saved).toBe(0);
   });
 
-  it('no level runs forever when the player never touches it', () => {
+  it('every level runs under a clock, its own or the fallback', () => {
     for (const level of LEVELS) {
-      const outcome = playLevel(level, () => {});
-      expect(outcome.endedAt).not.toBeNull();
-      expect(outcome.endedAt).toBeLessThanOrEqual(levelTimeLimit(level));
+      expect(levelTimeLimit(level)).toBeLessThanOrEqual(STALL_TIME_LIMIT);
+      expect(levelTimeLimit(level)).toBeGreaterThan(0);
     }
   });
 
   it('10 and 20: a stranded critter no longer hangs a level that was already won', () => {
     // Both levels are cleared by the builder placements the playthrough tests
     // above aim at, and both leave one critter pacing an 8px pocket afterwards
-    // — quota met, level never over. If a future terrain or skill change frees
-    // that critter, `resolved` flips to true here and this expectation should
-    // be updated rather than removed: the guarantee under test is that the
-    // level ends either way.
+    // — quota met, crowd going nowhere. The level resolves on the standstill
+    // instead of sitting out the fallback clock, and because it is billed at
+    // the tick the field froze rather than the tick the game was sure of it,
+    // the speed bonus these two could never earn now pays. If a future terrain
+    // or skill change frees that critter, `endedBy` flips to 'settled' here and
+    // this expectation should be updated rather than removed: the guarantee
+    // under test is that the level ends, promptly, either way.
     let dug = false;
     let built10 = false;
     const ten = playLevel(LEVELS[9], ({ critters, assign }) => {
@@ -1188,8 +1255,10 @@ describe('levels — every level resolves', () => {
       }
     });
     expect(ten.saved).toBeGreaterThanOrEqual(LEVELS[9].needed);
-    expect(ten.resolved).toBe(false);
-    expect(ten.endedAt).toBe(STALL_TIME_LIMIT);
+    expect(ten.endedBy).toBe('decided');
+    expect(ten.endedAt).toBeLessThan(STALL_TIME_LIMIT / 4);
+    expect(ten.ticks).toBe(ten.endedAt! - STUCK_TICKS);
+    expect(timeBonusFor(LEVELS[9], ten)).toBeGreaterThan(0);
 
     let bashed = false;
     let built20 = false;
@@ -1213,8 +1282,18 @@ describe('levels — every level resolves', () => {
       }
     });
     expect(twenty.saved).toBeGreaterThanOrEqual(LEVELS[19].needed);
-    expect(twenty.resolved).toBe(false);
-    expect(twenty.endedAt).toBe(STALL_TIME_LIMIT);
+    expect(twenty.endedBy).toBe('decided');
+    expect(twenty.endedAt).toBeLessThan(STALL_TIME_LIMIT / 4);
+    expect(timeBonusFor(LEVELS[19], twenty)).toBeGreaterThan(0);
+  });
+
+  it('a frozen field does not end a level whose quota is still short', () => {
+    // The standstill check is not a second stall cap: a losing crowd keeps
+    // playing (the player still has skills to spend on it) and only the
+    // fallback clock — the game's, not the harness's — ever cuts it off.
+    const outcome = playLevel(LEVELS[1], () => {}, { maxTicks: STALL_TIME_LIMIT * 2 });
+    expect(outcome.saved).toBeLessThan(LEVELS[1].needed);
+    expect(outcome.endedAt).toBeNull();
   });
 
   it('a timed level still ends on its own clock, not the stall cap', () => {
@@ -1226,6 +1305,74 @@ describe('levels — every level resolves', () => {
     expect(levelTimeLimit(timed)).toBe(timed.timeLimit);
     const outcome = playLevel(timed, () => {}, { interval: 80 });
     expect(outcome.endedAt).toBe(timed.timeLimit);
+    expect(outcome.endedBy).toBe('clock');
+  });
+});
+
+describe('stall — standstill detection', () => {
+  const field = (critters: Critter[], over: Partial<FieldState> = {}): FieldState => ({
+    critters,
+    saved: 0,
+    spawned: 1,
+    terrainVersion: 0,
+    stock: 0,
+    ...over
+  });
+
+  it('never trips while a critter is covering new ground', () => {
+    const c = createCritter(1, 4, 159, 1);
+    const watch = createStallWatch();
+    for (let t = 0; t < STUCK_TICKS * 2; t++) {
+      c.x += 1;
+      watch.observe(field([c]));
+    }
+    expect(watch.idleTicks).toBe(0);
+    expect(watch.stuck).toBe(false);
+  });
+
+  it('trips one standstill window after a critter starts pacing a pocket', () => {
+    const c = createCritter(1, 100, 159, 1);
+    const watch = createStallWatch();
+    let trippedAt: number | null = null;
+    for (let t = 1; t <= STUCK_TICKS * 2 && trippedAt === null; t++) {
+      // An eight-pixel pocket, walked end to end and back.
+      c.x = 100 + Math.abs((t % 16) - 8);
+      watch.observe(field([c]));
+      if (watch.stuck) trippedAt = t;
+    }
+    // One lap to cover the pocket, then the window — and not a tick sooner.
+    expect(trippedAt).toBeGreaterThan(STUCK_TICKS);
+    expect(trippedAt).toBeLessThanOrEqual(STUCK_TICKS + 16);
+  });
+
+  it('starts the count over for a rescue, a terrain edit, or a skill spent', () => {
+    const c = createCritter(1, 100, 159, 1);
+    const watch = createStallWatch();
+    const settle = () => {
+      for (let t = 0; t < 50; t++) watch.observe(field([c]));
+      expect(watch.idleTicks).toBeGreaterThan(0);
+    };
+    settle();
+    watch.observe(field([c], { saved: 1 }));
+    expect(watch.idleTicks).toBe(0);
+
+    for (let t = 0; t < 50; t++) watch.observe(field([c], { saved: 1 }));
+    watch.observe(field([c], { saved: 1, terrainVersion: 7 }));
+    expect(watch.idleTicks).toBe(0);
+
+    for (let t = 0; t < 50; t++) watch.observe(field([c], { saved: 1, terrainVersion: 7 }));
+    watch.observe(field([c], { saved: 1, terrainVersion: 7, stock: 3 }));
+    expect(watch.idleTicks).toBe(0);
+  });
+
+  it('forgets everything when a level loads', () => {
+    const c = createCritter(1, 100, 159, 1);
+    const watch = createStallWatch();
+    for (let t = 0; t <= STUCK_TICKS; t++) watch.observe(field([c]));
+    expect(watch.stuck).toBe(true);
+    watch.reset();
+    expect(watch.idleTicks).toBe(0);
+    expect(watch.stuck).toBe(false);
   });
 });
 

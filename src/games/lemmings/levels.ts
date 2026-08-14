@@ -110,14 +110,19 @@ function paintShape(bmp: TerrainBitmap, shape: Shape): void {
 }
 
 /**
- * Fallback clock (ticks, 60/s — so 2.5 minutes) for a level with no authored
+ * Runaway backstop (ticks, 60/s — so 2.5 minutes) for a level with no authored
  * `timeLimit`. The "all out, only blockers left" end condition never matches a
  * crowd that has simply run out of ways home — a walker pacing a pocket it
  * cannot climb out of is neither dead nor a blocker — so without a cap such a
- * level runs forever with no way forward but the Nuke button. Sits well clear
- * of real play — the slowest headless playthrough resolves in ~1,200 ticks and
- * the most generous par (a first clear at the default release rate) is 5,400 —
- * so a level being played never meets it; only a stalled one does.
+ * level runs forever with no way forward but the Nuke button.
+ *
+ * Deliberately long, and deliberately not the usual way a stalled level ends:
+ * a level whose quota is already met resolves on the standstill check
+ * (stall.ts) within seconds of the field freezing. What is left for this cap is
+ * the losing stall — a crowd short of the quota with skills still in hand,
+ * where cutting the level off early would take a comeback away from the player.
+ * It sits well clear of real play (the most generous par, a first clear at the
+ * default release rate, is 5,400), so a level being played never meets it.
  */
 export const STALL_TIME_LIMIT = 9000;
 

@@ -43,6 +43,7 @@ import {
   EXIT_HALF_W,
   type Hatch
 } from './levels';
+import { createStallWatch } from './stall';
 import { levelSelectItems, loadClearedLevels, saveClearedLevels } from './progress';
 import { exitArrowAngle, rescueProgress } from './hud';
 import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
@@ -358,6 +359,9 @@ export function initLemmingsGame(): void {
   let runScore = 0;
   let combo = newCombo();
   let levelTicks = 0;
+  // Watches the field for a standstill so a decided level resolves there and
+  // then, rather than sitting out the fallback clock (see stall.ts).
+  const stall = createStallWatch();
   // Progress lives in its own key; older installs stored it as the table's
   // "score", which loadClearedLevels migrates on first read.
   let cleared = loadClearedLevels(board.best(), LEVELS.length);
@@ -411,6 +415,7 @@ export function initLemmingsGame(): void {
     nuking = false;
     combo = newCombo();
     levelTicks = 0;
+    stall.reset();
     stock = blankStock();
     for (const key of SKILL_ORDER) stock[key] = def.stock[key] ?? 0;
     // The bomber (pick-one blast) is the single-critter counterpart to the
@@ -547,8 +552,12 @@ export function initLemmingsGame(): void {
    * `timeLimit`; `'stalled'` is the fallback cap an untimed level runs under,
    * which is not a race the player lost but a crowd that stopped making
    * progress, so it gets its own framing.
+   *
+   * `atTick` is the level's length for scoring, which is the elapsed tick for
+   * every ending but a standstill: there the caller bills the tick the field
+   * froze, so the seconds spent confirming it never eat the speed bonus.
    */
-  function finishLevel(endedBy: 'clock' | 'stalled' | null = null) {
+  function finishLevel(endedBy: 'clock' | 'stalled' | null = null, atTick = levelTicks) {
     if (phase === 'result') return;
     phase = 'result';
     syncToolbar();
@@ -559,7 +568,7 @@ export function initLemmingsGame(): void {
       saved,
       needed: def.needed,
       spawnCount: def.spawnCount,
-      ticks: levelTicks,
+      ticks: atTick,
       par: def.par
     });
     runScore += bonuses.total;
@@ -687,21 +696,42 @@ export function initLemmingsGame(): void {
     critters = critters.filter(c => isActive(c));
     syncHud();
 
-    // The level ends once everyone has emerged and no critter can still be
-    // rescued: any stragglers are blockers, which never leave on their own and
-    // — with no one else left to dig them free — are stuck for good. A level
-    // also ends the moment its clock runs out, stranding whoever is still in
-    // the field — except during a nuke: the player already conceded, so the
-    // chain plays out and the result reads as the failure it is rather than a
-    // timeout coaching them to speed up. Every level runs under a clock, its
-    // own or the STALL_TIME_LIMIT fallback: a walker that can no longer reach
-    // the exit is neither dead nor a blocker, so a crowd out of options never
-    // satisfies `done` and, uncapped, the level would run forever.
+    // Three ways a level ends, in the order they are trusted.
+    //
+    // `done`: everyone has emerged and no critter can still be rescued — any
+    // stragglers are blockers, which never leave on their own and, with no one
+    // else left to dig them free, are stuck for good.
+    //
+    // `decided`: the quota is already met and the field has gone completely
+    // still for STUCK_TICKS (stall.ts) — nobody moving anywhere new, no terrain
+    // cut, no skill spent. The level is won and nothing left in it can change
+    // that on its own, so it resolves here rather than leaving the player
+    // staring at a motionless screen until the fallback clock runs out. The
+    // score is billed to the tick the field actually froze: the standstill
+    // window is how long the game took to be sure, not time the player played.
+    //
+    // `outOfTime`: the clock ran out, stranding whoever is still in the field —
+    // except during a nuke, where the player already conceded, so the chain
+    // plays out and the result reads as the failure it is rather than a timeout
+    // coaching them to speed up. Every level runs under a clock, its own or the
+    // STALL_TIME_LIMIT fallback, which is the runaway backstop for the cases
+    // neither of the above catches: a crowd that runs out of ways home without
+    // meeting the quota is neither `done` nor `decided`, and uncapped that
+    // level would run forever.
+    stall.observe({
+      critters,
+      saved,
+      spawned,
+      terrainVersion: bmp.version,
+      stock: SKILL_ORDER.reduce((n, s) => n + stock[s], 0)
+    });
+    const allOut = spawned >= def.spawnCount;
+    const done = allOut && critters.every(c => c.state === 'blocker');
+    const decided = !done && allOut && saved >= def.needed && stall.stuck;
     const outOfTime = !nuking && levelTicks >= levelTimeLimit(def);
-    const done = spawned >= def.spawnCount && critters.every(c => c.state === 'blocker');
-    if (done || outOfTime) {
-      finishLevel(done ? null : def.timeLimit !== undefined ? 'clock' : 'stalled');
-    }
+    if (done) finishLevel();
+    else if (decided) finishLevel(null, levelTicks - stall.idleTicks);
+    else if (outOfTime) finishLevel(def.timeLimit !== undefined ? 'clock' : 'stalled');
   }
 
   // --- Rendering ---

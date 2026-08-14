@@ -33,6 +33,7 @@ import {
   type IsoView,
   hash01 as hash
 } from '../engine';
+import { TOWERDEFENSE_MUSIC } from './music';
 import { GRID_W, GRID_H, createTdMap, routePosition, type TdMap } from './path';
 import { spawnEnemy, stepEnemies, type Enemy, type EnemyKind } from './enemies';
 import {
@@ -338,73 +339,7 @@ export function initTowerDefenseGame(): void {
   const board = initScoreboard(document.getElementById('highscores'));
   recordEl.textContent = `${board.best()}`;
 
-  // A martial A-minor march — hold the line. A swelling low drone bed under
-  // a heroic dotted lead, over a steady on-the-beat marching bass.
-  const audio = createGameAudio({
-    tempo: 136,
-    volume: 0.12,
-    echo: { time: 0.28, feedback: 0.25, mix: 0.2 },
-    tracks: [
-      {
-        // Drone/pad: a low tonic bed that descends A→F→E to build tension.
-        wave: 'sawtooth',
-        envelope: 'pad',
-        volume: 0.45,
-        melody: [
-          { freq: 110.0, beats: 4 },
-          { freq: 110.0, beats: 4 },
-          { freq: 87.31, beats: 4 },
-          { freq: 82.41, beats: 4 }
-        ]
-      },
-      {
-        // Lead: a resolute dotted march that resolves home to the tonic.
-        wave: 'square',
-        volume: 0.9,
-        melody: [
-          { freq: 440.0, beats: 1.5 },
-          { freq: 440.0, beats: 0.5 },
-          { freq: 523.25, beats: 1 },
-          { freq: 659.25, beats: 1 },
-          { freq: 587.33, beats: 1.5 },
-          { freq: 523.25, beats: 0.5 },
-          { freq: 493.88, beats: 1 },
-          { freq: 440.0, beats: 1 },
-          { freq: 659.25, beats: 1.5 },
-          { freq: 587.33, beats: 0.5 },
-          { freq: 523.25, beats: 1 },
-          { freq: 493.88, beats: 1 },
-          { freq: 440.0, beats: 1.5 },
-          { freq: 493.88, beats: 0.5 },
-          { freq: 523.25, beats: 1 },
-          { freq: 440.0, beats: 1 }
-        ]
-      },
-      {
-        // Bass: a steady marching pulse, one note to the beat, tonic/dominant.
-        wave: 'triangle',
-        volume: 0.75,
-        melody: [
-          { freq: 110.0, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 73.42, beats: 1 },
-          { freq: 73.42, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 110.0, beats: 1 }
-        ]
-      }
-    ]
-  });
+  const audio = createGameAudio(TOWERDEFENSE_MUSIC);
   wireChannelButton(document.getElementById('music-btn'), audio, 'music');
   wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 

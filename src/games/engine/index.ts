@@ -8,6 +8,7 @@ export { initScoreboard, createRunRecord } from './scoreboard';
 export type { Scoreboard, ScoreboardOptions, RunRecordBank } from './scoreboard';
 export { createGameAudio, loadMusicMuted, loadSfxMuted } from './audio';
 export type { GameAudio, GameAudioOptions, Note, SfxName, Track, EchoOptions } from './audio';
+export { pitch, p, REST } from './pitch';
 export { wireChannelButton } from './soundButton';
 export { createToaster } from './toast';
 export type { Toaster, ToasterOptions } from './toast';

@@ -27,6 +27,17 @@ export interface Note {
   freq: number;
   /** Duration in beats. */
   beats: number;
+  /**
+   * Per-note level, 0.05–1, multiplying the track's `volume`. Defaults to 1.
+   *
+   * Attenuation only, deliberately: a line is shaped by ducking its weak beats
+   * rather than boosting its strong ones, which keeps every voice's ceiling at
+   * the track volume the mix was balanced at. Without this every note in a
+   * voice fires at one level, which is what makes an otherwise decent line read
+   * as a machine playing it. The floor is not zero because the envelope ramps
+   * are exponential and cannot legally reach it — write a rest as `freq: 0`.
+   */
+  gain?: number;
 }
 
 /** One simultaneous voice of the music. */
@@ -155,6 +166,16 @@ const MAX_BPM = 1000;
 
 /** Peak gain of a single voice before its relative `volume` scaling. */
 const VOICE_PEAK = 0.8;
+
+/**
+ * Clamps a note's optional level into the legal attenuation range. The floor is
+ * positive because `playTone`'s envelope uses exponential ramps, which cannot
+ * target zero; the ceiling is 1 so a note can only duck below its track volume.
+ */
+function noteGain(gain: number | undefined): number {
+  if (gain === undefined || !Number.isFinite(gain)) return 1;
+  return Math.min(Math.max(gain, 0.05), 1);
+}
 
 interface NormTrack {
   melody: Note[];
@@ -320,7 +341,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
             v.next,
             playDur,
             track.wave,
-            VOICE_PEAK * track.volume,
+            VOICE_PEAK * track.volume * noteGain(note.gain),
             musicBus,
             track.envelope,
             track.detune

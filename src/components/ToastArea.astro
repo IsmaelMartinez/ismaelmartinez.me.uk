@@ -12,14 +12,23 @@
  * children are created at runtime by that module, never here, which is why
  * their rule is declared with `:global`.
  *
- * The stack has to paint above the cabinets' `.game-overlay` panels: a run's
- * one-time new-record toast fires in the same breath that raises the
- * game-over or round overlay, and behind a dimmed, blurred panel it is spent
- * without ever being seen. Three cabinets give that overlay `z-index: 2` and
- * the stack precedes the overlays in DOM order, so this must be strictly
- * greater than 2 — an equal value loses the tie to the later sibling. Tank
- * Duel's local `z-index: 2` (PR #251) worked only because its own overlay set
- * no z-index at all.
+ * Deliberately sets no `z-index`, which leaves each cabinet's stacking exactly
+ * as it shipped. Raising the stack above the overlays looks like the obvious
+ * fix — a record toast that fires as the game-over panel goes up is spent
+ * behind it and never fires again — but measured at a phone width it trades
+ * that bug for another: the opaque pill then lands on Line Hold's "Hold Again"
+ * button for the toast's full 2.4s. Tank Duel already has that second problem,
+ * because PR #251 raised its stack to `z-index: 2` and its own overlay sets
+ * none; that one cabinet keeps its rule locally. Which of the two bugs each
+ * cabinet should have is a design call, not a CSS one, so it is filed rather
+ * than decided here.
+ *
+ * Long toasts wrap rather than run off. Five of the six copies carried
+ * `white-space: nowrap`, which reads as a tidy single-line pill until a
+ * localised string is long: `.game-area` is `overflow: hidden`, so at 375px
+ * four to six of every cabinet's own toast strings were clipped at both ends
+ * in all three locales (Line Hold's Catalan wave-cleared line measured 627px
+ * against a 327px area). Wrapping clips none of them.
  */
 ---
 
@@ -29,9 +38,15 @@
   .toast-area {
     position: absolute;
     bottom: var(--space-md);
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 3;
+    /* Spans the field rather than the old `left: 50%` + `translateX(-50%)`,
+       which is not equivalent once toasts wrap: an absolutely positioned
+       shrink-to-fit box offset from the left edge gets only the remaining half
+       as its available width, so a long toast collapsed to a 162px, four-line
+       sliver. Anchored to both edges the pill can use the full width and the
+       flex centring keeps it where it was. */
+    left: 0;
+    right: 0;
+    padding: 0 var(--space-md);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -46,7 +61,8 @@
     padding: var(--space-xs) var(--space-md);
     border-radius: 999px;
     animation: toastIn 0.2s ease;
-    white-space: nowrap;
+    max-width: 100%;
+    text-align: center;
   }
 
   @keyframes toastIn {

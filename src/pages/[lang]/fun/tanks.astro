@@ -248,6 +248,19 @@ const weapons = [
     cursor: crosshair;
   }
 
+  /* The one cabinet whose toast stack sits above its overlays, kept from
+     PR #251: the round overlay is raised in the same breath that awards the
+     250-point round bonus, the likeliest moment a run beats its best, so
+     without this the one-time record toast is spent behind a dimmed panel and
+     never fires again. It works here only because this page's .game-overlay
+     sets no z-index of its own. It is deliberately NOT in ToastArea.astro —
+     generalising it puts the pill over other cabinets' overlay buttons (see
+     that component's note). Global because the element belongs to the
+     component, so a scoped selector would not reach it. */
+  :global(#toast-area) {
+    z-index: 2;
+  }
+
   .local-note {
     font-size: 0.75rem;
     color: var(--color-text-muted);

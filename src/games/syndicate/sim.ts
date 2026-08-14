@@ -24,14 +24,17 @@ export const SIGHT_RANGE = 7;
 export const BOOST_SPEED = 1.6;
 export const BOOST_FIRE = 0.6;
 /**
- * How close a follower (a persuaded mind, or the escort asset in tow) settles
- * behind its nearest agent, in tiles. It stops here and never closes further,
- * so this is a floor on where a followed unit can come to rest — any test that
- * asks such a unit to reach a spot has to be written against this distance.
- * Exported for exactly that reason: the escort's delivery test reads it rather
- * than carrying a second copy that can drift out of step with this one.
+ * How close a follower (a persuaded mind, or the escort asset between orders)
+ * settles behind its nearest agent, in tiles. It stops here and never closes
+ * further, so this is a floor on where a *followed* unit can come to rest.
  */
 export const FOLLOW_STOP_DISTANCE = 1.6;
+/**
+ * How close a unit must stand to the extraction pad's centre to count as being
+ * on it, in tiles. One number for every mould: the `secure` hold, the persuade
+ * escape and the escort drop-off all mean the same place by it.
+ */
+export const EXTRACTION_RADIUS = 1.5;
 
 export interface Shot {
   fx: number;
@@ -88,39 +91,56 @@ export const escorting = (unit: Unit): boolean =>
   unit.kind === 'vip' && unit.faction === 'player';
 
 /**
- * The escort's delivery test: has the asset been walked out?
+ * The escort's delivery test: is the asset standing on the extraction pad?
  *
  * Deliberately about the asset and not the squad — an agent alone on the pad
- * must not extract a mission whose whole point is what it brought with it.
- * But it is measured against `spots`, the tiles the squad itself lands on when
- * ordered to the pad, rather than against the pad's own centre, because the
- * asset trails on `follow`: it parks FOLLOW_STOP_DISTANCE short of its nearest
- * agent and never closes further. Asking it to stand on the pad within the
- * squad's own extraction radius is asking for geometry the follow routine
- * cannot produce, and that is precisely how this mission shipped unwinnable.
- * An asset resting behind an agent that reached the landing zone is home.
+ * must not extract a mission whose whole point is what it brought with it —
+ * and measured from the pad's own centre at the same EXTRACTION_RADIUS an
+ * agent has to meet. That is the only bound a player can read off the screen:
+ * anything derived from where the squad happens to land makes the win zone a
+ * shape the city's streets chose rather than one the mission did, and stretches
+ * it in whichever direction the pad's alley happens to run.
+ *
+ * It is `commandMove` leading the asset onto the pad, not `follow` trailing it
+ * behind whichever agent got there first, that makes this reachable — see
+ * there for why the two have to be read together.
  */
-export function vipAtExtraction(world: World, spots: number[]): boolean {
+export function vipAtExtraction(world: World, extraction: number): boolean {
+  if (extraction < 0) return false;
   const vip = vipOf(world);
   if (!vip || !vip.alive || !escorting(vip)) return false;
-  return spots.some(spot => {
-    const sx = (spot % MAP_W) + 0.5;
-    const sy = Math.floor(spot / MAP_W) + 0.5;
-    return Math.hypot(vip.x - sx, vip.y - sy) <= FOLLOW_STOP_DISTANCE;
-  });
+  const ex = (extraction % MAP_W) + 0.5;
+  const ey = Math.floor(extraction / MAP_W) + 0.5;
+  return Math.hypot(vip.x - ex, vip.y - ey) <= EXTRACTION_RADIUS;
 }
 
 const tileOf = (u: Unit): number => idx(Math.floor(u.x), Math.floor(u.y));
 
 const distance = (a: Unit, b: Unit): number => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** Orders the given agents to fan out around the clicked tile. */
+/**
+ * Orders the squad to fan out around the clicked tile.
+ *
+ * A collected asset is led rather than herded: it takes the clicked tile
+ * itself and the agents form up around it. Nothing else in the sim ever hands
+ * the asset a destination — `follow` only ever walks it to within
+ * FOLLOW_STOP_DISTANCE of an agent, which is further out than the pad's own
+ * radius — so without this an escort could be ordered onto the extraction pad
+ * and still leave its charge parked a couple of tiles down the street. That
+ * arithmetic is how mission 10 shipped unwinnable. Putting the asset at the
+ * head of the fan-out also rings it with its escort instead of leaving it
+ * trailing at the back where the streets can shoot it.
+ */
 export function commandMove(world: World, target: number, agents: Unit[]): void {
   if (target < 0 || !isWalkable(world.tiles[target])) return;
-  const spots = spreadTargets(world.tiles, target, agents.length);
-  agents.forEach((agent, n) => {
-    const path = findPath(world.tiles, tileOf(agent), spots[Math.min(n, spots.length - 1)] ?? target);
-    if (path) agent.path = path;
+  const asset = world.units.find(u => u.alive && u.kind === 'vip' && escorting(u));
+  const movers = asset ? [asset, ...agents] : agents;
+  const spots = spreadTargets(world.tiles, target, movers.length);
+  movers.forEach((unit, n) => {
+    const path = findPath(world.tiles, tileOf(unit), spots[Math.min(n, spots.length - 1)] ?? target);
+    if (!path) return;
+    unit.path = path;
+    if (unit === asset) unit.led = true;
   });
 }
 
@@ -320,9 +340,17 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
       }
       autoFire(unit);
     } else if (unit.kind === 'vip') {
-      // Pinned where the contract left it until an agent arrives; from then
-      // on it trails the squad on the same routine persuaded minds use.
-      if (escorting(unit)) follow(world, unit, agents);
+      // Pinned where the contract left it until an agent arrives. From then on
+      // the squad leads it: a move order walks it to the tile the player
+      // clicked, and only once that route runs out does it fall back to
+      // trailing the nearest agent on the same routine persuaded minds use.
+      // Following never overrides an order in flight — the route to the pad
+      // runs the gauntlet of the squad's own agents, and an asset re-aimed at
+      // the first one it passes is an asset that never reaches the pad.
+      if (escorting(unit)) {
+        if (!unit.path.length) unit.led = false;
+        if (!unit.led) follow(world, unit, agents);
+      }
     } else if (unit.faction === 'hostile') {
       const weapon = unit.weapon ? WEAPONS[unit.weapon] : null;
       const mark = visibleTarget(world, unit, prey, SIGHT_RANGE);

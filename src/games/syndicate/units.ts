@@ -46,6 +46,12 @@ export interface Unit {
   panic: number;
   wanderTimer: number;
   repathTimer: number;
+  /**
+   * Escort asset only: true while it is walking a route a move order gave it.
+   * `follow` must not overwrite such a route — an asset re-aimed at its nearest
+   * agent halfway to the extraction pad is an asset that never arrives.
+   */
+  led: boolean;
   /** Patrol anchor tile for guards/enemies, spawn tile otherwise. */
   home: number;
   /** Cosmetic colour variant. */
@@ -118,6 +124,7 @@ export function createUnit(
     panic: 0,
     wanderTimer: 0,
     repathTimer: 0,
+    led: false,
     home: tile,
     tint: 0,
     alive: true

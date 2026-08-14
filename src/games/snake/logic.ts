@@ -44,8 +44,8 @@ export const ARENA_EVERY = 8;
  * its floor (22), which is where a run used to stop offering anything new.
  *
  * Authored light on purpose — short bars and posts, never a maze. Every rung
- * leaves the free cells mutually reachable; the test suite proves it rather
- * than trusting the eye.
+ * leaves the free cells mutually reachable and none of them a cul-de-sac; the
+ * test suite proves both rather than trusting the eye.
  */
 export const ARENA_WALLS: readonly (readonly number[])[] = [
   [],
@@ -94,12 +94,22 @@ export interface SnakeState {
   /** Solid cells. The head dies on one. */
   walls: Set<number>;
   /**
-   * Cells the ladder has claimed but that were still occupied when the rung
-   * arrived. They stay passable and turn solid the moment they are vacated,
-   * so a wall never materialises underneath the snake — the player watches
-   * them close in instead of dying to geometry that appeared out of nowhere.
+   * Cells the ladder has claimed but that are not solid yet, each with the
+   * steps of grace it has left. *Every* claimed cell starts here, whether or
+   * not something stood on it: the cell stays passable, renders as a pulsing
+   * ghost, and only sets once it has been clear — and so on screen — for
+   * WALL_GRACE_STEPS consecutive steps.
+   * The player watches the walls close in instead of dying to geometry that
+   * appeared out of nowhere.
+   *
+   * That grace is the whole of the guarantee, so note what it is not. A wall
+   * never materialises underneath the snake, but it may perfectly well set in
+   * the cell the head is one step from entering, and it should: the ghost sat
+   * there to be read for WALL_GRACE_STEPS steps, and a player who steers into
+   * one anyway has had every warning the rules owe them. Head-adjacency safety
+   * is not held here and never has been, so do not write code that assumes it.
    */
-  pendingWalls: Set<number>;
+  pendingWalls: Map<number, number>;
 }
 
 export type StepEvent = 'moved' | 'ate' | 'ate-bonus' | 'died';
@@ -121,6 +131,13 @@ function standingOn(state: SnakeState, i: number): boolean {
   return false;
 }
 
+/**
+ * Steps a claimed cell must sit clear, ghosting, before it turns solid. At the
+ * speed floor (70ms a step) four steps is 280ms of warning, which clears human
+ * simple reaction time; earlier in a run it is closer to half a second.
+ */
+export const WALL_GRACE_STEPS = 4;
+
 /** Claims the walls of every rung the apple count has now reached. */
 function advanceArena(state: SnakeState): void {
   const rung = Math.min(
@@ -130,17 +147,57 @@ function advanceArena(state: SnakeState): void {
   while (state.arena < rung) {
     state.arena++;
     for (const i of ARENA_WALLS[state.arena]) {
-      if (state.walls.has(i)) continue;
-      if (standingOn(state, i)) state.pendingWalls.add(i);
-      else state.walls.add(i);
+      if (state.walls.has(i) || state.pendingWalls.has(i)) continue;
+      state.pendingWalls.set(i, WALL_GRACE_STEPS);
     }
   }
 }
 
-/** Turns claimed cells solid once whatever stood on them has moved off. */
-function settleWalls(state: SnakeState): void {
-  for (const i of state.pendingWalls) {
-    if (standingOn(state, i)) continue;
+/**
+ * The claimed cells the frame this step begins from is hiding — read before the
+ * snake moves, so it is occupancy exactly as the player last saw it drawn.
+ */
+function hiddenPending(state: SnakeState): Set<number> {
+  const hidden = new Set<number>();
+  for (const i of state.pendingWalls.keys()) {
+    if (standingOn(state, i)) hidden.add(i);
+  }
+  return hidden;
+}
+
+/**
+ * Counts the claimed cells down and turns them solid. A step spends a cell's
+ * grace only when the player had a ghost to look at for it, so a cell under the
+ * snake, an apple or a bonus waits to be vacated and *then* still ghosts for its
+ * full grace — nothing goes solid without WALL_GRACE_STEPS consecutive steps of
+ * visible warning first.
+ *
+ * Two things stop a step counting, and both are needed. The countdown restarts
+ * while something stands on the cell *now* (`standingOn`), which is what keeps a
+ * wall from setting under the snake. And it does not count the step that
+ * uncovers a cell either (`hidden`, the previous frame's covered set): this
+ * function runs after the move, so on that step `standingOn` is already false,
+ * yet the frame the step is measured from still had the ghost behind the snake.
+ * Without the second test a vacated cell got one fewer visible frame than a
+ * freshly claimed one — three where the constant promises four.
+ *
+ * Restarted, not paused, in both cases. The ghost renders *under* the snake, the
+ * apple and the bonus, so while a cell is covered the player is being shown
+ * nothing; resuming a half-spent countdown on the step it is uncovered would
+ * reveal the cell and set it a step or two later, which is the no-warning wall
+ * this whole mechanism exists to prevent. The grace only means anything measured
+ * from the moment the ghost is visible again.
+ */
+function settleWalls(state: SnakeState, hidden: ReadonlySet<number>): void {
+  for (const [i, left] of state.pendingWalls) {
+    if (hidden.has(i) || standingOn(state, i)) {
+      state.pendingWalls.set(i, WALL_GRACE_STEPS);
+      continue;
+    }
+    if (left > 1) {
+      state.pendingWalls.set(i, left - 1);
+      continue;
+    }
     state.pendingWalls.delete(i);
     state.walls.add(i);
   }
@@ -174,7 +231,7 @@ export function createSnakeState(random: () => number = Math.random): SnakeState
     alive: true,
     arena: 0,
     walls: new Set<number>(),
-    pendingWalls: new Set<number>()
+    pendingWalls: new Map<number, number>()
   };
   state.food = freeCell(state, random) ?? { x: 15, y: 10 };
   return state;
@@ -195,6 +252,10 @@ export function queueDirection(state: SnakeState, dir: Vec): void {
 /** Advances the snake one cell. */
 export function step(state: SnakeState, random: () => number = Math.random): StepEvent {
   if (!state.alive) return 'died';
+
+  // Snapshotted before anything moves: `settleWalls` runs after the move and
+  // needs to know which ghosts the frame it is counting was hiding.
+  const hidden = hiddenPending(state);
 
   const queued = state.inputQueue.shift();
   if (queued) state.direction = queued;
@@ -239,6 +300,11 @@ export function step(state: SnakeState, random: () => number = Math.random): Ste
     }
   }
 
+  // Ghosts age (and any that ran out set) *before* this step's rung claims its
+  // own cells, so a freshly claimed cell always gets its full grace rather
+  // than being counted down on the very step it appeared.
+  settleWalls(state, hidden);
+
   let event: StepEvent = ateBonus ? 'ate-bonus' : 'moved';
   if (ate) {
     state.score += FOOD_POINTS;
@@ -254,6 +320,5 @@ export function step(state: SnakeState, random: () => number = Math.random): Ste
     event = 'ate';
   }
 
-  settleWalls(state);
   return event;
 }

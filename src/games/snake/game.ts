@@ -532,7 +532,7 @@ export function initSnakeGame(): void {
     // where the walls are about to land and steer clear.
     if (state.pendingWalls.size > 0) {
       ctx.globalAlpha = 0.32 + 0.16 * Math.sin(clock * 6);
-      for (const i of state.pendingWalls) drawWall(ctx, i);
+      for (const i of state.pendingWalls.keys()) drawWall(ctx, i);
       ctx.globalAlpha = 1;
     }
     if (state.food.x >= 0) {

@@ -165,6 +165,16 @@ export function initCityGame(): void {
   const overOverlay = el('over-overlay');
   const startBtn = el('start-btn');
   const restartBtn = el('restart-btn');
+  const retireBtn = el('retire-btn') as HTMLButtonElement;
+  const overIconEl = el('over-icon');
+  const overTitleEl = el('over-title');
+  const overDescEl = el('over-desc');
+  // The bankruptcy copy is server-rendered and localised; capture it so the
+  // retirement variant can be swapped in and back out without a second set of
+  // data-t attributes for strings the page already carries.
+  const bankruptIcon = overIconEl.textContent ?? '';
+  const bankruptTitle = overTitleEl.textContent ?? '';
+  const bankruptDesc = overDescEl.textContent ?? '';
   const moneyEl = el('money');
   const popEl = el('population');
   const jobsEl = el('jobs');
@@ -197,6 +207,10 @@ export function initCityGame(): void {
     crimeAlert: root.dataset.tCrimeAlert || 'Crime is rising. Build a police station!',
     densityUnlocked: root.dataset.tDensityUnlocked || 'High-density zoning unlocked!',
     newRecord: root.dataset.tNewRecord || 'New record population!',
+    retired: root.dataset.tRetired || 'City Retired',
+    retiredDesc:
+      root.dataset.tRetiredDesc ||
+      'You called time on a solvent city. Its peak population goes to the board.',
     events: {
       grant: root.dataset.tEventGrant || 'Government grant awarded',
       protest: root.dataset.tEventProtest || 'Tax protest at the town hall',
@@ -402,13 +416,28 @@ export function initCityGame(): void {
     renderObjective();
     board.hide();
     phase = 'play';
+    retireBtn.disabled = false;
     audio.start();
   }
 
-  function gameOver() {
+  /**
+   * The single terminal path. Bankruptcy is the involuntary way in; retiring
+   * is the voluntary one, and both post the same number — `peakPop`, the very
+   * figure banked live during the run — so ending a solvent city on purpose
+   * can neither be worth less than losing it nor be worth more than it earned.
+   * Without the retire door only failures ever reached `board.show`, which is
+   * why the shared board held nothing but collapsed cities.
+   */
+  function gameOver(reason: 'bankrupt' | 'retired') {
     phase = 'over';
-    audio.playSfx('gameover');
+    retireBtn.disabled = true;
+    audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
     audio.stop();
+    const retired = reason === 'retired';
+    overIconEl.textContent = retired ? '🏁' : bankruptIcon;
+    overTitleEl.textContent = retired ? strings.retired : bankruptTitle;
+    overTitleEl.classList.toggle('retired', retired);
+    overDescEl.textContent = retired ? strings.retiredDesc : bankruptDesc;
     finalMonthsEl.textContent = month.toString();
     finalPopEl.textContent = peakPop.toString();
     overOverlay.style.display = 'flex';
@@ -595,7 +624,7 @@ export function initCityGame(): void {
         showToast(`${event.emoji} ${strings.events[event.id]}${delta}`);
       }
       refreshDerivedState();
-      if (money < 0) gameOver();
+      if (money < 0) gameOver('bankrupt');
     }
   }
 
@@ -1681,6 +1710,13 @@ export function initCityGame(): void {
   });
   document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));
+
+  retireBtn.addEventListener('click', () => {
+    // Guarded on the phase as well as the disabled attribute: a retire outside
+    // a live run would post a stale (or empty) peak from the idle board.
+    if (phase !== 'play') return;
+    gameOver('retired');
+  });
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

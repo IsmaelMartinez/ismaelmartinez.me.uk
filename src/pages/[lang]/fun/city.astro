@@ -48,6 +48,8 @@ const tools = [
         data-t-crime-alert={t('fun.city.crimeAlert')}
         data-t-density-unlocked={t('fun.city.densityUnlocked')}
         data-t-new-record={t('fun.city.newRecord')}
+        data-t-retired={t('fun.city.retired')}
+        data-t-retired-desc={t('fun.city.retiredDesc')}
         data-t-event-grant={t('fun.city.eventGrant')}
         data-t-event-protest={t('fun.city.eventProtest')}
         data-t-event-festival={t('fun.city.eventFestival')}
@@ -100,9 +102,9 @@ const tools = [
           </div>
           <div id="over-overlay" class="game-overlay" style="display: none;">
             <div class="overlay-content">
-              <span class="play-icon">💸</span>
-              <h2>{t('fun.city.gameOver')}</h2>
-              <p>{t('fun.city.gameOverDesc')}</p>
+              <span id="over-icon" class="play-icon">💸</span>
+              <h2 id="over-title">{t('fun.city.gameOver')}</h2>
+              <p id="over-desc">{t('fun.city.gameOverDesc')}</p>
               <p class="final-stats">
                 {t('fun.city.monthsLabel')}: <strong id="final-months">0</strong> ·
                 {t('fun.city.peakPop')}: <strong id="final-pop">0</strong>
@@ -144,6 +146,14 @@ const tools = [
               <button class="speed-btn" data-speed="0">⏸</button>
               <button class="speed-btn active" data-speed="1">▶</button>
               <button class="speed-btn" data-speed="3">⏩</button>
+              <button
+                type="button"
+                id="retire-btn"
+                class="retire-btn"
+                title={t('fun.city.retireHint')}
+                aria-label={t('fun.city.retireHint')}
+                disabled
+              >🏁 {t('fun.city.retire')}</button>
             </div>
           </div>
         </div>
@@ -353,6 +363,11 @@ const tools = [
     margin-bottom: var(--space-md);
   }
 
+  /* Retiring is a decision, not a failure — the alarm red belongs to bankruptcy. */
+  .overlay-content h2.retired {
+    color: #38bdf8;
+  }
+
   .overlay-content p {
     margin-bottom: var(--space-lg);
   }
@@ -494,6 +509,32 @@ const tools = [
   .rotate-btn:hover {
     border-color: #38bdf8;
     background: rgba(56, 189, 248, 0.12);
+  }
+
+  /* Wider than the icon buttons beside it: ending a run has to be findable,
+     not a glyph a player has to guess at. */
+  .retire-btn {
+    height: 44px;
+    padding: 0 var(--space-md);
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .retire-btn:hover:not(:disabled) {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.14);
+  }
+
+  .retire-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   @media (max-width: 600px) {

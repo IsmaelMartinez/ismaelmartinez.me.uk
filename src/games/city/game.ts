@@ -143,7 +143,14 @@ const buildingHeight = (tile: CityTile): number => {
   return ZONE_TOP_HEIGHT[tile.type][level];
 };
 
-type Phase = 'idle' | 'play' | 'over';
+/**
+ * `confirm` is a live run held still while the retire prompt is open. It is a
+ * phase rather than a flag beside one so every existing `phase !== 'play'`
+ * guard covers it for free: the simulation stops, the canvas stops accepting
+ * builds, and — the point — a city cannot go bankrupt underneath the prompt
+ * and stack a game-over overlay behind it.
+ */
+type Phase = 'idle' | 'play' | 'confirm' | 'over';
 
 export function initCityGame(): void {
   const root = document.getElementById('city-root');
@@ -166,6 +173,9 @@ export function initCityGame(): void {
   const startBtn = el('start-btn');
   const restartBtn = el('restart-btn');
   const retireBtn = el('retire-btn') as HTMLButtonElement;
+  const retireOverlay = el('retire-overlay');
+  const retireConfirmBtn = el('retire-confirm') as HTMLButtonElement;
+  const retireCancelBtn = el('retire-cancel') as HTMLButtonElement;
   const overIconEl = el('over-icon');
   const overTitleEl = el('over-title');
   const overDescEl = el('over-desc');
@@ -415,9 +425,30 @@ export function initCityGame(): void {
     refreshDerivedState();
     renderObjective();
     board.hide();
+    retireOverlay.style.display = 'none';
     phase = 'play';
     retireBtn.disabled = false;
     audio.start();
+  }
+
+  /**
+   * Opens the retire prompt over a live run. Focus moves to Cancel rather than
+   * Confirm so the keyboard's own default answer — the one Enter reaches — is
+   * the one that keeps the city.
+   */
+  function openRetireConfirm() {
+    if (phase !== 'play') return;
+    phase = 'confirm';
+    retireOverlay.style.display = 'flex';
+    retireCancelBtn.focus();
+  }
+
+  /** Dismisses the prompt and hands the run back, focus included. */
+  function closeRetireConfirm() {
+    if (phase !== 'confirm') return;
+    phase = 'play';
+    retireOverlay.style.display = 'none';
+    retireBtn.focus();
   }
 
   /**
@@ -431,6 +462,7 @@ export function initCityGame(): void {
   function gameOver(reason: 'bankrupt' | 'retired') {
     phase = 'over';
     retireBtn.disabled = true;
+    retireOverlay.style.display = 'none';
     audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
     audio.stop();
     const retired = reason === 'retired';
@@ -1711,11 +1743,34 @@ export function initCityGame(): void {
   document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));
 
-  retireBtn.addEventListener('click', () => {
-    // Guarded on the phase as well as the disabled attribute: a retire outside
-    // a live run would post a stale (or empty) peak from the idle board.
-    if (phase !== 'play') return;
+  // Guarded on the phase as well as the disabled attribute: a retire outside
+  // a live run would post a stale (or empty) peak from the idle board.
+  retireBtn.addEventListener('click', openRetireConfirm);
+  retireCancelBtn.addEventListener('click', closeRetireConfirm);
+  retireConfirmBtn.addEventListener('click', () => {
+    if (phase !== 'confirm') return;
     gameOver('retired');
+  });
+
+  // Escape is the expected way out of a prompt, and the Tab cycle keeps a
+  // keyboard user inside the two answers for as long as the dialog claims to
+  // be modal — without it, `aria-modal` would be a promise the page breaks.
+  // Bound to the game root, not the overlay, so a key still lands after a
+  // click has put focus on one of the controls the overlay does not cover;
+  // and not to `document`, so a ClientRouter swap cannot leave a live handler
+  // behind on a root this module has already replaced.
+  root.addEventListener('keydown', e => {
+    if (phase !== 'confirm') return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeRetireConfirm();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    // Two answers, so a Tab in either direction is the same toggle between
+    // them; from anywhere else it re-enters the dialog at the safe answer.
+    (document.activeElement === retireCancelBtn ? retireConfirmBtn : retireCancelBtn).focus();
   });
 
   startBtn.addEventListener('click', () => {

@@ -113,6 +113,32 @@ const tools = [
               <button id="restart-btn" class="btn btn-primary btn-large">{t('fun.city.playAgain')}</button>
             </div>
           </div>
+          <!-- The guard on the one irreversible control in the game. Retiring
+               cannot be undone, so it costs a second, deliberate click on a
+               different button in a different place: a stray coordinate that
+               lands on Retire can no longer end the run on its own. Cancel is
+               the primary action and takes focus, so a keyboard or screen
+               reader user lands on the safe answer first. -->
+          <div
+            id="retire-overlay"
+            class="game-overlay"
+            style="display: none;"
+            tabindex="-1"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="retire-confirm-title"
+            aria-describedby="retire-confirm-desc"
+          >
+            <div class="overlay-content">
+              <span class="play-icon" aria-hidden="true">🏁</span>
+              <h2 id="retire-confirm-title">{t('fun.city.retireConfirmTitle')}</h2>
+              <p id="retire-confirm-desc">{t('fun.city.retireConfirmDesc')}</p>
+              <div class="confirm-actions">
+                <button type="button" id="retire-cancel" class="btn btn-primary btn-large">{t('fun.city.retireConfirmNo')}</button>
+                <button type="button" id="retire-confirm" class="btn btn-outline btn-large">{t('fun.city.retireConfirmYes')}</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="controls">
@@ -146,14 +172,18 @@ const tools = [
               <button class="speed-btn" data-speed="0">⏸</button>
               <button class="speed-btn active" data-speed="1">▶</button>
               <button class="speed-btn" data-speed="3">⏩</button>
+            </div>
+            <!-- Deliberately its own group, not a sixth button in the speed
+                 cluster: the hand reaching for ⏩ should not be able to land on
+                 the control that ends the run. -->
+            <div class="run-controls">
               <button
                 type="button"
                 id="retire-btn"
                 class="retire-btn"
                 title={t('fun.city.retireHint')}
-                aria-label={t('fun.city.retireHint')}
                 disabled
-              >🏁 {t('fun.city.retire')}</button>
+              ><span aria-hidden="true">🏁</span> {t('fun.city.retire')}</button>
             </div>
           </div>
         </div>
@@ -368,6 +398,13 @@ const tools = [
     color: #38bdf8;
   }
 
+  .confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    justify-content: center;
+  }
+
   .overlay-content p {
     margin-bottom: var(--space-lg);
   }
@@ -509,6 +546,12 @@ const tools = [
   .rotate-btn:hover {
     border-color: #38bdf8;
     background: rgba(56, 189, 248, 0.12);
+  }
+
+  /* Held apart from the speed cluster by more than the usual gap, so the
+     irreversible control is not a neighbour of the one players hammer. */
+  .run-controls {
+    margin-left: var(--space-md);
   }
 
   /* Wider than the icon buttons beside it: ending a run has to be findable,

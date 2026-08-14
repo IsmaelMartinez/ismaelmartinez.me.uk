@@ -72,6 +72,14 @@ const PAGE_HTML = `
       </div>
       <button id="restart-btn">New City</button>
     </div>
+    <div id="retire-overlay" style="display: none;" tabindex="-1"
+         role="alertdialog" aria-modal="true"
+         aria-labelledby="retire-confirm-title" aria-describedby="retire-confirm-desc">
+      <h2 id="retire-confirm-title">Retire this city?</h2>
+      <p id="retire-confirm-desc">The run ends here.</p>
+      <button type="button" id="retire-cancel">Keep building</button>
+      <button type="button" id="retire-confirm">Retire city</button>
+    </div>
     <div class="toolbar">
       <button class="tool-btn active" data-tool="road"></button>
       <button class="tool-btn" data-tool="res"></button>
@@ -84,7 +92,9 @@ const PAGE_HTML = `
       <button class="speed-btn" data-speed="0"></button>
       <button class="speed-btn active" data-speed="1"></button>
       <button class="speed-btn" data-speed="3"></button>
-      <button type="button" id="retire-btn" disabled>🏁 Retire</button>
+    </div>
+    <div class="run-controls">
+      <button type="button" id="retire-btn" disabled><span aria-hidden="true">🏁</span> Retire</button>
     </div>
   </div>`;
 
@@ -169,6 +179,31 @@ const panel = () => document.getElementById('highscores')!;
 const overlayShown = () =>
   (document.getElementById('over-overlay') as HTMLElement).style.display === 'flex';
 
+const retireBtn = () => document.getElementById('retire-btn') as HTMLButtonElement;
+const confirmBtn = () => document.getElementById('retire-confirm') as HTMLButtonElement;
+const cancelBtn = () => document.getElementById('retire-cancel') as HTMLButtonElement;
+const promptShown = () =>
+  (document.getElementById('retire-overlay') as HTMLElement).style.display === 'flex';
+const monthShown = () => document.getElementById('month')!.textContent;
+
+/** Sends a key the way a player's keyboard would: from inside the dialog, bubbling. */
+function pressInPrompt(key: string): void {
+  document
+    .getElementById('retire-overlay')!
+    .dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+}
+
+/**
+ * Retires the run the only way a player can: open the prompt, then confirm.
+ * Every assertion about what retiring *posts* goes through this, so if the
+ * guard were ever reduced back to a single click these would still pass —
+ * which is why the guard has its own tests below rather than relying on this.
+ */
+function retire(): void {
+  retireBtn().click();
+  confirmBtn().click();
+}
+
 /**
  * Founds a solvent little city: one power plant, one road, and two homes
  * beside it. Two growth ticks take both homes to level 1 (16 residents), at
@@ -209,7 +244,6 @@ beforeEach(() => {
   }));
   HTMLCanvasElement.prototype.getContext = (() =>
     stubContext()) as unknown as HTMLCanvasElement['getContext'];
-  clock = 0;
   frameCallback = null;
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     frameCallback = cb;
@@ -220,6 +254,15 @@ beforeEach(() => {
   });
   mountPage();
   initCityGame();
+  // The loop seeds its own `last` from performance.now() when it starts, which
+  // initCityGame has just done. Starting the hand-driven clock at zero would
+  // make the first frame's delta `250 - <process uptime>` — hugely negative,
+  // leaving the accumulator so far behind that no simulation step ever runs.
+  // The suite only got away with it while this file happened to be scheduled
+  // early. Starting at or after that same reading makes every frame's delta
+  // land on the loop's own 250ms cap, so tick counts are exact whenever the
+  // file runs.
+  clock = performance.now();
 });
 
 afterEach(() => {
@@ -236,9 +279,8 @@ describe('Microcity retire control', () => {
     expect(money()).toBeGreaterThan(0);
     expect(overlayShown()).toBe(false);
 
-    const retire = document.getElementById('retire-btn') as HTMLButtonElement;
-    expect(retire.disabled).toBe(false);
-    retire.click();
+    expect(retireBtn().disabled).toBe(false);
+    retire();
 
     expect(money()).toBeGreaterThan(0);
     expect(overlayShown()).toBe(true);
@@ -260,7 +302,7 @@ describe('Microcity retire control', () => {
   it('posts the same peak population a bankruptcy would', async () => {
     foundCity();
     const retiredPop = (() => {
-      (document.getElementById('retire-btn') as HTMLButtonElement).click();
+      retire();
       return finalPop();
     })();
     expect(submitGlobal).not.toHaveBeenCalled();
@@ -298,7 +340,7 @@ describe('Microcity retire control', () => {
   it('banks nothing for a city that never grew', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.9);
     document.getElementById('start-btn')!.click();
-    (document.getElementById('retire-btn') as HTMLButtonElement).click();
+    retire();
 
     expect(finalPop()).toBe('0');
     expect(document.querySelector<HTMLFormElement>('.hs-entry')!.hidden).toBe(true);
@@ -306,12 +348,110 @@ describe('Microcity retire control', () => {
   });
 
   it('does nothing before a run has started', () => {
-    const retire = document.getElementById('retire-btn') as HTMLButtonElement;
-    expect(retire.disabled).toBe(true);
-    retire.click();
+    expect(retireBtn().disabled).toBe(true);
+    retireBtn().click();
 
+    expect(promptShown()).toBe(false);
     expect(overlayShown()).toBe(false);
     expect(panel().hidden).toBe(true);
     expect(submitGlobal).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The guard. Retiring is irreversible and the control sits among buttons a
+ * player uses constantly, so a single stray click must not be able to end a
+ * city that took minutes to build. These tests are about the click that does
+ * *not* end the run: what the first one does instead, and that the city on the
+ * other side of a cancel is the same city, still running.
+ */
+describe('Microcity retire confirmation', () => {
+  it('asks first: one click on Retire ends nothing', () => {
+    foundCity();
+    retireBtn().click();
+
+    expect(promptShown()).toBe(true);
+    // Nothing terminal has happened: no overlay, no board, no submission.
+    expect(overlayShown()).toBe(false);
+    expect(panel().hidden).toBe(true);
+    expect(submitGlobal).not.toHaveBeenCalled();
+  });
+
+  it('holds the run still while it asks, so nothing can end it behind the prompt', () => {
+    foundCity();
+    const before = money();
+    retireBtn().click();
+
+    // A stray build lands on the canvas under the prompt, and a whole month of
+    // wall time passes. Both are no-ops: the simulation is paused, which is
+    // what stops a bankruptcy from firing a second overlay behind this one.
+    buildAt('road', 10, 9);
+    advance(25);
+
+    expect(monthShown()).toBe('1');
+    expect(money()).toBe(before);
+    expect(overlayShown()).toBe(false);
+  });
+
+  it('cancelling leaves the run live and unharmed', () => {
+    foundCity();
+    const before = money();
+    const peak = document.getElementById('population')!.textContent;
+
+    retireBtn().click();
+    cancelBtn().click();
+
+    expect(promptShown()).toBe(false);
+    expect(overlayShown()).toBe(false);
+    expect(panel().hidden).toBe(true);
+    expect(submitGlobal).not.toHaveBeenCalled();
+    expect(retireBtn().disabled).toBe(false);
+
+    // The city is buildable again, so the run really did come back rather than
+    // being left paused — and it still ends on the peak it had before the scare.
+    buildAt('road', 10, 9);
+    advance(0.25); // the treasury readout is painted by the loop, not the click
+    expect(money()).toBe(before - 10);
+
+    retire();
+    expect(overlayShown()).toBe(true);
+    expect(finalPop()).toBe(peak);
+  });
+
+  it('cancels on Escape', () => {
+    foundCity();
+    retireBtn().click();
+    pressInPrompt('Escape');
+
+    expect(promptShown()).toBe(false);
+    expect(overlayShown()).toBe(false);
+    expect(submitGlobal).not.toHaveBeenCalled();
+  });
+
+  it('opens on the safe answer and hands focus back on cancel', () => {
+    foundCity();
+    retireBtn().click();
+    // Cancel takes focus, so the key a keyboard user presses first keeps the city.
+    expect(document.activeElement).toBe(cancelBtn());
+
+    // Tab stays inside the two answers rather than escaping to the toolbar.
+    pressInPrompt('Tab');
+    expect(document.activeElement).toBe(confirmBtn());
+    pressInPrompt('Tab');
+    expect(document.activeElement).toBe(cancelBtn());
+
+    cancelBtn().click();
+    expect(document.activeElement).toBe(retireBtn());
+  });
+
+  it('ends the run only on the second, deliberate click', () => {
+    foundCity();
+    retireBtn().click();
+    confirmBtn().click();
+
+    expect(promptShown()).toBe(false);
+    expect(overlayShown()).toBe(true);
+    expect(document.getElementById('over-title')!.textContent).toBe('City Retired');
+    expect(finalPop()).toBe('16');
   });
 });

@@ -462,6 +462,38 @@ describe('run: clears, chains, and levels', () => {
     expect(fullRows(run.well)).toEqual([]);
   });
 
+  it('pays nothing on a top-out that completed no row', () => {
+    // The mirror of the test above, and the bug it guards: the top-out branch
+    // used to resolve the whole well unconditionally, so the settle it runs
+    // collapsed every floating cell and scored whatever rows *that* completed.
+    // Here nothing is full and nothing the piece does completes a row — rows
+    // 1-19 are one cell short at column 0, and the only cell above them is a
+    // loose one parked at (0, 0) which the phantom settle would drop nineteen
+    // rows to finish row 19 for a free 100 points.
+    const run = createRun(seededRandom(23));
+    for (let y = 1; y < WELL_H; y++) {
+      for (let x = 1; x < WELL_W; x++) fill(run.well, x, y, 2);
+    }
+    fill(run.well, 0, 0, 3);
+    expect(fullRows(run.well)).toEqual([]);
+
+    // An O resting on the stack with its top half above the well: it locks,
+    // tops out, and completes nothing (row 0 ends up holding 0, 4 and 5).
+    run.piece = { id: 1, rot: 0, x: 4, y: -1 };
+    expect(fits(run.well, run.piece)).toBe(true);
+    expect(tryMove(run.well, run.piece, 0, 1)).toBeNull();
+
+    const events = hardDrop(run);
+    expect(events.map(e => e.type)).toEqual(['lock', 'topOut']);
+    expect(run.score).toBe(0);
+    expect(run.lines).toBe(0);
+    expect(run.phase).toBe('over');
+    // The run ends on the board the player was looking at: the loose cell is
+    // still parked at the top, not landslid to the floor.
+    expect(at(run.well, 0, 0)).toBe(3);
+    expect(at(run.well, 0, 19)).toBe(0);
+  });
+
   it('levels up on the lines threshold, scoring the clear at the old level', () => {
     const run = createRun(seededRandom(17));
     run.lines = LINES_PER_LEVEL - 1;
@@ -507,8 +539,15 @@ describe('run: deep cascade chains fire and score by link', () => {
 });
 
 describe('headless playthrough (seeded, deterministic)', () => {
-  /** Greedy player: tries every rotation/column, drops on the placement that
-   * clears most and buries fewest holes. Pure-module APIs only. */
+  /**
+   * Greedy player: tries every rotation/column and drops on the placement with
+   * the best score under the classic four-term stacker heuristic — rows
+   * cleared, minus buried holes, minus how tall the stack is overall, minus
+   * how jagged its surface is. It looks one piece ahead and never rotates
+   * after the drop, so it is a *competent* policy rather than an optimal one:
+   * enough to keep a well alive indefinitely, which is what makes it a usable
+   * oracle for "is this cabinet survivable". Pure-module APIs only.
+   */
   function playGame(seed: number, pieces: number) {
     const run = createRun(seededRandom(seed));
     const log: RunEvent[] = [];
@@ -532,19 +571,40 @@ describe('headless playthrough (seeded, deterministic)', () => {
             else trial[c.y * WELL_W + c.x] = 1;
           }
           if (sunk) continue;
-          const cleared = resolveClears(trial).reduce((sum, s) => sum + s.rows.length, 0);
+          // `resolveClears` settles the well whether or not a row is full, so
+          // calling it unguarded flattened every candidate board before it was
+          // measured and left the `holes` term below permanently zero — the
+          // player was blind to the one thing that ends a run. Guard it exactly
+          // as the run's own lock path does.
+          const cleared =
+            fullRows(trial).length > 0
+              ? resolveClears(trial).reduce((sum, s) => sum + s.rows.length, 0)
+              : 0;
           let holes = 0;
-          let stack = 0;
+          let aggregate = 0;
+          let bumpiness = 0;
+          let previousHeight = 0;
           for (let cx = 0; cx < WELL_W; cx++) {
+            let height = 0;
             let covered = false;
             for (let cy = 0; cy < WELL_H; cy++) {
               if (trial[cy * WELL_W + cx] !== 0) {
+                if (!covered) height = WELL_H - cy;
                 covered = true;
-                stack = Math.max(stack, WELL_H - cy);
               } else if (covered) holes++;
             }
+            aggregate += height;
+            if (cx > 0) bumpiness += Math.abs(height - previousHeight);
+            previousHeight = height;
           }
-          const value = cleared * 1000 - holes * 60 - stack * 2;
+          // Standard stacker weights. Seeing holes is necessary but not
+          // sufficient: with the old terms a hole cost 60 and a row of extra
+          // height cost 2, so the player would happily build to the ceiling
+          // rather than accept one hole, and `cleared * 1000` swamped both.
+          // The aggregate-height and bumpiness terms are what turn "sees
+          // holes" into "survives" — guarded but on the old weights the run
+          // still ends around piece 136 (median over 20 seeds).
+          const value = cleared * 76 - holes * 36 - aggregate * 51 - bumpiness * 18;
           if (!best || value > best.value) best = { rot, x, value };
         }
       }
@@ -570,6 +630,25 @@ describe('headless playthrough (seeded, deterministic)', () => {
     const locks = log.filter(e => e.type === 'lock').length;
     expect(locks).toBeGreaterThan(0);
     expect(locks).toBeLessThanOrEqual(80);
+  });
+
+  it('is survivable: a competent policy plays 1500 pieces without topping out', () => {
+    // The play-to-completion guarantee this cabinet lacked. The suite above
+    // can only say "some clears happened in 80 pieces", which a cabinet that
+    // strangles a good player at piece 150 passes just as easily. This one
+    // asserts the thing a player actually cares about: play it well and it
+    // does not end. 1500 pieces is roughly 25 minutes of real play.
+    for (const seed of [1234, 4321, 99, 2026]) {
+      const { run, log } = playGame(seed, 1500);
+      expect(log.filter(e => e.type === 'topOut')).toHaveLength(0);
+      expect(run.phase).toBe('falling');
+      expect(log.filter(e => e.type === 'lock')).toHaveLength(1500);
+      // ...and it is scoring while it survives, so "survivable" can't be won
+      // by a policy that simply never completes a row.
+      expect(run.score).toBeGreaterThan(0);
+      expect(run.lines).toBeGreaterThan(100);
+      expect(run.level).toBeGreaterThan(1);
+    }
   });
 
   it('is reproducible: the same seed replays the same game', () => {

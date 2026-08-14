@@ -34,7 +34,7 @@ import {
   buildLevel,
   atExit,
   levelHatches,
-  levelTimeLimit,
+  levelStock,
   LEVELS,
   LEVEL_W,
   LEVEL_H,
@@ -43,7 +43,7 @@ import {
   EXIT_HALF_W,
   type Hatch
 } from './levels';
-import { createStallWatch } from './stall';
+import { createStallWatch, levelEnding } from './stall';
 import { levelSelectItems, loadClearedLevels, saveClearedLevels } from './progress';
 import { exitArrowAngle, rescueProgress } from './hud';
 import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
@@ -51,7 +51,6 @@ import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
 const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
 const NUKE_INTERVAL = 4; // ticks between successive detonations during a nuke
-const DEFAULT_BOMBER_STOCK = 2; // pick-one blasts each level grants when unspecified
 
 // Deliberately NOT engine/effects: these debris motes fade on a life*2 ramp
 // and step from 2px to 1px as they die, which the shared module's
@@ -416,12 +415,11 @@ export function initLemmingsGame(): void {
     combo = newCombo();
     levelTicks = 0;
     stall.reset();
-    stock = blankStock();
-    for (const key of SKILL_ORDER) stock[key] = def.stock[key] ?? 0;
     // The bomber (pick-one blast) is the single-critter counterpart to the
     // always-available nuke, so every level grants a small reserve rather than
-    // authoring it into each hand-tuned stock — unless a level sets its own.
-    stock.bomber = def.stock.bomber ?? DEFAULT_BOMBER_STOCK;
+    // authoring it into each hand-tuned stock — `levelStock` deals that hand,
+    // and the playthrough harness deals itself the same one.
+    stock = levelStock(def);
     selected = SKILL_ORDER.find(s => stock[s] > 0) ?? null;
     levelNum.textContent = (index + 1).toString();
     neededCount.textContent = def.needed.toString();
@@ -549,9 +547,10 @@ export function initLemmingsGame(): void {
    * clock, rather than the crowd resolving) — finishLevel never re-derives it
    * from tick state, so a quota failure that merely coincides with the final
    * tick is not mislabelled as a timeout. `'clock'` is a level's authored
-   * `timeLimit`; `'stalled'` is the fallback cap an untimed level runs under,
-   * which is not a race the player lost but a crowd that stopped making
-   * progress, so it gets its own framing.
+   * `timeLimit`; `'stalled'` is a field that stopped changing, which is not a
+   * race the player lost but a crowd that ran out of ways home, so it gets its
+   * own framing — and only when the quota was missed, since the same standstill
+   * on a met quota is simply the win arriving.
    *
    * `atTick` is the level's length for scoring, which is the elapsed tick for
    * every ending but a standstill: there the caller bills the tick the field
@@ -696,42 +695,36 @@ export function initLemmingsGame(): void {
     critters = critters.filter(c => isActive(c));
     syncHud();
 
-    // Three ways a level ends, in the order they are trusted.
-    //
-    // `done`: everyone has emerged and no critter can still be rescued — any
-    // stragglers are blockers, which never leave on their own and, with no one
-    // else left to dig them free, are stuck for good.
-    //
-    // `decided`: the quota is already met and the field has gone completely
-    // still for STUCK_TICKS (stall.ts) — nobody moving anywhere new, no terrain
-    // cut, no skill spent. The level is won and nothing left in it can change
-    // that on its own, so it resolves here rather than leaving the player
-    // staring at a motionless screen until the fallback clock runs out. The
-    // score is billed to the tick the field actually froze: the standstill
-    // window is how long the game took to be sure, not time the player played.
-    //
-    // `outOfTime`: the clock ran out, stranding whoever is still in the field —
-    // except during a nuke, where the player already conceded, so the chain
-    // plays out and the result reads as the failure it is rather than a timeout
-    // coaching them to speed up. Every level runs under a clock, its own or the
-    // STALL_TIME_LIMIT fallback, which is the runaway backstop for the cases
-    // neither of the above catches: a crowd that runs out of ways home without
-    // meeting the quota is neither `done` nor `decided`, and uncapped that
-    // level would run forever.
+    // Whether the level is over is decided in one pure place (stall.ts), which
+    // the headless playthrough harness calls too — the loop and the harness
+    // agreeing on when a level ends is the whole point of the helper, since a
+    // harness that ends levels on its own terms once certified twenty-five
+    // levels the browser would happily hang on.
+    const stockLeft = SKILL_ORDER.reduce((n, s) => n + stock[s], 0);
     stall.observe({
       critters,
       saved,
       spawned,
       terrainVersion: bmp.version,
-      stock: SKILL_ORDER.reduce((n, s) => n + stock[s], 0)
+      stock: stockLeft
     });
-    const allOut = spawned >= def.spawnCount;
-    const done = allOut && critters.every(c => c.state === 'blocker');
-    const decided = !done && allOut && saved >= def.needed && stall.stuck;
-    const outOfTime = !nuking && levelTicks >= levelTimeLimit(def);
-    if (done) finishLevel();
-    else if (decided) finishLevel(null, levelTicks - stall.idleTicks);
-    else if (outOfTime) finishLevel(def.timeLimit !== undefined ? 'clock' : 'stalled');
+    const ending = levelEnding({
+      allOut: spawned >= def.spawnCount,
+      onlyBlockersLeft: critters.every(c => c.state === 'blocker'),
+      stockLeft,
+      idleTicks: stall.idleTicks,
+      ticks: levelTicks,
+      timeLimit: def.timeLimit,
+      conceded: nuking
+    });
+    // A standstill ending is billed to the tick the field actually froze: the
+    // window the game spends being sure is bookkeeping, not time the player
+    // played, and charging it would quietly eat the speed bonus. It also always
+    // passes the 'stalled' framing, which `finishLevel` only reaches for when
+    // the quota was missed — a standstill on a met quota is a win, not a stall.
+    if (ending === 'settled') finishLevel();
+    else if (ending === 'clock') finishLevel('clock');
+    else if (ending) finishLevel('stalled', levelTicks - stall.idleTicks);
   }
 
   // --- Rendering ---
@@ -1057,9 +1050,10 @@ export function initLemmingsGame(): void {
     vignetteLayer.draw(ctx);
 
     // Timed levels wear their clock top-centre, flashing red for the last 10s.
-    // Deliberately the authored `timeLimit`, not `levelTimeLimit`: the stall
-    // fallback every untimed level runs under is a safety net, not a race, and
-    // showing it would turn every level into a timed one.
+    // Every level that runs under a countdown shows it: an untimed level has no
+    // clock behind the scenes either, only the standstill check, which ends a
+    // level for something the player can see on the field rather than for time
+    // they were never told about.
     if (phase === 'playing' && def.timeLimit !== undefined) {
       const remaining = Math.max(0, def.timeLimit - levelTicks);
       const secs = Math.ceil(remaining / 60);

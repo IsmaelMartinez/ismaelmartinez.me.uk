@@ -16,8 +16,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { initLemmingsGame } from '../../src/games/lemmings/game';
-import { LEVELS, LEVEL_W, LEVEL_H, STALL_TIME_LIMIT } from '../../src/games/lemmings/levels';
-import { STUCK_TICKS } from '../../src/games/lemmings/stall';
+import { LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
+import { STUCK_TICKS, ABANDONED_TICKS } from '../../src/games/lemmings/stall';
 import { levelBonuses } from '../../src/games/lemmings/score';
 
 const SKILLS = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
@@ -221,21 +221,22 @@ afterEach(() => {
 });
 
 describe('game loop — a level always ends', () => {
-  it('cuts an untouched level off at the fallback clock, framed as a stall', () => {
+  it('ends an untouched level once the field stops changing, framed as a stall', () => {
     // Issue #256's headline repro: level 2 needs a basher, so with no input at
     // all every critter paces between the left wall and the pillar — nobody
-    // dies, nobody blocks, and the crowd end condition never matches. Only the
-    // STALL_TIME_LIMIT fallback ends it, and this is the test that fails if the
-    // fallback stops being applied to untimed levels.
+    // dies, nobody blocks, and the crowd end condition never matches. The
+    // abandoned-field fallback is the only thing that ends it, and this is the
+    // test that fails if it stops being applied to untimed levels.
     expect(LEVELS[1].timeLimit).toBeUndefined();
     startLevel(1);
 
-    step(STALL_TIME_LIMIT / TICKS_PER_FRAME - 1);
-    expect(resultShown()).toBe(false);
+    // The crowd is still spreading out well past the short standstill window,
+    // so nothing resolves on the player's behalf while there is anything left
+    // to see; the level only gives up after a full minute of a frozen field.
+    const ended = runUntilResult(ABANDONED_TICKS * 2);
+    expect(ended).not.toBeNull();
+    expect(ended!).toBeGreaterThan(ABANDONED_TICKS);
     expect(num('saved-count')).toBe(0);
-
-    step();
-    expect(resultShown()).toBe(true);
     expect(document.getElementById('result-title')!.textContent).toBe('Rescue Stalled');
     expect(document.getElementById('result-emoji')!.textContent).toBe('🧱');
   });
@@ -253,18 +254,20 @@ describe('game loop — a level always ends', () => {
     expect(document.getElementById('result-title')!.textContent).toBe('Time Up!');
   });
 
-  it('resolves a won level as soon as the field freezes, and still pays a time bonus', () => {
-    // Level 13 sends two streams at one shared door between two end walls. Let
-    // the quota home, then wall the left stream off with a blocker: those
-    // critters pace their pocket forever, so the level is won and can never
-    // improve. Before the standstill check it sat there until the fallback
-    // clock — two motionless minutes, and a time bonus that could never pay
-    // because the level was always billed at STALL_TIME_LIMIT, well past par.
+  /**
+   * Level 13 sends two streams at one shared door between two end walls, and is
+   * the standstill fixture for both tests below: play it untouched until the
+   * quota is home, then wall the left stream off with a blocker so those
+   * critters pace a pocket. The level is won, the field is frozen, and what
+   * happens next is the whole question.
+   *
+   * Returns the ticks elapsed when the blocker landed.
+   */
+  function winAndPenLevel13(): number {
     const level = LEVELS[12];
     expect(level.timeLimit).toBeUndefined();
     startLevel(12);
 
-    // Play until the quota is home, untouched.
     let ticks = 0;
     while (num('saved-count') < level.needed && ticks < 3000) {
       step();
@@ -273,8 +276,8 @@ describe('game loop — a level always ends', () => {
     expect(num('saved-count')).toBeGreaterThanOrEqual(level.needed);
     expect(resultShown()).toBe(false);
 
-    // Then tap the left approach until a blocker lands there (blocker is the
-    // level's first stocked skill, so it is already the selected one).
+    // Tap the left approach until a blocker lands there (blocker is the level's
+    // first stocked skill, so it is already the selected one).
     expect(skillCount('blocker')).toBe(2);
     while (skillCount('blocker') === 2 && ticks < 3000) {
       tap(100, 154);
@@ -282,36 +285,81 @@ describe('game loop — a level always ends', () => {
       ticks += TICKS_PER_FRAME;
     }
     expect(skillCount('blocker')).toBe(1);
+    return ticks;
+  }
 
-    const rest = runUntilResult(STALL_TIME_LIMIT - ticks);
-    expect(rest).not.toBeNull();
-    const endedAt = ticks + rest!;
-    // Nowhere near the fallback: the standstill window plus what was still in
-    // flight, not two and a half minutes.
-    expect(endedAt).toBeLessThan(STALL_TIME_LIMIT / 2);
-    // Critters are still on the field — this is the standstill ending, not the
-    // "everyone out, only blockers left" one.
+  /** The time bonus the level would pay if it were billed at `ticks`. */
+  const bonusAt = (ticks: number) =>
+    levelBonuses({
+      saved: num('saved-count'),
+      needed: LEVELS[12].needed,
+      spawnCount: LEVELS[12].spawnCount,
+      ticks,
+      par: LEVELS[12].par
+    }).time;
+
+  it('leaves a won level open while the player still has a skill to spend', () => {
+    // The regression: a player who pens the surplus crowd and then reads the
+    // terrain for a while is playing, not stalling. Closing the level under
+    // them takes every remaining rescue and the perfect bonus with it, so the
+    // frozen field alone is not enough — a blocker and a pair of umbrellas are
+    // still in hand here, and the level must wait for them.
+    const ticks = winAndPenLevel13();
+    step((STUCK_TICKS * 3) / TICKS_PER_FRAME);
+    expect(resultShown()).toBe(false);
     expect(num('out-count')).toBeGreaterThan(1);
-    // It reads as the win it is, not as a stall or a timeout.
+
+    // It does end, though — a minute of a field going nowhere is nobody
+    // playing — and it reads as the win it is, not as a stall or a timeout.
+    const rest = runUntilResult(ABANDONED_TICKS * 2);
+    expect(rest).not.toBeNull();
+    const endedAt = ticks + STUCK_TICKS * 3 + rest!;
     expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
-    // And the speed bonus survives: the level is billed at the tick the field
-    // froze, so the STUCK_TICKS spent confirming it never eat the bonus. What
-    // is paid is therefore at least a full standstill window's worth more than
+    // And the speed bonus survives the wait: the level is billed at the tick
+    // the field froze, so the window spent confirming it never eats the bonus.
+    // What is paid is therefore at least a full window's worth more than
     // billing the resolution tick would give — `endedAt` is only known to a
     // frame here, and a whole window is far wider than that slack.
     expect(document.getElementById('bonus-time-row')!.hidden).toBe(false);
-    const bonusAt = (ticks: number) =>
-      levelBonuses({
-        saved: num('saved-count'),
-        needed: level.needed,
-        spawnCount: level.spawnCount,
-        ticks,
-        par: level.par
-      }).time;
     const paid = Number(document.getElementById('bonus-time-val')!.textContent!.slice(1));
     expect(paid).toBeGreaterThan(0);
-    expect(paid).toBeGreaterThanOrEqual(bonusAt(endedAt - STUCK_TICKS));
+    expect(paid).toBeGreaterThanOrEqual(bonusAt(endedAt - ABANDONED_TICKS));
     expect(paid).toBeGreaterThan(bonusAt(endedAt));
-    expect(endedAt - STUCK_TICKS).toBeLessThan(level.par);
+    expect(endedAt - ABANDONED_TICKS).toBeLessThan(LEVELS[12].par);
+  });
+
+  it('resolves a won level at once when nothing is left to change it', () => {
+    // The same frozen field, but with the stock spent: there is now no move the
+    // player could make, so waiting out the long window would be dead time. The
+    // level resolves on the short one instead.
+    winAndPenLevel13();
+    const stockLeft = () => SKILLS.reduce((n, s) => n + skillCount(s), 0);
+    // Pen the right-hand stream too, then spend the rest on whoever is pacing
+    // either pocket. Selection auto-advances as each skill runs out, so the
+    // taps go on to the umbrellas and then the blasts by themselves; the taps
+    // alternate between the two pens because a tap picks the nearest critter
+    // and the same one cannot take the same skill twice.
+    let spent = 0;
+    while (stockLeft() > 0 && spent < 6000) {
+      const frame = spent / TICKS_PER_FRAME;
+      tap(skillCount('blocker') > 0 ? 220 : frame % 2 ? 60 : 270, 154);
+      step();
+      spent += TICKS_PER_FRAME;
+    }
+    expect(stockLeft()).toBe(0);
+    expect(resultShown()).toBe(false);
+
+    const rest = runUntilResult(ABANDONED_TICKS);
+    expect(rest).not.toBeNull();
+    // Seconds, not a minute: the short standstill window plus whatever was
+    // still in flight when the last skill was spent.
+    expect(rest!).toBeLessThan(ABANDONED_TICKS / 2);
+    // More than the two blockers are still standing there, so this is the
+    // standstill ending and not the "everyone out, only blockers left" one.
+    expect(num('out-count')).toBeGreaterThan(2);
+    expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
+    expect(Number(document.getElementById('bonus-time-val')!.textContent!.slice(1))).toBeGreaterThan(
+      0
+    );
   });
 });

@@ -82,6 +82,11 @@ export interface LevelDef {
    * ends immediately with whatever has been rescued so far. Tuned so a player
    * who cranks the release rate clears comfortably — the timer punishes
    * trickling, not playing.
+   *
+   * A level without one runs under no clock at all, not a hidden fallback: what
+   * stops it running forever is the standstill check in stall.ts, which ends it
+   * for a field that has stopped changing rather than for time the HUD never
+   * showed. Every countdown a level runs under is on screen.
    */
   timeLimit?: number;
   /**
@@ -109,26 +114,27 @@ function paintShape(bmp: TerrainBitmap, shape: Shape): void {
   }
 }
 
-/**
- * Runaway backstop (ticks, 60/s — so 2.5 minutes) for a level with no authored
- * `timeLimit`. The "all out, only blockers left" end condition never matches a
- * crowd that has simply run out of ways home — a walker pacing a pocket it
- * cannot climb out of is neither dead nor a blocker — so without a cap such a
- * level runs forever with no way forward but the Nuke button.
- *
- * Deliberately long, and deliberately not the usual way a stalled level ends:
- * a level whose quota is already met resolves on the standstill check
- * (stall.ts) within seconds of the field freezing. What is left for this cap is
- * the losing stall — a crowd short of the quota with skills still in hand,
- * where cutting the level off early would take a comeback away from the player.
- * It sits well clear of real play (the most generous par, a first clear at the
- * default release rate, is 5,400), so a level being played never meets it.
- */
-export const STALL_TIME_LIMIT = 9000;
+/** Pick-one blasts a level grants when it does not author its own count. */
+export const DEFAULT_BOMBER_STOCK = 2;
 
-/** The clock a level actually runs under: its own, or the stall fallback. */
-export function levelTimeLimit(def: LevelDef): number {
-  return def.timeLimit ?? STALL_TIME_LIMIT;
+/**
+ * The hand a level actually deals: its authored skills, plus the universal
+ * bomber reserve for the levels that leave `bomber` out.
+ *
+ * Shared rather than spelled out at each call site because the reserve decides
+ * whether the player still has a move to make, and a headless playthrough that
+ * dealt itself a different hand from the browser would be answering a different
+ * question about when the level is over.
+ */
+export function levelStock(def: LevelDef): Record<Skill, number> {
+  return {
+    blocker: def.stock.blocker ?? 0,
+    digger: def.stock.digger ?? 0,
+    basher: def.stock.basher ?? 0,
+    builder: def.stock.builder ?? 0,
+    floater: def.stock.floater ?? 0,
+    bomber: def.stock.bomber ?? DEFAULT_BOMBER_STOCK
+  };
 }
 
 /** Every hatch a level spawns from — the primary plus the optional second. */

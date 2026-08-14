@@ -234,6 +234,28 @@ describe('well: lines, cascade gravity, chains', () => {
     for (let y = 16; y <= 19; y++) fill(well, 9, y); // plug the open feeder
     expect(resolveClears(well).length).toBeGreaterThanOrEqual(3);
   });
+
+  it('leaves a well with no full row untouched: no settle, no step', () => {
+    // The invariant every caller relies on, pinned at the function rather than
+    // at each call site. This board is one landslide away from a full row:
+    // rows 1-19 are one cell short at column 0, and a loose cell parked at
+    // (0, 0) would drop nineteen rows and complete row 19 if the settle ran.
+    // Nothing is full *now*, so nothing may move and nothing may score.
+    const well = createWell();
+    for (let y = 1; y < WELL_H; y++) {
+      for (let x = 1; x < WELL_W; x++) fill(well, x, y, 2);
+    }
+    fill(well, 0, 0, 3);
+    const before = Array.from(well);
+    expect(fullRows(well)).toEqual([]);
+
+    expect(resolveClears(well)).toEqual([]);
+    expect(Array.from(well)).toEqual(before);
+    // Spelled out: the tempting row is still one cell short, and the loose
+    // cell is still where it was rather than at the bottom of its column.
+    expect(at(well, 0, 0)).toBe(3);
+    expect(at(well, 0, 19)).toBe(0);
+  });
 });
 
 /**
@@ -462,6 +484,38 @@ describe('run: clears, chains, and levels', () => {
     expect(fullRows(run.well)).toEqual([]);
   });
 
+  it('pays nothing on a top-out that completed no row', () => {
+    // The mirror of the test above, and the bug it guards: the top-out branch
+    // used to resolve the whole well unconditionally, so the settle it runs
+    // collapsed every floating cell and scored whatever rows *that* completed.
+    // Here nothing is full and nothing the piece does completes a row — rows
+    // 1-19 are one cell short at column 0, and the only cell above them is a
+    // loose one parked at (0, 0) which the phantom settle would drop nineteen
+    // rows to finish row 19 for a free 100 points.
+    const run = createRun(seededRandom(23));
+    for (let y = 1; y < WELL_H; y++) {
+      for (let x = 1; x < WELL_W; x++) fill(run.well, x, y, 2);
+    }
+    fill(run.well, 0, 0, 3);
+    expect(fullRows(run.well)).toEqual([]);
+
+    // An O resting on the stack with its top half above the well: it locks,
+    // tops out, and completes nothing (row 0 ends up holding 0, 4 and 5).
+    run.piece = { id: 1, rot: 0, x: 4, y: -1 };
+    expect(fits(run.well, run.piece)).toBe(true);
+    expect(tryMove(run.well, run.piece, 0, 1)).toBeNull();
+
+    const events = hardDrop(run);
+    expect(events.map(e => e.type)).toEqual(['lock', 'topOut']);
+    expect(run.score).toBe(0);
+    expect(run.lines).toBe(0);
+    expect(run.phase).toBe('over');
+    // The run ends on the board the player was looking at: the loose cell is
+    // still parked at the top, not landslid to the floor.
+    expect(at(run.well, 0, 0)).toBe(3);
+    expect(at(run.well, 0, 19)).toBe(0);
+  });
+
   it('levels up on the lines threshold, scoring the clear at the old level', () => {
     const run = createRun(seededRandom(17));
     run.lines = LINES_PER_LEVEL - 1;
@@ -507,55 +561,164 @@ describe('run: deep cascade chains fire and score by link', () => {
 });
 
 describe('headless playthrough (seeded, deterministic)', () => {
-  /** Greedy player: tries every rotation/column, drops on the placement that
-   * clears most and buries fewest holes. Pure-module APIs only. */
-  function playGame(seed: number, pieces: number) {
+  /**
+   * Greedy player: tries every rotation/column and picks the placement with
+   * the best score under the classic four-term stacker heuristic — rows
+   * cleared, minus buried holes, minus how tall the stack is overall, minus
+   * how jagged its surface is. It looks one piece ahead and never rotates
+   * after the drop, so it is a *competent* policy rather than an optimal one:
+   * enough to keep a well alive indefinitely, which is what makes it a usable
+   * oracle for "is this cabinet survivable". Pure-module APIs only.
+   */
+  function choosePlacement(run: CascadeRun): { rot: number; x: number } | null {
+    let best: { rot: number; x: number; value: number } | null = null;
+    for (let rot = 0; rot < 4; rot++) {
+      for (let x = -2; x < WELL_W; x++) {
+        let cand: ActivePiece = { ...run.piece!, rot, x };
+        if (!fits(run.well, cand)) continue;
+        for (;;) {
+          const below = tryMove(run.well, cand, 0, 1);
+          if (!below) break;
+          cand = below;
+        }
+        const trial = run.well.slice() as Well;
+        let sunk = false;
+        for (const c of cellsOf(cand)) {
+          if (c.y < 0) sunk = true;
+          else trial[c.y * WELL_W + c.x] = 1;
+        }
+        if (sunk) continue;
+        // `resolveClears` leaves a board with no full row exactly as it is, so
+        // a candidate that clears nothing reaches the terms below unflattened
+        // and its buried holes are still there to be counted. (An unguarded
+        // settle used to flatten every candidate before it was measured, which
+        // left `holes` permanently zero and blinded the player to the one
+        // thing that ends a run.)
+        const cleared = resolveClears(trial).reduce((sum, s) => sum + s.rows.length, 0);
+        let holes = 0;
+        let aggregate = 0;
+        let bumpiness = 0;
+        let previousHeight = 0;
+        for (let cx = 0; cx < WELL_W; cx++) {
+          let height = 0;
+          let covered = false;
+          for (let cy = 0; cy < WELL_H; cy++) {
+            if (trial[cy * WELL_W + cx] !== 0) {
+              if (!covered) height = WELL_H - cy;
+              covered = true;
+            } else if (covered) holes++;
+          }
+          aggregate += height;
+          if (cx > 0) bumpiness += Math.abs(height - previousHeight);
+          previousHeight = height;
+        }
+        // Standard stacker weights. Seeing holes is necessary but not
+        // sufficient: with the old terms a hole cost 60 and a row of extra
+        // height cost 2, so the player would happily build to the ceiling
+        // rather than accept one hole, and `cleared * 1000` swamped both.
+        // The aggregate-height and bumpiness terms are what turn "sees
+        // holes" into "survives" — guarded but on the old weights the run
+        // still ends around piece 136 (median over 20 seeds).
+        const value = cleared * 76 - holes * 36 - aggregate * 51 - bumpiness * 18;
+        if (!best || value > best.value) best = { rot, x, value };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Walks the piece in play onto `plan` one keypress at a time, advancing the
+   * run by `interval` seconds between presses. Returns true only if the player
+   * got the piece onto the exact placement it chose and hard-dropped it there;
+   * false means gravity locked the piece first, i.e. the clock took the
+   * placement away.
+   *
+   * The tick comes *before* the first press deliberately: the player cannot
+   * act on a piece before it exists, so even the opening input costs a full
+   * period rather than landing free at spawn.
+   */
+  function playPieceOnTheClock(
+    run: CascadeRun,
+    log: RunEvent[],
+    plan: { rot: number; x: number } | null,
+    interval: number
+  ): boolean {
+    if (!plan) {
+      log.push(...hardDrop(run));
+      return false;
+    }
+    // Lock delay plus its reset budget bound how long one piece can last, so
+    // this only trips if the state machine stops resolving pieces at all.
+    for (let guard = 0; guard < 4000; guard++) {
+      log.push(...tickRun(run, interval));
+      if (run.phase !== 'falling' || !run.piece) return false;
+      // Rotate first: a rotation kicks sideways, so aligning x before rot
+      // would undo itself. A blocked press is spent all the same.
+      if (run.piece.rot !== plan.rot) {
+        rotate(run, 1);
+        continue;
+      }
+      if (run.piece.x !== plan.x) {
+        shift(run, run.piece.x < plan.x ? 1 : -1);
+        continue;
+      }
+      log.push(...hardDrop(run));
+      return true;
+    }
+    throw new Error('piece never resolved on the clock');
+  }
+
+  /**
+   * Plays a seeded game headlessly and reports the run, its event log, and how
+   * many pieces locked somewhere other than where the player aimed.
+   *
+   * `inputsPerSecond` of 0 is the *instantaneous* player: it teleports the
+   * piece onto its chosen placement and hard-drops, so the falling phase never
+   * advances the clock and neither `gravityInterval` nor the level ramp is on
+   * the execution path. That is fine for the state-machine and determinism
+   * checks below, and useless for any claim about playability.
+   *
+   * Any positive rate is the *clocked* player: one keypress every
+   * `1 / inputsPerSecond` seconds with the run ticking that long in between,
+   * so gravity decides whether the chosen placement is reachable at all.
+   */
+  function playGame(seed: number, pieces: number, inputsPerSecond = 0) {
     const run = createRun(seededRandom(seed));
     const log: RunEvent[] = [];
     // Reads the phase without control-flow narrowing (hardDrop mutates it).
     const phase = () => run.phase;
+    let missed = 0;
     for (let n = 0; n < pieces && phase() === 'falling'; n++) {
-      let best: { rot: number; x: number; value: number } | null = null;
-      for (let rot = 0; rot < 4; rot++) {
-        for (let x = -2; x < WELL_W; x++) {
-          let cand: ActivePiece = { ...run.piece!, rot, x };
-          if (!fits(run.well, cand)) continue;
-          for (;;) {
-            const below = tryMove(run.well, cand, 0, 1);
-            if (!below) break;
-            cand = below;
-          }
-          const trial = run.well.slice() as Well;
-          let sunk = false;
-          for (const c of cellsOf(cand)) {
-            if (c.y < 0) sunk = true;
-            else trial[c.y * WELL_W + c.x] = 1;
-          }
-          if (sunk) continue;
-          const cleared = resolveClears(trial).reduce((sum, s) => sum + s.rows.length, 0);
-          let holes = 0;
-          let stack = 0;
-          for (let cx = 0; cx < WELL_W; cx++) {
-            let covered = false;
-            for (let cy = 0; cy < WELL_H; cy++) {
-              if (trial[cy * WELL_W + cx] !== 0) {
-                covered = true;
-                stack = Math.max(stack, WELL_H - cy);
-              } else if (covered) holes++;
-            }
-          }
-          const value = cleared * 1000 - holes * 60 - stack * 2;
-          if (!best || value > best.value) best = { rot, x, value };
-        }
+      const plan = choosePlacement(run);
+      if (inputsPerSecond === 0) {
+        if (plan) run.piece = { ...run.piece!, rot: plan.rot, x: plan.x };
+        log.push(...hardDrop(run));
+      } else if (!playPieceOnTheClock(run, log, plan, 1 / inputsPerSecond)) {
+        missed++;
       }
-      if (best) run.piece = { ...run.piece!, rot: best.rot, x: best.x };
-      log.push(...hardDrop(run));
       for (let t = 0; t < 300 && (phase() === 'clearing' || phase() === 'settling'); t++) {
         log.push(...tickRun(run, CLEAR_TIME + 0.01));
       }
     }
-    return { run, log };
+    return { run, log, missed };
   }
+
+  /**
+   * Distinct keypresses per second the modelled player sustains — one every
+   * 100 ms. Chosen as a competent-but-human rate: fast enough to be a fair
+   * test of a cabinet that means to be beaten, slow enough not to prove
+   * playability by superhuman hands. It is also deliberately conservative
+   * against the real cabinet, where a *held* arrow is auto-shifted by the
+   * game itself (`DAS_DELAY` 0.17 s then `DAS_REPEAT` 0.05 s in `game.ts`,
+   * i.e. 20 shifts a second), so a real player crosses the well faster than
+   * this model's one column per press.
+   */
+  const PLAYER_INPUTS_PER_SECOND = 10;
+  /**
+   * A distinctly slower player, for the other side of the ramp. Roughly a
+   * press every quarter second.
+   */
+  const SLOW_INPUTS_PER_SECOND = 4;
 
   it('stacks and clears lines without ever reaching an illegal state', () => {
     const { run, log } = playGame(1234, 80);
@@ -570,6 +733,57 @@ describe('headless playthrough (seeded, deterministic)', () => {
     const locks = log.filter(e => e.type === 'lock').length;
     expect(locks).toBeGreaterThan(0);
     expect(locks).toBeLessThanOrEqual(80);
+  });
+
+  it('is survivable at 10 inputs a second: 1500 pieces, no placement lost to the ramp', () => {
+    // The play-to-completion guarantee this cabinet lacked. The suite above
+    // can only say "some clears happened in 80 pieces", which a cabinet that
+    // strangles a good player at piece 150 passes just as easily.
+    //
+    // This one plays on the clock, so `gravityInterval` and the level ramp are
+    // on the execution path: the player has to physically walk each piece onto
+    // its chosen column before gravity locks it. 1500 pieces is roughly 25
+    // minutes of real play and carries the run past level 55.
+    for (const seed of [1234, 4321, 99, 2026]) {
+      const { run, log, missed } = playGame(seed, 1500, PLAYER_INPUTS_PER_SECOND);
+      expect(log.filter(e => e.type === 'topOut')).toHaveLength(0);
+      expect(run.phase).toBe('falling');
+      expect(log.filter(e => e.type === 'lock')).toHaveLength(1500);
+      // Not one piece locked anywhere but where the player aimed it, so the
+      // survival above is not a run of lucky misplacements.
+      expect(missed).toBe(0);
+      // ...and it is scoring while it survives, so "survivable" can't be won
+      // by a policy that simply never completes a row.
+      expect(run.score).toBeGreaterThan(0);
+      expect(run.lines).toBeGreaterThan(100);
+      // The ramp bottoms out at level 16 (0.8 × 0.85^15 ≈ 0.0699, under the
+      // 0.07 floor), so a run that reaches level 40 has spent 25 levels at the
+      // fastest gravity the cabinet can ever serve. The literal is deliberate:
+      // deriving it from `gravityInterval` would let a re-tuned ramp move the
+      // goalposts and still pass.
+      expect(run.level).toBeGreaterThan(40);
+    }
+  });
+
+  it('the ramp is not decorative: 4 inputs a second loses the run past level 10', () => {
+    // The other side of the same clock, and the reason the test above is worth
+    // anything. A quarter-second between presses is not enough to cross the
+    // well once gravity has ramped: every seed eventually fails to reach its
+    // chosen column, and that first missed placement is the run.
+    //
+    // This is also the test that notices if the clocked player is ever quietly
+    // reverted to the teleporting one. The survivability test above would sail
+    // through that revert — a player immune to the clock never tops out — and
+    // this one fails, because it is asserting that the clock can win.
+    for (const seed of [1234, 4321, 99, 2026]) {
+      const { run, log } = playGame(seed, 1500, SLOW_INPUTS_PER_SECOND);
+      expect(log.filter(e => e.type === 'topOut')).toHaveLength(1);
+      expect(run.phase).toBe('over');
+      // Not an early death: the ramp, not the geometry, is what ends it, so
+      // the run gets a long way in before the clock beats the hands.
+      expect(run.level).toBeGreaterThan(10);
+      expect(run.lines).toBeGreaterThan(100);
+    }
   });
 
   it('is reproducible: the same seed replays the same game', () => {

@@ -234,6 +234,28 @@ describe('well: lines, cascade gravity, chains', () => {
     for (let y = 16; y <= 19; y++) fill(well, 9, y); // plug the open feeder
     expect(resolveClears(well).length).toBeGreaterThanOrEqual(3);
   });
+
+  it('leaves a well with no full row untouched: no settle, no step', () => {
+    // The invariant every caller relies on, pinned at the function rather than
+    // at each call site. This board is one landslide away from a full row:
+    // rows 1-19 are one cell short at column 0, and a loose cell parked at
+    // (0, 0) would drop nineteen rows and complete row 19 if the settle ran.
+    // Nothing is full *now*, so nothing may move and nothing may score.
+    const well = createWell();
+    for (let y = 1; y < WELL_H; y++) {
+      for (let x = 1; x < WELL_W; x++) fill(well, x, y, 2);
+    }
+    fill(well, 0, 0, 3);
+    const before = Array.from(well);
+    expect(fullRows(well)).toEqual([]);
+
+    expect(resolveClears(well)).toEqual([]);
+    expect(Array.from(well)).toEqual(before);
+    // Spelled out: the tempting row is still one cell short, and the loose
+    // cell is still where it was rather than at the bottom of its column.
+    expect(at(well, 0, 0)).toBe(3);
+    expect(at(well, 0, 19)).toBe(0);
+  });
 });
 
 /**
@@ -566,15 +588,13 @@ describe('headless playthrough (seeded, deterministic)', () => {
           else trial[c.y * WELL_W + c.x] = 1;
         }
         if (sunk) continue;
-        // `resolveClears` settles the well whether or not a row is full, so
-        // calling it unguarded flattened every candidate board before it was
-        // measured and left the `holes` term below permanently zero — the
-        // player was blind to the one thing that ends a run. Guard it exactly
-        // as the run's own lock path does.
-        const cleared =
-          fullRows(trial).length > 0
-            ? resolveClears(trial).reduce((sum, s) => sum + s.rows.length, 0)
-            : 0;
+        // `resolveClears` leaves a board with no full row exactly as it is, so
+        // a candidate that clears nothing reaches the terms below unflattened
+        // and its buried holes are still there to be counted. (An unguarded
+        // settle used to flatten every candidate before it was measured, which
+        // left `holes` permanently zero and blinded the player to the one
+        // thing that ends a run.)
+        const cleared = resolveClears(trial).reduce((sum, s) => sum + s.rows.length, 0);
         let holes = 0;
         let aggregate = 0;
         let bumpiness = 0;

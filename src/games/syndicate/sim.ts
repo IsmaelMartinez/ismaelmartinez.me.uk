@@ -167,11 +167,22 @@ const distance = (a: Unit, b: Unit): number => Math.hypot(a.x - b.x, a.y - b.y);
  * order the player never meant it to hear. Since the tighter gap already makes
  * trailing deliver, that scoping costs the player nothing: walk the agents
  * onto the pad one chip at a time and the asset arrives with them.
+ *
+ * That scoping also countermands: a subset order drops any march still in
+ * flight and hands the asset straight back to trailing. Skipping it instead
+ * would leave the asset walking the abandoned route alone with `follow`
+ * suppressed — the same lone walk under fire the scoping exists to prevent,
+ * only now on a route the player has already replaced.
  */
 export function commandMove(world: World, target: number, agents: Unit[]): void {
   if (target < 0 || !isWalkable(world.tiles[target])) return;
   const wholeSquad = agents.length > 0 && livingAgents(world).every(a => agents.includes(a));
-  const asset = wholeSquad ? world.units.find(u => u.alive && escorting(u)) : undefined;
+  const escort = world.units.find(u => u.alive && escorting(u));
+  const asset = wholeSquad ? escort : undefined;
+  if (escort && !asset) {
+    escort.led = false;
+    escort.path = [];
+  }
   const movers = asset ? [asset, ...agents] : agents;
   const spots = spreadTargets(world.tiles, target, movers.length);
   movers.forEach((unit, n) => {
@@ -387,13 +398,13 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
       // runs the gauntlet of the squad's own agents, and an asset re-aimed at
       // the first one it passes stops short of the tile the player clicked.
       //
-      // The flag needs no expiry beyond its own route running out. It is only
-      // ever set on a march the entire living squad is walking, so the escort
-      // can only vanish from under it by being wiped out — which loses the
-      // mission outright before the next order — or by the player re-tasking
-      // agents one at a time, which is an order they gave on purpose. If it
-      // did lapse early the asset falls back to trailing, which now delivers
-      // on its own, so the flag can no longer strand the mission.
+      // The flag clears two ways, and both are here or in `commandMove`: the
+      // route running out, and any subset order countermanding it. It is only
+      // ever set on a march the entire living squad is walking, so the squad
+      // can only vanish from under it by being wiped out, which loses the
+      // mission outright before the next order. Either way the asset falls
+      // back to trailing, which now delivers on its own, so the flag can
+      // neither strand the mission nor outlive the order that set it.
       if (escorting(unit)) {
         if (!unit.path.length) unit.led = false;
         if (!unit.led) follow(world, unit, agents, ESCORT_FOLLOW_DISTANCE);

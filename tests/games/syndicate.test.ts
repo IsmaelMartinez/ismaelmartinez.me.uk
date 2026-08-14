@@ -410,6 +410,53 @@ describe('simulation', () => {
     expect(vip.led).toBe(true);
   });
 
+  it('drops a march the player has countermanded with a subset order', () => {
+    // The other end of the same rule. Scoping the lead to whole-squad orders
+    // only helps if the lead also *ends* when the player countermands one:
+    // a march hands the asset a long route, and if a later subset order just
+    // skips it, `led` stays set and it keeps walking the abandoned route alone
+    // with `follow` suppressed. That is the lone walk under fire the scoping
+    // exists to prevent, on a route the player has already replaced — the
+    // squad re-tasks down a side street while the asset carries on toward the
+    // pad by itself, and a collected asset is valid prey the whole way.
+    const tiles = openMap();
+    const scout = createUnit(1, 'agent', idx(2, 12), MAP_W, null);
+    const minder = createUnit(2, 'agent', idx(3, 12), MAP_W, null);
+    const vip = createUnit(3, 'vip', idx(4, 12), MAP_W);
+    vip.faction = 'player';
+    const world = createWorld(tiles, [scout, minder, vip], seededRandom());
+    const march = idx(24, 12);
+    const sideStreet = idx(2, 22);
+
+    // The whole squad marches east, so the asset takes a route of its own.
+    commandMove(world, march, [scout, minder]);
+    expect(vip.led).toBe(true);
+    expect(vip.path.length).toBeGreaterThan(0);
+    for (let step = 0; step < 120; step++) stepWorld(world, 1 / 60);
+    expect(vip.x).toBeGreaterThan(4.5);
+
+    // A firefight opens, so the player re-tasks the agents one chip at a time
+    // down a side street. The first of those calls countermands the march.
+    commandMove(world, sideStreet, [scout]);
+    expect(vip.led).toBe(false);
+    expect(vip.path).toHaveLength(0);
+    commandMove(world, sideStreet, [minder]);
+    expect(vip.led).toBe(false);
+
+    for (let step = 0; step < 900; step++) stepWorld(world, 1 / 60);
+    // It went with the squad, not on down the abandoned route: it is tucked
+    // in behind its nearest agent on the side street, nowhere near the tile
+    // the countermanded march was walking it to.
+    const nearest = Math.min(
+      Math.hypot(vip.x - scout.x, vip.y - scout.y),
+      Math.hypot(vip.x - minder.x, vip.y - minder.y)
+    );
+    expect(nearest).toBeLessThanOrEqual(ESCORT_FOLLOW_DISTANCE);
+    expect(Math.hypot(vip.x - 24.5, vip.y - 12.5)).toBeGreaterThan(ESCORT_FOLLOW_DISTANCE);
+    expect(vip.x).toBeLessThan(6);
+    expect(vip.y).toBeGreaterThan(18);
+  });
+
   it('leaves an uncollected asset where the contract pinned it', () => {
     const tiles = openMap();
     const agent = createUnit(1, 'agent', idx(30, 30), MAP_W, null);

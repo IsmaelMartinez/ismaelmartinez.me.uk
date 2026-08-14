@@ -119,21 +119,29 @@ const tileOf = (u: Unit): number => idx(Math.floor(u.x), Math.floor(u.y));
 const distance = (a: Unit, b: Unit): number => Math.hypot(a.x - b.x, a.y - b.y);
 
 /**
- * Orders the squad to fan out around the clicked tile.
+ * Orders the given agents to fan out around the clicked tile.
  *
- * A collected asset is led rather than herded: it takes the clicked tile
- * itself and the agents form up around it. Nothing else in the sim ever hands
- * the asset a destination — `follow` only ever walks it to within
- * FOLLOW_STOP_DISTANCE of an agent, which is further out than the pad's own
- * radius — so without this an escort could be ordered onto the extraction pad
- * and still leave its charge parked a couple of tiles down the street. That
- * arithmetic is how mission 10 shipped unwinnable. Putting the asset at the
- * head of the fan-out also rings it with its escort instead of leaving it
- * trailing at the back where the streets can shoot it.
+ * A collected asset is led rather than herded, but only when the order is one
+ * the squad as a whole is taking: it takes the clicked tile itself and the
+ * agents form up around it. Nothing else in the sim ever hands the asset a
+ * destination — `follow` only ever walks it to within FOLLOW_STOP_DISTANCE of
+ * an agent, which is further out than the pad's own radius — so without this
+ * an escort could be ordered onto the extraction pad and still leave its
+ * charge parked a couple of tiles down the street. That arithmetic is how
+ * mission 10 shipped unwinnable. Putting the asset at the head of the fan-out
+ * also rings it with its escort instead of leaving it trailing at the back
+ * where the streets can shoot it.
+ *
+ * An order to a subset of the living squad is a scouting order, not a march,
+ * and must leave the asset trailing on `follow` where the rest of the squad
+ * still stands. Leading it on those too walks it up a side street alone, and
+ * a collected asset is valid prey the whole way — it would be shot down on an
+ * order the player never meant it to hear.
  */
 export function commandMove(world: World, target: number, agents: Unit[]): void {
   if (target < 0 || !isWalkable(world.tiles[target])) return;
-  const asset = world.units.find(u => u.alive && u.kind === 'vip' && escorting(u));
+  const wholeSquad = agents.length > 0 && livingAgents(world).every(a => agents.includes(a));
+  const asset = wholeSquad ? world.units.find(u => u.alive && escorting(u)) : undefined;
   const movers = asset ? [asset, ...agents] : agents;
   const spots = spreadTargets(world.tiles, target, movers.length);
   movers.forEach((unit, n) => {
@@ -341,12 +349,18 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
       autoFire(unit);
     } else if (unit.kind === 'vip') {
       // Pinned where the contract left it until an agent arrives. From then on
-      // the squad leads it: a move order walks it to the tile the player
-      // clicked, and only once that route runs out does it fall back to
+      // the squad leads it: a whole-squad move order walks it to the tile the
+      // player clicked, and only once that route runs out does it fall back to
       // trailing the nearest agent on the same routine persuaded minds use.
       // Following never overrides an order in flight — the route to the pad
       // runs the gauntlet of the squad's own agents, and an asset re-aimed at
       // the first one it passes is an asset that never reaches the pad.
+      //
+      // The flag needs no expiry beyond its own route running out. It is only
+      // ever set on a march the entire living squad is walking, so the escort
+      // can only vanish from under it by being wiped out — which loses the
+      // mission outright before the next order — or by the player re-tasking
+      // agents one at a time, which is an order they gave on purpose.
       if (escorting(unit)) {
         if (!unit.path.length) unit.led = false;
         if (!unit.led) follow(world, unit, agents);

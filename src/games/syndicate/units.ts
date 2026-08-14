@@ -47,9 +47,10 @@ export interface Unit {
   wanderTimer: number;
   repathTimer: number;
   /**
-   * Escort asset only: true while it is walking a route a move order gave it.
-   * `follow` must not overwrite such a route — an asset re-aimed at its nearest
-   * agent halfway to the extraction pad is an asset that never arrives.
+   * Escort asset only: true while it is walking a route a whole-squad move
+   * order gave it. `follow` must not overwrite such a route — an asset re-aimed
+   * at its nearest agent halfway to the extraction pad is an asset that never
+   * arrives.
    */
   led: boolean;
   /** Patrol anchor tile for guards/enemies, spawn tile otherwise. */

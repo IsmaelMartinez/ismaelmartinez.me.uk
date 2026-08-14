@@ -352,6 +352,43 @@ describe('simulation', () => {
     expect(closest).toBeLessThan(0.01);
   });
 
+  it('leaves the asset behind when only part of the squad is ordered out', () => {
+    // The other half of the leading rule, and the reason it is scoped rather
+    // than universal. Clicking a single agent chip and sending it up a side
+    // street is a scouting order, not a march: leading the asset on it walks
+    // it away from its escort alone, and a collected asset is valid prey the
+    // whole way, so the mission is lost to an order the player never meant it
+    // to hear. Only an order the whole living squad is taking may lead it.
+    const tiles = openMap();
+    const scout = createUnit(1, 'agent', idx(5, 12), MAP_W, null);
+    const minder = createUnit(2, 'agent', idx(6, 12), MAP_W, null);
+    const vip = createUnit(3, 'vip', idx(7, 12), MAP_W);
+    vip.faction = 'player';
+    const world = createWorld(tiles, [scout, minder, vip], seededRandom());
+    const parked = { x: vip.x, y: vip.y };
+    const sideStreet = idx(22, 12);
+
+    // One chip selected, one agent ordered: the asset gets no route at all.
+    commandMove(world, sideStreet, [scout]);
+    expect(scout.path.length).toBeGreaterThan(0);
+    expect(vip.path).toHaveLength(0);
+    expect(vip.led).toBe(false);
+
+    for (let step = 0; step < 600; step++) stepWorld(world, 1 / 60);
+    expect(scout.x).toBeGreaterThan(21);
+    // It never followed the scout: it is still stood beside the agent that
+    // stayed, well inside the follow gap and nowhere near the scouted tile.
+    expect(vip.x).toBe(parked.x);
+    expect(vip.y).toBe(parked.y);
+    expect(Math.hypot(vip.x - minder.x, vip.y - minder.y)).toBeLessThanOrEqual(FOLLOW_STOP_DISTANCE);
+
+    // The whole squad marching, though, still leads it — the scope is which
+    // agents were ordered, not whether leading happens at all.
+    commandMove(world, idx(9, 18), [scout, minder]);
+    expect(vip.path.length).toBeGreaterThan(0);
+    expect(vip.led).toBe(true);
+  });
+
   it('leaves an uncollected asset where the contract pinned it', () => {
     const tiles = openMap();
     const agent = createUnit(1, 'agent', idx(30, 30), MAP_W, null);

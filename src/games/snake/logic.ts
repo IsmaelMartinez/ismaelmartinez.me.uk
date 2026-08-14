@@ -98,9 +98,15 @@ export interface SnakeState {
    * steps of grace it has left. *Every* claimed cell starts here, whether or
    * not something stood on it: the cell stays passable, renders as a pulsing
    * ghost, and only sets once it has been clear for WALL_GRACE_STEPS steps.
-   * So a wall never materialises underneath the snake, nor in the cell the
-   * head is one step from entering — the player watches them close in instead
-   * of dying to geometry that appeared out of nowhere.
+   * The player watches the walls close in instead of dying to geometry that
+   * appeared out of nowhere.
+   *
+   * That grace is the whole of the guarantee, so note what it is not. A wall
+   * never materialises underneath the snake, but it may perfectly well set in
+   * the cell the head is one step from entering, and it should: the ghost sat
+   * there to be read for WALL_GRACE_STEPS steps, and a player who steers into
+   * one anyway has had every warning the rules owe them. Head-adjacency safety
+   * is not held here and never has been, so do not write code that assumes it.
    */
   pendingWalls: Map<number, number>;
 }

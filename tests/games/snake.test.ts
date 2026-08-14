@@ -455,7 +455,7 @@ describe('the arena ladder', () => {
  * the August 2026 audit, and 0.04% of them with no legal move left at all.
  */
 describe('the arena ladder gives warning before a wall sets', () => {
-  it('does not seal the cell straight ahead of the head (issue #259 repro)', () => {
+  it('ghosts the cell straight ahead rather than sealing it (issue #259 repro)', () => {
     const random = seededRandom(11);
     const state = createSnakeState(random);
     // The issue's deterministic case: the snake runs along row 4 into the
@@ -472,7 +472,8 @@ describe('the arena ladder gives warning before a wall sets', () => {
     expect(state.arena).toBe(1);
 
     // (4,4) is the very next cell the head enters. It belongs to the rung, so
-    // it is claimed — but as a ghost, never as geometry that kills on contact.
+    // it is claimed — but as a ghost, not as geometry that kills the moment it
+    // appears. It may still set there later, once its grace has run.
     const ahead = cellIndex(4, 4);
     expect(ARENA_WALLS[1]).toContain(ahead);
     expect(state.walls.has(ahead)).toBe(false);

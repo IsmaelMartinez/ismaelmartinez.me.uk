@@ -20,8 +20,9 @@
  * button for the toast's full 2.4s. Tank Duel already has that second problem,
  * because PR #251 raised its stack to `z-index: 2` and its own overlay sets
  * none; that one cabinet keeps its rule locally. Which of the two bugs each
- * cabinet should have is a design call, not a CSS one, so it is filed rather
- * than decided here.
+ * cabinet should have is a design call, not a CSS one — issue #284 tracks it,
+ * and the likely answer is that a terminal overlay should carry the record
+ * itself rather than race a toast against it.
  *
  * Long toasts wrap rather than run off. Five of the six copies carried
  * `white-space: nowrap`, which reads as a tidy single-line pill until a

@@ -36,10 +36,14 @@ const CANVAS_H = (CITY_W + CITY_H) * HALF_H + ORIGIN_Y + 10;
 
 /**
  * The runtime skeleton of src/pages/[lang]/fun/city.astro — every element the
- * game module looks up, and nothing else. A static fixture, parsed rather than
- * assigned, so no live node ever renders it.
+ * game module looks up, plus one focusable node *outside* `#city-root` standing
+ * in for the site chrome the layout wraps the game in. The overlay covers the
+ * canvas and nothing else, so that link is somewhere a player can genuinely put
+ * focus while the prompt is open. A static fixture, parsed rather than assigned,
+ * so no live node ever renders it.
  */
 const PAGE_HTML = `
+  <a id="site-nav-link" href="/en/">Home</a>
   <div id="city-root"
        data-t-retired="City Retired"
        data-t-retired-desc="You called time on a solvent city.">
@@ -186,11 +190,22 @@ const promptShown = () =>
   (document.getElementById('retire-overlay') as HTMLElement).style.display === 'flex';
 const monthShown = () => document.getElementById('month')!.textContent;
 
+const navLink = () => document.getElementById('site-nav-link') as HTMLAnchorElement;
+
+/**
+ * Sends a key the way a browser would: from whatever holds focus, bubbling and
+ * cancellable. Returns the event so a caller can assert the page's own default
+ * — the browser's Tab, which jsdom does not implement — was suppressed.
+ */
+function pressFrom(target: Element, key: string): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  return event;
+}
+
 /** Sends a key the way a player's keyboard would: from inside the dialog, bubbling. */
 function pressInPrompt(key: string): void {
-  document
-    .getElementById('retire-overlay')!
-    .dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  pressFrom(document.getElementById('retire-overlay')!, key);
 }
 
 /**
@@ -442,6 +457,41 @@ describe('Microcity retire confirmation', () => {
 
     cancelBtn().click();
     expect(document.activeElement).toBe(retireBtn());
+  });
+
+  /**
+   * The trap has to reach as far as focus can go. The overlay is painted over
+   * the canvas, so it covers neither the toolbar nor the site chrome around the
+   * game: a player can open the prompt and then click a nav link, and focus
+   * leaves `#city-root` entirely. A trap scoped to the root stops seeing keys at
+   * that moment — Escape does nothing and Tab walks out into the page behind a
+   * dialog still advertising `role="alertdialog" aria-modal="true"` — which
+   * strands a keyboard-only player in a modal that is not modal.
+   */
+  it('keeps trapping once focus has left the game root', () => {
+    foundCity();
+    retireBtn().click();
+
+    navLink().focus();
+    expect(document.activeElement).toBe(navLink());
+
+    // Tab from out there is answered by the dialog, not by the page: the
+    // browser's own focus move is suppressed and the safe answer is re-entered.
+    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(cancelBtn());
+    pressFrom(cancelBtn(), 'Tab');
+    expect(document.activeElement).toBe(confirmBtn());
+
+    // And Escape still dismisses from outside the root.
+    navLink().focus();
+    expect(pressFrom(navLink(), 'Escape').defaultPrevented).toBe(true);
+    expect(promptShown()).toBe(false);
+    expect(overlayShown()).toBe(false);
+    expect(submitGlobal).not.toHaveBeenCalled();
+
+    // Closed means released: the page gets its own keys back, so Tab outside a
+    // prompt that is no longer open is the browser's again.
+    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(false);
   });
 
   it('ends the run only on the second, deliberate click', () => {

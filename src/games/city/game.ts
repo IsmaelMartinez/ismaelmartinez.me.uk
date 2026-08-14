@@ -440,6 +440,7 @@ export function initCityGame(): void {
     if (phase !== 'play') return;
     phase = 'confirm';
     retireOverlay.style.display = 'flex';
+    document.addEventListener('keydown', onConfirmKeydown);
     retireCancelBtn.focus();
   }
 
@@ -448,7 +449,42 @@ export function initCityGame(): void {
     if (phase !== 'confirm') return;
     phase = 'play';
     retireOverlay.style.display = 'none';
+    document.removeEventListener('keydown', onConfirmKeydown);
     retireBtn.focus();
+  }
+
+  /**
+   * Escape is the expected way out of a prompt, and the Tab cycle keeps a
+   * keyboard user inside the two answers for as long as the dialog claims to
+   * be modal — without it, `aria-modal` would be a promise the page breaks.
+   *
+   * Bound on `document`, because the overlay covers the canvas and nothing
+   * else: a click on the toolbar, the site header or the page background puts
+   * focus outside `#city-root`, and a root-scoped listener never sees the keys
+   * that follow. The trap has to reach as far as focus can go, which is the
+   * whole document. It is attached only while the prompt is open and removed
+   * again when it closes, so no handler outlives the dialog it belongs to —
+   * which is what keeps a ClientRouter swap from stacking dead listeners on a
+   * document that survives the swap.
+   */
+  function onConfirmKeydown(e: KeyboardEvent) {
+    // A swap can tear the page out from under an open prompt, leaving this
+    // listener attached to the surviving document with nothing left to trap.
+    if (!retireOverlay.isConnected) {
+      document.removeEventListener('keydown', onConfirmKeydown);
+      return;
+    }
+    if (phase !== 'confirm') return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeRetireConfirm();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    // Two answers, so a Tab in either direction is the same toggle between
+    // them; from anywhere else it re-enters the dialog at the safe answer.
+    (document.activeElement === retireCancelBtn ? retireConfirmBtn : retireCancelBtn).focus();
   }
 
   /**
@@ -463,6 +499,9 @@ export function initCityGame(): void {
     phase = 'over';
     retireBtn.disabled = true;
     retireOverlay.style.display = 'none';
+    // Confirming leaves the prompt without going through closeRetireConfirm,
+    // so the trap is lifted here too rather than only on cancel.
+    document.removeEventListener('keydown', onConfirmKeydown);
     audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
     audio.stop();
     const retired = reason === 'retired';
@@ -1750,27 +1789,6 @@ export function initCityGame(): void {
   retireConfirmBtn.addEventListener('click', () => {
     if (phase !== 'confirm') return;
     gameOver('retired');
-  });
-
-  // Escape is the expected way out of a prompt, and the Tab cycle keeps a
-  // keyboard user inside the two answers for as long as the dialog claims to
-  // be modal — without it, `aria-modal` would be a promise the page breaks.
-  // Bound to the game root, not the overlay, so a key still lands after a
-  // click has put focus on one of the controls the overlay does not cover;
-  // and not to `document`, so a ClientRouter swap cannot leave a live handler
-  // behind on a root this module has already replaced.
-  root.addEventListener('keydown', e => {
-    if (phase !== 'confirm') return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeRetireConfirm();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    e.preventDefault();
-    // Two answers, so a Tab in either direction is the same toggle between
-    // them; from anywhere else it re-enters the dialog at the safe answer.
-    (document.activeElement === retireCancelBtn ? retireConfirmBtn : retireCancelBtn).focus();
   });
 
   startBtn.addEventListener('click', () => {

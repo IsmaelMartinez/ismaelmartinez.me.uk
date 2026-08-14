@@ -131,7 +131,7 @@ const tools = [
           >
             <div class="overlay-content">
               <span class="play-icon" aria-hidden="true">🏁</span>
-              <h2 id="retire-confirm-title">{t('fun.city.retireConfirmTitle')}</h2>
+              <h2 id="retire-confirm-title" class="retired">{t('fun.city.retireConfirmTitle')}</h2>
               <p id="retire-confirm-desc">{t('fun.city.retireConfirmDesc')}</p>
               <div class="confirm-actions">
                 <button type="button" id="retire-cancel" class="btn btn-primary btn-large">{t('fun.city.retireConfirmNo')}</button>
@@ -393,7 +393,9 @@ const tools = [
     margin-bottom: var(--space-md);
   }
 
-  /* Retiring is a decision, not a failure — the alarm red belongs to bankruptcy. */
+  /* Retiring is a decision, not a failure — the alarm red belongs to
+     bankruptcy. Worn by the confirmation heading as well as the result one,
+     so the whole retirement path reads the same colour from prompt to board. */
   .overlay-content h2.retired {
     color: #38bdf8;
   }

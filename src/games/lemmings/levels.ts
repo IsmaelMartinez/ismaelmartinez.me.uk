@@ -109,6 +109,23 @@ function paintShape(bmp: TerrainBitmap, shape: Shape): void {
   }
 }
 
+/**
+ * Fallback clock (ticks, 60/s — so 2.5 minutes) for a level with no authored
+ * `timeLimit`. The "all out, only blockers left" end condition never matches a
+ * crowd that has simply run out of ways home — a walker pacing a pocket it
+ * cannot climb out of is neither dead nor a blocker — so without a cap such a
+ * level runs forever with no way forward but the Nuke button. Sits well clear
+ * of real play — the slowest headless playthrough resolves in ~1,200 ticks and
+ * the most generous par (a first clear at the default release rate) is 5,400 —
+ * so a level being played never meets it; only a stalled one does.
+ */
+export const STALL_TIME_LIMIT = 9000;
+
+/** The clock a level actually runs under: its own, or the stall fallback. */
+export function levelTimeLimit(def: LevelDef): number {
+  return def.timeLimit ?? STALL_TIME_LIMIT;
+}
+
 /** Every hatch a level spawns from — the primary plus the optional second. */
 export function levelHatches(def: LevelDef): Hatch[] {
   return def.hatch2 ? [def.hatch, def.hatch2] : [def.hatch];

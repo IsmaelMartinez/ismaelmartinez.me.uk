@@ -21,9 +21,11 @@ import {
   buildLevel,
   atExit,
   levelHatches,
+  levelTimeLimit,
   LEVELS,
   LEVEL_W,
-  LEVEL_H
+  LEVEL_H,
+  STALL_TIME_LIMIT
 } from '../../src/games/lemmings/levels';
 import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
 import { exitArrowAngle, rescueProgress } from '../../src/games/lemmings/hud';
@@ -559,11 +561,17 @@ function countSolid(bmp: TerrainBitmap, x: number): number {
 /**
  * Headless playthrough harness: runs a level exactly as the game loop does —
  * spawning on an interval (alternating hatches when a level has two), stepping
- * every critter each tick, banking exits, and cutting the run off hard at the
- * level's `timeLimit` — while a `strategy` callback assigns skills from the
- * level's stock, the same decisions a player makes with taps. This is the
- * automated stand-in for the manual "guide the crowd home with each skill"
- * verification, so a timed level's test proves it is winnable on the clock.
+ * every critter each tick, banking exits, and resolving the level on the game's
+ * own end condition (everyone out and only blockers left, or the clock —
+ * authored or fallback — running out) — while a `strategy` callback assigns
+ * skills from the level's stock, the same decisions a player makes with taps.
+ * This is the automated stand-in for the manual "guide the crowd home with each
+ * skill" verification, so a timed level's test proves it is winnable on the
+ * clock.
+ *
+ * `maxTicks` is the harness's own runaway guard, deliberately kept above every
+ * level's clock: a run that reaches it is a level that never resolved, which is
+ * reported as `endedAt === null` rather than quietly passing.
  */
 type LevelDef = (typeof LEVELS)[number];
 
@@ -573,11 +581,19 @@ interface SimApi {
   assign(c: Critter, skill: Skill): boolean;
 }
 
+interface PlayOutcome {
+  saved: number;
+  /** Tick the game's end condition fired on, or null if it never did. */
+  endedAt: number | null;
+  /** True when the crowd resolved itself; false when a clock cut the level off. */
+  resolved: boolean;
+}
+
 function playLevel(
   level: LevelDef,
   strategy: (api: SimApi) => void,
-  { interval = 24, maxTicks = 8000 } = {}
-): number {
+  { interval = 24, maxTicks = 12000 } = {}
+): PlayOutcome {
   const bmp = buildLevel(level);
   const stock: Record<Skill, number> = {
     blocker: level.stock.blocker ?? 0,
@@ -615,8 +631,8 @@ function playLevel(
   };
 
   const hatches = levelHatches(level);
-  const tickCap = level.timeLimit !== undefined ? Math.min(maxTicks, level.timeLimit) : maxTicks;
-  for (let tick = 0; tick < tickCap; tick++) {
+  const limit = levelTimeLimit(level);
+  for (let tick = 1; tick <= maxTicks; tick++) {
     if (spawned < level.spawnCount) {
       if (spawnTimer <= 0) {
         const h = hatches[spawned % hatches.length];
@@ -638,61 +654,77 @@ function playLevel(
       }
     }
     critters = critters.filter(isActive);
-    if (spawned >= level.spawnCount && critters.length === 0) break;
+    // The game's own end condition, mirrored (game.ts `update`): everyone has
+    // emerged and whoever is left can never leave on their own, or the clock
+    // ran out.
+    const done = spawned >= level.spawnCount && critters.every(c => c.state === 'blocker');
+    if (done || tick >= limit) return { saved, endedAt: tick, resolved: done };
   }
-  return saved;
+  return { saved, endedAt: null, resolved: false };
+}
+
+/**
+ * Every playthrough asserts two things, and the first one matters as much as
+ * the second: the level has to *resolve*. A level whose crowd settles into a
+ * state the end condition never matches (walkers pacing a pocket they cannot
+ * climb out of) used to run until the harness loop simply fell out, and a test
+ * that only counted rescues passed anyway. `endedAt` is null exactly then.
+ */
+function expectCleared(level: LevelDef, outcome: PlayOutcome): void {
+  expect(outcome.endedAt).not.toBeNull();
+  expect(outcome.saved).toBeGreaterThanOrEqual(level.needed);
 }
 
 describe('levels — solvable playthroughs', () => {
   it('1: reaches the exit by simply walking', () => {
-    const saved = playLevel(LEVELS[0], () => {});
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[0].needed);
+    const outcome = playLevel(LEVELS[0], () => {});
+    expectCleared(LEVELS[0], outcome);
   });
 
   it('2: a basher tunnels the wall for the whole crowd', () => {
-    const saved = playLevel(LEVELS[1], ({ critters, bmp, assign }) => {
+    const outcome = playLevel(LEVELS[1], ({ critters, bmp, assign }) => {
       if (!bmp.solid(156, 158)) return; // tunnel already open
       if (critters.some(c => c.state === 'basher')) return;
       const w = critters.find(c => c.state === 'walker' && c.dir === 1 && c.x >= 140 && c.x <= 149);
       if (w) assign(w, 'basher');
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[1].needed);
+    expectCleared(LEVELS[1], outcome);
   });
 
   it('3: one builder ramps up to the ledge and the crowd follows', () => {
     let built = false;
-    const saved = playLevel(LEVELS[2], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[2], ({ critters, assign }) => {
       if (built) return;
       const w = critters.find(
         c => c.state === 'walker' && c.dir === 1 && c.y === 159 && c.x >= 226 && c.x <= 231
       );
       if (w && assign(w, 'builder')) built = true;
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[2].needed);
+    expectCleared(LEVELS[2], outcome);
   });
 
   it('4: a digger opens the floor and the crowd drops to the exit', () => {
     let dug = false;
-    const saved = playLevel(LEVELS[3], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[3], ({ critters, assign }) => {
       if (dug) return;
       const w = critters.find(c => c.state === 'walker' && c.y === 119);
       if (w && assign(w, 'digger')) dug = true;
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[3].needed);
+    expectCleared(LEVELS[3], outcome);
   });
 
   it('5: floaters survive the long drop', () => {
-    const saved = playLevel(LEVELS[4], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[4], ({ critters, assign }) => {
       for (const c of critters) {
         if (c.state === 'walker' && !c.floater && c.y === 59 && c.x < 108) assign(c, 'floater');
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[4].needed);
+    expectCleared(LEVELS[4], outcome);
   });
 
   it('6: float down, bash across, build up — the finale chains three skills', () => {
     let built = false;
-    const saved = playLevel(LEVELS[5], ({ critters, bmp, assign }) => {
+    const outcome = playLevel(LEVELS[5], ({ critters, bmp, assign }) => {
       for (const c of critters) {
         if (c.state === 'walker' && !c.floater && c.y === 59 && c.x < 88) assign(c, 'floater');
       }
@@ -709,13 +741,13 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[5].needed);
+    expectCleared(LEVELS[5], outcome);
   });
 
   it('7: a blocker holds the crowd off the cliff while a digger drops them home', () => {
     let blocked = false;
     let dug = false;
-    const saved = playLevel(LEVELS[6], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[6], ({ critters, assign }) => {
       // Turn the crowd back before the leader marches off the right-hand cliff.
       if (!blocked) {
         const w = critters.find(
@@ -731,13 +763,13 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'digger')) dug = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[6].needed);
+    expectCleared(LEVELS[6], outcome);
   });
 
   it('8: build up onto the shelf, then bash through the wall to the exit', () => {
     let built = false;
     let bashed = false;
-    const saved = playLevel(LEVELS[7], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[7], ({ critters, assign }) => {
       if (!built) {
         const w = critters.find(
           c => c.state === 'walker' && c.dir === 1 && c.y === 169 && c.x >= 184 && c.x <= 190
@@ -751,12 +783,12 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'basher')) bashed = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[7].needed);
+    expectCleared(LEVELS[7], outcome);
   });
 
   it('9: floaters ride the drop down, then a digger opens the chamber below', () => {
     let dug = false;
-    const saved = playLevel(LEVELS[8], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[8], ({ critters, assign }) => {
       // Pop an umbrella on anything still above the shelf so the fall is safe.
       for (const c of critters) {
         if (!c.floater && c.y < 130 && (c.state === 'walker' || c.state === 'faller')) {
@@ -771,13 +803,13 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'digger')) dug = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[8].needed);
+    expectCleared(LEVELS[8], outcome);
   });
 
   it('10: dig through the hall floor, then build up to the exit plinth', () => {
     let dug = false;
     let built = false;
-    const saved = playLevel(LEVELS[9], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[9], ({ critters, assign }) => {
       if (!dug) {
         const w = critters.find(
           c => c.state === 'walker' && c.y === 139 && c.x >= 100 && c.x <= 160
@@ -793,13 +825,13 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[9].needed);
+    expectCleared(LEVELS[9], outcome);
   });
 
   it('11: bash through the wall, then build up to the ledge beyond', () => {
     let bashed = false;
     let built = false;
-    const saved = playLevel(LEVELS[10], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[10], ({ critters, assign }) => {
       if (!bashed) {
         const w = critters.find(
           c => c.state === 'walker' && c.dir === 1 && c.y === 167 && c.x >= 143 && c.x <= 148
@@ -813,12 +845,12 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[10].needed);
+    expectCleared(LEVELS[10], outcome);
   });
 
   it('12: umbrellas into the pit, then a basher opens the right wall', () => {
     let bashed = false;
-    const saved = playLevel(LEVELS[11], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[11], ({ critters, assign }) => {
       for (const c of critters) {
         if (!c.floater && c.y < 160 && (c.state === 'walker' || c.state === 'faller')) {
           assign(c, 'floater');
@@ -831,12 +863,12 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'basher')) bashed = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[11].needed);
+    expectCleared(LEVELS[11], outcome);
   });
 
   it('13: two hatches — both crowds simply walk to the shared middle door', () => {
-    const saved = playLevel(LEVELS[12], () => {});
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[12].needed);
+    const outcome = playLevel(LEVELS[12], () => {});
+    expectCleared(LEVELS[12], outcome);
   });
 
   // Timed levels are proven at interval 80 — the shipped release-slider
@@ -845,7 +877,7 @@ describe('levels — solvable playthroughs', () => {
   const TRICKLE = { interval: 80 };
 
   it('14: beats the clock at the default trickle — a basher opens the wall in time', () => {
-    const saved = playLevel(
+    const outcome = playLevel(
       LEVELS[13],
       ({ critters, bmp, assign }) => {
         if (!bmp.solid(156, 158)) return; // tunnel already open
@@ -857,35 +889,36 @@ describe('levels — solvable playthroughs', () => {
       },
       TRICKLE
     );
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[13].needed);
+    expectCleared(LEVELS[13], outcome);
   });
 
   it('15: digs through the earth strip because the steel floor resists', () => {
     let dug = false;
-    const saved = playLevel(LEVELS[14], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[14], ({ critters, assign }) => {
       if (dug) return;
       // Only the strip beyond x=240 is earth; a dig there opens the way down.
       const w = critters.find(c => c.state === 'walker' && c.y === 119 && c.x >= 250 && c.x <= 290);
       if (w && assign(w, 'digger')) dug = true;
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[14].needed);
+    expectCleared(LEVELS[14], outcome);
   });
 
   it('15: proves the steel floor is a real wall — digging it saves no one', () => {
     // The counterfactual behind the hint: a digger dropped on the steel half
     // gives up on the spot, so nobody ever reaches the exit chamber.
     let dug = false;
-    const saved = playLevel(LEVELS[14], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[14], ({ critters, assign }) => {
       if (dug) return;
       const w = critters.find(c => c.state === 'walker' && c.y === 119 && c.x >= 100 && c.x <= 200);
       if (w && assign(w, 'digger')) dug = true;
     });
-    expect(saved).toBe(0);
+    expect(outcome.endedAt).not.toBeNull();
+    expect(outcome.saved).toBe(0);
   });
 
   it('16: ramps over the steel wall that bashers cannot dent', () => {
     let built = false;
-    const saved = playLevel(LEVELS[15], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[15], ({ critters, assign }) => {
       if (built) return;
       // The ramp must top the 8px steel stub before reaching it (x0 ≤ 142)
       // and still have bricks left to arrive there (x0 ≥ 138).
@@ -894,20 +927,21 @@ describe('levels — solvable playthroughs', () => {
       );
       if (w && assign(w, 'builder')) built = true;
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[15].needed);
+    expectCleared(LEVELS[15], outcome);
   });
 
   it('16: proves the steel wall is basher-proof — bashing alone saves no one', () => {
-    const saved = playLevel(LEVELS[15], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[15], ({ critters, assign }) => {
       for (const c of critters) {
         if (c.state === 'walker' && c.dir === 1 && c.x >= 144 && c.x <= 148) assign(c, 'basher');
       }
     });
-    expect(saved).toBe(0);
+    expect(outcome.endedAt).not.toBeNull();
+    expect(outcome.saved).toBe(0);
   });
 
   it('17: umbrellas for the high stream only — the low stream walks home', () => {
-    const saved = playLevel(LEVELS[16], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[16], ({ critters, assign }) => {
       for (const c of critters) {
         // Everything above y=100 came out of the high hatch and faces the
         // fatal cliff drop; the ground-level stream never needs a floater.
@@ -916,36 +950,37 @@ describe('levels — solvable playthroughs', () => {
         }
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[16].needed);
+    expectCleared(LEVELS[16], outcome);
   });
 
   it('18: a digger opens the earth seam that the steel floor denies', () => {
     let dug = false;
-    const saved = playLevel(LEVELS[17], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[17], ({ critters, assign }) => {
       if (dug) return;
       // Only the strip left of x=90 is earth; a dig there opens the way down,
       // and the swathe stays clear of the steel seam at x=90.
       const w = critters.find(c => c.state === 'walker' && c.y === 123 && c.x >= 30 && c.x <= 80);
       if (w && assign(w, 'digger')) dug = true;
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[17].needed);
+    expectCleared(LEVELS[17], outcome);
   });
 
   it('18: proves the steel floor is a real wall — digging it saves no one', () => {
     // The counterfactual behind the hint: a digger on the steel half gives up on
     // the spot, so nobody ever reaches the exit chamber below.
     let dug = false;
-    const saved = playLevel(LEVELS[17], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[17], ({ critters, assign }) => {
       if (dug) return;
       const w = critters.find(c => c.state === 'walker' && c.y === 123 && c.x >= 120 && c.x <= 220);
       if (w && assign(w, 'digger')) dug = true;
     });
-    expect(saved).toBe(0);
+    expect(outcome.endedAt).not.toBeNull();
+    expect(outcome.saved).toBe(0);
   });
 
   it('19: bridges the gap for the left crowd while the right crowd strolls in, on the clock', () => {
     let built = false;
-    const saved = playLevel(
+    const outcome = playLevel(
       LEVELS[18],
       ({ critters, assign }) => {
         if (built) return;
@@ -958,13 +993,13 @@ describe('levels — solvable playthroughs', () => {
       },
       TRICKLE
     );
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[18].needed);
+    expectCleared(LEVELS[18], outcome);
   });
 
   it('20: float down, bash through the wall, and build up to the door', () => {
     let bashed = false;
     let built = false;
-    const saved = playLevel(LEVELS[19], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[19], ({ critters, assign }) => {
       // Umbrellas anywhere above the shelf; they persist for the later hops.
       for (const c of critters) {
         if (!c.floater && c.y < 110 && (c.state === 'walker' || c.state === 'faller')) {
@@ -986,12 +1021,12 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[19].needed);
+    expectCleared(LEVELS[19], outcome);
   });
 
   it('21: umbrellas into the pan, then a digger drops the crowd home on the clock', () => {
     let dug = false;
-    const saved = playLevel(
+    const outcome = playLevel(
       LEVELS[20],
       ({ critters, assign }) => {
         // Pop an umbrella on everything still high so the long drop never splats.
@@ -1010,12 +1045,12 @@ describe('levels — solvable playthroughs', () => {
       },
       TRICKLE
     );
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[20].needed);
+    expectCleared(LEVELS[20], outcome);
   });
 
   it('22: one builder ramps the far bank of the valley and the crowd climbs out', () => {
     let built = false;
-    const saved = playLevel(LEVELS[21], ({ critters, assign }) => {
+    const outcome = playLevel(LEVELS[21], ({ critters, assign }) => {
       if (built) return;
       // The valley floor sits a full staircase below the far plateau; start the
       // ramp a staircase-width before the plateau edge so its top meets the rim.
@@ -1024,13 +1059,13 @@ describe('levels — solvable playthroughs', () => {
       );
       if (w && assign(w, 'builder')) built = true;
     });
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[21].needed);
+    expectCleared(LEVELS[21], outcome);
   });
 
   it('23: a second builder takes over at the first bridge tip to span the gorge', () => {
     let first = false;
     let second = false;
-    const saved = playLevel(
+    const outcome = playLevel(
       LEVELS[22],
       ({ critters, assign }) => {
         // First bridge starts at the near bank's edge.
@@ -1051,13 +1086,13 @@ describe('levels — solvable playthroughs', () => {
       },
       { interval: 48 }
     );
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[22].needed);
+    expectCleared(LEVELS[22], outcome);
   });
 
   it('24: the gauntlet — bash the earth wall left, build over the steel right, beat the clock', () => {
     let bashed = false;
     let built = false;
-    const saved = playLevel(
+    const outcome = playLevel(
       LEVELS[23],
       ({ critters, assign }) => {
         if (!bashed) {
@@ -1079,13 +1114,13 @@ describe('levels — solvable playthroughs', () => {
       },
       TRICKLE
     );
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[23].needed);
+    expectCleared(LEVELS[23], outcome);
   });
 
   it('25: the harder gauntlet — bash left, ramp over the steel right, beat the clock', () => {
     let bashed = false;
     let built = false;
-    const saved = playLevel(
+    const outcome = playLevel(
       LEVELS[24],
       ({ critters, assign }) => {
         if (!bashed) {
@@ -1103,7 +1138,94 @@ describe('levels — solvable playthroughs', () => {
       },
       TRICKLE
     );
-    expect(saved).toBeGreaterThanOrEqual(LEVELS[24].needed);
+    expectCleared(LEVELS[24], outcome);
+  });
+});
+
+describe('levels — every level resolves', () => {
+  // A crowd can run out of ways home without anyone dying: a walker pacing a
+  // pocket it cannot climb out of is neither dead nor a blocker, so the "all
+  // out, only blockers left" end condition never matches it. These are the
+  // cases that used to run forever, leaving the Nuke button as the only way
+  // out of a level the instructions never mention.
+
+  it('2: an untouched level still ends — the crowd bounces until the stall cap', () => {
+    // The issue's headline repro: level 2 needs a basher, so with no player
+    // input at all every critter paces between the left wall and the pillar.
+    const outcome = playLevel(LEVELS[1], () => {});
+    expect(outcome.endedAt).toBe(STALL_TIME_LIMIT);
+    expect(outcome.resolved).toBe(false);
+    expect(outcome.saved).toBe(0);
+  });
+
+  it('no level runs forever when the player never touches it', () => {
+    for (const level of LEVELS) {
+      const outcome = playLevel(level, () => {});
+      expect(outcome.endedAt).not.toBeNull();
+      expect(outcome.endedAt).toBeLessThanOrEqual(levelTimeLimit(level));
+    }
+  });
+
+  it('10 and 20: a stranded critter no longer hangs a level that was already won', () => {
+    // Both levels are cleared by the builder placements the playthrough tests
+    // above aim at, and both leave one critter pacing an 8px pocket afterwards
+    // — quota met, level never over. If a future terrain or skill change frees
+    // that critter, `resolved` flips to true here and this expectation should
+    // be updated rather than removed: the guarantee under test is that the
+    // level ends either way.
+    let dug = false;
+    let built10 = false;
+    const ten = playLevel(LEVELS[9], ({ critters, assign }) => {
+      if (!dug) {
+        const w = critters.find(c => c.state === 'walker' && c.y === 139 && c.x >= 100 && c.x <= 160);
+        if (w && assign(w, 'digger')) dug = true;
+      }
+      if (dug && !built10) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 187 && c.x >= 224 && c.x <= 228
+        );
+        if (w && assign(w, 'builder')) built10 = true;
+      }
+    });
+    expect(ten.saved).toBeGreaterThanOrEqual(LEVELS[9].needed);
+    expect(ten.resolved).toBe(false);
+    expect(ten.endedAt).toBe(STALL_TIME_LIMIT);
+
+    let bashed = false;
+    let built20 = false;
+    const twenty = playLevel(LEVELS[19], ({ critters, assign }) => {
+      for (const c of critters) {
+        if (!c.floater && c.y < 110 && (c.state === 'walker' || c.state === 'faller')) {
+          assign(c, 'floater');
+        }
+      }
+      if (!bashed) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 233 && c.x <= 237
+        );
+        if (w && assign(w, 'basher')) bashed = true;
+      }
+      if (bashed && !built20) {
+        const w = critters.find(
+          c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 264 && c.x <= 268
+        );
+        if (w && assign(w, 'builder')) built20 = true;
+      }
+    });
+    expect(twenty.saved).toBeGreaterThanOrEqual(LEVELS[19].needed);
+    expect(twenty.resolved).toBe(false);
+    expect(twenty.endedAt).toBe(STALL_TIME_LIMIT);
+  });
+
+  it('a timed level still ends on its own clock, not the stall cap', () => {
+    // The fallback must never pre-empt an authored `timeLimit`: level 14's
+    // clock (2,700) is the shorter of the two and is what a stalled run there
+    // must hit.
+    const timed = LEVELS[13];
+    expect(timed.timeLimit).toBeDefined();
+    expect(levelTimeLimit(timed)).toBe(timed.timeLimit);
+    const outcome = playLevel(timed, () => {}, { interval: 80 });
+    expect(outcome.endedAt).toBe(timed.timeLimit);
   });
 });
 

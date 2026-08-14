@@ -34,6 +34,7 @@ import {
   buildLevel,
   atExit,
   levelHatches,
+  levelTimeLimit,
   LEVELS,
   LEVEL_W,
   LEVEL_H,
@@ -152,6 +153,7 @@ export function initLemmingsGame(): void {
     complete: root.dataset.tComplete || 'Level Complete!',
     failed: root.dataset.tFailed || 'Not Enough Rescued',
     timeUp: root.dataset.tTimeUp || 'Time Up!',
+    stalled: root.dataset.tStalled || 'Rescue Stalled',
     victory: root.dataset.tVictory || 'Every Critter Home!',
     completeDesc: root.dataset.tCompleteDesc || 'You rescued {n} of {m}!',
     failedDesc: root.dataset.tFailedDesc || 'Only {n} of {m} made it. Try again!',
@@ -538,12 +540,15 @@ export function initLemmingsGame(): void {
   }
 
   /**
-   * Ends the level. `timedOut` is the caller's verdict on *why* it ended (the
+   * Ends the level. `endedBy` is the caller's verdict on *why* it ended (a
    * clock, rather than the crowd resolving) — finishLevel never re-derives it
    * from tick state, so a quota failure that merely coincides with the final
-   * tick is not mislabelled as a timeout.
+   * tick is not mislabelled as a timeout. `'clock'` is a level's authored
+   * `timeLimit`; `'stalled'` is the fallback cap an untimed level runs under,
+   * which is not a race the player lost but a crowd that stopped making
+   * progress, so it gets its own framing.
    */
-  function finishLevel(timedOut = false) {
+  function finishLevel(endedBy: 'clock' | 'stalled' | null = null) {
     if (phase === 'result') return;
     phase = 'result';
     syncToolbar();
@@ -583,9 +588,12 @@ export function initLemmingsGame(): void {
     } else if (won) {
       emoji = '🎉';
       title = strings.complete;
-    } else if (timedOut) {
+    } else if (endedBy === 'clock') {
       emoji = '⏰';
       title = strings.timeUp;
+    } else if (endedBy === 'stalled') {
+      emoji = '🧱';
+      title = strings.stalled;
     }
     resultEmoji.textContent = emoji;
     resultTitle.textContent = title;
@@ -681,14 +689,19 @@ export function initLemmingsGame(): void {
 
     // The level ends once everyone has emerged and no critter can still be
     // rescued: any stragglers are blockers, which never leave on their own and
-    // — with no one else left to dig them free — are stuck for good. A timed
-    // level also ends the moment its clock runs out, stranding whoever is
-    // still in the field — except during a nuke: the player already conceded,
-    // so the chain plays out and the result reads as the failure it is rather
-    // than a timeout coaching them to speed up.
-    const timedOut = !nuking && def.timeLimit !== undefined && levelTicks >= def.timeLimit;
+    // — with no one else left to dig them free — are stuck for good. A level
+    // also ends the moment its clock runs out, stranding whoever is still in
+    // the field — except during a nuke: the player already conceded, so the
+    // chain plays out and the result reads as the failure it is rather than a
+    // timeout coaching them to speed up. Every level runs under a clock, its
+    // own or the STALL_TIME_LIMIT fallback: a walker that can no longer reach
+    // the exit is neither dead nor a blocker, so a crowd out of options never
+    // satisfies `done` and, uncapped, the level would run forever.
+    const outOfTime = !nuking && levelTicks >= levelTimeLimit(def);
     const done = spawned >= def.spawnCount && critters.every(c => c.state === 'blocker');
-    if (done || timedOut) finishLevel(timedOut && !done);
+    if (done || outOfTime) {
+      finishLevel(done ? null : def.timeLimit !== undefined ? 'clock' : 'stalled');
+    }
   }
 
   // --- Rendering ---
@@ -1014,6 +1027,9 @@ export function initLemmingsGame(): void {
     vignetteLayer.draw(ctx);
 
     // Timed levels wear their clock top-centre, flashing red for the last 10s.
+    // Deliberately the authored `timeLimit`, not `levelTimeLimit`: the stall
+    // fallback every untimed level runs under is a safety net, not a race, and
+    // showing it would turn every level into a timed one.
     if (phase === 'playing' && def.timeLimit !== undefined) {
       const remaining = Math.max(0, def.timeLimit - levelTicks);
       const secs = Math.ceil(remaining / 60);

@@ -30,10 +30,11 @@ import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
 
 // The fixture now carries a real high-score panel, so the board these tests
 // mount is the real scoreboard rather than the no-op one a missing panel
-// yields. Its network seam is stubbed: the assertions here are about which
-// run reaches it, not what the server does with it.
+// yields. Its two network seams are stubbed: the assertions here are about
+// which run reaches the board, not what the server does with it. (The module's
+// own `canSubmit` gate is private to it, so stubbing the two exports replaces
+// that decision wholesale rather than configuring it.)
 vi.mock('../../src/games/engine/globalScores', () => ({
-  canSubmit: () => true,
   fetchGlobal: vi.fn(async () => null),
   submitGlobal: vi.fn(async () => ({ status: 'failed' }))
 }));

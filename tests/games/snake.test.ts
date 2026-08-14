@@ -498,6 +498,8 @@ describe('the arena ladder gives warning before a wall sets', () => {
     let gracesRestarted = 0;
     /** Walls that set in the cell the head was one step from entering. */
     let aheadOfHead = 0;
+    /** Walls that set after having been covered — the restart does not starve. */
+    let setAfterCover = 0;
     // Violations are counted rather than asserted per step: 1,200 runs is a
     // few hundred thousand steps, and one assertion each dominates the clock.
     const unwarned: string[] = [];
@@ -508,15 +510,22 @@ describe('the arena ladder gives warning before a wall sets', () => {
       const random = seededRandom(run * 7919 + 13);
       const state = createSnakeState(random);
       /**
-       * *Consecutive* steps a cell has ghosted in the clear — the warning the
-       * player can actually act on, since the ghost is drawn under the snake
-       * and a covered one is showing nobody anything. Counted the way the
-       * rules count it: a cell claimed before this step gets one step of grace
-       * off this step only when nothing stood on it, and a step spent covered
-       * does not merely fail to age it, it puts the cell back to owing its
-       * full grace from the moment it is visible again.
+       * *Consecutive* frames a cell has been drawn as a ghost the player could
+       * see — which is what the grace promises, and not the same thing as the
+       * countdown's own decrements. Counted from the rendered state after each
+       * step rather than from the cells pending before it, for two reasons that
+       * both hid a step's worth of warning. A cell this step's rung claims is
+       * on screen as a ghost the moment the step ends, so that frame is the
+       * first of its grace even though no countdown has visited it yet. And the
+       * step that turns a cell solid renders it as a wall, not a ghost, so it
+       * must not be credited as warning: the count stops at the last frame the
+       * cell was still pending. Add those two together on the old counter and
+       * they cancelled, which is exactly how it reported four for a vacated
+       * cell the player saw ghost three times.
        */
       const ghostAge = new Map<number, number>();
+      /** Claimed cells that have been hidden at least once since they were claimed. */
+      const wasCovered = new Set<number>();
 
       for (let n = 0; n < 4000 && state.alive; n++) {
         playNovice(state, random);
@@ -525,23 +534,20 @@ describe('the arena ladder gives warning before a wall sets', () => {
         // here even though nothing ever tracked it as pending.
         const wallsBefore = new Set(state.walls);
         const arenaBefore = state.arena;
-        // The cells whose countdown this step will visit. Cells the step's own
-        // rung claims are deliberately not among them: they are claimed after
-        // the countdown runs, so this step is none of their grace.
-        const claimedBefore = [...state.pendingWalls.keys()];
         step(state, random);
         steps++;
         if (!state.alive) break;
         if (state.arena > arenaBefore) rungs++;
 
-        // Nothing between the countdown and here moves the snake or the bonus,
-        // and neither a respawned apple nor a fresh bonus may land on a claimed
-        // cell, so occupancy read now is occupancy as the countdown saw it.
-        for (const i of claimedBefore) {
+        // Read off the frame this step just produced: every cell still claimed
+        // is drawn, and `game.ts` draws the ghosts under the food, the bonus
+        // and the snake, so a covered one shows the player nothing at all.
+        for (const i of state.pendingWalls.keys()) {
           if (occupiedCell(state, i)) {
             heldWhileOccupied++;
             if ((ghostAge.get(i) ?? 0) > 0) gracesRestarted++;
             ghostAge.set(i, 0);
+            wasCovered.add(i);
             continue;
           }
           ghostAge.set(i, (ghostAge.get(i) ?? 0) + 1);
@@ -560,11 +566,15 @@ describe('the arena ladder gives warning before a wall sets', () => {
           const age = ghostAge.get(i) ?? 0;
           if (age < WALL_GRACE_STEPS) unwarned.push(`run ${run} step ${n} cell ${i} age ${age}`);
           if (i === ahead) aheadOfHead++;
+          if (wasCovered.has(i)) setAfterCover++;
           if (state.snake.some(s => cellIndex(s.x, s.y) === i)) {
             underSnake.push(`run ${run} step ${n} cell ${i}`);
           }
         }
-        for (const i of fresh) ghostAge.delete(i);
+        for (const i of fresh) {
+          ghostAge.delete(i);
+          wasCovered.delete(i);
+        }
 
         // Checked where the walls *land*, not where the rung advances: with a
         // grace in front of every claim, a rung's cells set several steps
@@ -596,6 +606,11 @@ describe('the arena ladder gives warning before a wall sets', () => {
     // and merely pausing it would assert exactly the same thing.
     expect(heldWhileOccupied).toBeGreaterThan(0);
     expect(gracesRestarted).toBeGreaterThan(0);
+    // A restart is a delay, not a reprieve: cells that spent time hidden do
+    // still set once they have been left alone for the grace. Without this the
+    // frame count above could pass by never promoting a covered cell at all —
+    // and that is the path whose count was one short.
+    expect(setAfterCover).toBeGreaterThan(0);
     // The audit's own headline case does occur — walls do set right in front
     // of the head — but every one of them ghosted there first.
     expect(aheadOfHead).toBeGreaterThan(0);

@@ -39,8 +39,10 @@ import {
   persuadedCivilians,
   vipOf,
   escorting,
+  vipAtExtraction,
   type World
 } from './sim';
+import { spreadTargets } from './pathfind';
 import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus, type MissionSpec } from './missions';
 
 const VIEW: IsoView = { halfW: 16, halfH: 8, originX: MAP_H * 16, originY: 70 };
@@ -48,6 +50,12 @@ const CANVAS_W = (MAP_W + MAP_H) * VIEW.halfW;
 const CANVAS_H = (MAP_W + MAP_H) * VIEW.halfH + VIEW.originY + 12;
 const BOOST_DURATION = 4;
 const BOOST_COOLDOWN = 14;
+/**
+ * How close a *player-driven* unit must get to the pad to count as extracted.
+ * Only agents are player-driven: the escort asset trails on `follow` and can
+ * never come this close to a tile the squad occupies, so its own delivery test
+ * is `vipAtExtraction` in sim.ts and is written against FOLLOW_STOP_DISTANCE.
+ */
 const EXTRACTION_RADIUS = 1.5;
 
 const FACADES = ['#313853', '#3a2e4c', '#2b3c4c', '#3d3446'];
@@ -237,6 +245,11 @@ export function initSyndicateGame(): void {
   let missionIdx = 0;
   let spec: MissionSpec = MISSIONS[0];
   let extraction = -1;
+  // Where the squad lands when ordered to the pad — the same fan-out
+  // `commandMove` produces. The escort's delivery test measures the asset
+  // against these tiles, so it is rolled once per mission beside `extraction`
+  // rather than re-walked every tick.
+  let extractionSpots: number[] = [];
   let money = 0;
   const board = initScoreboard(document.getElementById('highscores'));
   let agentWeapons: WeaponId[] = Array(SQUAD_SIZE).fill('pistol');
@@ -360,6 +373,7 @@ export function initSyndicateGame(): void {
     const setup = spawnMission(spec, tiles, agentWeapons, Math.random);
     world = createWorld(tiles, setup.units, Math.random);
     extraction = setup.extraction;
+    extractionSpots = spreadTargets(tiles, extraction, SQUAD_SIZE);
     selected = new Set([0, 1, 2, 3]);
     boostCooldown = 0;
     moveMarker = null;
@@ -469,20 +483,6 @@ export function initSyndicateGame(): void {
     return livingAgents(world).some(a => Math.hypot(a.x - ex, a.y - ey) <= EXTRACTION_RADIUS);
   }
 
-  /**
-   * The escort's win test. Deliberately about the asset and not the squad: an
-   * agent alone on the pad must not extract a mission whose whole point is
-   * what it brought with it.
-   */
-  function vipAtExtraction(): boolean {
-    if (extraction < 0) return false;
-    const vip = vipOf(world);
-    if (!vip || !vip.alive || !escorting(vip)) return false;
-    const ex = (extraction % MAP_W) + 0.5;
-    const ey = Math.floor(extraction / MAP_W) + 0.5;
-    return Math.hypot(vip.x - ex, vip.y - ey) <= EXTRACTION_RADIUS;
-  }
-
   function update(dt: number) {
     clock += dt;
     fx.update(dt);
@@ -544,7 +544,7 @@ export function initSyndicateGame(): void {
       persuadedCivilians(world),
       atExtraction,
       holdProgress,
-      vipAtExtraction()
+      vipAtExtraction(world, extractionSpots)
     );
     if (status === 'won') completeMission();
     else if (status === 'lost') endCampaign(false);
@@ -1165,7 +1165,7 @@ export function initSyndicateGame(): void {
       spec.objective === 'secure'
         ? agentAtExtraction()
         : spec.objective === 'escort'
-          ? vipAtExtraction()
+          ? vipAtExtraction(world, extractionSpots)
           : persuadedCivilians(world) >= spec.persuadeQuota;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 4);
     const colour = open ? '#4ade80' : '#94a3b8';

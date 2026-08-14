@@ -23,6 +23,15 @@ export const SIGHT_RANGE = 7;
 /** Adrenaline: squad speed multiplier and weapon cooldown multiplier. */
 export const BOOST_SPEED = 1.6;
 export const BOOST_FIRE = 0.6;
+/**
+ * How close a follower (a persuaded mind, or the escort asset in tow) settles
+ * behind its nearest agent, in tiles. It stops here and never closes further,
+ * so this is a floor on where a followed unit can come to rest — any test that
+ * asks such a unit to reach a spot has to be written against this distance.
+ * Exported for exactly that reason: the escort's delivery test reads it rather
+ * than carrying a second copy that can drift out of step with this one.
+ */
+export const FOLLOW_STOP_DISTANCE = 1.6;
 
 export interface Shot {
   fx: number;
@@ -77,6 +86,29 @@ export const vipOf = (world: World): Unit | null =>
 /** True once an agent has reached the asset and it is trailing the squad. */
 export const escorting = (unit: Unit): boolean =>
   unit.kind === 'vip' && unit.faction === 'player';
+
+/**
+ * The escort's delivery test: has the asset been walked out?
+ *
+ * Deliberately about the asset and not the squad — an agent alone on the pad
+ * must not extract a mission whose whole point is what it brought with it.
+ * But it is measured against `spots`, the tiles the squad itself lands on when
+ * ordered to the pad, rather than against the pad's own centre, because the
+ * asset trails on `follow`: it parks FOLLOW_STOP_DISTANCE short of its nearest
+ * agent and never closes further. Asking it to stand on the pad within the
+ * squad's own extraction radius is asking for geometry the follow routine
+ * cannot produce, and that is precisely how this mission shipped unwinnable.
+ * An asset resting behind an agent that reached the landing zone is home.
+ */
+export function vipAtExtraction(world: World, spots: number[]): boolean {
+  const vip = vipOf(world);
+  if (!vip || !vip.alive || !escorting(vip)) return false;
+  return spots.some(spot => {
+    const sx = (spot % MAP_W) + 0.5;
+    const sy = Math.floor(spot / MAP_W) + 0.5;
+    return Math.hypot(vip.x - sx, vip.y - sy) <= FOLLOW_STOP_DISTANCE;
+  });
+}
 
 const tileOf = (u: Unit): number => idx(Math.floor(u.x), Math.floor(u.y));
 
@@ -163,7 +195,7 @@ function follow(world: World, unit: Unit, agents: Unit[]): void {
     }
   }
   if (!leader) return;
-  if (best <= 1.6) {
+  if (best <= FOLLOW_STOP_DISTANCE) {
     unit.path = [];
     return;
   }

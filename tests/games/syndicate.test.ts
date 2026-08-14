@@ -21,7 +21,12 @@ import {
   stepWorld,
   commandMove,
   followerCount,
-  persuadedCivilians
+  persuadedCivilians,
+  livingAgents,
+  vipOf,
+  escorting,
+  vipAtExtraction,
+  FOLLOW_STOP_DISTANCE
 } from '../../src/games/syndicate/sim';
 import {
   MISSIONS,
@@ -260,11 +265,54 @@ describe('simulation', () => {
     expect(followerCount(world)).toBe(0);
 
     // Walk the agent away; the asset closes the gap on the shared follow
-    // routine rather than standing where the contract left it.
+    // routine rather than standing where the contract left it. The tolerance
+    // is the exported stop distance itself, not a round number near it: a
+    // loose "less than 2" here is what let mission 10 ship with a delivery
+    // test the follow routine could never satisfy.
     commandMove(world, idx(24, 10), [agent]);
     for (let step = 0; step < 600; step++) stepWorld(world, 1 / 60);
-    expect(Math.hypot(agent.x - vip.x, agent.y - vip.y)).toBeLessThan(2);
+    expect(Math.hypot(agent.x - vip.x, agent.y - vip.y)).toBeLessThanOrEqual(FOLLOW_STOP_DISTANCE);
     expect(vip.x).toBeGreaterThan(20);
+  });
+
+  it('measures escort delivery against where `follow` can actually park the asset', () => {
+    // The two numbers that must never drift apart again. `follow` stops the
+    // asset FOLLOW_STOP_DISTANCE behind its nearest agent and never closes
+    // further, so the delivery test reads that same exported constant and
+    // measures against the tiles the squad lands on rather than the pad's
+    // centre — which the asset cannot reach.
+    const tiles = openMap();
+    // One agent parked on the landing-zone tile, the asset in tow well down
+    // the street — the end state of an escort, in miniature.
+    const agent = createUnit(1, 'agent', idx(20, 20), MAP_W, null);
+    const vip = createUnit(2, 'vip', idx(28, 20), MAP_W);
+    vip.faction = 'player';
+    const world = createWorld(tiles, [agent, vip], seededRandom());
+    const spots = [idx(20, 20)];
+    expect(vipAtExtraction(world, spots)).toBe(false);
+
+    for (let step = 0; step < 600; step++) stepWorld(world, 1 / 60);
+
+    // Where the follow routine leaves it: short of the tile, and short by more
+    // than the squad's own 1.5-tile extraction radius, which is exactly why a
+    // delivery test written against the pad's centre could never pass.
+    const rest = Math.hypot(vip.x - 20.5, vip.y - 20.5);
+    expect(rest).toBeGreaterThan(1.5);
+    expect(rest).toBeLessThanOrEqual(FOLLOW_STOP_DISTANCE);
+    expect(vipAtExtraction(world, spots)).toBe(true);
+
+    // An asset that is not in tow is not delivered, however close it stands.
+    vip.faction = 'neutral';
+    expect(vipAtExtraction(world, spots)).toBe(false);
+    vip.faction = 'player';
+    // Nor a dead one, wherever its body lies.
+    vip.alive = false;
+    expect(vipAtExtraction(world, spots)).toBe(false);
+    vip.alive = true;
+    // Nor one further out than following can explain.
+    vip.x = 20.5 + FOLLOW_STOP_DISTANCE + 1;
+    vip.y = 20.5;
+    expect(vipAtExtraction(world, spots)).toBe(false);
   });
 
   it('leaves an uncollected asset where the contract pinned it', () => {
@@ -447,6 +495,57 @@ describe('missions', () => {
       // A dead asset ends the contract wherever the squad happens to be.
       vip.alive = false;
       expect(missionStatus(spec, setup.units, 0, true, 0, true)).toBe('lost');
+    }
+  });
+
+  it('walks the escort finale home: the asset can be delivered and the mission won', () => {
+    // The regression that matters for mission 10, which shipped unwinnable
+    // (issue #255): the asset trails on `follow`, which parks it
+    // FOLLOW_STOP_DISTANCE behind its nearest agent, while the delivery test
+    // demanded it stand on the pad within the squad's own tighter extraction
+    // radius. Nothing a player could do closed that gap. So this asserts the
+    // outcome — the mission reaching 'won' — and not a distance tolerance,
+    // because it was a tolerance that let the bug through.
+    //
+    // Played the way a player plays it: order the squad onto the asset to
+    // collect it, then order it onto the pad, re-issuing the order each
+    // second. Hostiles are stripped because what is under test is whether the
+    // escort geometry can ever close, not whether a fixed policy survives the
+    // firefight; several city seeds, since the pad's fan-out depends on which
+    // tiles around it happen to be walkable.
+    const spec = MISSIONS[9];
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const tiles = generateCity(seededRandom(seed * 7919));
+      const setup = spawnMission(spec, tiles, ['uzi', 'uzi', 'uzi', 'uzi'], seededRandom(seed * 104729));
+      const world = createWorld(
+        tiles,
+        setup.units.filter(u => u.faction !== 'hostile'),
+        seededRandom(seed)
+      );
+      const spots = spreadTargets(tiles, setup.extraction, SQUAD_SIZE);
+      const vip = vipOf(world)!;
+      const status = () => missionStatus(spec, world.units, 0, false, 0, vipAtExtraction(world, spots));
+
+      // Leg one — fight in and collect it.
+      for (let step = 0; step < 60 * 120 && !escorting(vip); step++) {
+        if (step % 60 === 0) {
+          commandMove(world, idx(Math.floor(vip.x), Math.floor(vip.y)), livingAgents(world));
+        }
+        stepWorld(world, 1 / 60);
+      }
+      expect(escorting(vip)).toBe(true);
+      // Collected but nowhere near the pad: the contract is not done yet.
+      expect(status()).toBe('ongoing');
+
+      // Leg two — walk it out.
+      let won = false;
+      for (let step = 0; step < 60 * 180 && !won; step++) {
+        if (step % 60 === 0) commandMove(world, setup.extraction, livingAgents(world));
+        stepWorld(world, 1 / 60);
+        won = status() === 'won';
+      }
+      expect(won).toBe(true);
+      expect(vip.alive).toBe(true);
     }
   });
 

@@ -302,8 +302,8 @@ describe('game loop — a level always ends', () => {
     // The regression: a player who pens the surplus crowd and then reads the
     // terrain for a while is playing, not stalling. Closing the level under
     // them takes every remaining rescue and the perfect bonus with it, so the
-    // frozen field alone is not enough — a blocker and a pair of umbrellas are
-    // still in hand here, and the level must wait for them.
+    // frozen field alone is not enough — a blocker, a pair of umbrellas and the
+    // bomber reserve are all still in hand here, and the level must wait.
     const ticks = winAndPenLevel13();
     step((STUCK_TICKS * 3) / TICKS_PER_FRAME);
     expect(resultShown()).toBe(false);

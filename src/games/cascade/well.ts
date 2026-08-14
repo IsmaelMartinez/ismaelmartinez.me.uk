@@ -76,8 +76,16 @@ export interface ClearStep {
  * finish a row mid-fall and keep the chain going (this is what lifts chains
  * past ×2; the old instant-settle form capped them at 2). The interactive run
  * mirrors this loop with a timer per flash/settle so the cascade is watchable.
+ *
+ * A well with no full row is left exactly as it is: no clear is pending, so
+ * there is no landslide to run. Without that entry check the settle fires
+ * anyway and collapses every floating cell in the well, scoring whatever rows
+ * that collapse happens to complete — points nothing actually earned, and a
+ * board the player never saw. The check lives here rather than at each call
+ * site so the invariant holds for every caller by construction.
  */
 export function resolveClears(well: Well): ClearStep[] {
+  if (fullRows(well).length === 0) return [];
   const steps: ClearStep[] = [];
   for (;;) {
     const rows = fullRows(well);

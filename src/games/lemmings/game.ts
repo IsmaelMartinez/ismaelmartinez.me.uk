@@ -420,7 +420,7 @@ export function initLemmingsGame(): void {
     levelTicks = 0;
     stall.reset();
     concededAt = null;
-    stuckHint.hidden = true;
+    setStuckHint(false);
     // The bomber (pick-one blast) is the single-critter counterpart to the
     // always-available nuke, so every level grants a small reserve rather than
     // authoring it into each hand-tuned stock — `levelStock` deals that hand,
@@ -436,6 +436,27 @@ export function initLemmingsGame(): void {
     levelHint.hidden = !hint;
     syncHud();
     syncToolbar();
+  }
+
+  /**
+   * Raises or withdraws the standstill notice.
+   *
+   * The wording is written into the element and cleared out of it again, rather
+   * than sitting there permanently behind a `hidden` attribute that comes and
+   * goes. `role="status"` makes this a live region, and assistive technology
+   * announces a change to a region's *contents*; an element whose text never
+   * changes is not a change, so a hint driven by `hidden` alone could go up on
+   * screen and never be spoken. The locale's own string still comes from
+   * `useTranslations` at build time, parked in `data-hint` until it is needed,
+   * and the page hides the element while it is empty.
+   *
+   * The equality guard matters as much as the write: `update` calls this on
+   * every one of the sixty ticks a second, and rewriting the same sentence
+   * would re-announce it each time.
+   */
+  function setStuckHint(on: boolean) {
+    const text = on ? (stuckHint.dataset.hint ?? '') : '';
+    if (stuckHint.textContent !== text) stuckHint.textContent = text;
   }
 
   function syncHud() {
@@ -533,19 +554,10 @@ export function initLemmingsGame(): void {
     if (phase !== 'playing' || nuking) return;
     nuking = true;
     nukeTimer = 0;
-    concededAt = billedTicks();
-    stuckHint.hidden = true;
+    concededAt = levelTicks - stall.idleTicks;
+    setStuckHint(false);
     spawned = def.spawnCount; // no more critters emerge
     audio.playSfx('explosion');
-  }
-
-  /**
-   * The tick the level is scored on: the last one on which the field actually
-   * changed. Time spent staring at a motionless field is not time the player
-   * played, and charging it would quietly eat the speed bonus.
-   */
-  function billedTicks(): number {
-    return levelTicks - stall.idleTicks;
   }
 
   /**
@@ -575,15 +587,20 @@ export function initLemmingsGame(): void {
    * re-derives it from tick state, so a quota failure that merely coincides with
    * the final tick is not mislabelled as a timeout.
    *
-   * The level is scored on `billedTicks`, or on the tick the player conceded
-   * when they did: either way the score is taken where the field last moved, not
-   * where the level happened to close.
+   * Billing, per ending. Both of the endings the *level* reaches are scored on
+   * the ticks that genuinely elapsed: a crowd that resolves itself is billed for
+   * the run it took, and an authored clock running out is billed for the whole
+   * clock — which is what a countdown the player watched expiring has to cost,
+   * and pays no speed bonus on a level whose par the clock outlasts. Only the
+   * one ending the *player* reaches is scored anywhere else: conceding freezes
+   * the bill at the tick the field last moved, so the standstill the game itself
+   * asked them to sit through before offering the Nuke button is not charged for.
    */
   function finishLevel(endedBy: 'clock' | null = null) {
     if (phase === 'result') return;
     phase = 'result';
-    const atTick = concededAt ?? billedTicks();
-    stuckHint.hidden = true;
+    const atTick = concededAt ?? levelTicks;
+    setStuckHint(false);
     syncToolbar();
     audio.stop();
     const won = saved >= def.needed;
@@ -734,7 +751,7 @@ export function initLemmingsGame(): void {
     // gone nowhere for a while and withdraws itself the moment anything moves
     // again. Guessing wrong here costs that sentence and nothing else, which is
     // the whole reason the hint replaced the automatic ending it used to drive.
-    stuckHint.hidden = !stall.stuck || nuking;
+    setStuckHint(stall.stuck && !nuking);
     const ending = levelEnding({
       allOut: spawned >= def.spawnCount,
       onlyBlockersLeft: critters.every(c => c.state === 'blocker'),

@@ -611,9 +611,10 @@ interface PlayOutcome {
   endedAt: number | null;
   /**
    * The tick the level is *billed* for, which is what the end-of-level bonuses
-   * are scored on (game.ts scores `finishLevel` on the same number): the last
-   * tick the field actually moved, so a wait in front of a motionless field —
-   * or the nuke chain that ends it — never eats the speed bonus.
+   * are scored on (game.ts scores `finishLevel` on the same number): the ticks
+   * that really elapsed, except on a run the player conceded, where the tick
+   * they conceded on stands in so the standstill the hint asks them to sit
+   * through does not eat the speed bonus.
    */
   ticks: number;
   /** `levelEnding`'s verdict, or null when nothing ended the level. */
@@ -674,7 +675,8 @@ function playLevel(
   const hatches = levelHatches(level);
   const stall = createStallWatch();
   const stockLeft = () => Object.values(stock).reduce((n, v) => n + v, 0);
-  // The last tick the field moved, which is what the level is billed for.
+  // The last tick the field moved, which is what a *conceded* level is billed
+  // for. Every other ending is billed for the ticks that really elapsed.
   let billed = 0;
   /** game.ts's `startNuke`: no more spawns, and the billing clock stops here. */
   const nuke = () => {
@@ -746,36 +748,58 @@ function playLevel(
       conceded: nuking
     });
     if (endedBy) {
-      // Billed as game.ts bills it: at the last tick the field moved, or at the
-      // tick the player conceded when they did.
-      return { saved, endedAt: tick, ticks: concededAt ?? billed, endedBy, nuked: nuking };
+      // Billed as game.ts bills it: the ticks that really elapsed, or the tick
+      // the player conceded on when they did. An authored clock running out is
+      // billed for the whole clock, standstill or no standstill.
+      return { saved, endedAt: tick, ticks: concededAt ?? tick, endedBy, nuked: nuking };
     }
   }
-  return { saved, endedAt: null, ticks: concededAt ?? billed, endedBy: null, nuked: nuking };
+  return { saved, endedAt: null, ticks: concededAt ?? maxTicks, endedBy: null, nuked: nuking };
 }
 
 /**
- * Every playthrough asserts three things. The quota is the obvious one; the
- * other two are about the ending itself.
+ * Every playthrough asserts four things. The quota is the obvious one; the other
+ * three are about the ending itself.
  *
  * The level has to *resolve*, and to resolve on the same terms the shipped game
  * uses — which it does by construction now that both call `levelEnding`, so a
  * strategy can no longer be certified here and cut off in the browser.
  *
- * And it has to resolve *promptly*: `endedAt` is bounded well under the
- * harness's runaway guard, so a run that only limps home because the guard is
- * generous fails rather than passing on a technicality. The bound is the time it
- * takes the hint to appear plus a full playthrough's worth of ticks — the
- * slowest shipped solution at the slowest release rate the slider offers takes
- * under 2,000, so this is roomy without being meaningless.
+ * It has to resolve *promptly*: `endedAt` is bounded well under the harness's
+ * runaway guard, so a run that only limps home because the guard is generous
+ * fails rather than passing on a technicality. The bound is the time it takes
+ * the hint to appear plus a full playthrough's worth of ticks — the slowest
+ * shipped solution at the slowest release rate the slider offers takes under
+ * 2,000, so this is roomy without being meaningless.
+ *
+ * And it has to resolve *the way the test says it does*. The harness plays a
+ * player who takes the stuck hint, so without this last assertion a strategy
+ * that no longer solves its level would still pass: the crowd would freeze, the
+ * simulated player would reach for the Nuke button, and a nuked level that
+ * happens to have met its quota looks exactly like a solved one from the
+ * outside. `nuked` is therefore pinned per test rather than left to chance:
+ * `false` for a level the strategy genuinely walks empty, and explicitly
+ * `STRANDS_A_CRITTER` for the eight that leave someone behind once the quota is
+ * home.
  */
 const RESOLVE_BY = STUCK_TICKS + 4000;
 
-function expectCleared(level: LevelDef, outcome: PlayOutcome): void {
+function expectCleared(level: LevelDef, outcome: PlayOutcome, { nuked = false } = {}): void {
   expect(outcome.endedAt).not.toBeNull();
   expect(outcome.endedAt).toBeLessThan(RESOLVE_BY);
   expect(outcome.saved).toBeGreaterThanOrEqual(level.needed);
+  expect(outcome.nuked).toBe(nuked);
 }
+
+/**
+ * Eight of the twenty-five shipped solutions bring the quota home and then leave
+ * a critter or two pacing a pocket they cannot climb out of, so the crowd's own
+ * "everyone out, only blockers left" ending never matches and the run finishes
+ * the way it finishes in the browser: the field freezes, the hint goes up, and
+ * the player presses Nuke. Those tests say so out loud rather than letting the
+ * nuke hide inside a green assertion. See "10 and 20" below for the diagnosis.
+ */
+const STRANDS_A_CRITTER = { nuked: true };
 
 /** The speed bonus a run would be paid, scored exactly as `finishLevel` scores it. */
 function timeBonusFor(level: LevelDef, outcome: PlayOutcome): number {
@@ -813,7 +837,7 @@ describe('levels — solvable playthroughs', () => {
       );
       if (w && assign(w, 'builder')) built = true;
     });
-    expectCleared(LEVELS[2], outcome);
+    expectCleared(LEVELS[2], outcome, STRANDS_A_CRITTER);
   });
 
   it('4: a digger opens the floor and the crowd drops to the exit', () => {
@@ -854,7 +878,7 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expectCleared(LEVELS[5], outcome);
+    expectCleared(LEVELS[5], outcome, STRANDS_A_CRITTER);
   });
 
   it('7: a blocker holds the crowd off the cliff while a digger drops them home', () => {
@@ -896,7 +920,7 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'basher')) bashed = true;
       }
     });
-    expectCleared(LEVELS[7], outcome);
+    expectCleared(LEVELS[7], outcome, STRANDS_A_CRITTER);
   });
 
   it('9: floaters ride the drop down, then a digger opens the chamber below', () => {
@@ -938,7 +962,7 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expectCleared(LEVELS[9], outcome);
+    expectCleared(LEVELS[9], outcome, STRANDS_A_CRITTER);
   });
 
   it('11: bash through the wall, then build up to the ledge beyond', () => {
@@ -958,7 +982,7 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expectCleared(LEVELS[10], outcome);
+    expectCleared(LEVELS[10], outcome, STRANDS_A_CRITTER);
   });
 
   it('12: umbrellas into the pit, then a basher opens the right wall', () => {
@@ -1042,7 +1066,7 @@ describe('levels — solvable playthroughs', () => {
       );
       if (w && assign(w, 'builder')) built = true;
     });
-    expectCleared(LEVELS[15], outcome);
+    expectCleared(LEVELS[15], outcome, STRANDS_A_CRITTER);
   });
 
   it('16: proves the steel wall is basher-proof — bashing alone saves no one', () => {
@@ -1140,7 +1164,7 @@ describe('levels — solvable playthroughs', () => {
         if (w && assign(w, 'builder')) built = true;
       }
     });
-    expectCleared(LEVELS[19], outcome);
+    expectCleared(LEVELS[19], outcome, STRANDS_A_CRITTER);
   });
 
   it('21: umbrellas into the pan, then a digger drops the crowd home on the clock', () => {
@@ -1178,7 +1202,7 @@ describe('levels — solvable playthroughs', () => {
       );
       if (w && assign(w, 'builder')) built = true;
     });
-    expectCleared(LEVELS[21], outcome);
+    expectCleared(LEVELS[21], outcome, STRANDS_A_CRITTER);
   });
 
   it('23: a second builder takes over at the first bridge tip to span the gorge', () => {
@@ -1328,8 +1352,9 @@ describe('levels — no level is ever unescapable', () => {
   });
 
   it('10 and 20: a stranded critter no longer hangs a level that was already won', () => {
-    // Both levels are cleared by the builder placements the playthrough tests
-    // above aim at, and both leave one critter pacing an 8px pocket afterwards
+    // The worked example behind `STRANDS_A_CRITTER`. Both levels are cleared by
+    // the builder placements the playthrough tests above aim at, and both leave
+    // one critter pacing an 8px pocket afterwards
     // — quota met, crowd going nowhere, and skills still in hand, so the game
     // keeps offering the player the chance to go back for it, for as long as
     // they want. What ends it is the player, and because the level is billed at
@@ -1399,6 +1424,12 @@ describe('levels — no level is ever unescapable', () => {
     expect(outcome.endedAt).toBe(timed.timeLimit);
     expect(outcome.endedBy).toBe('clock');
     expect(outcome.nuked).toBe(false);
+    // And it is billed for the whole clock. This crowd stands still for most of
+    // it, so discounting the standstill would hand back time the countdown on
+    // screen really burned — and hand back more of it the longer the player left
+    // the field alone, which is worth points on a level whose par the clock
+    // outlasts. game.ts scores `finishLevel` on this same number.
+    expect(outcome.ticks).toBe(timed.timeLimit);
   });
 
   it('a lit bomber fuse really goes off, so the dealt reserve is a real move', () => {

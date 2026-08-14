@@ -79,7 +79,7 @@ const GAME_HTML = `
       <button id="retry-btn"></button>
     </div>
     <p id="level-hint" hidden></p>
-    <p id="stuck-hint" role="status" hidden>Nothing has moved for a while.</p>
+    <p id="stuck-hint" role="status" data-hint="Nothing has moved for a while."></p>
     <div class="skill-bar">
       ${SKILLS.map(
         s => `<button class="skill-btn" data-skill="${s}"><span class="skill-count">0</span></button>`
@@ -180,12 +180,22 @@ function startLevel(index: number): void {
 const num = (id: string) => Number(document.getElementById(id)!.textContent);
 const resultShown = () =>
   (document.getElementById('result-overlay') as HTMLElement).style.display === 'flex';
-/** Whether the "you look stuck, here is the way out" notice is on screen. */
-const stuckShown = () => !(document.getElementById('stuck-hint') as HTMLElement).hidden;
+/**
+ * Whether the "you look stuck, here is the way out" notice is on screen — which
+ * is a question about its *text*, not about a `hidden` attribute. The notice is
+ * a `role="status"` live region, and assistive technology announces a change to
+ * a region's contents; reading `hidden` here would let a hint that is never
+ * announced pass as one that is.
+ */
+const stuckShown = () => (document.getElementById('stuck-hint') as HTMLElement).textContent !== '';
 /** The player's escape hatch, pressed. */
 const pressNuke = () => (document.getElementById('nuke-btn') as HTMLButtonElement).click();
 const skillCount = (skill: string) =>
   Number(document.querySelector(`.skill-btn[data-skill="${skill}"] .skill-count`)!.textContent);
+
+/** Picks a skill off the toolbar, the way a player does before tapping. */
+const selectSkill = (skill: string) =>
+  (document.querySelector(`.skill-btn[data-skill="${skill}"]`) as HTMLButtonElement).click();
 
 /** Taps the field at a level coordinate, the way a player assigns a skill. */
 function tap(x: number, y: number): void {
@@ -327,15 +337,16 @@ describe('game loop — no level is ever unescapable', () => {
     return ticks;
   }
 
-  /** The time bonus the level would pay if it were billed at `ticks`. */
-  const bonusAt = (ticks: number) =>
+  /** The speed bonus a level would pay if the run on screen were billed at `ticks`. */
+  const timeBonus = (level: (typeof LEVELS)[number], ticks: number) =>
     levelBonuses({
       saved: num('saved-count'),
-      needed: LEVELS[12].needed,
-      spawnCount: LEVELS[12].spawnCount,
+      needed: level.needed,
+      spawnCount: level.spawnCount,
       ticks,
-      par: LEVELS[12].par
+      par: level.par
     }).time;
+  const bonusAt = (ticks: number) => timeBonus(LEVELS[12], ticks);
 
   it('never closes a won level under the player, and pays the speed bonus when they end it', () => {
     // The regression that killed the previous two attempts: a player who pens
@@ -425,6 +436,76 @@ describe('game loop — no level is ever unescapable', () => {
     );
   });
 
+  it('bills an authored clock for the whole clock, however still the field went', () => {
+    // The scoring counterpart to the tests above. Nothing on a frozen field ends
+    // a level any more, but a level with an authored `timeLimit` still has one
+    // ending the player does not choose — and that ending has to be paid for at
+    // the tick it really happened. Discounting the standstill out of it pays a
+    // speed bonus for time a countdown on screen genuinely burned, and pays more
+    // of it the longer the player stands still, because the watcher only ever
+    // measures the *current* standstill: parking the crowd after the quota was
+    // home would then be worth more than finishing the level.
+    //
+    // Level 14 is the fixture: the wall level against a 2,700-tick clock its own
+    // 2,400-tick par expires inside, so a run that goes the distance must be paid
+    // nothing at all for speed. Bash the pillar open, bank the quota, wall the
+    // rest of the crowd in behind a blocker, and let the clock run out.
+    const level = LEVELS[13];
+    expect(level.timeLimit).toBe(2700);
+    expect(level.par).toBeLessThan(level.timeLimit!);
+    startLevel(13);
+
+    let ticks = 0;
+    const advance = () => {
+      step();
+      ticks += TICKS_PER_FRAME;
+    };
+
+    // Tunnel through the pillar. A basher pointed the wrong way walks off and
+    // gives up, so keep tapping its face until one of them digs and the crowd
+    // starts arriving at the exit.
+    selectSkill('basher');
+    while (num('saved-count') === 0 && skillCount('basher') > 0 && ticks < 1500) {
+      tap(155, 154);
+      advance();
+    }
+    while (num('saved-count') === 0 && ticks < 1500) advance();
+    expect(num('saved-count')).toBeGreaterThan(0);
+
+    // Bank the quota, then shut the door on whoever is left: a blocker on the
+    // home straight walls the rest of the crowd into the long pocket behind it,
+    // where they pace out the rest of the clock going nowhere.
+    while (num('saved-count') < level.needed && ticks < 1500) advance();
+    expect(num('saved-count')).toBeGreaterThanOrEqual(level.needed);
+    selectSkill('blocker');
+    while (skillCount('blocker') === 2 && ticks < 1800) {
+      tap(250, 154);
+      advance();
+    }
+    expect(skillCount('blocker')).toBe(1);
+
+    // Wait the clock out doing nothing, which is the run the bug used to pay
+    // for. The notice goes up `STUCK_TICKS` after the field last moved, so it
+    // also dates the freeze: the tick the discount billed instead of this one.
+    let hintedAt: number | null = null;
+    while (!resultShown() && ticks < level.timeLimit! * 2) {
+      advance();
+      if (hintedAt === null && stuckShown()) hintedAt = ticks;
+    }
+    expect(hintedAt).not.toBeNull();
+    expect(num('out-count')).toBeGreaterThan(1);
+    expect(ticks).toBe(level.timeLimit);
+
+    // It reads as the win it is, and it earns nothing at all for speed: the
+    // clock the player watched expire is what the level is billed for.
+    expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
+    expect(document.getElementById('bonus-time-row')!.hidden).toBe(true);
+    expect(document.getElementById('bonus-time-val')!.textContent).toBe('+0');
+    // And the discount it used to take was worth real points, so this is a
+    // scoring change rather than a rounding one.
+    expect(timeBonus(level, hintedAt! - STUCK_TICKS)).toBeGreaterThan(0);
+  });
+
   it('withdraws the hint as soon as the field moves again', () => {
     // A hint that misfires must cost a line of text and nothing more, so it has
     // to be able to take itself back. Freeze level 13's left stream behind a
@@ -432,6 +513,12 @@ describe('game loop — no level is ever unescapable', () => {
     // the player is evidently still there, and the notice goes away by itself.
     winAndPenLevel13();
     expect(runUntilStuck(STUCK_TICKS * 12)).not.toBeNull();
+    // And it is announced rather than merely revealed: the live region holds no
+    // text until the standstill, then holds the page's wording, which is the
+    // change a screen reader has to see to say anything at all.
+    const hint = document.getElementById('stuck-hint') as HTMLElement;
+    expect(hint.textContent).toBe(hint.dataset.hint);
+    expect(hint.dataset.hint).toBeTruthy();
 
     // Whoever is left is pacing the left-hand pen, so sweep it until a tap
     // connects and a skill is actually spent.
@@ -445,6 +532,7 @@ describe('game loop — no level is ever unescapable', () => {
     }
     expect(stockLeft()).toBeLessThan(before);
     expect(stuckShown()).toBe(false);
+    expect(hint.textContent).toBe('');
     expect(resultShown()).toBe(false);
   });
 });

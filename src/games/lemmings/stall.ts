@@ -26,9 +26,16 @@
  * pixel of terrain moved, or any critter setting foot somewhere it has not been
  * since the last of those. A crowd bouncing between two blockers covers no new
  * ground and cuts no new terrain, so it freezes; a critter walking the long way
- * round to the exit does not, however long it takes. The same measurement also
- * says what the level is *billed* for: time on a frozen field is not time the
- * player played, so the score is taken at the tick the field last moved.
+ * round to the exit does not, however long it takes.
+ *
+ * What the standstill does *not* do is discount the clock. A level is billed for
+ * the ticks it really took, and an authored `timeLimit` running out is billed
+ * for the whole limit — anything else pays a speed bonus for time a countdown on
+ * screen genuinely consumed, and pays more of it the longer the player stands
+ * still, since `idleTicks` measures only the current standstill. The one place
+ * the freeze is read is game.ts's Nuke: conceding freezes the bill where the
+ * field last moved, so the wait this module asks the player to sit through
+ * before it offers them the button is not charged back to them.
  *
  * `levelEnding` composes the whole verdict in one pure place so the game loop
  * and the headless playthrough harness cannot drift apart on when a level is

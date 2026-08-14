@@ -152,12 +152,23 @@ const hintAttrs = Object.fromEntries(
         <p id="level-hint" class="level-hint" hidden></p>
         {/*
           Shown by the game once the field has gone nowhere for a while, and
-          hidden again the moment anything moves. It is a hint, not a verdict:
+          withdrawn the moment anything moves. It is a hint, not a verdict:
           nothing in the game ends on a standstill, so this is what makes a level
           whose crowd can no longer reach the exit escapable rather than hung.
-          `role="status"` so it is announced without stealing focus.
+
+          `role="status"` so it is announced without stealing focus — which is
+          also why it ships empty with its wording parked in `data-hint`. A live
+          region is announced when its *contents* change, so the game writes the
+          sentence in and clears it out again; revealing text that was there all
+          along may never be spoken. The element stays empty rather than hidden
+          between hints, and the `:empty` rule below keeps it off the page.
         */}
-        <p id="stuck-hint" class="stuck-hint" role="status" hidden>{t('fun.lemmings.stuckHint')}</p>
+        <p
+          id="stuck-hint"
+          class="stuck-hint"
+          role="status"
+          data-hint={t('fun.lemmings.stuckHint')}
+        ></p>
 
         <div class="skill-bar">
           {skills.map((skill, i) => (
@@ -450,7 +461,9 @@ const hintAttrs = Object.fromEntries(
     text-align: center;
   }
 
-  .stuck-hint[hidden] {
+  /* The live region is always in the document so changes to it are announced;
+     what comes and goes is its text, so an empty one takes no space. */
+  .stuck-hint:empty {
     display: none;
   }
 

@@ -144,7 +144,7 @@ export function initTowerDefenseGame(): void {
     waveIn: s('tWaveIn', 'Wave {n} in {s}s'),
     waveNow: s('tWaveNow', 'Wave {n} incoming!'),
     waveCleared: s('tWaveCleared', 'Wave cleared'),
-    waveLeaked: s('tWaveLeaked', 'They got through, no bonus'),
+    waveLeaked: s('tWaveLeaked', 'They got through, no wave bonus'),
     interest: s('tInterest', 'interest'),
     newRecord: s('tNewRecord', 'New record!'),
     breach: s('tBreach', 'The line is breached!'),
@@ -302,9 +302,6 @@ export function initTowerDefenseGame(): void {
   let towers: Tower[] = [];
   let enemies: Enemy[] = [];
   let waveIdx = 0;
-  // Leaks during the wave in progress; a wave that ends with any of these was
-  // not held, so it pays neither the wave bonus nor interest.
-  let leakedThisWave = 0;
   // Set once the authored campaign is broken and the endless assault begins.
   let clearedCampaign = false;
   // The launched wave, cached at each wave boundary — endless waves are built
@@ -454,7 +451,6 @@ export function initTowerDefenseGame(): void {
 
   function launchWave() {
     phase = 'wave';
-    leakedThisWave = 0;
     currentWave = waveDef(waveIdx);
     spawner = createSpawner(currentWave);
     bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
@@ -481,19 +477,19 @@ export function initTowerDefenseGame(): void {
 
   function waveCleared() {
     // Surviving a wave is not holding it: if anything reached the keep, the
-    // wave still moves the run on to the next one, but pays nothing.
-    const held = leakedThisWave === 0;
-    const interest = clearWave(eco, held);
+    // wave still moves the run on and still pays its interest, but scores
+    // nothing. The economy counts the leaks itself, behind `leak`.
+    const { held, interest } = clearWave(eco);
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
     bankScore();
+    const gp = routePosition(map.route, routeLast);
+    addFloater(gp.x, gp.y - 1, `+${interest} ${strings.interest}`, '#4ade80');
     if (held) {
-      const gp = routePosition(map.route, routeLast);
-      addFloater(gp.x, gp.y - 1, `+${interest} ${strings.interest}`, '#4ade80');
       showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);
       audio.playSfx('score');
     } else {
-      showToast(`🩸 ${strings.waveLeaked}`);
+      showToast(`🩸 ${strings.waveLeaked} · +${interest} ${strings.interest}`);
     }
     waveIdx++;
     if (waveIdx === AUTHORED_WAVES) {
@@ -542,7 +538,6 @@ export function initTowerDefenseGame(): void {
       spawnBurst(kp.x, kp.y - 12, 12, '#f87171', { speed: 70, life: 0.5, size: 1.8, glow: true });
       keepFlash = 0.45;
       leakedThisStep = true;
-      leakedThisWave++;
       if (lives <= 0) {
         showToast(`💥 ${strings.breach}`);
         endRun();

@@ -1,9 +1,10 @@
 /**
  * Line Hold — currency, lives, interest, and score. Score follows the design
  * doc's formula: waves held × base + kill bonus, where each kill's bounty
- * doubles as its score value. Held waves pay interest on banked cash
- * (capped, so hoarding never beats building). Surviving a wave is not the
- * same as holding it: a wave that let anything through pays neither.
+ * doubles as its score value. Every finished wave pays interest on banked
+ * cash (capped, so hoarding never beats building). Surviving a wave is not
+ * the same as holding it: a wave that let anything through still pays and
+ * still advances the run, but scores nothing.
  */
 
 export const START_MONEY = 200;
@@ -22,10 +23,24 @@ export interface Economy {
   wavesHeld: number;
   /** Accumulated kill bounties — the score's kill-bonus term. */
   killScore: number;
+  /**
+   * Leaks so far in the wave in progress. Owned here rather than by the
+   * caller: `leak` is the one door every marcher that reaches the keep goes
+   * through, so counting behind it means the game loop and the headless
+   * harness cannot disagree about which waves were held.
+   */
+  leakedThisWave: number;
 }
 
 export function createEconomy(): Economy {
-  return { money: START_MONEY, lives: START_LIVES, wavesCleared: 0, wavesHeld: 0, killScore: 0 };
+  return {
+    money: START_MONEY,
+    lives: START_LIVES,
+    wavesCleared: 0,
+    wavesHeld: 0,
+    killScore: 0,
+    leakedThisWave: 0
+  };
 }
 
 /** Spends `cost` if affordable; false leaves the purse untouched. */
@@ -40,26 +55,31 @@ export function awardKill(eco: Economy, bounty: number): void {
   eco.killScore += bounty;
 }
 
-/** A leaked enemy costs its lives toll; returns the lives remaining. */
+/**
+ * A leaked enemy costs its lives toll and marks the wave in progress as no
+ * longer held; returns the lives remaining.
+ */
 export function leak(eco: Economy, livesCost: number): number {
+  eco.leakedThisWave++;
   eco.lives = Math.max(0, eco.lives - livesCost);
   return eco.lives;
 }
 
 /**
- * Banks a finished wave. `held` is false when anything walked into the keep
- * during it: the run still advances, but the wave pays no score and no
- * interest, so an undefended line earns nothing. Returns the interest paid.
- * The flag is required rather than defaulted — a caller that forgets it is a
- * compile error, not a silent free bonus.
+ * Banks a finished wave and opens the next one's leak count. A wave that let
+ * anything into the keep was survived but not held: the run still advances,
+ * but the wave pays no score, so an undefended line earns nothing. Interest
+ * is paid on every finished wave — withholding it too would compound a
+ * scoring rule into a difficulty spiral (see issue #254).
  */
-export function clearWave(eco: Economy, held: boolean): number {
+export function clearWave(eco: Economy): { held: boolean; interest: number } {
+  const held = eco.leakedThisWave === 0;
+  eco.leakedThisWave = 0;
   eco.wavesCleared++;
-  if (!held) return 0;
-  eco.wavesHeld++;
+  if (held) eco.wavesHeld++;
   const interest = Math.min(INTEREST_CAP, Math.floor(eco.money * INTEREST_RATE));
   eco.money += interest;
-  return interest;
+  return { held, interest };
 }
 
 /** The run's score: waves held × base + kill bonus. */

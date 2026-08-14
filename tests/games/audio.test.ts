@@ -313,6 +313,70 @@ describe('createGameAudio with a stubbed AudioContext', () => {
   });
 });
 
+describe('per-note gain', () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  /**
+   * Peak level the first scheduled note ramps to. Without an echo send the
+   * gain nodes are created in a fixed order — music master, music bus, then
+   * one per note — so index 2 is the first note's envelope.
+   */
+  function firstNotePeak(ctx: ReturnType<typeof makeFakeContext>): number {
+    const noteGain = ctx.createGain.mock.results[2].value;
+    return noteGain.gain.exponentialRampToValueAtTime.mock.calls[0][0];
+  }
+
+  function playOne(note: Note, volume?: number): number {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+    const audio = createGameAudio({ tracks: [{ melody: [note], volume }], tempo: 120 });
+    audio.start();
+    const peak = firstNotePeak(ctx);
+    audio.stop();
+    return peak;
+  }
+
+  it('plays a note without a gain at the voice peak', () => {
+    // VOICE_PEAK (0.8) times the track volume, which defaults to 1.
+    expect(playOne({ freq: 440, beats: 1 })).toBeCloseTo(0.8, 6);
+  });
+
+  it('attenuates a note in proportion to its gain', () => {
+    expect(playOne({ freq: 440, beats: 1, gain: 0.5 })).toBeCloseTo(0.4, 6);
+    expect(playOne({ freq: 440, beats: 1, gain: 0.75 })).toBeCloseTo(0.6, 6);
+  });
+
+  it('scales under the track volume rather than replacing it', () => {
+    // A ducked note in a quiet voice is quieter still: 0.8 * 0.5 * 0.5.
+    expect(playOne({ freq: 440, beats: 1, gain: 0.5 }, 0.5)).toBeCloseTo(0.2, 6);
+  });
+
+  it('clamps above 1 so a note can never exceed its track volume', () => {
+    // Attenuation only: boosting is not how these lines are shaped, and a note
+    // louder than the voice would break the balance the mix was set at.
+    expect(playOne({ freq: 440, beats: 1, gain: 4 })).toBeCloseTo(0.8, 6);
+  });
+
+  it('clamps at a positive floor, since exponential ramps cannot reach zero', () => {
+    // A zero target would be an invalid ramp, not silence — a rest is freq 0.
+    expect(playOne({ freq: 440, beats: 1, gain: 0 })).toBeCloseTo(0.04, 6);
+    expect(playOne({ freq: 440, beats: 1, gain: -3 })).toBeCloseTo(0.04, 6);
+  });
+
+  it('ignores a non-finite gain rather than silencing the note', () => {
+    expect(playOne({ freq: 440, beats: 1, gain: NaN })).toBeCloseTo(0.8, 6);
+    expect(playOne({ freq: 440, beats: 1, gain: Infinity })).toBeCloseTo(0.8, 6);
+  });
+});
+
 describe('setTempo', () => {
   beforeEach(() => {
     installLocalStorage();

@@ -395,14 +395,24 @@ describe('economy', () => {
     expect(leak(eco, 5)).toBe(0);
   });
 
-  it('pays capped interest per cleared wave and scores the wave base', () => {
+  it('pays capped interest per wave held and scores the wave base', () => {
     const eco = createEconomy();
     eco.money = 90;
-    expect(clearWave(eco)).toBe(9);
+    expect(clearWave(eco, true)).toBe(9);
     expect(eco.money).toBe(99);
     expect(score(eco)).toBe(WAVE_BASE + 0);
     eco.money = 10000;
-    expect(clearWave(eco)).toBe(INTEREST_CAP);
+    expect(clearWave(eco, true)).toBe(INTEREST_CAP);
+  });
+
+  it('pays nothing for a wave that leaked, though the run moves on', () => {
+    const eco = createEconomy();
+    eco.money = 90;
+    expect(clearWave(eco, false)).toBe(0);
+    expect(eco.money).toBe(90);
+    expect(eco.wavesCleared).toBe(1);
+    expect(eco.wavesHeld).toBe(0);
+    expect(score(eco)).toBe(0);
   });
 });
 
@@ -452,6 +462,7 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
     const wave = waveDef(waveIdx);
     const spawner = createSpawner(wave);
     let enemies: Enemy[] = [];
+    let leakedThisWave = 0;
     for (let guard = 0; ; guard++) {
       if (guard > 60 * 600) throw new Error(`wave ${waveIdx + 1} never ended`);
       for (const kind of stepSpawner(spawner, wave, dt)) {
@@ -459,6 +470,7 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
       }
       for (const leaked of stepEnemies(enemies, world.route.length, dt)) {
         leak(eco, leaked.livesCost);
+        leakedThisWave++;
       }
       for (const event of stepTowers(towers, enemies, world.route, dt)) {
         if (event.type === 'kill') awardKill(eco, event.bounty);
@@ -467,7 +479,7 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
       if (enemies.length > 64) enemies = enemies.filter(e => e.alive);
       if (spawnerDone(spawner, wave) && enemies.every(e => !e.alive)) break;
     }
-    clearWave(eco);
+    clearWave(eco, leakedThisWave === 0);
     buy();
   }
   return { survived: true, eco, waveIdx: maxWave };
@@ -478,6 +490,17 @@ describe('headless playthrough', () => {
     const result = playRun([]);
     expect(result.survived).toBe(false);
     expect(result.waveIdx).toBeLessThan(4);
+  });
+
+  it('an idle run scores nothing and earns nothing (issue #254)', () => {
+    // Press Start, build nothing, walk away. The opening waves still *end* —
+    // every marcher walks into the keep, so no enemy is left alive — and the
+    // run used to bank the wave bonus and interest for each of them, putting
+    // 200 points and 42 free money on the board for doing nothing at all.
+    const result = playRun([]);
+    expect(result.eco.wavesCleared).toBeGreaterThan(0); // waves did end
+    expect(score(result.eco)).toBe(0); // and the player earned nothing by it
+    expect(result.eco.money).toBe(START_MONEY); // no interest either
   });
 
   // The kill corridors: bolts on the ridges between the path's straights
@@ -539,8 +562,13 @@ describe('headless playthrough', () => {
     // the best layout we can author against this harness finishes bleeding.
     expect(result.eco.lives).toBeGreaterThan(0);
     expect(result.eco.lives).toBeLessThan(START_LIVES);
-    // The score follows the design formula: waves × base + kill bounties.
-    expect(score(result.eco)).toBe(AUTHORED_WAVES * WAVE_BASE + result.eco.killScore);
+    // The score follows the design formula: waves *held* × base + kill
+    // bounties. Since this plan bleeds (the contract above), some of the 18
+    // waves it survives leaked and so paid no wave bonus — the run scores for
+    // the ones it held, not for every one it got through (issue #254).
+    expect(score(result.eco)).toBe(result.eco.wavesHeld * WAVE_BASE + result.eco.killScore);
+    expect(result.eco.wavesHeld).toBeGreaterThan(0);
+    expect(result.eco.wavesHeld).toBeLessThan(result.eco.wavesCleared);
     expect(result.eco.killScore).toBeGreaterThan(0);
   });
 

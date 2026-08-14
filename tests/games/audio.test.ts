@@ -509,10 +509,18 @@ describe('sustained voices: tempo changes, stopping, and un-muting', () => {
     // long voice's at 2.025 rather than 4.05. Left un-rescaled, the long voice
     // would keep old-tempo timing for its whole in-flight note and every later
     // tempo change would add another slip that never comes back.
-    expect(starts).toContain(0.525);
-    expect(starts).toContain(2.025);
-    expect(starts).not.toContain(1.05);
-    expect(starts).not.toContain(4.05);
+    //
+    // Matched within a tolerance rather than by exact equality. The arithmetic
+    // is deterministic, so this is not about flakiness — it is that the claim
+    // being made is "the cursor was rescaled", not "the sum rounded to this
+    // exact double", and a later refactor that reassociates the arithmetic
+    // should not fail by an ULP. The positions being told apart here are
+    // 0.5 apart, so the tolerance discriminates with enormous margin.
+    const scheduledNear = (t: number): boolean => starts.some(s => Math.abs(s - t) < 1e-9);
+    expect(scheduledNear(0.525)).toBe(true);
+    expect(scheduledNear(2.025)).toBe(true);
+    expect(scheduledNear(1.05)).toBe(false);
+    expect(scheduledNear(4.05)).toBe(false);
 
     audio.stop();
     vi.useRealTimers();

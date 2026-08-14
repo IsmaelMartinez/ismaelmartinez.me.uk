@@ -24,9 +24,10 @@ export const SIGHT_RANGE = 7;
 export const BOOST_SPEED = 1.6;
 export const BOOST_FIRE = 0.6;
 /**
- * How close a follower (a persuaded mind, or the escort asset between orders)
- * settles behind its nearest agent, in tiles. It stops here and never closes
- * further, so this is a floor on where a *followed* unit can come to rest.
+ * How close a persuaded mind settles behind its nearest agent, in tiles. It
+ * stops here and never closes further, so this is a floor on where a
+ * *followed* unit can come to rest. The escort asset trails on the same
+ * routine but at its own tighter gap — see ESCORT_FOLLOW_DISTANCE.
  */
 export const FOLLOW_STOP_DISTANCE = 1.6;
 /**
@@ -35,6 +36,26 @@ export const FOLLOW_STOP_DISTANCE = 1.6;
  * escape and the escort drop-off all mean the same place by it.
  */
 export const EXTRACTION_RADIUS = 1.5;
+/**
+ * The escort asset's own follow gap, in tiles — deliberately tighter than
+ * EXTRACTION_RADIUS rather than sharing the crowd's FOLLOW_STOP_DISTANCE.
+ *
+ * This is the arithmetic the whole mould rests on. An asset that settles
+ * further out than the pad's own radius can never be delivered by trailing,
+ * however it got there, so an agent standing on the pad is not a win — which
+ * is how mission 10 shipped unwinnable, and why two rounds of routing fixes
+ * (widening the win zone, then leading the asset only on whole-squad orders)
+ * each traded one unreachable case for another. Tighter than the radius, the
+ * question stops being *who* the asset follows: trailing any agent that is
+ * standing on the pad puts it inside the pad's radius, so a whole-squad march
+ * and a single chip ordered onto the tile both deliver.
+ *
+ * There is slack rather than a hair's breadth (1.2 against 1.5) because the
+ * agent it trails need not be dead centre, and the gap is only sampled
+ * between repaths. Nothing collides in this sim, so standing closer costs the
+ * squad nothing but the look of it.
+ */
+export const ESCORT_FOLLOW_DISTANCE = 1.2;
 
 export interface Shot {
   fx: number;
@@ -101,9 +122,11 @@ export const escorting = (unit: Unit): boolean =>
  * shape the city's streets chose rather than one the mission did, and stretches
  * it in whichever direction the pad's alley happens to run.
  *
- * It is `commandMove` leading the asset onto the pad, not `follow` trailing it
- * behind whichever agent got there first, that makes this reachable — see
- * there for why the two have to be read together.
+ * What makes it reachable is ESCORT_FOLLOW_DISTANCE being tighter than this
+ * radius: an asset trailing any agent that stands on the pad is already inside
+ * it. `commandMove` leading the asset is what widens that from "an agent on
+ * the pad" to "the squad ordered onto the pad", since a squad order fans the
+ * agents out around the tile rather than onto it.
  */
 export function vipAtExtraction(world: World, extraction: number): boolean {
   if (extraction < 0) return false;
@@ -123,20 +146,27 @@ const distance = (a: Unit, b: Unit): number => Math.hypot(a.x - b.x, a.y - b.y);
  *
  * A collected asset is led rather than herded, but only when the order is one
  * the squad as a whole is taking: it takes the clicked tile itself and the
- * agents form up around it. Nothing else in the sim ever hands the asset a
- * destination — `follow` only ever walks it to within FOLLOW_STOP_DISTANCE of
- * an agent, which is further out than the pad's own radius — so without this
- * an escort could be ordered onto the extraction pad and still leave its
- * charge parked a couple of tiles down the street. That arithmetic is how
- * mission 10 shipped unwinnable. Putting the asset at the head of the fan-out
- * also rings it with its escort instead of leaving it trailing at the back
- * where the streets can shoot it.
+ * agents form up around it.
+ *
+ * That is a convenience on top of ESCORT_FOLLOW_DISTANCE rather than the thing
+ * that makes delivery possible — trailing does deliver, as long as the agent
+ * being trailed is the one on the pad. What leading buys is precisely the
+ * whole-squad order, because `spreadTargets` fans a squad *around* the clicked
+ * tile: the asset's nearest agent is then one of the outer spots, and it comes
+ * to rest two to three tiles from the pad's centre. Measured over twelve city
+ * seeds, dropping the lead loses every whole-squad delivery (0/12, 2.1 to 3.2
+ * tiles out) while single-agent orders, which send every agent to the tile
+ * itself, still land 12/12. Putting the asset at the head of the fan-out also
+ * rings it with its escort instead of leaving it trailing at the back where
+ * the streets can shoot it.
  *
  * An order to a subset of the living squad is a scouting order, not a march,
  * and must leave the asset trailing on `follow` where the rest of the squad
  * still stands. Leading it on those too walks it up a side street alone, and
  * a collected asset is valid prey the whole way — it would be shot down on an
- * order the player never meant it to hear.
+ * order the player never meant it to hear. Since the tighter gap already makes
+ * trailing deliver, that scoping costs the player nothing: walk the agents
+ * onto the pad one chip at a time and the asset arrives with them.
  */
 export function commandMove(world: World, target: number, agents: Unit[]): void {
   if (target < 0 || !isWalkable(world.tiles[target])) return;
@@ -212,7 +242,7 @@ function nearestPickup(world: World, unit: Unit, range: number): Pickup | null {
   return best;
 }
 
-function follow(world: World, unit: Unit, agents: Unit[]): void {
+function follow(world: World, unit: Unit, agents: Unit[], stopDistance: number): void {
   let leader: Unit | null = null;
   let best = Infinity;
   for (const agent of agents) {
@@ -223,7 +253,7 @@ function follow(world: World, unit: Unit, agents: Unit[]): void {
     }
   }
   if (!leader) return;
-  if (best <= FOLLOW_STOP_DISTANCE) {
+  if (best <= stopDistance) {
     unit.path = [];
     return;
   }
@@ -344,26 +374,29 @@ export function stepWorld(world: World, dt: number): WorldEvent[] {
           unit.repathTimer = 0.4;
         }
       } else {
-        follow(world, unit, agents);
+        follow(world, unit, agents, FOLLOW_STOP_DISTANCE);
       }
       autoFire(unit);
     } else if (unit.kind === 'vip') {
       // Pinned where the contract left it until an agent arrives. From then on
       // the squad leads it: a whole-squad move order walks it to the tile the
       // player clicked, and only once that route runs out does it fall back to
-      // trailing the nearest agent on the same routine persuaded minds use.
+      // trailing the nearest agent on the same routine persuaded minds use,
+      // at its own ESCORT_FOLLOW_DISTANCE rather than the crowd's gap.
       // Following never overrides an order in flight — the route to the pad
       // runs the gauntlet of the squad's own agents, and an asset re-aimed at
-      // the first one it passes is an asset that never reaches the pad.
+      // the first one it passes stops short of the tile the player clicked.
       //
       // The flag needs no expiry beyond its own route running out. It is only
       // ever set on a march the entire living squad is walking, so the escort
       // can only vanish from under it by being wiped out — which loses the
       // mission outright before the next order — or by the player re-tasking
-      // agents one at a time, which is an order they gave on purpose.
+      // agents one at a time, which is an order they gave on purpose. If it
+      // did lapse early the asset falls back to trailing, which now delivers
+      // on its own, so the flag can no longer strand the mission.
       if (escorting(unit)) {
         if (!unit.path.length) unit.led = false;
-        if (!unit.led) follow(world, unit, agents);
+        if (!unit.led) follow(world, unit, agents, ESCORT_FOLLOW_DISTANCE);
       }
     } else if (unit.faction === 'hostile') {
       const weapon = unit.weapon ? WEAPONS[unit.weapon] : null;

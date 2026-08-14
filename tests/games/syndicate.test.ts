@@ -27,6 +27,7 @@ import {
   escorting,
   vipAtExtraction,
   FOLLOW_STOP_DISTANCE,
+  ESCORT_FOLLOW_DISTANCE,
   EXTRACTION_RADIUS
 } from '../../src/games/syndicate/sim';
 import {
@@ -272,21 +273,35 @@ describe('simulation', () => {
     // trailing behaviour with no order in play.
     agent.path = findPath(tiles, idx(10, 10), idx(24, 10))!;
     for (let step = 0; step < 600; step++) stepWorld(world, 1 / 60);
-    // The tolerance is the exported stop distance itself, not a round number
-    // near it: a loose "less than 2" here is what let mission 10 ship with a
-    // delivery test the follow routine could never satisfy.
-    expect(Math.hypot(agent.x - vip.x, agent.y - vip.y)).toBeLessThanOrEqual(FOLLOW_STOP_DISTANCE);
+    // The tolerance is the asset's own exported stop distance, not a round
+    // number near it and not the crowd's looser gap: a loose "less than 2"
+    // here is what let mission 10 ship with a delivery test the follow routine
+    // could never satisfy.
+    expect(Math.hypot(agent.x - vip.x, agent.y - vip.y)).toBeLessThanOrEqual(ESCORT_FOLLOW_DISTANCE);
     expect(vip.x).toBeGreaterThan(20);
   });
 
-  it('walks the asset onto the pad rather than parking it behind the squad', () => {
-    // Mission 10's whole geometry, in miniature. Trailing alone can never
-    // deliver the asset: `follow` stops it FOLLOW_STOP_DISTANCE behind its
-    // nearest agent, which is further out than the EXTRACTION_RADIUS every
-    // mould measures the pad by, so an agent standing on the pad is not enough
-    // — that arithmetic is exactly how the finale shipped unwinnable. What
-    // closes it is the move order, which hands the asset the clicked tile
-    // itself and fans the squad out around it.
+  it('keeps the escort gap tighter than the pad an agent has to stand on', () => {
+    // The arithmetic the whole mould rests on, asserted as a relation rather
+    // than left implicit in two constants that drifted apart. FOLLOW_STOP_
+    // DISTANCE (1.6) is wider than EXTRACTION_RADIUS (1.5), so an asset on the
+    // crowd's gap could never be delivered by trailing however it got there —
+    // that gap being on the wrong side of the radius is exactly how mission 10
+    // shipped unwinnable, and two rounds of routing fixes each traded one
+    // unreachable case for another before the numbers were touched.
+    expect(ESCORT_FOLLOW_DISTANCE).toBeLessThan(EXTRACTION_RADIUS);
+    expect(FOLLOW_STOP_DISTANCE).toBeGreaterThan(EXTRACTION_RADIUS);
+  });
+
+  it('delivers the asset by trailing an agent that stands on the pad', () => {
+    // Mission 10's whole geometry, in miniature, and the fix stated as the
+    // arithmetic it is. Trailing used to be unable to deliver at all: `follow`
+    // parked the asset FOLLOW_STOP_DISTANCE (1.6) behind its nearest agent,
+    // further out than the EXTRACTION_RADIUS (1.5) every mould measures the
+    // pad by, so an agent standing dead centre on the pad still was not
+    // enough. On its own tighter gap it is: whoever the asset happens to be
+    // trailing, if that agent is on the pad then so is the asset, and the
+    // question of which order routed it there stops mattering.
     const tiles = openMap();
     const pad = idx(20, 20);
     const agent = createUnit(1, 'agent', pad, MAP_W, null);
@@ -295,15 +310,16 @@ describe('simulation', () => {
     const world = createWorld(tiles, [agent, vip], seededRandom());
     expect(vipAtExtraction(world, pad)).toBe(false);
 
-    // Left to trail: it settles at the follow gap, outside the pad's radius,
-    // and stays there however long the agent stands on the tile.
+    // Left to trail, with no order of its own ever issued: it closes on the
+    // agent standing on the pad and settles inside the pad's radius.
     for (let step = 0; step < 600; step++) stepWorld(world, 1 / 60);
     const trailing = Math.hypot(vip.x - 20.5, vip.y - 20.5);
-    expect(trailing).toBeGreaterThan(EXTRACTION_RADIUS);
-    expect(trailing).toBeLessThanOrEqual(FOLLOW_STOP_DISTANCE);
-    expect(vipAtExtraction(world, pad)).toBe(false);
+    expect(trailing).toBeLessThanOrEqual(ESCORT_FOLLOW_DISTANCE);
+    expect(trailing).toBeLessThanOrEqual(EXTRACTION_RADIUS);
+    expect(vipAtExtraction(world, pad)).toBe(true);
 
-    // Ordered to the pad: the asset takes the tile, the agent rings it.
+    // Ordered to the pad on top of that, the asset takes the tile itself and
+    // the agent rings it — the lead still puts it dead centre.
     commandMove(world, pad, [agent]);
     expect(vip.path.length).toBeGreaterThan(0);
     for (let step = 0; step < 600 && vip.path.length; step++) stepWorld(world, 1 / 60);
@@ -359,6 +375,11 @@ describe('simulation', () => {
     // it away from its escort alone, and a collected asset is valid prey the
     // whole way, so the mission is lost to an order the player never meant it
     // to hear. Only an order the whole living squad is taking may lead it.
+    //
+    // Scoping it this way used to cost the player the mission, because a
+    // subset order left the asset on a gap it could never be delivered from.
+    // It no longer does: it stays put here, and the delivery tests below walk
+    // it home on nothing but subset orders.
     const tiles = openMap();
     const scout = createUnit(1, 'agent', idx(5, 12), MAP_W, null);
     const minder = createUnit(2, 'agent', idx(6, 12), MAP_W, null);
@@ -380,7 +401,7 @@ describe('simulation', () => {
     // stayed, well inside the follow gap and nowhere near the scouted tile.
     expect(vip.x).toBe(parked.x);
     expect(vip.y).toBe(parked.y);
-    expect(Math.hypot(vip.x - minder.x, vip.y - minder.y)).toBeLessThanOrEqual(FOLLOW_STOP_DISTANCE);
+    expect(Math.hypot(vip.x - minder.x, vip.y - minder.y)).toBeLessThanOrEqual(ESCORT_FOLLOW_DISTANCE);
 
     // The whole squad marching, though, still leads it — the scope is which
     // agents were ordered, not whether leading happens at all.
@@ -572,74 +593,103 @@ describe('missions', () => {
     }
   });
 
-  it('walks the escort finale home, and only ever wins it at the pad', () => {
-    // The regression that matters for mission 10, which shipped unwinnable
-    // (issue #255): the asset trails on `follow`, which parks it
-    // FOLLOW_STOP_DISTANCE behind its nearest agent, while the delivery test
-    // demanded it stand on the pad within the squad's own tighter extraction
-    // radius. Nothing a player could do closed that gap.
-    //
-    // Two things have to hold at once here, and pinning only the first is what
-    // let the first attempt at this fix overcorrect into accepting wins nearly
-    // four tiles from the pad. So this asserts the mission can be won on every
-    // seed *and* records how far from the pad's centre each win registered:
-    // that distance is the whole player-facing promise of the mould, and it is
-    // bounded by the one radius every mould measures the pad by, not by
-    // whichever tiles the streets happen to leave walkable around it.
-    //
-    // Played the way a player plays it: order the squad onto the asset to
-    // collect it, then order it onto the pad, re-issuing the order each
-    // second. Hostiles are stripped because what is under test is whether the
-    // escort geometry can ever close, not whether a fixed policy survives the
-    // firefight; twelve city seeds, since the pad sits in a random pocket of
-    // the south-east block and its surroundings differ wildly.
+  /**
+   * Plays mission 10 to a win over one city seed and reports how far from the
+   * pad's centre the win registered, or null if it never came.
+   *
+   * `order` is how leg two is issued. 'squad' selects every living agent, the
+   * way the All button does; 'chip' orders the agents one at a time, each call
+   * covering a strict subset, the way a player clicking a single agent chip
+   * does. Both must deliver — the second is the one that was unwinnable, and
+   * scoping the lead to whole-squad orders is what reopened it.
+   *
+   * Hostiles are stripped because what is under test is whether the escort
+   * geometry can ever close, not whether a fixed policy survives the firefight.
+   */
+  function playEscortFinale(seed: number, order: 'squad' | 'chip'): number | null {
     const spec = MISSIONS[9];
-    const winDistances: number[] = [];
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
-      const tiles = generateCity(seededRandom(seed * 7919));
-      const setup = spawnMission(spec, tiles, ['uzi', 'uzi', 'uzi', 'uzi'], seededRandom(seed * 104729));
-      const world = createWorld(
-        tiles,
-        setup.units.filter(u => u.faction !== 'hostile'),
-        seededRandom(seed)
-      );
-      const px = (setup.extraction % MAP_W) + 0.5;
-      const py = Math.floor(setup.extraction / MAP_W) + 0.5;
-      const vip = vipOf(world)!;
-      const status = () =>
-        missionStatus(spec, world.units, 0, false, 0, vipAtExtraction(world, setup.extraction));
+    const tiles = generateCity(seededRandom(seed * 7919));
+    const setup = spawnMission(spec, tiles, ['uzi', 'uzi', 'uzi', 'uzi'], seededRandom(seed * 104729));
+    const world = createWorld(
+      tiles,
+      setup.units.filter(u => u.faction !== 'hostile'),
+      seededRandom(seed)
+    );
+    const px = (setup.extraction % MAP_W) + 0.5;
+    const py = Math.floor(setup.extraction / MAP_W) + 0.5;
+    const vip = vipOf(world)!;
+    const status = () =>
+      missionStatus(spec, world.units, 0, false, 0, vipAtExtraction(world, setup.extraction));
 
-      // Leg one — fight in and collect it.
-      for (let step = 0; step < 60 * 120 && !escorting(vip); step++) {
-        if (step % 60 === 0) {
-          commandMove(world, idx(Math.floor(vip.x), Math.floor(vip.y)), livingAgents(world));
-        }
-        stepWorld(world, 1 / 60);
+    // Leg one — fight in and collect it.
+    for (let step = 0; step < 60 * 120 && !escorting(vip); step++) {
+      if (step % 60 === 0) {
+        commandMove(world, idx(Math.floor(vip.x), Math.floor(vip.y)), livingAgents(world));
       }
-      expect(escorting(vip)).toBe(true);
-      // Collected but nowhere near the pad: the contract is not done yet.
-      expect(status()).toBe('ongoing');
-
-      // Leg two — walk it out.
-      let won = false;
-      for (let step = 0; step < 60 * 180 && !won; step++) {
-        if (step % 60 === 0) commandMove(world, setup.extraction, livingAgents(world));
-        stepWorld(world, 1 / 60);
-        won = status() === 'won';
-      }
-      expect(won).toBe(true);
-      expect(vip.alive).toBe(true);
-      winDistances.push(Math.hypot(vip.x - px, vip.y - py));
+      stepWorld(world, 1 / 60);
     }
-    // The bound, in the player's terms, and written out as a number rather
-    // than read back from the constant that produced it — a bound expressed in
-    // terms of the thing it is bounding would widen the moment someone widened
-    // the radius, which is exactly the failure mode this test exists to catch.
-    // 1.5 tiles is a unit standing on the pad's own tile; it is the same reach
-    // an agent must meet to extract, which is the whole point of the number.
-    expect(EXTRACTION_RADIUS).toBe(1.5);
-    expect(Math.max(...winDistances)).toBeLessThanOrEqual(1.5);
-  });
+    expect(escorting(vip)).toBe(true);
+    // Collected but nowhere near the pad: the contract is not done yet.
+    expect(status()).toBe('ongoing');
+
+    // Leg two — walk it out, re-issuing the order each second.
+    let won = false;
+    for (let step = 0; step < 60 * 180 && !won; step++) {
+      if (step % 60 === 0) {
+        const agents = livingAgents(world);
+        if (order === 'squad') commandMove(world, setup.extraction, agents);
+        else for (const agent of agents) commandMove(world, setup.extraction, [agent]);
+      }
+      stepWorld(world, 1 / 60);
+      won = status() === 'won';
+    }
+    if (!won) return null;
+    expect(vip.alive).toBe(true);
+    return Math.hypot(vip.x - px, vip.y - py);
+  }
+
+  const ESCORT_SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+  const median = (values: number[]): number => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = sorted.length / 2;
+    return sorted.length % 2 ? sorted[Math.floor(mid)] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
+
+  it.each(['squad', 'chip'] as const)(
+    'walks the escort finale home on %s orders, and only ever wins it at the pad',
+    order => {
+      // The regression that matters for mission 10, which shipped unwinnable
+      // (issue #255): the asset trails on `follow`, which parked it
+      // FOLLOW_STOP_DISTANCE (1.6) behind its nearest agent, while the delivery
+      // test demands it stand within EXTRACTION_RADIUS (1.5) of the pad. No
+      // routing could close a gap that was on the wrong side of the radius,
+      // which is why the asset now trails on its own tighter gap instead.
+      //
+      // Two things have to hold at once here, and pinning only the first is
+      // what let an earlier attempt overcorrect into accepting wins nearly four
+      // tiles from the pad. So this asserts the mission can be won on every
+      // seed *and* records how far from the pad's centre each win registered:
+      // that distance is the whole player-facing promise of the mould, and it
+      // is bounded by the one radius every mould measures the pad by, not by
+      // whichever tiles the streets happen to leave walkable around it.
+      //
+      // Twelve city seeds, since the pad sits in a random pocket of the
+      // south-east block and its surroundings differ wildly.
+      const distances = ESCORT_SEEDS.map(seed => playEscortFinale(seed, order));
+      expect(distances.filter(d => d === null)).toHaveLength(0);
+      const won = distances as number[];
+      // The bound, in the player's terms, and written out as a number rather
+      // than read back from the constant that produced it — a bound expressed
+      // in terms of the thing it is bounding would widen the moment someone
+      // widened the radius, which is exactly the failure mode this test exists
+      // to catch. 1.5 tiles is a unit standing on the pad's own tile; it is the
+      // same reach an agent must meet to extract, which is the point of it.
+      expect(EXTRACTION_RADIUS).toBe(1.5);
+      expect(Math.max(...won)).toBeLessThanOrEqual(1.5);
+      expect(median(won)).toBeLessThanOrEqual(1.5);
+    }
+  );
 
   it('never auto-wins an escort mission whose roster has no asset', () => {
     // The mirror of the secure mould's missing-hold guard: a spec that fields

@@ -8,13 +8,12 @@
 import {
   createGameLoop,
   createStaticLayer,
-  loadScore,
-  saveScore,
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
   wireChannelButton,
   createEffects,
+  createToaster,
   shadeColor,
   clamp
 } from '../engine';
@@ -26,9 +25,9 @@ import {
   bounceOffSurface,
   stepFall,
   explosionDamage,
-  matchScore,
   type Projectile
 } from './physics';
+import { createScoreLedger, submitsToBoard } from './scoring';
 import { chooseAiShot, cpuDifficulty, cpuPickWeapon, type Difficulty } from './ai';
 import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster, type Ammo, type WeaponId } from './weapons';
 
@@ -46,7 +45,8 @@ const WINS_PER_MATCH = 3;
 const CPU_THINK_TIME = 1.1;
 const SAFE_DROP = 30; // px a tank can fall without damage
 const SKY_MARGIN = 20; // backdrop overdraw so screen shake never shows an edge
-const VICTORIES_KEY = 'tanks-victories';
+/** Colour of the "+NN" award floaters, kept clear of the red damage popups. */
+const AWARD_COLOR = '#fbbf24';
 
 interface Tank {
   x: number;
@@ -117,7 +117,15 @@ export function initTanksGame(): void {
   const p2Label = el('p2-label');
   const p1Wins = el('p1-wins');
   const p2Wins = el('p2-wins');
-  const victoriesEl = el('victories');
+  const scoreEl = el('score');
+  const score2Item = el('score2-item');
+  const score2El = el('score2');
+  const bestItem = el('best-item');
+  const bestEl = el('best');
+  const localScoresEl = el('local-scores');
+  const localP1El = el('local-p1');
+  const localP2El = el('local-p2');
+  const { show: showToast } = createToaster(el('toast-area'));
   const weaponButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.weapon-btn'));
   const difficultyButtons = Array.from(
     root.querySelectorAll<HTMLButtonElement>('.difficulty-btn')
@@ -134,7 +142,8 @@ export function initTanksGame(): void {
     winsMatch: root.dataset.tWinsMatch || 'wins the match!',
     draw: root.dataset.tDraw || 'Mutual destruction!',
     wind: root.dataset.tWind || 'Wind',
-    matchScore: root.dataset.tMatchScore || 'Match score'
+    matchScore: root.dataset.tMatchScore || 'Match score',
+    newRecord: root.dataset.tNewRecord || 'New record!'
   };
 
   const stars = Array.from({ length: 60 }, () => ({
@@ -303,11 +312,11 @@ export function initTanksGame(): void {
   let shake = 0;
   let cpuTimer = 0;
   let cpuShotPending = false;
-  let victories = loadScore(VICTORIES_KEY);
-  victoriesEl.textContent = victories.toString();
+  // Running match score per tank: damage landed, direct hits, rounds taken and
+  // (once, at match end) surviving armour. Player 0's total is what the header
+  // shows and what a vs-CPU match submits — the same number by construction.
+  const ledger = createScoreLedger();
 
-  // High-score table for matches won against the CPU: round margin plus the
-  // armour the player's tank finished on, so a clean sweep outranks a scrape.
   const board = initScoreboard(document.getElementById('highscores'));
 
   // Jaunty Worms/Scorched-Earth artillery march in C major: a brassy bouncing
@@ -405,11 +414,57 @@ export function initTanksGame(): void {
     syncWeapons();
   }
 
-  function applyDamage(tank: Tank, amount: number) {
+  /** Repaints both score readouts and, for the player's own gains vs the CPU,
+   *  banks the run so a closed tab keeps the record. */
+  function syncScores(player: number) {
+    scoreEl.textContent = ledger.total(0).toString();
+    score2El.textContent = ledger.total(1).toString();
+    // Only a vs-CPU run banks. Two-player totals are farmable (one person can
+    // drive both tanks), so they must never touch the personal best that feeds
+    // the arcade floor's attract screens, any more than the world board.
+    if (player !== 0 || !submitsToBoard(mode)) return;
+    const { best, newRecord } = board.bank(ledger.total(0));
+    bestEl.textContent = best.toString();
+    if (newRecord) showToast(`🏅 ${strings.newRecord}`);
+  }
+
+  /** Whether a player's running total is on the header. The CPU's is not (its
+   *  readout is the one `startMatch` hides vs the CPU), so its gains move a
+   *  number nobody can see and are banked without announcing themselves. */
+  const scoreShown = (player: number) => player === 0 || !score2Item.hidden;
+
+  /**
+   * Announces a gain over the tank that earned it and folds it into the
+   * readouts. The floater says "your score moved", so it belongs to the
+   * scorer's tank — drawn over the tank that was hit it read as the victim
+   * being paid. `rise` lifts it clear of the one already in flight when a
+   * single shell pays twice (a direct hit and then its blast damage).
+   */
+  function award(player: number | null, points: number, rise = 30) {
+    if (player === null || points <= 0) return;
+    if (scoreShown(player)) {
+      const tank = tanks[player];
+      fx.floater(tank.x, tank.y - TANK_H - rise, `+${points}`, AWARD_COLOR, { glow: true });
+    }
+    syncScores(player);
+  }
+
+  /**
+   * Damage landing on `index`, credited to `shooter` (null for fall damage,
+   * which nobody is paid for). The award follows the armour actually removed,
+   * so overkill on a nearly-dead tank is not worth more than the tank was.
+   */
+  function applyDamage(index: number, amount: number, shooter: number | null) {
+    const tank = tanks[index];
     if (amount <= 0 || tank.hp <= 0) return;
+    const removed = Math.min(tank.hp, amount);
     tank.hp = Math.max(0, tank.hp - amount);
     tank.flash = 0.35;
     fx.floater(tank.x, tank.y - TANK_H - 30, `-${amount}`, '#f87171');
+    // The red loss floats over the tank that took it; the gold gain floats over
+    // the tank that earned it, a little higher than the direct-hit bonus that
+    // may have preceded it on the same shell.
+    award(shooter, ledger.damage(shooter, index, removed), 46);
   }
 
   function newWind() {
@@ -467,14 +522,42 @@ export function initTanksGame(): void {
     syncControls();
   }
 
+  /**
+   * The header as the start screen should read: no running totals, the shared
+   * best on show and the second player's score put away. Called at init and
+   * again whenever the start overlay comes back, since the mode-dependent
+   * layout `startMatch` sets would otherwise still be advertising the last
+   * match's "P2 SCORE" over the start screen.
+   */
+  function idleScores() {
+    scoreEl.textContent = '0';
+    score2El.textContent = '0';
+    bestEl.textContent = board.best().toString();
+    score2Item.hidden = true;
+    bestItem.hidden = false;
+  }
+
   function startMatch(selectedMode: 'cpu' | '2p') {
     mode = selectedMode;
     wins = [0, 0];
     roundsDecided = 0;
+    ledger.reset();
+    // A best-of-five match is a long run: beginRun arms the one-time record
+    // celebration, and banking every award means walking away at 2–0 still
+    // keeps whatever the run was worth. Both modes begin a run; only vs-CPU
+    // banks into it (see syncScores).
+    board.beginRun();
     p1Label.textContent = strings.player1;
     p2Label.textContent = playerName(1);
     p1Wins.textContent = '0';
     p2Wins.textContent = '0';
+    scoreEl.textContent = '0';
+    score2El.textContent = '0';
+    bestEl.textContent = board.best().toString();
+    // The second score belongs to the other human; the shared best has nothing
+    // to say about a two-player match, so they swap places.
+    score2Item.hidden = mode === 'cpu';
+    bestItem.hidden = mode === '2p';
     startOverlay.style.display = 'none';
     roundOverlay.style.display = 'none';
     audio.start();
@@ -533,7 +616,7 @@ export function initTanksGame(): void {
     }
   }
 
-  function impactAt(x: number, y: number, weaponId: WeaponId) {
+  function impactAt(x: number, y: number, weaponId: WeaponId, shooter: number) {
     const weapon = WEAPONS[weaponId];
     explosions.push({ x, y, t: 0, radius: weapon.radius });
     audio.playSfx('explosion');
@@ -541,12 +624,13 @@ export function initTanksGame(): void {
     scene.rebuild(); // re-bake the reshaped terrain
     spawnDirt(x, y, weapon.radius);
     shake = Math.min(0.6, shake + weapon.radius / 160);
-    for (const tank of tanks) {
+    tanks.forEach((tank, index) => {
       applyDamage(
-        tank,
-        explosionDamage(x, y, tank.x, tank.y - TANK_H / 2, weapon.radius, weapon.maxDamage)
+        index,
+        explosionDamage(x, y, tank.x, tank.y - TANK_H / 2, weapon.radius, weapon.maxDamage),
+        shooter
       );
-    }
+    });
   }
 
   function endTurn() {
@@ -568,52 +652,72 @@ export function initTanksGame(): void {
     if (winner !== null) {
       wins[winner]++;
       (winner === 0 ? p1Wins : p2Wins).textContent = wins[winner].toString();
+      award(winner, ledger.roundWin(winner));
     }
     const matchOver = winner !== null && wins[winner] >= WINS_PER_MATCH;
     if (matchOver) {
       audio.playSfx('gameover');
       audio.stop();
+      // Surviving armour is folded in exactly once, when the match is over.
+      tanks.forEach((tank, index) => {
+        award(index, ledger.survivingArmour(index, tank.hp));
+      });
     }
-    // Floor unlock progress is decoupled from the leaderboard: a completed
-    // 2P match, or a CPU match where the player took at least one round,
-    // finishes this cabinet for the chain even though nothing reaches the
-    // board below (the score argument is a sentinel — markDone only needs it
-    // above zero).
-    if (matchOver && (mode === '2p' || wins[0] > 0)) markDone('tanks', 1);
-    const playerWonMatch = matchOver && winner === 0 && mode === 'cpu';
-    if (playerWonMatch) {
-      victories++;
-      saveScore(VICTORIES_KEY, victories);
-      victoriesEl.textContent = victories.toString();
-    }
-    roundEmoji.textContent = matchOver ? '🏆' : winner === null ? '☠️' : '💥';
+    // Two-player only. A vs-CPU match reaches the board below whatever its
+    // result, and `commit()` marks the chain from there, so the rule for this
+    // cabinet is the same as every other one: score something and the next
+    // cabinet appears. A completed 2P match never submits, so it needs this
+    // direct call or the chain's first link would stall for anyone who only
+    // ever plays two-player (the score argument is a sentinel — markDone only
+    // needs it above zero).
+    if (matchOver && mode === '2p') markDone('tanks', 1);
+    // A trophy is for someone in this room. When the CPU takes the match it
+    // used to raise one too, which read as congratulating the player on losing.
+    const cpuTookMatch = matchOver && mode === 'cpu' && winner === 1;
+    roundEmoji.textContent = matchOver
+      ? cpuTookMatch
+        ? '🤖'
+        : '🏆'
+      : winner === null
+        ? '☠️'
+        : '💥';
     roundMessage.textContent =
       winner === null
         ? strings.draw
         : `${playerName(winner)} ${matchOver ? strings.winsMatch : strings.winsRound}`;
     nextRoundBtn.style.display = matchOver ? 'none' : 'inline-block';
     playAgainBtn.style.display = matchOver ? 'inline-block' : 'none';
-    // Winning the match surfaces the number that faces the table — round
-    // margin × 100 plus surviving armour — so the score isn't a mystery.
-    const finalScore = matchScore(wins[0], wins[1], tanks[0].hp);
+    // The number the run submits is the one the player watched accumulate.
+    const finalScore = ledger.total(0);
+    // Vs the CPU it is shown at every match end, won or lost: a losing run that
+    // earned 900 points is still a finished run worth that much.
+    const submits = matchOver && submitsToBoard(mode);
     matchScoreEl.textContent = `🏅 ${strings.matchScore}: ${finalScore}`;
-    matchScoreEl.style.display = playerWonMatch ? 'block' : 'none';
+    matchScoreEl.style.display = submits ? 'block' : 'none';
+    // Two-player ends on both totals side by side instead, under a note saying
+    // where they stop.
+    localP1El.textContent = `${strings.player1}: ${ledger.total(0)}`;
+    localP2El.textContent = `${strings.player2}: ${ledger.total(1)}`;
+    localScoresEl.style.display = matchOver && mode === '2p' ? 'block' : 'none';
     roundOverlay.style.display = 'flex';
-    // After the overlay is visible, so the initials input can take focus.
-    // The vs-CPU-win-only gate here is load-bearing for the LEADERBOARD (a
-    // lost or 2P match has no comparable score to submit) — do not widen it.
+    // After the overlay is visible, so the initials input can take focus. The
+    // gate is vs-CPU alone and is load-bearing: two-player scores can be farmed
+    // trivially (one person drives both tanks), so they never reach the shared
+    // board. It is deliberately NOT also gated on winning — `qualifies()`
+    // decides whether to interrupt for initials, never whether a run counts.
     // Floor progress is marked above, independent of this gate.
-    if (playerWonMatch) board.show(finalScore);
+    if (submits) board.show(finalScore);
   }
 
-  /** Tanks above the (possibly freshly cratered) surface fall and take damage. */
+  /** Tanks above the (possibly freshly cratered) surface fall and take damage.
+   *  A drop is nobody's shot, so it pays nobody. */
   function updateFalls(dt: number) {
-    for (const tank of tanks) {
+    tanks.forEach((tank, index) => {
       const drop = stepFall(tank, surfaceYAt(ground, tank.x), dt);
       if (drop !== null && drop > SAFE_DROP) {
-        applyDamage(tank, Math.min(30, Math.round((drop - SAFE_DROP) * 0.5)));
+        applyDamage(index, Math.min(30, Math.round((drop - SAFE_DROP) * 0.5)), null);
       }
-    }
+    });
   }
 
   function stepShot(shot: Shot, dt: number, spawned: Shot[]): boolean {
@@ -642,13 +746,20 @@ export function initTanksGame(): void {
     if (p.x < -100 || p.x > WIDTH + 100 || p.y > HEIGHT) return false;
 
     // Direct hit on a tank detonates mid-air (own tank only after clearing the barrel)
-    const hitTank = tanks.find(
+    const hitIndex = tanks.findIndex(
       (tank, idx) =>
         (idx !== current || shot.flightTime > 0.25) &&
         Math.hypot(p.x - tank.x, p.y - (tank.y - TANK_H / 2)) < DIRECT_HIT_RADIUS
     );
-    if (hitTank) {
-      impactAt(p.x, p.y, shot.weapon);
+    if (hitIndex >= 0) {
+      // Putting a shell on the hull itself is the skill this game is about, so
+      // it pays a bonus on top of the blast damage that follows — but only on a
+      // live tank. A wreck keeps stopping shells (the hull is still there) and
+      // a MIRV's five warheads fly on until the last one lands, so without the
+      // hp the ledger checks, a finishing kill would be paid for four more
+      // times over the same corpse.
+      award(current, ledger.directHit(current, hitIndex, tanks[hitIndex].hp));
+      impactAt(p.x, p.y, shot.weapon, current);
       return false;
     }
     if (p.x >= 0 && p.x < WIDTH && p.y >= surfaceYAt(ground, p.x)) {
@@ -661,7 +772,7 @@ export function initTanksGame(): void {
         audio.playSfx('blip');
         return true;
       }
-      impactAt(p.x, p.y, shot.weapon);
+      impactAt(p.x, p.y, shot.weapon, current);
       return false;
     }
     return true;
@@ -1181,12 +1292,15 @@ export function initTanksGame(): void {
   });
   playAgainBtn.addEventListener('click', () => {
     roundOverlay.style.display = 'none';
+    localScoresEl.style.display = 'none';
     board.hide();
+    idleScores();
     startOverlay.style.display = 'flex';
     phase = 'idle';
   });
 
   // Idle backdrop so the canvas isn't empty behind the start overlay
+  idleScores();
   rollTerrain();
   scene.rebuild();
   syncControls();

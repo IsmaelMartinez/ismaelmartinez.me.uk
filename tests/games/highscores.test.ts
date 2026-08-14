@@ -146,6 +146,26 @@ describe('personal best', () => {
     expect(loadBest('tanks')).toBe(0);
   });
 
+  it('leaves a rescaled game\'s pre-bump best behind', () => {
+    // Tank Duel's old best was a match margin (100-400) and its ledger score
+    // runs into the thousands, so reading the old number back would seed the
+    // HUD with a baseline the first match clears — firing the one-time "New
+    // record!" toast on a run the player may well have lost. The bumped key
+    // is a fresh start, and no older source (which are all old-scale too) is
+    // consulted for it.
+    store['arcade-best-tanks'] = '340';
+    store['arcade-hs-tanks'] = JSON.stringify([entry('ISM', 400)]);
+    expect(loadBest('tanks')).toBe(0);
+    expect(bestKey('tanks')).toBe('arcade-best-tanks-v2');
+    // The retired row is left in place rather than deleted, as with the
+    // retired per-device tables.
+    expect(store['arcade-best-tanks']).toBe('340');
+    // The new key is an ordinary best from here on.
+    saveBest('tanks', 1480);
+    expect(loadBest('tanks')).toBe(1480);
+    expect(store[bestKey('tanks')]).toBe('1480');
+  });
+
   it('survives a corrupt retired table', () => {
     store['arcade-hs-snake'] = '{nope';
     expect(loadBest('snake')).toBe(0);

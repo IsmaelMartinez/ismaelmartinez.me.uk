@@ -37,8 +37,10 @@ const TABLE_PREFIX = 'arcade-hs-';
 
 /**
  * Single-number keys the games used before either board existed. Tank Duel is
- * absent on purpose: its legacy key counted matches won, which is not
- * comparable with the per-match score it reports now.
+ * absent on purpose: its legacy `tanks-victories` key counted matches won,
+ * which is not comparable with the per-match score it reports now. That
+ * counter has since been retired from the cabinet altogether; the rows are
+ * left where they are rather than deleted, as with the retired tables above.
  */
 const LEGACY_KEYS: Record<string, string> = {
   snake: 'snake-high-score',
@@ -48,7 +50,23 @@ const LEGACY_KEYS: Record<string, string> = {
   syndicate: 'syndicate-record-cash'
 };
 
-export const bestKey = (gameId: string): string => `${BEST_PREFIX}${gameId}`;
+/**
+ * Games whose scoring scale changed under them, and the version their best is
+ * kept under since. Tank Duel is the only one: it used to record a match
+ * margin (100–400, and only on a won CPU match) and now records a running
+ * ledger score that reaches four figures, so an old-scale number is not a best
+ * at all — it would sit in the HUD as an unbeatable-looking baseline one match
+ * clears, firing the one-time "New record!" toast on a run the player lost.
+ * Bumping the key retires the old number the way the retired tables below are
+ * retired: the row is left where it is rather than deleted, so the change costs
+ * a few bytes and stays reversible.
+ */
+const BEST_KEY_VERSION: Record<string, number> = { tanks: 2 };
+
+export const bestKey = (gameId: string): string => {
+  const version = BEST_KEY_VERSION[gameId];
+  return `${BEST_PREFIX}${gameId}${version ? `-v${version}` : ''}`;
+};
 
 /** Classic six-digit arcade readout, e.g. 340 → "000340". */
 export const formatScore = (score: number): string => score.toString().padStart(6, '0');
@@ -100,10 +118,15 @@ function retiredTableBest(gameId: string): number {
  * retired table's best row, then the single-number key that predated both. A
  * migrated value is written through, so the older sources are consulted once
  * per game and never again.
+ *
+ * A rescaled game reads its versioned key and stops there: every older source
+ * predates the scale change, so migrating one would put back exactly the number
+ * the bump was meant to retire.
  */
 export function loadBest(gameId: string): number {
   const stored = loadScore(bestKey(gameId));
   if (stored > 0) return stored;
+  if (BEST_KEY_VERSION[gameId]) return 0;
   const legacyKey = LEGACY_KEYS[gameId];
   const migrated = Math.max(retiredTableBest(gameId), legacyKey ? loadScore(legacyKey) : 0);
   if (migrated > 0) saveScore(bestKey(gameId), migrated);

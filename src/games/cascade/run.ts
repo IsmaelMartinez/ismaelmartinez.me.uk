@@ -204,7 +204,9 @@ function lockNow(run: CascadeRun, events: RunEvent[]): void {
     // Part of the piece never entered the well: the stack has hit the sky.
     // Any rows this last lock completed still score and clear (resolved
     // instantly — there is no next piece to flash for), so a heroic final
-    // drop is paid before the run ends.
+    // drop is paid before the run ends. A lock that completed nothing leaves
+    // the board untouched: `resolveClears` returns empty without settling
+    // when no row is full.
     for (const step of resolveClears(run.well)) {
       scoreClear(run, step.rows, events);
     }

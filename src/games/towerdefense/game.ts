@@ -144,6 +144,7 @@ export function initTowerDefenseGame(): void {
     waveIn: s('tWaveIn', 'Wave {n} in {s}s'),
     waveNow: s('tWaveNow', 'Wave {n} incoming!'),
     waveCleared: s('tWaveCleared', 'Wave cleared'),
+    waveLeaked: s('tWaveLeaked', 'They got through, no wave bonus'),
     interest: s('tInterest', 'interest'),
     newRecord: s('tNewRecord', 'New record!'),
     breach: s('tBreach', 'The line is breached!'),
@@ -475,14 +476,21 @@ export function initTowerDefenseGame(): void {
   }
 
   function waveCleared() {
-    const interest = clearWave(eco);
+    // Surviving a wave is not holding it: if anything reached the keep, the
+    // wave still moves the run on and still pays its interest, but scores
+    // nothing. The economy counts the leaks itself, behind `leak`.
+    const { held, interest } = clearWave(eco);
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
     bankScore();
     const gp = routePosition(map.route, routeLast);
     addFloater(gp.x, gp.y - 1, `+${interest} ${strings.interest}`, '#4ade80');
-    showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);
-    audio.playSfx('score');
+    if (held) {
+      showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);
+      audio.playSfx('score');
+    } else {
+      showToast(`🩸 ${strings.waveLeaked} · +${interest} ${strings.interest}`);
+    }
     waveIdx++;
     if (waveIdx === AUTHORED_WAVES) {
       // No victory wall: clearing the last authored wave rolls the run into an

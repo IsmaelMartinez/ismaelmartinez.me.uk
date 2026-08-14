@@ -118,7 +118,7 @@ export const translations = {
     'fun.lemmings.title': 'Critter Rescue',
     'fun.lemmings.description': 'Guide the little critters safely home!',
     'fun.lemmings.instructions':
-      'Guide the mindless critters from the hatch to the exit. Tap a critter to give it the selected skill — Blockers turn others back, Diggers tunnel down, Bashers dig sideways, Builders bridge a rise, and Floaters survive any fall. Rescue the goal number to clear each level. Skills are in limited supply, so spend them wisely!',
+      'Guide the mindless critters from the hatch to the exit. Tap a critter to give it the selected skill — Blockers turn others back, Diggers tunnel down, Bashers dig sideways, Builders bridge a rise, and Floaters survive any fall. Rescue the goal number to clear each level. Skills are in limited supply, so spend them wisely! If a level goes nowhere, 💥 Nuke blows up the whole crowd and ends it, so you are never stuck.',
     'fun.lemmings.start': 'Start Rescue',
     'fun.lemmings.saved': 'Saved',
     'fun.lemmings.progress': 'Rescued so far',
@@ -127,13 +127,18 @@ export const translations = {
     'fun.lemmings.best': 'Best',
     'fun.lemmings.spawnRate': 'Release rate',
     'fun.lemmings.nuke': 'Nuke',
+    'fun.lemmings.nukeTitle':
+      'End this level now: blow up every critter and score whoever you have already rescued',
     'fun.lemmings.skillBlocker': 'Blocker',
     'fun.lemmings.skillDigger': 'Digger',
     'fun.lemmings.skillBasher': 'Basher',
     'fun.lemmings.skillBuilder': 'Builder',
     'fun.lemmings.skillFloater': 'Floater',
     'fun.lemmings.skillBomber': 'Bomber',
-    'fun.lemmings.hint': 'Tap or click a critter to apply the selected skill.',
+    'fun.lemmings.hint':
+      'Tap or click a critter to apply the selected skill. Stuck? 💥 Nuke clears the field and ends the level there and then.',
+    'fun.lemmings.stuckHint':
+      'Nothing has moved for a while: the critters look stuck. Give one of them a skill to open a way through, or press 💥 Nuke to clear the field and end the level with whoever you have already rescued.',
     'fun.lemmings.hint7': 'Block the crowd before the cliff, then dig a shaft down to the exit.',
     'fun.lemmings.hint8':
       'Build a staircase up onto the shelf, then bash through the wall to the exit.',
@@ -622,7 +627,7 @@ export const translations = {
     'fun.lemmings.title': 'Rescate de Bichos',
     'fun.lemmings.description': '¡Guía a los bichitos sanos y salvos a casa!',
     'fun.lemmings.instructions':
-      'Guía a los bichos sin cabeza desde la trampilla hasta la salida. Toca un bicho para darle la habilidad seleccionada: los Bloqueadores hacen girar a los demás, los Excavadores cavan hacia abajo, los Perforadores cavan de lado, los Constructores tienden un puente y los Flotadores sobreviven a cualquier caída. Rescata el número objetivo para superar cada nivel. Las habilidades son limitadas, ¡úsalas con cabeza!',
+      'Guía a los bichos sin cabeza desde la trampilla hasta la salida. Toca un bicho para darle la habilidad seleccionada: los Bloqueadores hacen girar a los demás, los Excavadores cavan hacia abajo, los Perforadores cavan de lado, los Constructores tienden un puente y los Flotadores sobreviven a cualquier caída. Rescata el número objetivo para superar cada nivel. Las habilidades son limitadas, ¡úsalas con cabeza! Si un nivel no va a ninguna parte, 💥 Detonar hace volar a toda la cuadrilla y lo termina, así que nunca te quedas atrapado.',
     'fun.lemmings.start': 'Empezar Rescate',
     'fun.lemmings.saved': 'Salvados',
     'fun.lemmings.progress': 'Rescatados hasta ahora',
@@ -631,13 +636,18 @@ export const translations = {
     'fun.lemmings.best': 'Récord',
     'fun.lemmings.spawnRate': 'Ritmo de salida',
     'fun.lemmings.nuke': 'Detonar',
+    'fun.lemmings.nukeTitle':
+      'Termina el nivel ya: hace volar a todos los bichos y puntúa con los que ya hayas rescatado',
     'fun.lemmings.skillBlocker': 'Bloqueador',
     'fun.lemmings.skillDigger': 'Excavador',
     'fun.lemmings.skillBasher': 'Perforador',
     'fun.lemmings.skillBuilder': 'Constructor',
     'fun.lemmings.skillFloater': 'Flotador',
     'fun.lemmings.skillBomber': 'Explosivo',
-    'fun.lemmings.hint': 'Toca un bicho para aplicar la habilidad seleccionada.',
+    'fun.lemmings.hint':
+      'Toca un bicho para aplicar la habilidad seleccionada. ¿Atascado? 💥 Detonar despeja el campo y termina el nivel ahí mismo.',
+    'fun.lemmings.stuckHint':
+      'Hace un rato que no se mueve nada: los bichos parecen atascados. Dale una habilidad a alguno para abrir paso, o pulsa 💥 Detonar para despejar el campo y terminar el nivel con los que ya hayas rescatado.',
     'fun.lemmings.hint7':
       'Bloquea a la multitud antes del precipicio y luego excava un pozo hasta la salida.',
     'fun.lemmings.hint8':
@@ -1128,7 +1138,7 @@ export const translations = {
     'fun.lemmings.title': 'Rescat de Bestioles',
     'fun.lemmings.description': 'Guia les bestioletes sanes i estalvies a casa!',
     'fun.lemmings.instructions':
-      'Guia les bestioles sense cap des de la trapa fins a la sortida. Toca una bestiola per donar-li l\'habilitat seleccionada: els Bloquejadors fan girar els altres, els Excavadors caven cap avall, els Perforadors caven de costat, els Constructors fan un pont i els Flotadors sobreviuen a qualsevol caiguda. Rescata el nombre objectiu per superar cada nivell. Les habilitats són limitades, fes-les servir amb cap!',
+      'Guia les bestioles sense cap des de la trapa fins a la sortida. Toca una bestiola per donar-li l\'habilitat seleccionada: els Bloquejadors fan girar els altres, els Excavadors caven cap avall, els Perforadors caven de costat, els Constructors fan un pont i els Flotadors sobreviuen a qualsevol caiguda. Rescata el nombre objectiu per superar cada nivell. Les habilitats són limitades, fes-les servir amb cap! Si un nivell no va enlloc, 💥 Detonar fa volar tota la colla i l\'acaba, així que no et quedes mai encallat.',
     'fun.lemmings.start': 'Comença el Rescat',
     'fun.lemmings.saved': 'Salvats',
     'fun.lemmings.progress': 'Rescatats fins ara',
@@ -1137,13 +1147,18 @@ export const translations = {
     'fun.lemmings.best': 'Rècord',
     'fun.lemmings.spawnRate': 'Ritme de sortida',
     'fun.lemmings.nuke': 'Detonar',
+    'fun.lemmings.nukeTitle':
+      'Acaba el nivell ara mateix: fa volar totes les bestioles i puntua amb les que ja hagis rescatat',
     'fun.lemmings.skillBlocker': 'Bloquejador',
     'fun.lemmings.skillDigger': 'Excavador',
     'fun.lemmings.skillBasher': 'Perforador',
     'fun.lemmings.skillBuilder': 'Constructor',
     'fun.lemmings.skillFloater': 'Flotador',
     'fun.lemmings.skillBomber': 'Explosiu',
-    'fun.lemmings.hint': 'Toca una bestiola per aplicar l\'habilitat seleccionada.',
+    'fun.lemmings.hint':
+      'Toca una bestiola per aplicar l\'habilitat seleccionada. Encallat? 💥 Detonar neteja el camp i acaba el nivell allà mateix.',
+    'fun.lemmings.stuckHint':
+      'Fa estona que no es mou res: les bestioles semblen encallades. Dona una habilitat a alguna per obrir pas, o prem 💥 Detonar per netejar el camp i acabar el nivell amb les que ja hagis rescatat.',
     'fun.lemmings.hint7':
       'Bloqueja la munió abans del precipici i després cava un pou fins a la sortida.',
     'fun.lemmings.hint8':

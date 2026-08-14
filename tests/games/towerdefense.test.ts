@@ -395,14 +395,43 @@ describe('economy', () => {
     expect(leak(eco, 5)).toBe(0);
   });
 
-  it('pays capped interest per cleared wave and scores the wave base', () => {
+  it('pays capped interest per finished wave and scores the wave base', () => {
     const eco = createEconomy();
     eco.money = 90;
-    expect(clearWave(eco)).toBe(9);
+    expect(clearWave(eco)).toEqual({ held: true, interest: 9 });
     expect(eco.money).toBe(99);
     expect(score(eco)).toBe(WAVE_BASE + 0);
     eco.money = 10000;
-    expect(clearWave(eco)).toBe(INTEREST_CAP);
+    expect(clearWave(eco).interest).toBe(INTEREST_CAP);
+  });
+
+  it('scores nothing for a leaked wave, but still pays its interest', () => {
+    // Issue #254 was a scoring bug, so only the score is withheld: the wave
+    // pays its interest as before, or one slip would also cost the tower that
+    // stops the next wave.
+    const eco = createEconomy();
+    eco.money = 90;
+    leak(eco, 1);
+    expect(clearWave(eco)).toEqual({ held: false, interest: 9 });
+    expect(eco.money).toBe(99);
+    expect(eco.wavesCleared).toBe(1);
+    expect(eco.wavesHeld).toBe(0);
+    expect(score(eco)).toBe(0);
+  });
+
+  it('taints only the wave a leak happened in — the next starts clean', () => {
+    // clearWave is the sole reset of the leak count, and this is what pins
+    // that: move the reset anywhere run-scoped (createEconomy) and a single
+    // wave-1 leak latches every later wave to unheld, silently costing a
+    // strong run hundreds of points.
+    const eco = createEconomy();
+    leak(eco, 1);
+    expect(clearWave(eco).held).toBe(false);
+    expect(clearWave(eco).held).toBe(true);
+    expect(clearWave(eco).held).toBe(true);
+    expect(eco.wavesCleared).toBe(3);
+    expect(eco.wavesHeld).toBe(2);
+    expect(score(eco)).toBe(2 * WAVE_BASE);
   });
 });
 
@@ -417,6 +446,12 @@ interface BuildStep {
   y: number;
   /** Upgrade an existing tower at (x, y) instead of placing. */
   upgrade?: boolean;
+  /**
+   * Earliest wave index this step may be bought at — a player who builds
+   * later rather than one who cannot afford to. Like affordability, it stalls
+   * the buyer rather than skipping the step.
+   */
+  notBefore?: number;
 }
 
 function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
@@ -425,10 +460,14 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
   const towers: Tower[] = [];
   const dt = 1 / 60;
   let next = 0;
+  let waveIdx = 0;
+  /** Whether each finished wave was held, in order — the leak count's ledger. */
+  const heldByWave: boolean[] = [];
 
   const buy = () => {
     while (next < plan.length) {
       const step = plan[next];
+      if (step.notBefore !== undefined && waveIdx < step.notBefore) return;
       const tile = idx(step.x, step.y);
       if (step.upgrade) {
         const tower = towers.find(t => t.tile === tile);
@@ -447,7 +486,7 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
     }
   };
 
-  for (let waveIdx = 0; waveIdx < maxWave; waveIdx++) {
+  for (waveIdx = 0; waveIdx < maxWave; waveIdx++) {
     buy();
     const wave = waveDef(waveIdx);
     const spawner = createSpawner(wave);
@@ -463,14 +502,14 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
       for (const event of stepTowers(towers, enemies, world.route, dt)) {
         if (event.type === 'kill') awardKill(eco, event.bounty);
       }
-      if (eco.lives <= 0) return { survived: false, eco, waveIdx };
+      if (eco.lives <= 0) return { survived: false, eco, waveIdx, heldByWave };
       if (enemies.length > 64) enemies = enemies.filter(e => e.alive);
       if (spawnerDone(spawner, wave) && enemies.every(e => !e.alive)) break;
     }
-    clearWave(eco);
+    heldByWave.push(clearWave(eco).held);
     buy();
   }
-  return { survived: true, eco, waveIdx: maxWave };
+  return { survived: true, eco, waveIdx: maxWave, heldByWave };
 }
 
 describe('headless playthrough', () => {
@@ -478,6 +517,17 @@ describe('headless playthrough', () => {
     const result = playRun([]);
     expect(result.survived).toBe(false);
     expect(result.waveIdx).toBeLessThan(4);
+  });
+
+  it('an idle run scores nothing (issue #254)', () => {
+    // Press Start, build nothing, walk away. The opening waves still *end* —
+    // every marcher walks into the keep, so no enemy is left alive — and the
+    // run used to bank the wave bonus for each of them, putting 200 points on
+    // the shared board for doing nothing at all.
+    const result = playRun([]);
+    expect(result.eco.wavesCleared).toBeGreaterThan(0); // waves did end
+    expect(result.eco.wavesHeld).toBe(0); // none of them was held
+    expect(score(result.eco)).toBe(0); // so the board gets nothing
   });
 
   // The kill corridors: bolts on the ridges between the path's straights
@@ -539,9 +589,40 @@ describe('headless playthrough', () => {
     // the best layout we can author against this harness finishes bleeding.
     expect(result.eco.lives).toBeGreaterThan(0);
     expect(result.eco.lives).toBeLessThan(START_LIVES);
-    // The score follows the design formula: waves × base + kill bounties.
-    expect(score(result.eco)).toBe(AUTHORED_WAVES * WAVE_BASE + result.eco.killScore);
+    // The score follows the design formula: waves *held* × base + kill
+    // bounties. Since this plan bleeds (the contract above), some of the 18
+    // waves it survives leaked and so paid no wave bonus — the run scores for
+    // the ones it held, not for every one it got through (issue #254).
+    expect(score(result.eco)).toBe(result.eco.wavesHeld * WAVE_BASE + result.eco.killScore);
+    expect(result.eco.wavesHeld).toBeGreaterThan(0);
+    expect(result.eco.wavesHeld).toBeLessThan(result.eco.wavesCleared);
     expect(result.eco.killScore).toBeGreaterThan(0);
+    expect(result.eco.wavesHeld).toBe(result.heldByWave.filter(Boolean).length);
+  });
+
+  it('a wave that bled does not latch the rest of the run to unheld', () => {
+    // Nothing stands for wave 1, so it leaks; the line goes up from wave 2 and
+    // holds from there. The leak count is reset at the wave boundary and
+    // nowhere else, and this is the whole-loop proof of that boundary: make
+    // the reset run-scoped instead and a player who slips once on wave 1 then
+    // holds everything after scores nothing for any of it.
+    const result = playRun(
+      [
+        { kind: 'bolt', x: 10, y: 4, notBefore: 1 },
+        { kind: 'bolt', x: 10, y: 8, notBefore: 1 },
+        { kind: 'bolt', x: 13, y: 4, notBefore: 1 },
+        { kind: 'bolt', x: 13, y: 8, notBefore: 2 },
+        { kind: 'bolt', x: 7, y: 4, notBefore: 3 },
+        { kind: 'bolt', x: 7, y: 8, notBefore: 3 }
+      ],
+      6
+    );
+    expect(result.survived).toBe(true);
+    expect(result.heldByWave[0]).toBe(false); // wave 1 was undefended
+    expect(result.heldByWave.slice(1)).toContain(true); // and the run recovers
+    expect(result.eco.wavesHeld).toBe(result.heldByWave.filter(Boolean).length);
+    expect(result.eco.wavesHeld).toBeGreaterThan(0);
+    expect(score(result.eco)).toBe(result.eco.wavesHeld * WAVE_BASE + result.eco.killScore);
   });
 
   it('even the reference plan plus every affordable reinforcement still bleeds', () => {

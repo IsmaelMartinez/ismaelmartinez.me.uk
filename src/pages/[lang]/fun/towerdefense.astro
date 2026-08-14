@@ -2,6 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -69,7 +70,7 @@ const t = useTranslations(lang);
           <div class="canvas-scroll" id="canvas-scroll">
             <canvas id="game-canvas"></canvas>
           </div>
-          <div id="toast-area" class="toast-area"></div>
+          <ToastArea />
 
           <div id="start-overlay" class="game-overlay">
             <div class="overlay-content">
@@ -247,33 +248,6 @@ const t = useTranslations(lang);
     #game-canvas {
       min-width: 600px;
     }
-  }
-
-  .toast-area {
-    position: absolute;
-    bottom: var(--space-md);
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-xs);
-    pointer-events: none;
-  }
-
-  .toast-area :global(.toast) {
-    background: rgba(0, 0, 0, 0.8);
-    color: #fff;
-    font-size: 0.8rem;
-    padding: var(--space-xs) var(--space-md);
-    border-radius: 999px;
-    animation: toastIn 0.2s ease;
-    white-space: nowrap;
-  }
-
-  @keyframes toastIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 
   .game-overlay {

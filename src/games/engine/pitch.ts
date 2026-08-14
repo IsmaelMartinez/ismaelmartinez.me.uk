@@ -23,9 +23,16 @@ const NOTE_RE = /^([A-G])([#b]?)(-?\d{1,2})$/;
  * Frequency in Hz of a note named in scientific pitch notation — `C4`, `A#3`,
  * `Eb5`. Equal temperament from A4 = 440 Hz.
  *
- * Throws on an unparseable name rather than returning a silent fallback: these
- * are authored constants evaluated at module load, so a typo should fail the
- * build and the test run, not ship as a wrong or missing note.
+ * Throws on an unparseable name rather than returning a silent fallback. Be
+ * precise about what that buys, because the cost is real: the scores are
+ * module-level constants, so every call here runs at import time, and a typo
+ * that shipped would throw inside the cabinet's client bundle before the game
+ * ever initialises — a dead page, not one wrong note. `npm run build` does not
+ * catch it (it bundles client scripts, it never executes them) and neither can
+ * `typecheck`, which cannot look inside a string literal. The only gate is
+ * `tests/games/music.test.ts`, which imports every `music.ts` it can find via
+ * `import.meta.glob` precisely so that a new cabinet is covered without anyone
+ * remembering to add it to a list.
  */
 export function pitch(name: string): number {
   const m = name.match(NOTE_RE);

@@ -353,6 +353,16 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     }
   }
 
+  /** Puts every voice back at the top of its line, together. */
+  function resetCursors(): void {
+    if (!ctx) return;
+    const t0 = ctx.currentTime + 0.05;
+    for (const v of voice) {
+      v.next = t0;
+      v.idx = 0;
+    }
+  }
+
   function start(): void {
     if (running) return;
     const context = ensureContext();
@@ -360,12 +370,10 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // Resuming is needed when the context starts suspended (autoplay policy).
     if (context.state === 'suspended') void context.resume();
     running = true;
-    musicMaster.gain.value = musicMuted ? 0 : volume;
-    const t0 = context.currentTime + 0.05;
-    for (const v of voice) {
-      v.next = t0;
-      v.idx = 0;
-    }
+    // Ramped rather than assigned, because stop() ducks this same gain and a
+    // scheduled ramp outranks a later write to `.value`.
+    musicMaster.gain.setTargetAtTime(musicMuted ? 0 : volume, context.currentTime, 0.02);
+    resetCursors();
     scheduler = setInterval(scheduleAhead, 25);
     scheduleAhead();
   }
@@ -376,6 +384,15 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       clearInterval(scheduler);
       scheduler = null;
     }
+    // Dropping the scheduler only stops *new* notes. Everything already handed
+    // to the audio graph plays to its end, and a voice commits a whole note at
+    // a time, so a cabinet with a sustained voice (Tank Duel's horn is 4 beats,
+    // just over two seconds at its tempo) would go on droning over the
+    // game-over sting and the results overlay. Ducking the master is what
+    // actually stops the music; start() lifts it again.
+    if (musicMaster && ctx) {
+      musicMaster.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+    }
   }
 
   function applyMusicMute(): void {
@@ -385,9 +402,17 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   }
 
   function setMusicMuted(value: boolean): void {
+    const wasMuted = musicMuted;
     musicMuted = value;
     saveScore(MUSIC_MUTED_KEY, value ? 1 : 0);
     applyMusicMute();
+    // While muted the cursors keep advancing but no oscillators are made, so a
+    // voice that stepped over a long note has nothing left to play when the
+    // sound comes back: the plucked voices return within the lookahead window
+    // and a sustained one stays missing for up to its whole note, which makes
+    // the mix reassemble itself in stages. Restarting every cursor together
+    // brings it back in one piece, from the top of the loop.
+    if (wasMuted && !value && running) resetCursors();
   }
 
   function toggleMusicMute(): boolean {
@@ -512,7 +537,27 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       // Finite-positive only, capped at MAX_BPM: Infinity would zero
       // secondsPerBeat and spin scheduleAhead's lookahead loop forever, and
       // a huge finite bpm would flood it with near-zero-length notes.
-      if (Number.isFinite(bpm) && bpm > 0) secondsPerBeat = 60 / Math.min(bpm, MAX_BPM);
+      if (!Number.isFinite(bpm) || bpm <= 0) return;
+      const updated = 60 / Math.min(bpm, MAX_BPM);
+      const ratio = updated / secondsPerBeat;
+      secondsPerBeat = updated;
+      // Each cursor holds the end of the last note already handed to the audio
+      // graph, in seconds worked out at the *old* tempo. Left alone, a voice
+      // whose notes are long stays on old-tempo timing for the whole of its
+      // in-flight note while short-note voices re-time within the 0.1s
+      // lookahead — so every tempo change slides the voices further apart and
+      // none of it comes back. Cascade is the only cabinet that ramps, and
+      // across its thirteen level-ups its sustained voice ended up around a
+      // beat and a half behind the melody, which reads as the previous bar's
+      // chord still sounding under the current one. Rescaling the outstanding
+      // gap by the same ratio for every voice restates them all in the new
+      // tempo; the cost is one sub-note seam where the tempo changes.
+      if (ctx) {
+        const now = ctx.currentTime;
+        for (const v of voice) {
+          if (v.next > now) v.next = now + (v.next - now) * ratio;
+        }
+      }
     },
     dispose
   };

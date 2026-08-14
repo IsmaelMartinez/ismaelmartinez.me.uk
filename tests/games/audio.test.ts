@@ -463,6 +463,130 @@ describe('setTempo', () => {
   });
 });
 
+describe('sustained voices: tempo changes, stopping, and un-muting', () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  function stubContext() {
+    const ctx = makeFakeContext();
+    vi.stubGlobal('window', {
+      AudioContext: class {
+        constructor() {
+          return ctx;
+        }
+      }
+    });
+    return ctx;
+  }
+
+  /** Every start time handed to an oscillator so far. */
+  function startTimes(ctx: ReturnType<typeof makeFakeContext>): number[] {
+    return ctx.createOscillator.mock.results.map(r => r.value.start.mock.calls[0][0]);
+  }
+
+  it('rescales every pending cursor on a tempo change, so voices cannot slide apart', () => {
+    // A long-note voice against a short-note one — the shape that made
+    // Cascade's pad drift a beat and a half behind its melody across a run.
+    vi.useFakeTimers();
+    const ctx = stubContext();
+    const audio = createGameAudio({
+      tracks: [
+        { melody: [{ freq: 440, beats: 4 }] }, // 4s per note at 60 bpm
+        { melody: [{ freq: 220, beats: 1 }] } // 1s per note
+      ],
+      tempo: 60
+    });
+    audio.start(); // first note of each voice at t0 = 0.05
+    audio.setTempo(120); // half the beat length, so every pending gap halves
+
+    ctx.currentTime = 2.0;
+    vi.advanceTimersByTime(25);
+    const starts = startTimes(ctx);
+
+    // Both voices are now on the new tempo's grid: the short voice's next note
+    // lands at 0.525 rather than the 1.05 it was already committed to, and the
+    // long voice's at 2.025 rather than 4.05. Left un-rescaled, the long voice
+    // would keep old-tempo timing for its whole in-flight note and every later
+    // tempo change would add another slip that never comes back.
+    expect(starts).toContain(0.525);
+    expect(starts).toContain(2.025);
+    expect(starts).not.toContain(1.05);
+    expect(starts).not.toContain(4.05);
+
+    audio.stop();
+    vi.useRealTimers();
+  });
+
+  it('silences the music on stop instead of letting a long note ring on', () => {
+    // Dropping the scheduler leaves already-scheduled notes playing to their
+    // end — up to two seconds for a 4-beat voice, over the game-over sting.
+    const ctx = stubContext();
+    const audio = createGameAudio({ tracks: [{ melody: [{ freq: 440, beats: 4 }] }], tempo: 116 });
+    audio.start();
+    const master = ctx.createGain.mock.results[0].value;
+    master.gain.setTargetAtTime.mockClear();
+
+    audio.stop();
+    expect(master.gain.setTargetAtTime).toHaveBeenCalledWith(0, expect.any(Number), expect.any(Number));
+  });
+
+  it('lifts the music again on a restart after that stop', () => {
+    const ctx = stubContext();
+    const audio = createGameAudio({
+      tracks: [{ melody: [{ freq: 440, beats: 4 }] }],
+      tempo: 116,
+      volume: 0.2
+    });
+    audio.start();
+    audio.stop();
+    const master = ctx.createGain.mock.results[0].value;
+    master.gain.setTargetAtTime.mockClear();
+
+    audio.start();
+    expect(master.gain.setTargetAtTime).toHaveBeenCalledWith(0.2, expect.any(Number), expect.any(Number));
+    audio.stop();
+  });
+
+  it('brings every voice back together when the music is un-muted', () => {
+    // While muted the cursors advance but no oscillators are made, so a voice
+    // that stepped over a long note has nothing to play when sound returns.
+    vi.useFakeTimers();
+    const ctx = stubContext();
+    const audio = createGameAudio({
+      tracks: [
+        {
+          melody: [
+            { freq: 440, beats: 1 },
+            { freq: 880, beats: 1 }
+          ]
+        }
+      ],
+      tempo: 60
+    });
+    audio.start();
+    audio.setMusicMuted(true);
+
+    // Let the muted cursor run well past the first note of the line.
+    ctx.currentTime = 5.0;
+    vi.advanceTimersByTime(25);
+    const madeWhileMuted = ctx.createOscillator.mock.calls.length;
+
+    ctx.currentTime = 10.0;
+    audio.setMusicMuted(false);
+    vi.advanceTimersByTime(25);
+
+    // Sound resumes at once and from the top of the line, rather than the voice
+    // staying silent until whatever note the cursor had already stepped over.
+    expect(ctx.createOscillator.mock.calls.length).toBeGreaterThan(madeWhileMuted);
+    const resumed = ctx.createOscillator.mock.results[madeWhileMuted].value;
+    expect(resumed.frequency.setValueAtTime).toHaveBeenCalledWith(440, 10.05);
+
+    audio.stop();
+    vi.useRealTimers();
+  });
+});
+
 describe('navigation teardown via Astro ClientRouter', () => {
   beforeEach(() => {
     installLocalStorage();

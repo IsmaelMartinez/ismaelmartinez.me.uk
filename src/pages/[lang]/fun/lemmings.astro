@@ -144,6 +144,20 @@ const hintAttrs = Object.fromEntries(
                   data-play-again={t('fun.lemmings.playAgain')}
                 >{t('fun.lemmings.nextLevel')}</button>
                 <button id="retry-btn" class="btn btn-primary btn-large" style="display: none;">{t('fun.lemmings.retry')}</button>
+                {/*
+                  The run's only voluntary exit, offered on a mid-run clear —
+                  the one result screen that does not already end the run. A
+                  final victory and a failed quota both reach the board on
+                  their own; without this, a player who clears a few levels and
+                  closes the tab banks a personal best but never puts the run
+                  on the shared board (#261).
+                */}
+                <button
+                  id="end-run-btn"
+                  class="btn btn-outline btn-large"
+                  title={t('fun.lemmings.endRunHint')}
+                  style="display: none;"
+                >{t('fun.lemmings.endRun')}</button>
               </div>
             </div>
           </div>

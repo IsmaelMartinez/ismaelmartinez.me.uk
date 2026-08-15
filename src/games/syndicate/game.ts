@@ -28,6 +28,7 @@ import {
   type IsoView,
   hash01 as hash
 } from '../engine';
+import { SYNDICATE_MUSIC } from './music';
 import { MAP_W, MAP_H, generateCity, type MapTile } from './map';
 import type { Unit, WeaponId } from './units';
 import {
@@ -39,6 +40,8 @@ import {
   persuadedCivilians,
   vipOf,
   escorting,
+  vipAtExtraction,
+  EXTRACTION_RADIUS,
   type World
 } from './sim';
 import { MISSIONS, SQUAD_SIZE, spawnMission, missionStatus, type MissionSpec } from './missions';
@@ -48,7 +51,6 @@ const CANVAS_W = (MAP_W + MAP_H) * VIEW.halfW;
 const CANVAS_H = (MAP_W + MAP_H) * VIEW.halfH + VIEW.originY + 12;
 const BOOST_DURATION = 4;
 const BOOST_COOLDOWN = 14;
-const EXTRACTION_RADIUS = 1.5;
 
 const FACADES = ['#313853', '#3a2e4c', '#2b3c4c', '#3d3446'];
 const NEON = ['#22d3ee', '#38bdf8', '#818cf8', '#2dd4bf'];
@@ -273,59 +275,7 @@ export function initSyndicateGame(): void {
   // The record readout shows the table's best, beaten live by the current campaign.
   recordEl.textContent = `£${board.best()}`;
 
-  // Blade-Runner dread in E minor: a brooding low pad bed under a sparse,
-  // menacing lead, pricked by an occasional ad-screen bleep, all trailing
-  // through a feedback delay. Slow and cinematic.
-  const audio = createGameAudio({
-    tempo: 88,
-    volume: 0.1,
-    echo: { time: 0.33, feedback: 0.38, mix: 0.32 },
-    tracks: [
-      {
-        // Sustained sawtooth drone: E minor tonic, its fifth, then sixth.
-        wave: 'sawtooth',
-        envelope: 'pad',
-        detune: 10,
-        volume: 0.4,
-        melody: [
-          { freq: 82.41, beats: 4 }, // E2
-          { freq: 123.47, beats: 4 }, // B2
-          { freq: 130.81, beats: 4 }, // C3
-          { freq: 123.47, beats: 4 } // B2
-        ]
-      },
-      {
-        // Sparse, spacious lead — a few minor notes with rests between.
-        wave: 'sawtooth',
-        detune: 6,
-        volume: 0.9,
-        melody: [
-          { freq: 329.63, beats: 2 }, // E4
-          { freq: 0, beats: 2 },
-          { freq: 392.0, beats: 1 }, // G4
-          { freq: 329.63, beats: 1 }, // E4
-          { freq: 0, beats: 2 },
-          { freq: 493.88, beats: 2 }, // B4
-          { freq: 0, beats: 2 },
-          { freq: 440.0, beats: 1 }, // A4
-          { freq: 392.0, beats: 1 }, // G4
-          { freq: 0, beats: 2 }
-        ]
-      },
-      {
-        // Ad-screen flicker: mostly silence, an occasional high square blip.
-        wave: 'square',
-        volume: 0.5,
-        melody: [
-          { freq: 0, beats: 5 },
-          { freq: 1046.5, beats: 0.5 }, // C6
-          { freq: 0, beats: 7 },
-          { freq: 783.99, beats: 0.5 }, // G5
-          { freq: 0, beats: 3 }
-        ]
-      }
-    ]
-  });
+  const audio = createGameAudio(SYNDICATE_MUSIC);
   wireChannelButton(document.getElementById('music-btn'), audio, 'music');
   wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
@@ -469,20 +419,6 @@ export function initSyndicateGame(): void {
     return livingAgents(world).some(a => Math.hypot(a.x - ex, a.y - ey) <= EXTRACTION_RADIUS);
   }
 
-  /**
-   * The escort's win test. Deliberately about the asset and not the squad: an
-   * agent alone on the pad must not extract a mission whose whole point is
-   * what it brought with it.
-   */
-  function vipAtExtraction(): boolean {
-    if (extraction < 0) return false;
-    const vip = vipOf(world);
-    if (!vip || !vip.alive || !escorting(vip)) return false;
-    const ex = (extraction % MAP_W) + 0.5;
-    const ey = Math.floor(extraction / MAP_W) + 0.5;
-    return Math.hypot(vip.x - ex, vip.y - ey) <= EXTRACTION_RADIUS;
-  }
-
   function update(dt: number) {
     clock += dt;
     fx.update(dt);
@@ -544,7 +480,7 @@ export function initSyndicateGame(): void {
       persuadedCivilians(world),
       atExtraction,
       holdProgress,
-      vipAtExtraction()
+      vipAtExtraction(world, extraction)
     );
     if (status === 'won') completeMission();
     else if (status === 'lost') endCampaign(false);
@@ -1165,7 +1101,7 @@ export function initSyndicateGame(): void {
       spec.objective === 'secure'
         ? agentAtExtraction()
         : spec.objective === 'escort'
-          ? vipAtExtraction()
+          ? vipAtExtraction(world, extraction)
           : persuadedCivilians(world) >= spec.persuadeQuota;
     const pulse = 0.5 + 0.5 * Math.sin(clock * 4);
     const colour = open ? '#4ade80' : '#94a3b8';

@@ -33,6 +33,7 @@ import {
   type IsoView,
   hash01 as hash
 } from '../engine';
+import { TOWERDEFENSE_MUSIC } from './music';
 import { GRID_W, GRID_H, createTdMap, routePosition, type TdMap } from './path';
 import { spawnEnemy, stepEnemies, type Enemy, type EnemyKind } from './enemies';
 import {
@@ -144,6 +145,7 @@ export function initTowerDefenseGame(): void {
     waveIn: s('tWaveIn', 'Wave {n} in {s}s'),
     waveNow: s('tWaveNow', 'Wave {n} incoming!'),
     waveCleared: s('tWaveCleared', 'Wave cleared'),
+    waveLeaked: s('tWaveLeaked', 'They got through, no wave bonus'),
     interest: s('tInterest', 'interest'),
     newRecord: s('tNewRecord', 'New record!'),
     breach: s('tBreach', 'The line is breached!'),
@@ -337,73 +339,7 @@ export function initTowerDefenseGame(): void {
   const board = initScoreboard(document.getElementById('highscores'));
   recordEl.textContent = `${board.best()}`;
 
-  // A martial A-minor march — hold the line. A swelling low drone bed under
-  // a heroic dotted lead, over a steady on-the-beat marching bass.
-  const audio = createGameAudio({
-    tempo: 136,
-    volume: 0.12,
-    echo: { time: 0.28, feedback: 0.25, mix: 0.2 },
-    tracks: [
-      {
-        // Drone/pad: a low tonic bed that descends A→F→E to build tension.
-        wave: 'sawtooth',
-        envelope: 'pad',
-        volume: 0.45,
-        melody: [
-          { freq: 110.0, beats: 4 },
-          { freq: 110.0, beats: 4 },
-          { freq: 87.31, beats: 4 },
-          { freq: 82.41, beats: 4 }
-        ]
-      },
-      {
-        // Lead: a resolute dotted march that resolves home to the tonic.
-        wave: 'square',
-        volume: 0.9,
-        melody: [
-          { freq: 440.0, beats: 1.5 },
-          { freq: 440.0, beats: 0.5 },
-          { freq: 523.25, beats: 1 },
-          { freq: 659.25, beats: 1 },
-          { freq: 587.33, beats: 1.5 },
-          { freq: 523.25, beats: 0.5 },
-          { freq: 493.88, beats: 1 },
-          { freq: 440.0, beats: 1 },
-          { freq: 659.25, beats: 1.5 },
-          { freq: 587.33, beats: 0.5 },
-          { freq: 523.25, beats: 1 },
-          { freq: 493.88, beats: 1 },
-          { freq: 440.0, beats: 1.5 },
-          { freq: 493.88, beats: 0.5 },
-          { freq: 523.25, beats: 1 },
-          { freq: 440.0, beats: 1 }
-        ]
-      },
-      {
-        // Bass: a steady marching pulse, one note to the beat, tonic/dominant.
-        wave: 'triangle',
-        volume: 0.75,
-        melody: [
-          { freq: 110.0, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 73.42, beats: 1 },
-          { freq: 73.42, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 82.41, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 110.0, beats: 1 }
-        ]
-      }
-    ]
-  });
+  const audio = createGameAudio(TOWERDEFENSE_MUSIC);
   wireChannelButton(document.getElementById('music-btn'), audio, 'music');
   wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
@@ -475,14 +411,21 @@ export function initTowerDefenseGame(): void {
   }
 
   function waveCleared() {
-    const interest = clearWave(eco);
+    // Surviving a wave is not holding it: if anything reached the keep, the
+    // wave still moves the run on and still pays its interest, but scores
+    // nothing. The economy counts the leaks itself, behind `leak`.
+    const { held, interest } = clearWave(eco);
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
     bankScore();
     const gp = routePosition(map.route, routeLast);
     addFloater(gp.x, gp.y - 1, `+${interest} ${strings.interest}`, '#4ade80');
-    showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);
-    audio.playSfx('score');
+    if (held) {
+      showToast(`🛡️ ${strings.waveCleared} +${WAVE_BASE} · +${interest} ${strings.interest}`);
+      audio.playSfx('score');
+    } else {
+      showToast(`🩸 ${strings.waveLeaked} · +${interest} ${strings.interest}`);
+    }
     waveIdx++;
     if (waveIdx === AUTHORED_WAVES) {
       // No victory wall: clearing the last authored wave rolls the run into an

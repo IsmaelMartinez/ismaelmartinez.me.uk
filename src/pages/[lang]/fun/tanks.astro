@@ -2,6 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -36,6 +37,7 @@ const weapons = [
         data-t-draw={t('fun.tanks.draw')}
         data-t-wind={t('fun.tanks.wind')}
         data-t-match-score={t('fun.tanks.matchScore')}
+        data-t-new-record={t('fun.tanks.newRecord')}
       >
         <div class="game-header">
           <h1><span class="tank-emoji">🎯</span> {t('fun.tanks.title')}</h1>
@@ -50,14 +52,23 @@ const weapons = [
               <span id="p2-wins" class="score-value p2">0</span>
             </div>
             <div class="score-item">
-              <span class="score-label">{t('fun.tanks.victories')}</span>
-              <span id="victories" class="score-value">0</span>
+              <span class="score-label">{t('fun.tanks.score')}</span>
+              <span id="score" class="score-value">0</span>
+            </div>
+            <div class="score-item" id="score2-item" hidden>
+              <span class="score-label">{t('fun.tanks.scoreP2')}</span>
+              <span id="score2" class="score-value p2">0</span>
+            </div>
+            <div class="score-item" id="best-item">
+              <span class="score-label">{t('fun.tanks.best')}</span>
+              <span id="best" class="score-value">0</span>
             </div>
           </div>
         </div>
 
         <div class="game-area">
           <canvas id="game-canvas"></canvas>
+          <ToastArea />
           <div id="start-overlay" class="game-overlay">
             <div class="overlay-content">
               <span class="play-icon">🎯</span>
@@ -91,6 +102,12 @@ const weapons = [
               <span id="round-emoji" class="round-emoji">💥</span>
               <h2 id="round-message"></h2>
               <p id="match-score" class="match-score" style="display: none;"></p>
+              <div id="local-scores" class="local-scores" style="display: none;">
+                <p class="match-score">
+                  🏅 <span id="local-p1"></span> · <span id="local-p2"></span>
+                </p>
+                <p class="local-note">{t('fun.tanks.localOnly')}</p>
+              </div>
               <HighScoreTable gameId="tanks" lang={lang} accent="#3b82f6" />
               <button id="next-round-btn" class="btn btn-primary btn-large">{t('fun.tanks.nextRound')}</button>
               <button id="play-again-btn" class="btn btn-primary btn-large" style="display: none;">{t('fun.tanks.playAgain')}</button>
@@ -229,6 +246,24 @@ const weapons = [
     /* Dragging on the battlefield aims the shot, so don't scroll the page */
     touch-action: none;
     cursor: crosshair;
+  }
+
+  /* The one cabinet whose toast stack sits above its overlays, kept from
+     PR #251: the round overlay is raised in the same breath that awards the
+     250-point round bonus, the likeliest moment a run beats its best, so
+     without this the one-time record toast is spent behind a dimmed panel and
+     never fires again. It works here only because this page's .game-overlay
+     sets no z-index of its own. It is deliberately NOT in ToastArea.astro —
+     generalising it puts the pill over other cabinets' overlay buttons (see
+     that component's note). Global because the element belongs to the
+     component, so a scoped selector would not reach it. */
+  :global(#toast-area) {
+    z-index: 2;
+  }
+
+  .local-note {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
   }
 
   .game-overlay {

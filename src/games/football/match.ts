@@ -1007,7 +1007,7 @@ export function shoot(
   if (onTarget) m.stats.onTarget[side]++;
   m.log.push({ type: 'shot', side, onTarget, contact });
   m.stats.shotDistance[side] += d;
-  armKeeper(m, side);
+  armKeeper(m, side, contact);
 }
 
 /**
@@ -1040,7 +1040,7 @@ function clearUpfield(m: MatchState, side: Side, power: number, aim: number): vo
   kick(m, (lateral / len) * speed, ((dir as number) / len) * speed, 150);
   m.lastContact = 'ground';
   m.lastFromCross = false;
-  armKeeper(m, side);
+  armKeeper(m, side, 'ground');
 }
 
 /**
@@ -1127,7 +1127,7 @@ function groundPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   m.passTarget = mate;
   m.stats.passes[side]++;
   m.stats.groundPasses[side]++;
-  armKeeper(m, side);
+  armKeeper(m, side, 'ground');
 }
 
 /**
@@ -1214,7 +1214,7 @@ function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power
     m.passLofted = true;
     m.passTarget = -1;
     m.stats.passes[side]++;
-    armKeeper(m, side);
+    armKeeper(m, side, 'ground');
     return;
   }
   const speed = 150 + 90 * clamp(power, 0, 1);
@@ -1232,7 +1232,7 @@ function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   m.passLofted = true;
   m.passTarget = -1;
   m.stats.passes[side]++;
-  armKeeper(m, side);
+  armKeeper(m, side, 'ground');
 }
 
 /**
@@ -1281,7 +1281,7 @@ function crossTo(m: MatchState, side: Side, target: { x: number; y: number }): v
   m.passLofted = true;
   m.passTarget = -1;
   m.stats.passes[side]++;
-  armKeeper(m, side);
+  armKeeper(m, side, 'ground');
 }
 
 /**
@@ -1322,7 +1322,20 @@ export function canAirStrike(m: MatchState, side: Side, idx: number): boolean {
 /* keeper                                                              */
 
 /** Let the defending keeper commit once, at the instant of release. */
-function armKeeper(m: MatchState, kickingSide: Side): void {
+/**
+ * `strike` is how *this* ball was struck, passed in rather than read back off
+ * `m.lastContact`. The two are the same value today only because every caller
+ * writes `lastContact` immediately before calling, so the read landed after
+ * the write and meant "this strike is a ground strike" — which is what the
+ * assist gate below wants, and is not what its own comment said it was
+ * checking. Under the documented reading, "the last contact was on the
+ * ground", the gate would be inert, because `crossTo` and `loftedPass` both
+ * write `'ground'` themselves. That made it a fix held up by statement order:
+ * an ordinary tidy-up hoisting the read above the kick would have silently
+ * reverted it with every test still green. Taking it as an argument is what
+ * removes the trap (issue #273, finding 5).
+ */
+function armKeeper(m: MatchState, kickingSide: Side, strike: ContactType): void {
   const ds = (1 - kickingSide) as Side;
   const gk = m.keepers[ds];
   const keeper = m.players[ds][0];
@@ -1401,7 +1414,7 @@ function armKeeper(m: MatchState, kickingSide: Side): void {
   // Crossing keeps the half-dive penalty, which is the part that is about his
   // *legs* rather than his reading, and keeps everything `AIR_ASSIST_SHARE`
   // hands the striker. What it stops collecting is a keeper with no hands.
-  const assisted = !!m.assist && m.assist.side === kickingSide && m.lastContact === 'ground';
+  const assisted = !!m.assist && m.assist.side === kickingSide && strike === 'ground';
   gk.dive = commitDive({
     restX: keeper.x,
     interceptX: ball.x + ball.vx * nearest,
@@ -1753,7 +1766,7 @@ function humanAction(m: MatchState, input: MatchInput, dt: number): void {
       kick(m, aim.x * GOAL_KICK_SPEED, aim.y * GOAL_KICK_SPEED, GOAL_KICK_LIFT);
       m.lastFromCross = true;
       m.restart = null;
-      armKeeper(m, 0);
+      armKeeper(m, 0, 'ground');
     }
     return;
   }
@@ -2369,7 +2382,7 @@ function autoRelease(m: MatchState): void {
   const side = r.side;
   m.restart = null;
   m.markers = [];
-  armKeeper(m, side);
+  armKeeper(m, side, 'ground');
 }
 
 /* ------------------------------------------------------------------ */
@@ -2428,7 +2441,7 @@ function keeperDistribution(m: MatchState): void {
   m.lastFromCross = true;
   m.passInFlight = owner.side;
   m.passLofted = true;
-  armKeeper(m, owner.side);
+  armKeeper(m, owner.side, 'ground');
 }
 
 /** Advance the match by `dt` seconds. Returns the events raised this tick. */

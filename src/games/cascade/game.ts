@@ -23,6 +23,7 @@ import {
   createEffects,
   hash01 as hash
 } from '../engine';
+import { CASCADE_MUSIC, BASE_TEMPO } from './music';
 import { WELL_W, WELL_H } from './well';
 import { cellsOf, ROTATIONS, type PieceId } from './piece';
 import {
@@ -81,7 +82,8 @@ const PREVIEW_BOUNDS = ROTATIONS.map(states => {
 const DAS_DELAY = 0.17;
 const DAS_REPEAT = 0.05;
 
-const BASE_TEMPO = 126;
+// BASE_TEMPO is the score's own starting tempo and lives with it in music.ts;
+// these two are the ramp policy that winds it up as the level climbs.
 const TEMPO_PER_LEVEL = 9;
 const MAX_TEMPO = 240;
 
@@ -318,86 +320,7 @@ export function initCascadeGame(): void {
   const board = () => boards[mode];
   recordEl.textContent = `${board().best()}`;
 
-  // A driving Korobeiniki-style minor loop that setTempo() winds up level by
-  // level: a busy square lead (A phrase then a contrasting high B phrase) over
-  // a pumping octave-2/3 bass. Both voices span 14 beats so the loop restarts
-  // together.
-  const audio = createGameAudio({
-    tempo: BASE_TEMPO,
-    volume: 0.11,
-    tracks: [
-      {
-        // LEAD — square, energetic.
-        wave: 'square',
-        volume: 1.0,
-        melody: [
-          // A phrase.
-          { freq: 659.25, beats: 0.5 }, // E5
-          { freq: 493.88, beats: 0.5 }, // B4
-          { freq: 523.25, beats: 0.5 }, // C5
-          { freq: 587.33, beats: 0.5 }, // D5
-          { freq: 523.25, beats: 0.5 }, // C5
-          { freq: 493.88, beats: 0.5 }, // B4
-          { freq: 440.0, beats: 1.0 }, // A4
-          { freq: 440.0, beats: 0.5 }, // A4
-          { freq: 523.25, beats: 0.5 }, // C5
-          { freq: 659.25, beats: 0.5 }, // E5
-          { freq: 587.33, beats: 0.5 }, // D5
-          { freq: 523.25, beats: 0.5 }, // C5
-          { freq: 493.88, beats: 1.0 }, // B4
-          // B phrase — a brighter, higher answer.
-          { freq: 587.33, beats: 0.5 }, // D5
-          { freq: 698.46, beats: 0.5 }, // F5
-          { freq: 880.0, beats: 0.5 }, // A5
-          { freq: 783.99, beats: 0.5 }, // G5
-          { freq: 698.46, beats: 0.5 }, // F5
-          { freq: 659.25, beats: 1.0 }, // E5
-          { freq: 523.25, beats: 0.5 }, // C5
-          { freq: 659.25, beats: 0.5 }, // E5
-          { freq: 587.33, beats: 0.5 }, // D5
-          { freq: 523.25, beats: 0.5 }, // C5
-          { freq: 493.88, beats: 1.0 } // B4
-        ]
-      },
-      {
-        // BASS — warm triangle, pumping eighth notes under the lead.
-        wave: 'triangle',
-        volume: 0.8,
-        melody: [
-          // Under the A phrase.
-          { freq: 82.41, beats: 0.5 }, // E2
-          { freq: 123.47, beats: 0.5 }, // B2
-          { freq: 164.81, beats: 0.5 }, // E3
-          { freq: 123.47, beats: 0.5 }, // B2
-          { freq: 82.41, beats: 0.5 }, // E2
-          { freq: 123.47, beats: 0.5 }, // B2
-          { freq: 164.81, beats: 0.5 }, // E3
-          { freq: 123.47, beats: 0.5 }, // B2
-          { freq: 110.0, beats: 0.5 }, // A2
-          { freq: 164.81, beats: 0.5 }, // E3
-          { freq: 220.0, beats: 0.5 }, // A3
-          { freq: 164.81, beats: 0.5 }, // E3
-          { freq: 82.41, beats: 0.5 }, // E2
-          { freq: 123.47, beats: 0.5 }, // B2
-          { freq: 82.41, beats: 0.5 }, // E2
-          // Under the B phrase.
-          { freq: 146.83, beats: 0.5 }, // D3
-          { freq: 110.0, beats: 0.5 }, // A2
-          { freq: 146.83, beats: 0.5 }, // D3
-          { freq: 110.0, beats: 0.5 }, // A2
-          { freq: 98.0, beats: 0.5 }, // G2
-          { freq: 146.83, beats: 0.5 }, // D3
-          { freq: 98.0, beats: 0.5 }, // G2
-          { freq: 146.83, beats: 0.5 }, // D3
-          { freq: 123.47, beats: 0.5 }, // B2
-          { freq: 146.83, beats: 0.5 }, // D3
-          { freq: 123.47, beats: 0.5 }, // B2
-          { freq: 146.83, beats: 0.5 }, // D3
-          { freq: 82.41, beats: 0.5 } // E2
-        ]
-      }
-    ]
-  });
+  const audio = createGameAudio(CASCADE_MUSIC);
   wireChannelButton(document.getElementById('music-btn'), audio, 'music');
   wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 

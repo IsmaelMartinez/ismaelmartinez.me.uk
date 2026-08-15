@@ -7,6 +7,15 @@
  * `initScoreboard(...)` from src/games/engine/scoreboard.ts and then
  * `show(score)` when a run ends. Rows are fetched and rendered at runtime, so
  * their styles are declared globally under `.hs-panel`.
+ *
+ * `.hs-record` is where a beaten personal best is announced at run end, and it
+ * lives here rather than in each cabinet's own overlay markup because this
+ * panel is the one thing every terminal overlay on the floor already contains.
+ * The cabinets also toast a record the moment it lands, but a record landing
+ * as the overlay goes up is the common case, and that toast is then painted
+ * behind the overlay and spent (issue #284). It says "personal best", not
+ * `.hs-new`'s "new high score": one is the number on this device, the other is
+ * a place on the world board, and a run can be either without the other.
  */
 import { useTranslations } from '../i18n/translations';
 import type { Locale } from '../i18n/translations';
@@ -57,6 +66,7 @@ const t = useTranslations(lang);
       <button type="submit" class="hs-ok">{t('fun.arcade.saveInitials')}</button>
     </div>
   </form>
+  <p class="hs-record" hidden>🏅 {t('fun.arcade.newPersonalBest')}</p>
   <h3 class="hs-title">{t('fun.arcade.highScores')}</h3>
   <ol class="hs-list" aria-live="polite"></ol>
   <p class="hs-empty" hidden>{t('fun.arcade.noScores')}</p>
@@ -145,6 +155,17 @@ const t = useTranslations(lang);
 
   .hs-panel .hs-ok:hover {
     filter: brightness(1.15);
+  }
+
+  /* Sits above the board's title, so a player looking at the panel meets the
+     run's own result before the world's ten rows. */
+  .hs-panel .hs-record {
+    color: var(--hs-accent);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: var(--space-sm);
   }
 
   .hs-panel .hs-title {

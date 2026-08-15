@@ -25,6 +25,7 @@ const PANEL_HTML = `
       <input class="hs-input" type="text" maxlength="3" />
       <button type="submit" class="hs-ok">OK</button>
     </form>
+    <p class="hs-record" hidden>New personal best!</p>
     <ol class="hs-list"></ol>
     <p class="hs-empty" hidden></p>
     <p class="hs-note" hidden></p>
@@ -313,6 +314,64 @@ describe('initScoreboard board rendering', () => {
 
     expect(board.best()).toBe(4210);
     expect(localStorage.getItem(bestKey('snake'))).toBe('4210');
+  });
+
+  /*
+   * The regression behind issue #284. A record is most often beaten in the
+   * same breath as the game-over overlay goes up, and the toast the cabinets
+   * raise there is painted behind that overlay and spent — `newRecord` fires
+   * once per run and never again. Raising the toast stack instead drops an
+   * opaque pill on the overlay's own buttons, so the panel inside the overlay
+   * says it.
+   */
+  const recordLine = () => document.querySelector<HTMLElement>('.hs-record')!;
+
+  it('announces a beaten personal best on the panel the overlay carries', () => {
+    localStorage.setItem(bestKey('snake'), '100');
+    const board = initScoreboard(buildPanel());
+    board.beginRun();
+    // As a cabinet does it: bank the run, then raise the overlay and show.
+    expect(board.bank(150).newRecord).toBe(true);
+    board.show(150);
+    expect(recordLine().hidden).toBe(false);
+  });
+
+  it('says nothing for a run that did not beat the best', () => {
+    localStorage.setItem(bestKey('snake'), '100');
+    const board = initScoreboard(buildPanel());
+    board.beginRun();
+    board.bank(90);
+    board.show(90);
+    expect(recordLine().hidden).toBe(true);
+  });
+
+  /*
+   * The toast is one-shot and the panel is not: a record set in the first
+   * minute of a long sim has to still be reported at the end of it, including
+   * when the final score has fallen back under it (Syndicate banks takings
+   * that can be spent again).
+   */
+  it('reports a record set earlier in the run, whatever the final score', () => {
+    localStorage.setItem(bestKey('snake'), '100');
+    const board = initScoreboard(buildPanel());
+    board.beginRun();
+    board.bank(500);
+    board.bank(300);
+    board.show(300);
+    expect(recordLine().hidden).toBe(false);
+  });
+
+  it('clears the record line for the next run', () => {
+    localStorage.setItem(bestKey('snake'), '100');
+    const board = initScoreboard(buildPanel());
+    board.beginRun();
+    board.bank(150);
+    board.show(150);
+    board.hide();
+    board.beginRun();
+    board.bank(120); // under the 150 this run starts from
+    board.show(120);
+    expect(recordLine().hidden).toBe(true);
   });
 
   it('degrades to inert no-ops without a panel', () => {

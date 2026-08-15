@@ -127,6 +127,25 @@ describe('createRunRecord', () => {
     expect(record.bank(999).newRecord).toBe(false);
   });
 
+  /*
+   * `newRecord` is spent by the toast that fires when the record lands;
+   * `beaten` is what the game-over panel reads, so it has to survive the rest
+   * of the run — including a run whose score falls back under the baseline.
+   */
+  it('keeps beaten() true for the rest of the run, and re-arms it per run', () => {
+    const record = createRunRecord(100, () => {});
+    expect(record.beaten()).toBe(false);
+    record.beginRun();
+    record.bank(150);
+    expect(record.beaten()).toBe(true);
+    record.bank(120);
+    expect(record.beaten()).toBe(true);
+    record.beginRun();
+    expect(record.beaten()).toBe(false);
+    record.bank(140); // under the 150 this run starts from
+    expect(record.beaten()).toBe(false);
+  });
+
   it('stashes only when the persisted best actually moves', () => {
     const stash = vi.fn();
     const record = createRunRecord(100, stash);

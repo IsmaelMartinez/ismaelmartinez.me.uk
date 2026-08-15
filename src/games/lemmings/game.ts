@@ -127,6 +127,7 @@ export function initLemmingsGame(): void {
   const levelBackBtn = el('level-back-btn') as HTMLButtonElement;
   const nextBtn = el('next-btn') as HTMLButtonElement;
   const retryBtn = el('retry-btn') as HTMLButtonElement;
+  const endRunBtn = el('end-run-btn') as HTMLButtonElement;
   const nukeBtn = el('nuke-btn') as HTMLButtonElement;
   const spawnSlider = el('spawn-slider') as HTMLInputElement;
   const resultEmoji = el('result-emoji');
@@ -286,8 +287,12 @@ export function initLemmingsGame(): void {
   let nuking = false;
   let nukeTimer = 0;
   // Points accumulate across the levels of one run (a run ends on a failed
-  // quota or the final victory); combo/tick state is per-level.
+  // quota, the final victory, or the player calling it a day from a mid-run
+  // clear); combo/tick state is per-level.
   let runScore = 0;
+  // Set when the player ends a run themselves, so the button that would have
+  // carried them to the next level starts a fresh run instead.
+  let runEnded = false;
   let combo = newCombo();
   let levelTicks = 0;
   // Watches the field for a standstill. It ends nothing: it raises the "you look
@@ -588,6 +593,9 @@ export function initLemmingsGame(): void {
       ? nextBtn.dataset.playAgain || 'Play Again'
       : nextBtn.dataset.nextLevel || 'Next Level';
     retryBtn.style.display = won ? 'none' : 'inline-block';
+    // Offered on exactly the screen that leaves the run open, so the player
+    // always has a door to the shared board that is not "fail the next level".
+    endRunBtn.style.display = won && !victory ? 'inline-block' : 'none';
     resultOverlay.style.display = 'flex';
     audio.playSfx(won ? 'score' : 'gameover');
     // A run ends on the final victory or a failed quota; either way the run's
@@ -1081,6 +1089,7 @@ export function initLemmingsGame(): void {
   function startRun(index: number) {
     board.hide();
     runScore = 0;
+    runEnded = false;
     beginLevel(index);
   }
 
@@ -1132,8 +1141,23 @@ export function initLemmingsGame(): void {
     const victory = levelIndex === LEVELS.length - 1 && saved >= def.needed;
     board.hide();
     // A victory lap restarts as a fresh run; mid-run the points carry over.
-    if (victory) startRun(0);
+    // A run the player ended themselves is over too, so it restarts as well.
+    if (victory || runEnded) startRun(0);
     else beginLevel(Math.min(levelIndex + 1, LEVELS.length - 1));
+  });
+  /**
+   * Ends the run from a mid-run clear. `board.show` is what actually puts the
+   * points on the shared board: the `board.hide` on that screen commits
+   * nothing, because nothing was ever pending (see scoreboard.ts). Retitles
+   * the continue button in the same breath, so the screen cannot offer to
+   * carry a finished run into another level.
+   */
+  endRunBtn.addEventListener('click', () => {
+    if (runEnded) return;
+    runEnded = true;
+    endRunBtn.style.display = 'none';
+    nextBtn.textContent = nextBtn.dataset.playAgain || 'Play Again';
+    board.show(runScore);
   });
   // A failed level already ended the run (and banked its score), so a retry
   // begins a new run from the same level.

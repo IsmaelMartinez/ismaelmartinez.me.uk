@@ -26,6 +26,18 @@ import { initLemmingsGame } from '../../src/games/lemmings/game';
 import { LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
 import { STUCK_TICKS } from '../../src/games/lemmings/stall';
 import { levelBonuses } from '../../src/games/lemmings/score';
+import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
+
+// The fixture now carries a real high-score panel, so the board these tests
+// mount is the real scoreboard rather than the no-op one a missing panel
+// yields. Its two network seams are stubbed: the assertions here are about
+// which run reaches the board, not what the server does with it. (The module's
+// own `canSubmit` gate is private to it, so stubbing the two exports replaces
+// that decision wholesale rather than configuring it.)
+vi.mock('../../src/games/engine/globalScores', () => ({
+  fetchGlobal: vi.fn(async () => null),
+  submitGlobal: vi.fn(async () => ({ status: 'failed' }))
+}));
 
 const SKILLS = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
 
@@ -75,8 +87,22 @@ const GAME_HTML = `
         <li id="bonus-quota-row" hidden><span id="bonus-quota-val"></span></li>
       </ul>
       <span id="result-score-val">0</span>
-      <button id="next-btn"></button>
+      <div class="hs-panel" id="highscores" data-hs-game="lemmings" hidden
+           data-t-world-loading="Loading world board"
+           data-t-world-unavailable="World board unavailable"
+           data-t-world-rank="World rank #{rank}"
+           data-t-score-not-saved="Score not saved. Try again later">
+        <form class="hs-entry" hidden>
+          <input class="hs-input" type="text" maxlength="3" />
+          <button type="submit" class="hs-ok">OK</button>
+        </form>
+        <ol class="hs-list"></ol>
+        <p class="hs-empty" hidden></p>
+        <p class="hs-note" hidden></p>
+      </div>
+      <button id="next-btn" data-play-again="Play Again" data-next-level="Next Level"></button>
       <button id="retry-btn"></button>
+      <button id="end-run-btn" style="display: none;"></button>
     </div>
     <p id="level-hint" hidden></p>
     <p id="stuck-hint" role="status" data-hint="Nothing has moved for a while."></p>
@@ -229,6 +255,9 @@ function runUntilStuck(maxTicks: number): number | null {
 
 beforeEach(() => {
   installLocalStorage();
+  vi.mocked(fetchGlobal).mockResolvedValue(null);
+  vi.mocked(submitGlobal).mockClear();
+  vi.mocked(submitGlobal).mockResolvedValue({ status: 'failed' });
   realGetContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = stubContext as unknown as typeof realGetContext;
   pendingFrame = null;
@@ -534,5 +563,71 @@ describe('game loop — no level is ever unescapable', () => {
     expect(stuckShown()).toBe(false);
     expect(hint.textContent).toBe('');
     expect(resultShown()).toBe(false);
+  });
+});
+
+/**
+ * The shared board is the one every visitor sees, and until now a Critter
+ * Rescue run could only reach it by failing or by clearing all twenty-five
+ * levels: `board.show` was called from nowhere else, and the `board.hide` on a
+ * mid-run clear commits nothing because nothing was ever pending. A player who
+ * cleared a few levels and stopped banked a personal best and never appeared on
+ * the board (#261). These pin the door that fixes it, and the deliberate
+ * absence of one while the run is still going.
+ */
+describe('ending a run from a mid-run clear (#261)', () => {
+  const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+  const endRunBtn = () => document.getElementById('end-run-btn') as HTMLButtonElement;
+  const nextBtn = () => document.getElementById('next-btn') as HTMLButtonElement;
+
+  /** Clears level 1 — the teaching level, which resolves without any input. */
+  function clearFirstLevel(): number {
+    startLevel(0);
+    const ticks = runUntilResult(6000);
+    expect(ticks).not.toBeNull();
+    expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
+    const runScore = num('result-score-val');
+    expect(runScore).toBeGreaterThan(0);
+    return runScore;
+  }
+
+  it('offers the exit on a mid-run clear and sends that run to the board', async () => {
+    const runScore = clearFirstLevel();
+    // The run is still open, so the screen carries the way out of it.
+    expect(endRunBtn().style.display).toBe('inline-block');
+    expect(submitGlobal).not.toHaveBeenCalled();
+
+    endRunBtn().click();
+    // The screen must not still be offering to carry a finished run onward.
+    expect(endRunBtn().style.display).toBe('none');
+    expect(nextBtn().textContent).toBe('Play Again');
+
+    // `show` makes the run pending; the commit that submits it rides the next
+    // `hide`, exactly as every other cabinet's game over does.
+    nextBtn().click();
+    await flush();
+    expect(submitGlobal).toHaveBeenCalledWith('lemmings', expect.any(String), runScore);
+  });
+
+  it('starts a fresh run afterwards rather than resuming the finished one', async () => {
+    clearFirstLevel();
+    endRunBtn().click();
+    nextBtn().click();
+    await flush();
+    // Back at level 1 with the points reset — not level 2 carrying the old
+    // score, which is what an un-ended run would have done.
+    expect(num('level-num')).toBe(1);
+    expect(num('run-score')).toBe(0);
+  });
+
+  it('submits nothing when the player carries the run on to the next level', async () => {
+    clearFirstLevel();
+    // The bug's shape, kept as a guard: advancing is not an ending, so it must
+    // not put a half-finished run on the shared board.
+    expect(nextBtn().textContent).toBe('Next Level');
+    nextBtn().click();
+    await flush();
+    expect(submitGlobal).not.toHaveBeenCalled();
+    expect(num('level-num')).toBe(2);
   });
 });

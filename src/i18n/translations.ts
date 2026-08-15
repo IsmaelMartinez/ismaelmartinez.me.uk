@@ -115,6 +115,7 @@ export const translations = {
     'fun.arcade.genre.lemmings': 'Puzzle',
     'fun.arcade.genre.towerdefense': 'Tower defense',
     'fun.arcade.genre.cascade': 'Falling blocks',
+    'fun.arcade.genre.football': 'Sports',
     'fun.lemmings.title': 'Critter Rescue',
     'fun.lemmings.description': 'Guide the little critters safely home!',
     'fun.lemmings.instructions':
@@ -667,6 +668,7 @@ export const translations = {
     'fun.arcade.genre.lemmings': 'Puzle',
     'fun.arcade.genre.towerdefense': 'Defensa de torres',
     'fun.arcade.genre.cascade': 'Bloques',
+    'fun.arcade.genre.football': 'Deportes',
     'fun.lemmings.title': 'Rescate de Bichos',
     'fun.lemmings.description': '¡Guía a los bichitos sanos y salvos a casa!',
     'fun.lemmings.instructions':
@@ -1221,6 +1223,7 @@ export const translations = {
     'fun.arcade.genre.lemmings': 'Trencaclosques',
     'fun.arcade.genre.towerdefense': 'Defensa de torres',
     'fun.arcade.genre.cascade': 'Blocs',
+    'fun.arcade.genre.football': 'Esports',
     'fun.lemmings.title': 'Rescat de Bestioles',
     'fun.lemmings.description': 'Guia les bestioletes sanes i estalvies a casa!',
     'fun.lemmings.instructions':

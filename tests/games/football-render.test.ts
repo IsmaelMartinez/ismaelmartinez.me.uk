@@ -25,17 +25,13 @@ import {
   KEEPER_KITS,
   KIT_CLASH,
   SECRET_TEAM,
-  SHIRT_NUMBERS,
   TEAMS,
   firstKit,
   fixtureKits,
   kitDistance,
   kitLostOnGrass,
-  playerName,
-  shirtNumber,
   teamByCode
 } from '../../src/games/football/teams';
-import { TEAM_SIZE } from '../../src/games/football/pitch';
 import { translations, locales } from '../../src/i18n/translations';
 
 /** The Mega Drive's 3-bit-per-channel ladder, per 8.1. */
@@ -87,6 +83,10 @@ describe('font table', () => {
    * corpus is every string the renderer owns, every team name and code, and
    * every `fun.football.*` string in all three locales — which is what forces
    * the accented capitals Spanish and Catalan need.
+   *
+   * The country names are the reason this matters more than it looks: a real
+   * roster is one sloppy spelling away from an accent or a diacritic the 5 x 7
+   * table has never carried, and the fallback would draw it as `?`.
    */
   it('has a glyph for every character the game can display', () => {
     const corpus: string[] = [];
@@ -96,8 +96,6 @@ describe('font table', () => {
     }
     for (const team of ALL_TEAMS) {
       corpus.push(team.code, team.name);
-      // Every man who can appear on a full-time scorer line.
-      for (let idx = 0; idx < TEAM_SIZE; idx++) corpus.push(playerName(team, idx));
     }
     for (const locale of locales) {
       const table = translations[locale] as Record<string, string>;
@@ -211,11 +209,12 @@ describe('integer scaling', () => {
 });
 
 /**
- * Change strips. The playtest's finding was that the draw put teams on the
- * pitch in kits nobody could tell apart — Corvi's black against Cinghiali's
- * brown, Aquile's orange against Gamberi's vermilion, and Vipere's green
- * against the grass itself. Real football answers that with a change strip
- * and so does the cabinet, decided once per fixture.
+ * Change strips. A roster of real national sides clashes far harder than an
+ * invented one: England and Germany wear the same white and Spain and Belgium
+ * the same red, Italy, Yugoslavia and France are three shades of the same
+ * blue, Argentina and Uruguay two shades of the same sky, and Cameroon's green
+ * is lost in the grass itself. Real football answers all of that with a change
+ * strip and so does the cabinet, decided once per fixture.
  */
 describe('kit clashes', () => {
   it('leaves every fixture in two strips that read apart, on grass', () => {
@@ -232,17 +231,24 @@ describe('kit clashes', () => {
   });
 
   it('keeps both first strips when they already read apart', () => {
-    // Tori's red against Orche's blue: nothing to solve, so nobody changes.
-    const [homeKit, awayKit] = fixtureKits(teamByCode('TOR'), teamByCode('ORC'));
-    expect(homeKit).toEqual(firstKit(teamByCode('TOR')));
-    expect(awayKit).toEqual(firstKit(teamByCode('ORC')));
+    // Italy's azzurri against Brazil's yellow: nothing to solve, nobody changes.
+    const [homeKit, awayKit] = fixtureKits(teamByCode('ITA'), teamByCode('BRA'));
+    expect(homeKit).toEqual(firstKit(teamByCode('ITA')));
+    expect(awayKit).toEqual(firstKit(teamByCode('BRA')));
   });
 
-  it('changes the away side for each clash the playtest named', () => {
+  /**
+   * The three shapes a shirt-on-shirt clash comes in, one real pair each:
+   * England and Germany wear the identical white (kitDistance 0), Spain and
+   * Belgium the identical red (0), and Italy's azzurri sits 27 from
+   * Yugoslavia's royal blue — two different colours that are still one blob at
+   * 14 px. The away side changes in all three, as it does in real football.
+   */
+  it('changes the away side for each shape of clash', () => {
     const clashes: Array<[string, string]> = [
-      ['COR', 'CIN'],
-      ['AQU', 'GAM'],
-      ['LEO', 'API']
+      ['GER', 'ENG'],
+      ['ESP', 'BEL'],
+      ['ITA', 'YUG']
     ];
     for (const [homeCode, awayCode] of clashes) {
       const home = teamByCode(homeCode);
@@ -256,42 +262,26 @@ describe('kit clashes', () => {
     }
   });
 
-  it('takes Vipere out of their grass-green shirt in every fixture', () => {
-    const vipere = teamByCode('VIP');
-    expect(kitDistance(vipere.primary, GRASS)).toBeLessThan(KIT_CLASH);
+  it('takes Cameroon out of their grass-green shirt in every fixture', () => {
+    const cameroon = teamByCode('CMR');
+    expect(kitDistance(cameroon.primary, GRASS)).toBeLessThan(KIT_CLASH);
     for (const other of ALL_TEAMS) {
-      if (other === vipere) continue;
-      expect(fixtureKits(vipere, other)[0], `VIP at home v ${other.code}`).toEqual(vipere.alt);
-      expect(fixtureKits(other, vipere)[1], `VIP away at ${other.code}`).toEqual(vipere.alt);
+      if (other === cameroon) continue;
+      expect(fixtureKits(cameroon, other)[0], `CMR at home v ${other.code}`).toEqual(cameroon.alt);
+      expect(fixtureKits(other, cameroon)[1], `CMR away at ${other.code}`).toEqual(cameroon.alt);
     }
   });
-});
 
-/**
- * Squads. The full-time screen used to read `NO 6` for almost every goal,
- * because it drew the squad index and the striker is index 6; a scorer is now
- * a shirt number from the formation and a name from his side's squad.
- */
-describe('squads', () => {
-  it('numbers the seven shirts by position, with no repeats', () => {
-    expect(SHIRT_NUMBERS).toHaveLength(TEAM_SIZE);
-    expect(new Set(SHIRT_NUMBERS).size).toBe(TEAM_SIZE);
-    // The keeper is index 0 and wears 1; the lone striker wears 9.
-    expect(shirtNumber(0)).toBe(1);
-    expect(shirtNumber(TEAM_SIZE - 1)).toBe(9);
-  });
-
-  it('fields seven different, stable names per side', () => {
+  /**
+   * A change strip that is itself lost in the grass is no change strip at all:
+   * the side carrying it can never wear it, so the fixture has only two ways
+   * out instead of four. Cameroon's green is the one kit on the roster allowed
+   * to disappear, and only because it is a *first* strip with a red one behind
+   * it.
+   */
+  it('gives every side a change strip it can actually wear', () => {
     for (const team of ALL_TEAMS) {
-      const squad = Array.from({ length: TEAM_SIZE }, (_, idx) => playerName(team, idx));
-      expect(new Set(squad).size, `${team.code} squad ${squad.join()}`).toBe(TEAM_SIZE);
-      for (const name of squad) {
-        expect(name).toMatch(/^[A-Z]+$/);
-        // Long enough to read as a name, short enough to sit beside a minute.
-        expect(name.length).toBeGreaterThanOrEqual(4);
-        expect(name.length).toBeLessThanOrEqual(8);
-      }
-      expect(playerName(team, 3), 'the same shirt is the same man').toBe(squad[3]);
+      expect(kitLostOnGrass(team.alt), `${team.code} change strip on grass`).toBe(false);
     }
   });
 });

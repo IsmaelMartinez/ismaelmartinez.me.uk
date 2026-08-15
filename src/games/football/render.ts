@@ -79,8 +79,6 @@ import {
   KEEPER_KITS,
   SECRET_TEAM,
   TEAMS,
-  playerName,
-  shirtNumber,
   type Kit,
   type Team
 } from './teams';
@@ -1284,11 +1282,12 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       drawText(ctx!, m.teams[side].name, x, 74, { color: PALETTE.menuPanel });
       for (let i = 0; i < list.length; i++) {
         const g = list[i];
-        // A scorer is a man in a shirt, not a squad index: the number comes
-        // from his position in the 2-3-1 and the name from his side's squad,
-        // both fixed, so `10 MARINI 63'` reads like a result.
-        const scorer = `${shirtNumber(g.scorer)} ${playerName(m.teams[side], g.scorer)}`;
-        drawText(ctx!, scorer, x, 90 + i * 12, { color: PALETTE.menuText });
+        // A goal is credited to the country, not to a man: `ITA 63'`. The
+        // roster is real national sides and there are no real squads behind
+        // them, so an invented surname under a real flag would read worse than
+        // no name at all — and the squad index it used to draw ("NO 6") was
+        // never a scorer in the first place.
+        drawText(ctx!, m.teams[side].code, x, 90 + i * 12, { color: PALETTE.menuText });
         drawTextRight(ctx!, `${Math.round(g.minute)}'`, x + 112, 90 + i * 12, { color: PALETTE.menuText });
       }
     }

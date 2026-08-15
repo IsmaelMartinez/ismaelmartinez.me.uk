@@ -570,7 +570,7 @@ describe('keeper: he has a body', () => {
       const m = createMatch({
         rng: seededRandom(seed * 7919 + 5),
         difficulty: 0.55,
-        teams: [teamByCode('LUP'), teamByCode('TOR')]
+        teams: [teamByCode('ENG'), teamByCode('ESP')]
       });
       m.phase = 'play';
       m.phaseTimer = 0;

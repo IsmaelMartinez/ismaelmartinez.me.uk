@@ -140,12 +140,18 @@ export interface ShotOptions {
   keeperX?: number;
 }
 
+/**
+ * A side per Keeper rating, so the defending team's own rating agrees with the
+ * one the rig then forces onto `keepers[1].skill`. The roster tops out at 4 and
+ * bottoms out at 2, so rating 5 reuses the best keeper on it and rating 1 takes
+ * the weakest side.
+ */
 const KEEPER_TEAMS: Record<number, string> = {
-  1: 'API',
-  2: 'GAM',
-  3: 'TOR',
-  4: 'AQU',
-  5: 'AQU'
+  1: 'SCO',
+  2: 'CMR',
+  3: 'ESP',
+  4: 'BEL',
+  5: 'BEL'
 };
 
 /** Move everyone except the shooter and the defending keeper out of the way. */
@@ -174,7 +180,7 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
   const m = createMatch({
     rng: opts.rng,
     difficulty,
-    teams: [teamByCode('LUP'), teamByCode(KEEPER_TEAMS[rating])]
+    teams: [teamByCode('ENG'), teamByCode(KEEPER_TEAMS[rating])]
   });
   m.keepers[1].skill = keeperSkill(rating, difficulty);
   // Straight to open play: the kickoff freeze is 48 ticks of nothing and the

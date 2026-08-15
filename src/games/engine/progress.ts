@@ -26,15 +26,17 @@ import { loadBest } from './highscores';
 /**
  * Floor order: a walk through gaming history, oldest homaged classic first —
  * Tank Duel (Atari Tank, 1974), Snake (Blockade, 1976), Cascade (the
- * falling-block era, 1985), Microcity (SimCity, 1989), Critter Rescue
- * (Lemmings, 1991), Line Hold (the tower-defense era, 2007). Each cabinet is
- * powered by scoring on the one before it.
+ * falling-block era, 1985), Microcity (SimCity, 1989), Calcio '90 (Italia '90
+ * and the Kick Off / Sensible Soccer era, 1990), Critter Rescue (Lemmings,
+ * 1991), Line Hold (the tower-defense era, 2007). Each cabinet is powered by
+ * scoring on the one before it.
  */
 export const UNLOCK_CHAIN = [
   'tanks',
   'snake',
   'cascade',
   'city',
+  'football',
   'lemmings',
   'towerdefense'
 ] as const;

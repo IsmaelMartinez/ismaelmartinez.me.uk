@@ -25,8 +25,8 @@ export const TICK_CAP = 12000;
 export const DIFFICULTIES = [0.25, 0.45, 0.65, 0.85] as const;
 
 /** A fixed, middling pairing so a cell measures the curve and not the draw. */
-export const HOME = teamByCode('TOR');
-export const AWAY = teamByCode('LUP');
+export const HOME = teamByCode('ESP');
+export const AWAY = teamByCode('ENG');
 
 export interface Played {
   match: MatchState;

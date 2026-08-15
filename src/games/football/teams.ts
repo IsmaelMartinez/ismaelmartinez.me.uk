@@ -1,16 +1,30 @@
 /**
- * The CALCIO '90 roster: twelve invented Italian-flavoured sides, eight of
- * which enter any given run. Real national squads, the Italia '90 licence and
- * its mascot are trademarked and are not reproduced here — these are original
- * nicknames with invented kits, so the names read the same in all three
- * locales.
+ * The CALCIO '90 roster: twelve national sides, eight of which enter any given
+ * run. All twelve played at the 1990 tournament the cabinet homages, which is
+ * where the spread of strength comes from — the hosts and the champions at the
+ * top, Cameroon's raw pace and Scotland's group-stage exit at the bottom.
+ *
+ * Countries, not clubs, and no squads: the Italia '90 licence, its mascot and
+ * every player of the era are somebody's property, but a country's name and
+ * the colours it plays in are not. Names are the three-letter codes' countries
+ * in plain unaccented capitals, so they read the same in all three site
+ * locales and every character has a glyph in the cabinet's 5 x 7 font. Ten
+ * letters is the ceiling: `YUGOSLAVIA` is 59 px at scale 1 and a select-grid
+ * cell has 60 px inside it. That is also why the Dutch side is the
+ * era-correct HOL / HOLLAND rather than an eleven-letter NETHERLANDS, which
+ * would have run out of its cell and into its neighbour.
  *
  * A thirteenth side, `SECRET_TEAM`, sits outside `TEAMS` — it is unlocked by
  * the Konami code on the select screen and is deliberately not in the pool the
  * draw reads, so it can only ever be *your* team.
  *
- * Every colour is on the Mega Drive's 3-bit-per-channel ladder
- * (00/24/49/6D/92/B6/DB/FF), which render.ts asserts.
+ * Every colour is a national colour quantised to the Mega Drive's
+ * 3-bit-per-channel ladder (00/24/49/6D/92/B6/DB/FF), which render.ts asserts.
+ * Real sides clash far more than invented ones do — three blues, two identical
+ * whites and two identical reds sit in these twelve — so each change strip is
+ * picked to resolve its side's clashes rather than to look pretty, and
+ * `football-render.test.ts` proves by exhaustion that every one of the 13 x 13
+ * ordered fixtures comes out readable.
  */
 import { PALETTE } from './sprites';
 
@@ -42,65 +56,76 @@ export interface Team {
 }
 
 export const TEAMS: readonly Team[] = [
+  // Hosts. The azzurri blue, and the meanest defence in the field.
   {
-    code: 'AQU', name: 'Aquile', primary: '#FF9200', trim: '#000049',
-    alt: { primary: '#FFFFFF', trim: '#000049' },
-    speed: 4, skill: 3, defence: 3, keeper: 4
+    code: 'ITA', name: 'Italy', primary: '#0049B6', trim: '#FFFFFF',
+    alt: { primary: '#FFFFFF', trim: '#0049B6' },
+    speed: 3, skill: 4, defence: 5, keeper: 3
   },
+  // The canary yellow, with the change strip Brazil actually carries: blue.
   {
-    code: 'TOR', name: 'Tori', primary: '#DB0000', trim: '#FFFFFF',
+    code: 'BRA', name: 'Brazil', primary: '#FFDB00', trim: '#009249',
+    alt: { primary: '#0024B6', trim: '#FFDB00' },
+    speed: 4, skill: 5, defence: 3, keeper: 3
+  },
+  // Champions. White with black trim; the change strip is the green one, taken
+  // as dark as the ladder allows so it clears the grass (see GRASS_CLASH).
+  {
+    code: 'GER', name: 'Germany', primary: '#FFFFFF', trim: '#000000',
+    alt: { primary: '#004900', trim: '#FFFFFF' },
+    speed: 3, skill: 4, defence: 4, keeper: 4
+  },
+  // Sky blue, and a navy change strip — it has to be dark, because Argentina's
+  // sky reads as neither Italy's blue nor Uruguay's.
+  {
+    code: 'ARG', name: 'Argentina', primary: '#92DBFF', trim: '#FFFFFF',
+    alt: { primary: '#000049', trim: '#92DBFF' },
+    speed: 3, skill: 5, defence: 3, keeper: 3
+  },
+  // HOL, not NED: the era's code, and a name that fits a select-grid cell.
+  {
+    code: 'HOL', name: 'Holland', primary: '#FF6D00', trim: '#FFFFFF',
+    alt: { primary: '#FFFFFF', trim: '#FF6D00' },
+    speed: 4, skill: 5, defence: 3, keeper: 2
+  },
+  // White like Germany, so the red change strip does all the work.
+  {
+    code: 'ENG', name: 'England', primary: '#FFFFFF', trim: '#000049',
+    alt: { primary: '#DB0000', trim: '#FFFFFF' },
+    speed: 3, skill: 3, defence: 4, keeper: 4
+  },
+  // Red like Belgium and like Cameroon's change strip; navy resolves all three.
+  {
+    code: 'ESP', name: 'Spain', primary: '#DB0000', trim: '#000049',
     alt: { primary: '#000049', trim: '#DB0000' },
     speed: 3, skill: 4, defence: 4, keeper: 3
   },
   {
-    code: 'LUP', name: 'Lupi', primary: '#9200DB', trim: '#DBDBDB',
-    alt: { primary: '#DBDBDB', trim: '#9200DB' },
-    speed: 3, skill: 3, defence: 4, keeper: 4
+    code: 'BEL', name: 'Belgium', primary: '#DB0000', trim: '#FFDB00',
+    alt: { primary: '#242424', trim: '#FFDB00' },
+    speed: 3, skill: 3, defence: 3, keeper: 4
   },
   {
-    code: 'LEO', name: 'Leoni', primary: '#FFDB00', trim: '#004900',
-    alt: { primary: '#004900', trim: '#FFDB00' },
-    speed: 5, skill: 4, defence: 3, keeper: 3
+    code: 'YUG', name: 'Yugoslavia', primary: '#2449DB', trim: '#FFFFFF',
+    alt: { primary: '#FFFFFF', trim: '#2449DB' },
+    speed: 3, skill: 4, defence: 3, keeper: 2
   },
   {
-    code: 'VIP', name: 'Vipere', primary: '#00B649', trim: '#000000',
-    alt: { primary: '#FFFFFF', trim: '#00B649' },
-    speed: 4, skill: 4, defence: 3, keeper: 3
-  },
-  {
-    code: 'ORC', name: 'Orche', primary: '#0049DB', trim: '#FFFFFF',
-    alt: { primary: '#FFDB00', trim: '#0049DB' },
-    speed: 3, skill: 3, defence: 5, keeper: 4
-  },
-  {
-    code: 'FAL', name: 'Falchi', primary: '#B6B6B6', trim: '#DB0000',
-    alt: { primary: '#DB0000', trim: '#FFFFFF' },
-    speed: 4, skill: 3, defence: 3, keeper: 3
-  },
-  {
-    code: 'CIN', name: 'Cinghiali', primary: '#6D4900', trim: '#FFDB00',
-    alt: { primary: '#49DBFF', trim: '#6D4900' },
+    code: 'URU', name: 'Uruguay', primary: '#49B6FF', trim: '#000000',
+    alt: { primary: '#000000', trim: '#49B6FF' },
     speed: 2, skill: 3, defence: 4, keeper: 3
   },
+  // The one side that disappears into the pitch, so it plays every fixture in
+  // its red change strip. Fastest legs on the roster and the rawest finishing.
   {
-    code: 'GAM', name: 'Gamberi', primary: '#FF4900', trim: '#FFFFFF',
-    alt: { primary: '#000049', trim: '#FF4900' },
-    speed: 3, skill: 2, defence: 3, keeper: 2
+    code: 'CMR', name: 'Cameroon', primary: '#009249', trim: '#DB0000',
+    alt: { primary: '#DB0000', trim: '#009249' },
+    speed: 5, skill: 2, defence: 2, keeper: 2
   },
   {
-    code: 'DEL', name: 'Delfini', primary: '#49DBFF', trim: '#000049',
-    alt: { primary: '#000049', trim: '#49DBFF' },
-    speed: 4, skill: 4, defence: 2, keeper: 2
-  },
-  {
-    code: 'COR', name: 'Corvi', primary: '#242424', trim: '#DB9249',
-    alt: { primary: '#DBDBDB', trim: '#242424' },
-    speed: 3, skill: 4, defence: 4, keeper: 4
-  },
-  {
-    code: 'API', name: 'Api', primary: '#FFDB00', trim: '#242424',
-    alt: { primary: '#B6B6B6', trim: '#242424' },
-    speed: 2, skill: 2, defence: 2, keeper: 3
+    code: 'SCO', name: 'Scotland', primary: '#000049', trim: '#FFFFFF',
+    alt: { primary: '#FFFFFF', trim: '#000049' },
+    speed: 2, skill: 2, defence: 3, keeper: 2
   }
 ];
 
@@ -108,19 +133,26 @@ export const TEAMS: readonly Team[] = [
  * The thirteenth side: not in `TEAMS`, so it is never drawn as an opponent and
  * never appears on the select grid until the cabinet's Konami code unlocks it.
  *
+ * France is the side that is *not* in the twelve: the one great European team
+ * of the era that never made it to the 1990 finals at all. Hiding it behind
+ * the Konami code is the joke — the cabinet only lets you play as les Bleus if
+ * you know the code.
+ *
  * It is a reward, not a cheat. 5/5/4/4 is one rung above the best of the
- * twelve (Leoni's 5/4/3/3 and Corvi's 3/4/4/4 both total 15, this totals 18)
- * and a long way short of 5/5/5/5 — the run still has to be won, and the
- * difficulty ladder in `tournament.ts` is untouched by who you picked. Like
- * the rest of the roster it is an invented nickname with an invented kit: no
- * national side, no licence, no mascot.
+ * twelve (Italy, Brazil and Germany all total 15, this totals 18) and a long
+ * way short of 5/5/5/5 — the run still has to be won, and the difficulty
+ * ladder in `tournament.ts` is untouched by who you picked.
+ *
+ * Its blue is a rung darker than Italy's azzurri and Yugoslavia's royal, which
+ * is not enough to read apart on its own (53 and 67, both under `KIT_CLASH`);
+ * the white change strip is what settles those fixtures.
  */
 export const SECRET_TEAM: Team = {
-  code: 'FEN',
-  name: 'Fenice',
-  primary: '#DB2492',
-  trim: '#FFDB00',
-  alt: { primary: '#242424', trim: '#DB2492' },
+  code: 'FRA',
+  name: 'France',
+  primary: '#000092',
+  trim: '#FFFFFF',
+  alt: { primary: '#FFFFFF', trim: '#000092' },
   speed: 5,
   skill: 5,
   defence: 4,
@@ -146,18 +178,24 @@ export const GRASS = PALETTE.grass;
  * How far apart two shirt colours have to be before a 14 px blob of one can
  * be told from a 14 px blob of the other, on the metric below.
  *
- * Calibrated against the three pairs the playtest called out — Corvi's black
- * on Cinghiali's brown (47), Aquile's orange on Gamberi's vermilion (49), and
- * Leoni and Api, who wear the *same* yellow (0) — and set just below the
- * closest pair that still reads, Tori's red on Cinghiali's brown at 71.
+ * Calibrated against the pairs a real field throws up — England and Germany,
+ * who wear the *same* white (0), Spain and Belgium, who wear the same red (0),
+ * Italy's azzurri on Yugoslavia's royal blue (27) and Argentina's sky on
+ * Uruguay's (42) — and left just below the closest pair that still reads,
+ * Brazil's yellow on Holland's orange at 73. That 73 is also the tightest
+ * first-strip fixture in the whole 13 x 13 matrix, so it is the pair the
+ * threshold is really holding the line for.
  */
 export const KIT_CLASH = 70;
 
 /**
  * The same metric against the grass. Deliberately tighter than `KIT_CLASH`:
  * the pitch is a constant, so a strip only changes for it when it genuinely
- * disappears into it. Vipere's `#00B649` (36) is the one kit on the roster
- * that does; the next closest, Cinghiali's brown, sits at 63 and stays.
+ * disappears into it. Cameroon's `#009249` (27) is the one first strip on the
+ * roster that does, so Cameroon plays every fixture in red; the next closest
+ * kit anywhere is Germany's dark-green change strip at 56, which clears it and
+ * stays. Green is the colour this rule is about — a lighter bottle green sits
+ * in the thirties and a side wearing it is invisible.
  */
 export const GRASS_CLASH = 50;
 
@@ -209,7 +247,7 @@ export function firstKit(team: Team): Kit {
  *
  * `home` is the player's side. Over the whole 13 x 13 roster every ordered
  * fixture comes out at least `KIT_CLASH` apart with both strips readable,
- * which `football-teams.test.ts` asserts by exhaustion.
+ * which `football-render.test.ts` asserts by exhaustion.
  */
 export function fixtureKits(home: Team, away: Team): [Kit, Kit] {
   const options: Array<[Kit, boolean]>[] = [
@@ -240,45 +278,6 @@ export function fixtureKits(home: Team, away: Team): [Kit, Kit] {
     }
   }
   return best;
-}
-
-/* ------------------------------------------------------------------ */
-/* squads: names and shirt numbers                                     */
-
-/**
- * Invented surnames in the same Italian flavour as the nicknames — no real
- * player is named here, for the same reason no real squad is. Uppercase A-Z
- * only, which is all the cabinet's 5 x 7 font carries, and short enough to sit
- * beside a minute on the full-time screen.
- */
-const SURNAMES: readonly string[] = [
-  'BRUNI', 'CALVI', 'DONATI', 'FALCO', 'GRECO', 'MARINI', 'NERI', 'ORLANDI',
-  'PIRAS', 'QUARTA', 'RIZZO', 'SALVI', 'TOSI', 'VENTURI', 'ZANETTI', 'BELLINI',
-  'CONTI', 'DURANTE', 'GALLO', 'IANNI', 'LUPINI', 'MORELLI', 'NIGRO', 'PAGANI',
-  'RANIERI', 'SARTI', 'TIRELLI', 'VIOLA', 'ZOLA', 'AMATO', 'BERTI', 'CROCE'
-];
-
-/**
- * Shirt numbers by squad index, so a scorer line reads like a result rather
- * than "NO 6" every time. The formation is 2-3-1 in front of the keeper, and
- * the numbers follow it: 1 in goal, 2 and 5 at the back, 4, 8 and 10 across
- * the middle, 9 up front.
- */
-export const SHIRT_NUMBERS: readonly number[] = [1, 2, 5, 4, 8, 10, 9];
-
-export function shirtNumber(idx: number): number {
-  return SHIRT_NUMBERS[idx] ?? idx + 1;
-}
-
-/**
- * The man wearing that shirt. A team's squad is a fixed slice of the surname
- * pool, offset by its code, so the same side always fields the same seven
- * names and a scorer is somebody rather than a number.
- */
-export function playerName(team: Team, idx: number): string {
-  let offset = 0;
-  for (let i = 0; i < team.code.length; i++) offset += team.code.charCodeAt(i) * (i + 3);
-  return SURNAMES[(offset + idx * 5) % SURNAMES.length];
 }
 
 /** How many teams enter a run, and how many sit in each group. */

@@ -40,8 +40,8 @@ import { passive, competent } from './football-policies';
 
 const DT = 1 / 60;
 const TEAMS: [ReturnType<typeof teamByCode>, ReturnType<typeof teamByCode>] = [
-  teamByCode('LUP'),
-  teamByCode('TOR')
+  teamByCode('ENG'),
+  teamByCode('ESP')
 ];
 
 function fresh(opts: Parameters<typeof createMatch>[0] = {}): MatchState {
@@ -134,8 +134,9 @@ describe('the fixture picks the strips', () => {
   });
 
   it('puts the away side in its change strip when the two clash', () => {
-    const home = teamByCode('COR');
-    const away = teamByCode('CIN');
+    // Spain and Belgium wear the same red, so one of them has to change.
+    const home = teamByCode('ESP');
+    const away = teamByCode('BEL');
     const m = createMatch({ rng: seededRandom(7), teams: [home, away] });
     expect(m.kits[0]).toEqual(firstKit(home));
     expect(m.kits[1]).toEqual(away.alt);

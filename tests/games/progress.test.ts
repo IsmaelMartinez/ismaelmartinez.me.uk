@@ -7,6 +7,7 @@ import {
   visibleCabinets
 } from '../../src/games/engine/progress';
 import { bestKey } from '../../src/games/engine/highscores';
+import { CABINETS } from '../../src/data/arcadeCabinets';
 
 /** Minimal in-memory localStorage stand-in (the suite runs under node by default). */
 function installLocalStorage(): Record<string, string> {
@@ -28,6 +29,16 @@ function installLocalStorage(): Record<string, string> {
 
 const chain: readonly string[] = ['first', 'second', 'third', 'fourth'];
 const done = (...ids: string[]) => new Set(ids);
+
+describe('UNLOCK_CHAIN', () => {
+  it('walks gaming history in order: each cabinet homages a classic no older than the last', () => {
+    // The floor's whole premise, and what makes a new cabinet's slot obvious:
+    // it goes where its homaged classic falls, not on the end. Nothing else
+    // enforces this, since the EST. plaques are per-cabinet data.
+    const years = UNLOCK_CHAIN.map(id => CABINETS[id].estYear);
+    expect(years).toEqual([...years].sort((a, b) => a - b));
+  });
+});
 
 describe('visibleCabinets', () => {
   it('opens only the first cabinet on a fresh floor, shrouding the second', () => {

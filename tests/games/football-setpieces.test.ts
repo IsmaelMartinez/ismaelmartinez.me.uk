@@ -32,7 +32,7 @@ function fresh(): MatchState {
   return createMatch({
     rng: seededRandom(21),
     difficulty: 0.45,
-    teams: [teamByCode('LUP'), teamByCode('TOR')]
+    teams: [teamByCode('ENG'), teamByCode('ESP')]
   });
 }
 

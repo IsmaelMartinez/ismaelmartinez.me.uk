@@ -20,6 +20,7 @@ import {
   saveScore,
   wireChannelButton
 } from '../engine';
+import { BASE_TEMPO, FOOTBALL_MUSIC } from './music';
 import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
 import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
 import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
@@ -324,72 +325,11 @@ export function initFootballGame(): void {
    * The specification asks for three separate match tracks. `createGameAudio`
    * fixes its voices at construction and owns an AudioContext, so three of them
    * would mean three contexts and a mute toggle that has to be re-wired every
-   * time the stage changes; the samba stays and the knockout rounds lean on the
-   * tempo, which is the part of "the run has an arc" a player actually hears.
+   * time the stage changes; the anthem stays and the knockout rounds lean on
+   * the tempo, which is the part of "the run has an arc" a player actually
+   * hears. The score itself lives in `music.ts`, as every cabinet's does.
    */
-  const audio = createGameAudio({
-    tempo: 132,
-    volume: 0.1,
-    echo: { time: 0.18, feedback: 0.3, mix: 0.25 },
-    tracks: [
-      {
-        // LEAD — a bright samba-flavoured square line.
-        wave: 'square',
-        volume: 1,
-        detune: 8,
-        melody: [
-          { freq: 587.33, beats: 0.5 },
-          { freq: 698.46, beats: 0.5 },
-          { freq: 880.0, beats: 1 },
-          { freq: 783.99, beats: 0.5 },
-          { freq: 698.46, beats: 0.5 },
-          { freq: 587.33, beats: 1 },
-          { freq: 523.25, beats: 0.5 },
-          { freq: 587.33, beats: 0.5 },
-          { freq: 698.46, beats: 1 },
-          { freq: 880.0, beats: 0.5 },
-          { freq: 987.77, beats: 0.5 },
-          { freq: 880.0, beats: 1 },
-          { freq: 783.99, beats: 0.5 },
-          { freq: 698.46, beats: 0.5 },
-          { freq: 659.25, beats: 1 },
-          { freq: 587.33, beats: 1 }
-        ]
-      },
-      {
-        // BASS — a walking triangle under the lead.
-        wave: 'triangle',
-        volume: 0.85,
-        melody: [
-          { freq: 146.83, beats: 1 },
-          { freq: 110.0, beats: 1 },
-          { freq: 130.81, beats: 1 },
-          { freq: 98.0, beats: 1 },
-          { freq: 146.83, beats: 1 },
-          { freq: 174.61, beats: 1 },
-          { freq: 130.81, beats: 1 },
-          { freq: 110.0, beats: 1 }
-        ]
-      },
-      {
-        // PAD — off-beat sustained chords, the terrace bed.
-        wave: 'sawtooth',
-        volume: 0.3,
-        envelope: 'pad',
-        octaveShift: -1,
-        melody: [
-          { freq: 0, beats: 0.5 },
-          { freq: 587.33, beats: 1.5 },
-          { freq: 0, beats: 0.5 },
-          { freq: 523.25, beats: 1.5 },
-          { freq: 0, beats: 0.5 },
-          { freq: 493.88, beats: 1.5 },
-          { freq: 0, beats: 0.5 },
-          { freq: 440.0, beats: 1.5 }
-        ]
-      }
-    ]
-  });
+  const audio = createGameAudio(FOOTBALL_MUSIC);
   wireChannelButton(el('music-btn'), audio, 'music');
   wireChannelButton(el('sfx-btn'), audio, 'sfx');
 
@@ -741,11 +681,20 @@ export function initFootballGame(): void {
     startMatch();
   }
 
-  /** Tempo lifts stage by stage, so the run is audibly getting harder. */
+  /**
+   * Tempo lifts stage by stage, so the run is audibly getting harder.
+   *
+   * The ramp is policy about the game and stays here; the pace the score was
+   * written at is a property of the arrangement and comes from `music.ts` as
+   * `BASE_TEMPO`, the same split Cascade uses. Changing stage mid-loop is safe:
+   * the engine's `setTempo` rescales every pending voice cursor by the tempo
+   * ratio, so the sustained choir re-times with the plucked voices instead of
+   * sliding behind them.
+   */
   function stageTempo(state: RunState): number {
     if (state.stage === 'final') return 152;
     if (state.stage === 'semi') return 143;
-    return 132;
+    return BASE_TEMPO;
   }
 
   function startMatch(): void {

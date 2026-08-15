@@ -30,7 +30,7 @@ import {
 } from '../../src/games/football/tournament';
 import { TEAMS, teamByCode } from '../../src/games/football/teams';
 
-const PLAYER = 'LUP';
+const PLAYER = 'ENG';
 
 function row(code: string, over: Partial<TableRow> = {}): TableRow {
   return {
@@ -288,9 +288,9 @@ describe('difficulty', () => {
 
   it('is unmodulated when the two sides are evenly matched', () => {
     const r = run(11);
-    r.playerCode = 'TOR';
-    r.opponent = 'LUP';
-    // Tori 3/4/4/3 and Lupi 3/3/4/4 both total 14, so the gap is zero.
+    r.playerCode = 'ESP';
+    r.opponent = 'ENG';
+    // Spain 3/4/4/3 and England 3/3/4/4 both total 14, so the gap is zero.
     expect(difficultyFor(r)).toBeCloseTo(0.25, 10);
   });
 });
@@ -400,9 +400,11 @@ describe('simulated fixtures', () => {
 
   it('gives the better attack more goals on average', () => {
     const rng = seededRandom(4);
-    const strong = teamByCode('LEO');
-    const weak = teamByCode('API');
-    const shield = teamByCode('ORC');
+    // Brazil 4/5/3/3 attack Italy's 3/4/5/3 defence, and so does Scotland's
+    // 2/2/3/2 — the strongest and the weakest sides on the roster.
+    const strong = teamByCode('BRA');
+    const weak = teamByCode('SCO');
+    const shield = teamByCode('ITA');
     let strongTotal = 0;
     let weakTotal = 0;
     for (let i = 0; i < 8000; i++) {

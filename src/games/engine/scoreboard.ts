@@ -47,7 +47,9 @@ export interface Scoreboard {
    * into the tracked best, and report whether the run just beat its baseline.
    * `best` drives the HUD "Best" readout; `newRecord` is true exactly once per
    * run — never for a zero baseline, since a first-ever score is not a beaten
-   * record — and drives the one-time record toast.
+   * record — and drives the one-time record toast. That toast is the *mid-run*
+   * celebration only: at run end the panel says it itself (see `show`), since
+   * a toast raised in the same breath as a game-over overlay loses to it.
    */
   bank(score: number): RunRecordBank;
   /** Current personal best, for init-time HUD seeding. */
@@ -57,6 +59,18 @@ export interface Scoreboard {
 export interface RunRecordBank {
   best: number;
   newRecord: boolean;
+}
+
+export interface RunRecord extends Pick<Scoreboard, 'beginRun' | 'bank' | 'best'> {
+  /**
+   * Whether this run has beaten the best it started from. Unlike `bank`'s
+   * `newRecord` it is not spent on first sight: it stays true for the rest of
+   * the run, because the two announcements have different lifetimes. The toast
+   * is one-shot and fires at the moment the record lands; the game-over panel
+   * has to be able to say so afterwards, however early in the run that was.
+   * Internal to this module — the panel reads it, games use `bank`.
+   */
+  beaten(): boolean;
 }
 
 /**
@@ -70,29 +84,34 @@ export interface RunRecordBank {
  * stashing anything lower is a no-op that costs a storage round trip, and
  * long-running cabinets bank on every gain.
  */
-export function createRunRecord(
-  initialBest: number,
-  stash: (score: number) => void
-): Pick<Scoreboard, 'beginRun' | 'bank' | 'best'> {
+export function createRunRecord(initialBest: number, stash: (score: number) => void): RunRecord {
   let best = initialBest;
   let baseline = 0;
   // Armed by beginRun; banking before the first run never celebrates.
   let celebrated = true;
+  // Sticky for the whole run, where `celebrated` is spent by the first toast.
+  let beaten = false;
   return {
     beginRun() {
       baseline = best;
       celebrated = false;
+      beaten = false;
     },
     bank(score: number): RunRecordBank {
       if (score > best) {
         best = score;
         stash(score);
       }
-      const newRecord = !celebrated && baseline > 0 && score > baseline;
+      // A run whose score can fall again (Syndicate banks the takings) has
+      // still beaten the record it started from, so this latches rather than
+      // tracking the current score.
+      if (baseline > 0 && score > baseline) beaten = true;
+      const newRecord = beaten && !celebrated;
       if (newRecord) celebrated = true;
       return { best, newRecord };
     },
-    best: () => best
+    best: () => best,
+    beaten: () => beaten
   };
 }
 
@@ -174,6 +193,7 @@ export function initScoreboard(
   const form = panel.querySelector<HTMLFormElement>('.hs-entry');
   const input = panel.querySelector<HTMLInputElement>('.hs-input');
   const list = panel.querySelector<HTMLOListElement>('.hs-list');
+  const record = panel.querySelector<HTMLElement>('.hs-record');
   const empty = panel.querySelector<HTMLElement>('.hs-empty');
   const note = panel.querySelector<HTMLElement>('.hs-note');
   // Runtime-composed strings ride in on data attributes, the repo's channel
@@ -385,6 +405,15 @@ export function initScoreboard(
     ...runRecord,
     show(score: number) {
       panel.hidden = false;
+      // The terminal overlay carries the record itself. The mid-run toast
+      // fires in the same breath as that overlay is raised, which is the
+      // likeliest moment a run beats its best, and is then painted behind a
+      // dimmed panel and never fires again — while raising the toast stack
+      // over the overlays instead drops an opaque pill on the button the
+      // player is reaching for (issue #284, and ToastArea.astro's note).
+      // Driven by the sticky flag, not `bank`'s one-shot one, so a record set
+      // in the first minute of a long run is still reported here.
+      if (record) record.hidden = !runRecord.beaten();
       rank = 0;
       failed = false;
       rateLimited = false;

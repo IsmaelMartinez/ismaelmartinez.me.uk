@@ -29,7 +29,13 @@ import {
   type MatchState
 } from '../../src/games/football/match';
 import { keeperSkill, restPosition } from '../../src/games/football/keeper';
-import { CENTRE_X, PITCH_L, TEAM_SIZE, attackGoalY } from '../../src/games/football/pitch';
+import {
+  CENTRE_X,
+  PITCH_L,
+  PITCH_W,
+  TEAM_SIZE,
+  attackGoalY
+} from '../../src/games/football/pitch';
 import { teamByCode } from '../../src/games/football/teams';
 
 export const DT = 1 / 60;
@@ -154,25 +160,32 @@ const KEEPER_TEAMS: Record<number, string> = {
   5: 'BEL'
 };
 
+/**
+ * How far in from a touchline the parked players are stacked. The two sides
+ * mirror each other about the halfway line, so both are written from this one
+ * margin and the right-hand edge is derived from `PITCH_W` rather than hard
+ * coded: a change to the pitch's width then moves both stacks together instead
+ * of silently pushing one of them out of play.
+ */
+const PARK_MARGIN = 20;
+
 /** Move everyone except the shooter and the defending keeper out of the way. */
 function parkEveryone(m: MatchState, shooter: number): void {
   for (let idx = 0; idx < TEAM_SIZE; idx++) {
     if (idx > 0) {
       const away = m.players[1][idx];
-      away.x = 20 + idx * 6;
+      away.x = PARK_MARGIN + idx * 6;
       away.y = 20;
       away.speed = 0;
     }
     if (idx !== shooter) {
       const mate = m.players[0][idx];
-      mate.x = PITCH_W_EDGE - idx * 6;
+      mate.x = PITCH_W - PARK_MARGIN - idx * 6;
       mate.y = 20;
       mate.speed = 0;
     }
   }
 }
-
-const PITCH_W_EDGE = 320;
 
 export function shootAt(opts: ShotOptions): ShotOutcome {
   const difficulty = opts.difficulty ?? 0.55;

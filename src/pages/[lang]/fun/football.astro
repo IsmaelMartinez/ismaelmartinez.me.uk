@@ -9,6 +9,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 
@@ -82,11 +83,18 @@ const t = useTranslations(lang);
         <div class="cabinet">
           <div class="game-area">
             <canvas id="game-canvas"></canvas>
-            <div id="toast-area" class="toast-area"></div>
+            <ToastArea />
           </div>
 
           <div class="pad">
-            <div id="stick" class="stick" role="application" aria-label={t('fun.football.move')}>
+            {/*
+              No `role="application"`: it hands the whole region's keys to the
+              page and suppresses a screen reader's own navigation, and this is
+              a pointer-only affordance that implements none of that model. The
+              keyboard already steers through `game.ts`'s own window handler, so
+              nothing is lost by leaving this as a plain labelled element.
+            */}
+            <div id="stick" class="stick" aria-label={t('fun.football.move')}>
               <div id="stick-nub" class="stick-nub"></div>
             </div>
             <div class="pad-actions">
@@ -226,32 +234,6 @@ const t = useTranslations(lang);
     border-color: #22c55e;
   }
 
-  .toast-area {
-    position: absolute;
-    bottom: var(--space-md);
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-xs);
-    pointer-events: none;
-  }
-
-  .toast-area :global(.toast) {
-    background: rgba(0, 0, 0, 0.8);
-    color: #fff;
-    font-size: 0.8rem;
-    padding: var(--space-xs) var(--space-md);
-    border-radius: 999px;
-    animation: toastIn 0.2s ease;
-    white-space: nowrap;
-  }
-
-  @keyframes toastIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
 
   .pad {
     display: flex;

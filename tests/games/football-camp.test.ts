@@ -1,12 +1,10 @@
 /**
- * No fixed spot on the pitch may be the answer: the camp sweep, and the direct
- * regression for the strongest thing any audit has measured in this cabinet.
- *
- * Its own file rather than a describe inside `football-balance.test.ts` because
- * it is the single most expensive assertion in the repo — ninety fixed spots,
- * each a paired comparison at four difficulties, and then three finalists per
- * aim re-measured properly — and Vitest gives a file one worker however many
- * cores are free.
+ * No fixed spot on the pitch may be the answer. The sweep itself is documented
+ * on the assertion below; what is worth saying here is only why it has a file
+ * to itself: it is one of the two most expensive assertions in the repo, and
+ * Vitest gives a file one worker however many cores are free, so leaving it
+ * inside `football-balance.test.ts` ran it on the same core as the rest of the
+ * gate. Nothing about the sweep moved with it.
  */
 import { describe, it, expect } from 'vitest';
 import { camper, CAMP_AIMS, CAMP_SPOTS, type CampAim } from './football-policies';

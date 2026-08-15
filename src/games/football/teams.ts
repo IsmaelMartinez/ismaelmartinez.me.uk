@@ -23,8 +23,9 @@
  * Real sides clash far more than invented ones do — three blues, two identical
  * whites and two identical reds sit in these twelve — so each change strip is
  * picked to resolve its side's clashes rather than to look pretty, and
- * `football-render.test.ts` proves by exhaustion that every one of the 13 x 13
- * ordered fixtures comes out readable.
+ * `football-render.test.ts` proves by exhaustion that every one of the 156
+ * ordered fixtures comes out readable. 156 and not 169: the thirteen
+ * same-side pairings are skipped, because a side never plays itself.
  */
 import { PALETTE } from './sprites';
 
@@ -183,8 +184,8 @@ export const GRASS = PALETTE.grass;
  * Italy's azzurri on Yugoslavia's royal blue (27) and Argentina's sky on
  * Uruguay's (42) — and left just below the closest pair that still reads,
  * Brazil's yellow on Holland's orange at 73. That 73 is also the tightest
- * first-strip fixture in the whole 13 x 13 matrix, so it is the pair the
- * threshold is really holding the line for.
+ * first-strip fixture of the 156, so it is the pair the threshold is really
+ * holding the line for.
  */
 export const KIT_CLASH = 70;
 
@@ -245,9 +246,9 @@ export function firstKit(team: Team): Kit {
  * rule real football uses, and the flat part of the clash penalty is what
  * makes even a one-point clash worth a change strip.
  *
- * `home` is the player's side. Over the whole 13 x 13 roster every ordered
- * fixture comes out at least `KIT_CLASH` apart with both strips readable,
- * which `football-render.test.ts` asserts by exhaustion.
+ * `home` is the player's side. Over the whole roster all 156 ordered fixtures
+ * come out at least `KIT_CLASH` apart with both strips readable, which
+ * `football-render.test.ts` asserts by exhaustion.
  */
 export function fixtureKits(home: Team, away: Team): [Kit, Kit] {
   const options: Array<[Kit, boolean]>[] = [

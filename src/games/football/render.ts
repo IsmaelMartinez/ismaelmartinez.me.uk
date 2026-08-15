@@ -1282,13 +1282,15 @@ export function createRenderer(options: RendererOptions = {}): Renderer {
       drawText(ctx!, m.teams[side].name, x, 74, { color: PALETTE.menuPanel });
       for (let i = 0; i < list.length; i++) {
         const g = list[i];
-        // A goal is credited to the country, not to a man: `ITA 63'`. The
-        // roster is real national sides and there are no real squads behind
-        // them, so an invented surname under a real flag would read worse than
-        // no name at all — and the squad index it used to draw ("NO 6") was
-        // never a scorer in the first place.
-        drawText(ctx!, m.teams[side].code, x, 90 + i * 12, { color: PALETTE.menuText });
-        drawTextRight(ctx!, `${Math.round(g.minute)}'`, x + 112, 90 + i * 12, { color: PALETTE.menuText });
+        // A goal is a minute under its country's heading, nothing more. The
+        // roster is real national sides with no real squads behind them, so an
+        // invented surname under a real flag would read worse than no name at
+        // all, and the squad index this drew before that ("NO 6") was never a
+        // scorer in the first place. The side's own code is deliberately not
+        // repeated per row either: the column is already headed by its name
+        // three lines up, so `ITA` under `ITALY` would be the one token on the
+        // screen carrying no information.
+        drawText(ctx!, `${Math.round(g.minute)}'`, x, 90 + i * 12, { color: PALETTE.menuText });
       }
     }
     drawTextCentred(ctx!, view.outcome, FB_W / 2, 150, {

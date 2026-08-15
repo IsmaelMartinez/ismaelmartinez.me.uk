@@ -90,7 +90,7 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
         { freq: p('D5'), beats: 0.5, gain: 0.8 },
         { freq: p('E5'), beats: 1, gain: 0.85 },
         { freq: p('F#5'), beats: 1, gain: 0.9 },
-        // Bar 8 — D, then the octave leap that launches the chorus.
+        // Bar 8 — D, then the leap up a fifth that launches the chorus.
         { freq: p('D5'), beats: 2, gain: 0.9 },
         { freq: REST, beats: 0.5 },
         { freq: p('A5'), beats: 1.5 },
@@ -109,7 +109,7 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
         { freq: p('A5'), beats: 0.5, gain: 0.9 },
         { freq: p('G5'), beats: 1, gain: 0.95 },
         { freq: p('F#5'), beats: 1, gain: 0.9 },
-        // Bar 12 — D, home on a long tonic and one beat of air before the top.
+        // Bar 12 — D, home on a long tonic and half a beat of air before the top.
         { freq: p('E5'), beats: 0.5, gain: 0.85 },
         { freq: p('F#5'), beats: 0.5, gain: 0.9 },
         { freq: p('D5'), beats: 2.5 },

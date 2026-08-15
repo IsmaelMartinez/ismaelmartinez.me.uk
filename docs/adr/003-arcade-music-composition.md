@@ -58,7 +58,7 @@ Measured against that corpus, after the round that was supposed to make the trac
 | Pixel Park | 48 | 156 | 18.5 s | 3 |
 | Critter Rescue | 48 | 136 | 21.2 s | 3 |
 | Line Hold | 48 | 136 | 21.2 s | 3 |
-| CALCIO '90 | 48 | 132 base, 152 final | 21.8 s | 3 |
+| CALCIO '90 | 48 | 132 base, 152 final | 21.8 s falling to 18.9 s | 3 |
 | Microcity | 48 | 104 | 27.7 s | 3 |
 | Syndicate | 48 | 88 | 32.7 s | 3 |
 

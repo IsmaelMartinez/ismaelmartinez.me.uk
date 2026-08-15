@@ -33,6 +33,8 @@ const t = useTranslations(lang);
         data-t-victory-desc={t('fun.towerdefense.victoryDesc')}
         data-t-game-over={t('fun.towerdefense.gameOver')}
         data-t-game-over-desc={t('fun.towerdefense.gameOverDesc')}
+        data-t-stood-down={t('fun.towerdefense.stoodDown')}
+        data-t-stood-down-desc={t('fun.towerdefense.stoodDownDesc')}
         data-t-max-level={t('fun.towerdefense.maxLevel')}
         data-t-level={t('fun.towerdefense.level')}
         data-t-tower-bolt={t('fun.towerdefense.towerBolt')}
@@ -86,7 +88,11 @@ const t = useTranslations(lang);
           <div id="over-overlay" class="game-overlay" style="display: none;">
             <div class="overlay-content">
               <span id="over-icon" class="play-icon">💥</span>
-              <h2 id="over-title"></h2>
+              <!-- Focusable so the end of a run can be handed somewhere: the
+                   overlay arrives over a dismissed prompt (stand down) or out
+                   of the blue (a breach), and a heading that names which one it
+                   was is what a screen reader should read next. -->
+              <h2 id="over-title" tabindex="-1"></h2>
               <p id="over-desc"></p>
               <p class="final-stats">
                 {t('fun.towerdefense.finalScore')}: <strong id="final-score">0</strong>
@@ -95,6 +101,39 @@ const t = useTranslations(lang);
               <button id="again-btn" class="btn btn-primary btn-large">
                 {t('fun.towerdefense.playAgain')}
               </button>
+            </div>
+          </div>
+
+          <!-- The guard on the one irreversible control in the game. Standing
+               the garrison down cannot be undone, so it costs a second,
+               deliberate click on a different button in a different place: a
+               stray coordinate that lands on it can no longer end a defence
+               that took many minutes to build. Cancel is the primary action and
+               takes focus, so a keyboard or screen reader user lands on the
+               safe answer first.
+
+               Deliberately no `aria-modal`: this overlay is painted over the
+               battlefield alone, so the tower tools and the site chrome stay
+               pointer-reachable while it is open. Only the keyboard is trapped.
+               Claiming modality would tell assistive technology the rest of the
+               page is inert when it demonstrably is not. -->
+          <div
+            id="stand-down-overlay"
+            class="game-overlay"
+            style="display: none;"
+            tabindex="-1"
+            role="alertdialog"
+            aria-labelledby="stand-down-title"
+            aria-describedby="stand-down-desc"
+          >
+            <div class="overlay-content">
+              <span class="play-icon" aria-hidden="true">🏳️</span>
+              <h2 id="stand-down-title" class="stood-down">{t('fun.towerdefense.standDownConfirmTitle')}</h2>
+              <p id="stand-down-desc">{t('fun.towerdefense.standDownConfirmDesc')}</p>
+              <div class="confirm-actions">
+                <button type="button" id="stand-down-cancel" class="btn btn-primary btn-large">{t('fun.towerdefense.standDownConfirmNo')}</button>
+                <button type="button" id="stand-down-confirm" class="btn btn-outline btn-large">{t('fun.towerdefense.standDownConfirmYes')}</button>
+              </div>
             </div>
           </div>
         </div>
@@ -126,6 +165,18 @@ const t = useTranslations(lang);
               hidden
             ></button>
             <button id="wave-btn" class="btn wave-btn" disabled>▶</button>
+          </div>
+          <!-- Deliberately its own group, not a third button in the action bar:
+               the hand reaching for the wave launcher should not be able to
+               land on the control that ends the run. -->
+          <div class="run-controls">
+            <button
+              type="button"
+              id="stand-down-btn"
+              class="stand-down-btn"
+              title={t('fun.towerdefense.standDownHint')}
+              disabled
+            ><span aria-hidden="true">🏳️</span> {t('fun.towerdefense.standDown')}</button>
           </div>
         </div>
         <p class="hint">{t('fun.towerdefense.hint')}</p>
@@ -283,6 +334,21 @@ const t = useTranslations(lang);
     color: var(--color-text);
   }
 
+  /* Standing down is a decision, not a defeat, so it gets its own colour
+     rather than the campaign amber every other ending here wears. Worn by the
+     confirmation heading as well as the result one, so the whole stand-down
+     path reads the same from prompt to board. */
+  .overlay-content h2.stood-down {
+    color: #7dd3fc;
+  }
+
+  .confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    justify-content: center;
+  }
+
   .overlay-content .instructions {
     font-size: 0.85rem;
     color: var(--color-text-muted);
@@ -428,6 +494,37 @@ const t = useTranslations(lang);
     opacity: 0.75;
   }
 
+  .run-controls {
+    display: flex;
+    align-items: center;
+  }
+
+  /* Labelled rather than iconic: ending a run has to be findable, not a
+     symbol a player has to guess at. */
+  .stand-down-btn {
+    min-height: 44px;
+    padding: 0 var(--space-md);
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.6rem;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .stand-down-btn:hover:not(:disabled) {
+    border-color: #7dd3fc;
+    background: rgba(125, 211, 252, 0.14);
+  }
+
+  .stand-down-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .hint {
     margin-top: var(--space-sm);
     font-size: 0.75rem;
@@ -452,7 +549,8 @@ const t = useTranslations(lang);
     }
 
     .tool-bar,
-    .action-bar {
+    .action-bar,
+    .run-controls {
       justify-content: center;
     }
   }

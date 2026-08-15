@@ -135,15 +135,75 @@ function chaserFor(m: MatchState, side: Side, x: number, y: number): number {
   return best;
 }
 
-/** The two outfielders of `side` closest to a point, nearest first. */
-function twoNearest(m: MatchState, side: Side, x: number, y: number): [number, number] {
-  const ranked: Array<[number, number]> = [];
+/**
+ * The two outfielders of `side` closest to a point, nearest first, packed as
+ * `first * TEAM_SIZE + second` — unpacked by `nearer` and `nextNearer`.
+ *
+ * Two men and one running scan rather than a ranked array, because this is the
+ * hottest function in the simulation: it runs for every off-ball player on both
+ * sides on every tick, and building six `[idx, d]` tuples and sorting them was
+ * about a sixth of the whole cost of a headless match. The scan keeps the
+ * stable sort's tie-break — equal distances leave the lower shirt in front.
+ */
+function twoNearest(m: MatchState, side: Side, x: number, y: number): number {
+  let first = -1;
+  let firstD = Infinity;
+  let second = -1;
+  let secondD = Infinity;
   for (let idx = 1; idx < TEAM_SIZE; idx++) {
     const p = m.players[side][idx];
-    ranked.push([idx, dist(p.x, p.y, x, y)]);
+    const d = dist(p.x, p.y, x, y);
+    if (d < firstD) {
+      second = first;
+      secondD = firstD;
+      first = idx;
+      firstD = d;
+    } else if (d < secondD) {
+      second = idx;
+      secondD = d;
+    }
   }
-  ranked.sort((a, b) => a[1] - b[1]);
-  return [ranked[0][0], ranked[1][0]];
+  return first * TEAM_SIZE + second;
+}
+
+/** Nearest shirt out of a `twoNearest` pair. */
+function nearer(pair: number): number {
+  return Math.floor(pair / TEAM_SIZE);
+}
+
+/** Second-nearest shirt out of a `twoNearest` pair. */
+function nextNearer(pair: number): number {
+  return pair % TEAM_SIZE;
+}
+
+/**
+ * Bitmask of the two most advanced outfielders of `side`, `skipIdx` excluded:
+ * the same top two by `y * dir`, ties to the lower shirt, that a stable
+ * descending sort gave.
+ *
+ * A mask rather than an array because both callers only ever ask whether one
+ * shirt is among them, and both were building, filtering and sorting a fresh
+ * seven-element array for every off-ball player on every tick.
+ */
+function advancedMask(m: MatchState, side: Side, skipIdx: number, dir: 1 | -1): number {
+  let first = -1;
+  let firstK = -Infinity;
+  let second = -1;
+  let secondK = -Infinity;
+  for (let i = 1; i < TEAM_SIZE; i++) {
+    if (i === skipIdx) continue;
+    const k = m.players[side][i].y * dir;
+    if (k > firstK) {
+      second = first;
+      secondK = firstK;
+      first = i;
+      firstK = k;
+    } else if (k > secondK) {
+      second = i;
+      secondK = k;
+    }
+  }
+  return (first >= 0 ? 1 << first : 0) | (second >= 0 ? 1 << second : 0);
 }
 
 /** How far ahead of, and to the side of, the carrier the short option stands. */
@@ -193,20 +253,16 @@ function drift(m: MatchState, side: Side, x: number, y: number): number {
 
 /**
  * The teammate who offers the short option: the nearest to the carrier who is
- * not one of the two making runs beyond him.
+ * not one of the two making runs beyond him, `advanced` being their mask from
+ * `advancedMask`. It is passed in rather than computed here because the caller
+ * has already worked it out for its own branch, and it is the same two men.
  */
-function supportFor(m: MatchState, side: Side, carrierIdx: number): number {
+function supportFor(m: MatchState, side: Side, carrierIdx: number, advanced: number): number {
   const carrier = m.players[side][carrierIdx];
-  const dir = attackDir(side, m.swapped);
-  const advanced = [...Array(TEAM_SIZE).keys()]
-    .slice(1)
-    .filter(i => i !== carrierIdx)
-    .sort((a, b) => (m.players[side][b].y - m.players[side][a].y) * dir)
-    .slice(0, 2);
   let best = -1;
   let bestD = Infinity;
   for (let idx = 1; idx < TEAM_SIZE; idx++) {
-    if (idx === carrierIdx || advanced.includes(idx)) continue;
+    if (idx === carrierIdx || (advanced & (1 << idx)) !== 0) continue;
     const d = dist(m.players[side][idx].x, m.players[side][idx].y, carrier.x, carrier.y);
     if (d < bestD) {
       bestD = d;
@@ -250,9 +306,9 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
       // same player who never did. A second man at the back post is what an
       // attacking side actually does with a ball in the air, and it is the
       // difference between the verb paying and the verb not quite paying.
-      const [first, second] = twoNearest(m, side, meet.x, meet.y);
-      if (idx === first) return meet;
-      if (idx === second && Math.abs(meet.y - attackGoalY(side, m.swapped)) < BACK_POST_R) {
+      const pair = twoNearest(m, side, meet.x, meet.y);
+      if (idx === nearer(pair)) return meet;
+      if (idx === nextNearer(pair) && Math.abs(meet.y - attackGoalY(side, m.swapped)) < BACK_POST_R) {
         const away = meet.x < CENTRE_X ? 1 : -1;
         return { x: clamp(meet.x + away * BACK_POST_OFFSET, 20, PITCH_W - 20), y: meet.y };
       }
@@ -275,12 +331,8 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
     const goalY = attackGoalY(side, m.swapped);
     // The two most advanced players run into the attacking third, pulling away
     // from the carrier's lateral position so a pass has somewhere to go.
-    const advanced = [...Array(TEAM_SIZE).keys()]
-      .slice(1)
-      .filter(i => i !== m.owner!.idx)
-      .sort((a, b) => (m.players[side][b].y - m.players[side][a].y) * dir)
-      .slice(0, 2);
-    if (advanced.includes(idx)) {
+    const advanced = advancedMask(m, side, m.owner.idx, dir);
+    if ((advanced & (1 << idx)) !== 0) {
       const away = carrier.x < CENTRE_X ? 1 : -1;
       const lane = clamp(CENTRE_X + away * (40 + (idx % 2) * 46), 24, PITCH_W - 24);
       const depth = goalY - dir * (60 + (idx % 2) * 34);
@@ -293,7 +345,7 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
     // One man always offers a short option, pulled into the space away from
     // whoever is closing the carrier down. Without him the only pass on was a
     // forty-yard ball to a marked forward.
-    if (idx === supportFor(m, side, m.owner.idx)) {
+    if (idx === supportFor(m, side, m.owner.idx, advanced)) {
       const marker = nearestOpponentTo(m, side, carrier.x, carrier.y);
       const away = marker && marker.x > carrier.x ? -1 : 1;
       const sx = clamp(carrier.x + away * SUPPORT_WIDE, 20, PITCH_W - 20);
@@ -321,14 +373,21 @@ export function offBallTarget(m: MatchState, side: Side, idx: number): Point {
   // dial, and weakening the player's defence would show up as goals against.
   const carrier = m.players[m.owner.side][m.owner.idx];
   const own = ownGoalY(side, m.swapped);
-  const [first, second] = twoNearest(m, side, carrier.x, carrier.y);
+  const pair = twoNearest(m, side, carrier.x, carrier.y);
   // The second man's commitment is graded rather than switched on at a
   // threshold: at d = 0.25 he mostly holds the covering position and at d =
   // 0.85 he is in the carrier's face alongside the first.
   const backing = side === 0 ? HUMAN_BACKING : clamp(0.45 * (m.difficulty - 0.25), 0, 1);
   // Nobody has transferred onto the new man yet: hold the covering position
   // for the moment it takes to react to the ball having moved.
-  const commit = transferring(m, side) ? 0 : idx === first ? 1 : idx === second ? backing : 0;
+  const commit =
+    transferring(m, side)
+      ? 0
+      : idx === nearer(pair)
+        ? 1
+        : idx === nextNearer(pair)
+          ? backing
+          : 0;
   if (commit > 0 && m.owner.idx !== 0) {
     // They cannot out-run him — the speed ledger forbids it — so they run at
     // where he is going rather than where he is. Chasing a carrier's heels is

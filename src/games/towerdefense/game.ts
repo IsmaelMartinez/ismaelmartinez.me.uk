@@ -104,7 +104,15 @@ interface Scenery {
 
 const SHOT_LIFE = 0.14;
 
-type Phase = 'idle' | 'build' | 'wave' | 'over';
+/**
+ * `confirm` is a live run held still while the stand-down prompt is open. It
+ * is a phase rather than a flag beside one so every existing `phase !== 'build'
+ * && phase !== 'wave'` guard covers it for free (Microcity's trick): the build
+ * countdown freezes, the canvas stops accepting towers, and — the point — the
+ * next wave cannot roll in underneath the prompt and turn the answer into a
+ * different question.
+ */
+type Phase = 'idle' | 'build' | 'wave' | 'confirm' | 'over';
 
 export function initTowerDefenseGame(): void {
   const root = document.getElementById('towerdefense-root');
@@ -135,6 +143,10 @@ export function initTowerDefenseGame(): void {
   const recordEl = el('record');
   const waveBtn = el('wave-btn') as HTMLButtonElement;
   const upgradeBtn = el('upgrade-btn') as HTMLButtonElement;
+  const standDownBtn = el('stand-down-btn') as HTMLButtonElement;
+  const standDownOverlay = el('stand-down-overlay');
+  const standDownConfirmBtn = el('stand-down-confirm') as HTMLButtonElement;
+  const standDownCancelBtn = el('stand-down-cancel') as HTMLButtonElement;
   const towerInfoEl = el('tower-info');
   const toastArea = el('toast-area');
   const { show: showToast } = createToaster(toastArea);
@@ -153,6 +165,8 @@ export function initTowerDefenseGame(): void {
     victoryDesc: s('tVictoryDesc', 'Every wave broke against your towers.'),
     gameOver: s('tGameOver', 'The line has fallen'),
     gameOverDesc: s('tGameOverDesc', 'The horde marched through your defences.'),
+    stoodDown: s('tStoodDown', 'Garrison stood down'),
+    stoodDownDesc: s('tStoodDownDesc', 'You ended the watch with the line unbroken.'),
     maxLevel: s('tMaxLevel', 'MAX'),
     level: s('tLevel', 'Lv'),
     towerNames: {
@@ -379,9 +393,60 @@ export function initTowerDefenseGame(): void {
     bannerTimer = 0;
     keepFlash = 0;
     board.beginRun();
+    standDownOverlay.style.display = 'none';
     phase = 'build';
     audio.start();
     refreshToolbar();
+  }
+
+  /**
+   * Opens the stand-down prompt over a live run. Focus moves to Cancel rather
+   * than Confirm so the keyboard's own default answer — the one Enter reaches
+   * — is the one that keeps the run.
+   */
+  function openStandDownConfirm() {
+    if (phase !== 'build') return;
+    phase = 'confirm';
+    standDownOverlay.style.display = 'flex';
+    document.addEventListener('keydown', onConfirmKeydown);
+    standDownCancelBtn.focus();
+  }
+
+  /** Dismisses the prompt and hands the run back, focus included. */
+  function closeStandDownConfirm() {
+    if (phase !== 'confirm') return;
+    phase = 'build';
+    standDownOverlay.style.display = 'none';
+    document.removeEventListener('keydown', onConfirmKeydown);
+    standDownBtn.focus();
+  }
+
+  /**
+   * Escape is the expected way out of a prompt, and the Tab cycle keeps a
+   * keyboard user among the two answers while it is open. A courtesy, not a
+   * claim: the prompt covers only the battlefield, so the toolbar and the site
+   * chrome behind it stay pointer-reachable and the markup declares no
+   * `aria-modal` (see the note in towerdefense.astro).
+   *
+   * Bound on `document`, because focus can leave `#towerdefense-root` entirely
+   * while the prompt is open — a click on the tower tools, the header or the
+   * page background does it — and a root-scoped listener never sees the keys
+   * that follow. Both close paths lift it; a swap that tears the page out from
+   * under an open prompt is caught by the `astro:before-swap` retirement wired
+   * below.
+   */
+  function onConfirmKeydown(e: KeyboardEvent) {
+    if (phase !== 'confirm') return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeStandDownConfirm();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    // Two answers, so a Tab in either direction is the same toggle between
+    // them; from anywhere else it re-enters the dialog at the safe answer.
+    (document.activeElement === standDownCancelBtn ? standDownConfirmBtn : standDownCancelBtn).focus();
   }
 
   function launchWave() {
@@ -393,19 +458,50 @@ export function initTowerDefenseGame(): void {
     showToast(`⚔️ ${bannerText}`);
   }
 
-  function endRun() {
+  /**
+   * The single terminal path. A breach is the involuntary way in; standing the
+   * garrison down is the voluntary one, and both post the same number — the
+   * `score(eco)` banked live at every wave boundary — so ending a holding line
+   * on purpose can neither be worth less than losing it nor be worth more than
+   * it earned. Without the stand-down door only breaches ever reached
+   * `board.show`, and since clearing the authored campaign rolls the run into
+   * an endless assault rather than a victory wall, a player who held every
+   * wave had no terminal state at all except eventually losing.
+   */
+  function endRun(reason: 'breach' | 'standdown') {
     phase = 'over';
     selectedTower = null;
-    audio.playSfx('gameover');
+    // Confirming leaves the prompt without going through
+    // closeStandDownConfirm, so both the overlay and the key trap are torn
+    // down here as well. The button's disabled state needs no such care:
+    // `refreshHud` owns it off the phase, which is already 'over'.
+    standDownOverlay.style.display = 'none';
+    document.removeEventListener('keydown', onConfirmKeydown);
+    const stoodDown = reason === 'standdown';
+    audio.playSfx(stoodDown ? 'score' : 'gameover');
     audio.stop();
     bankScore();
-    // A run only ends when the line falls; clearing the whole authored
-    // campaign first still earns the trophy screen for how far it held.
-    overIcon.textContent = clearedCampaign ? '🏆' : '💥';
-    overTitle.textContent = clearedCampaign ? strings.victory : strings.gameOver;
-    overDesc.textContent = clearedCampaign ? strings.victoryDesc : strings.gameOverDesc;
+    // Clearing the whole authored campaign earns the trophy screen for how far
+    // the line held, whichever way the run then ended.
+    overIcon.textContent = stoodDown ? '🏳️' : clearedCampaign ? '🏆' : '💥';
+    overTitle.textContent = stoodDown
+      ? strings.stoodDown
+      : clearedCampaign
+        ? strings.victory
+        : strings.gameOver;
+    overTitle.classList.toggle('stood-down', stoodDown);
+    overDesc.textContent = stoodDown
+      ? strings.stoodDownDesc
+      : clearedCampaign
+        ? strings.victoryDesc
+        : strings.gameOverDesc;
     finalScoreEl.textContent = `${score(eco)}`;
     overOverlay.style.display = 'flex';
+    // Standing down dismisses the prompt that held focus, so without this the
+    // keyboard lands on `document.body`. Ahead of `board.show`, which takes
+    // focus for the initials prompt when the run charts; this is where focus
+    // lands when it does not.
+    overTitle.focus();
     // After the overlay is visible, so the initials input can take focus.
     board.show(score(eco));
   }
@@ -475,7 +571,7 @@ export function initTowerDefenseGame(): void {
       leakedThisStep = true;
       if (lives <= 0) {
         showToast(`💥 ${strings.breach}`);
-        endRun();
+        endRun('breach');
         return;
       }
     }
@@ -1451,6 +1547,12 @@ export function initTowerDefenseGame(): void {
       waveBtn.textContent = '▶';
     }
 
+    // Offered between waves and nowhere else: with marchers on the field the
+    // run has points still in flight, so what a stand-down would post is
+    // ambiguous. `confirm` keeps it enabled because the cancel path hands
+    // focus back to it, and a disabled button cannot take focus.
+    standDownBtn.disabled = phase !== 'build' && phase !== 'confirm';
+
     toolButtons.forEach(button => {
       const kind = button.dataset.kind as TowerKind;
       button.classList.toggle('active', selectedTool === kind && !selectedTower);
@@ -1546,6 +1648,24 @@ export function initTowerDefenseGame(): void {
   waveBtn.addEventListener('click', () => {
     if (phase === 'build') launchWave();
   });
+
+  // Guarded on the phase as well as the disabled attribute: a stand-down
+  // outside the build lull would post a score with marchers still on the field.
+  standDownBtn.addEventListener('click', openStandDownConfirm);
+  standDownCancelBtn.addEventListener('click', closeStandDownConfirm);
+  standDownConfirmBtn.addEventListener('click', () => {
+    if (phase !== 'confirm') return;
+    endRun('standdown');
+  });
+  // The trap lives on the document, which outlives a ClientRouter swap even
+  // though this page's DOM does not. Both close paths lift it, but a swap over
+  // an open prompt is neither, so it retires here like every other listener in
+  // the engine that reaches past the game root.
+  const onSwap = () => {
+    document.removeEventListener('keydown', onConfirmKeydown);
+    document.removeEventListener('astro:before-swap', onSwap);
+  };
+  document.addEventListener('astro:before-swap', onSwap);
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

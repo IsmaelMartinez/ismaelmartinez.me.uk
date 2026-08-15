@@ -3,6 +3,10 @@ import { pitch, p } from '../../src/games/engine/pitch';
 import type { GameAudioOptions } from '../../src/games/engine/audio';
 import { SNAKE_MUSIC } from '../../src/games/snake/music';
 import { CASCADE_MUSIC, BASE_TEMPO } from '../../src/games/cascade/music';
+import {
+  FOOTBALL_MUSIC,
+  BASE_TEMPO as FOOTBALL_BASE_TEMPO
+} from '../../src/games/football/music';
 
 /**
  * Every cabinet's score, discovered rather than listed.
@@ -53,7 +57,14 @@ const EXPECTED: Record<string, { beats: number; wasBeats: number }> = {
   lemmings: { beats: 48, wasBeats: 16 },
   towerdefense: { beats: 48, wasBeats: 16 },
   park: { beats: 48, wasBeats: 24 },
-  syndicate: { beats: 48, wasBeats: 16 }
+  syndicate: { beats: 48, wasBeats: 16 },
+  // Football is the one cabinet whose "before" was not a single loop length.
+  // It predated the round with its score inline in `game.ts` and its voices
+  // running 11, 8 and 8 beats — lines that never realigned, which is the bug
+  // the equal-length invariant below exists to catch. 11 is the longest of the
+  // three, so it is both the honest reading of how much music there was and
+  // the strictest bar for the doubling assertion.
+  football: { beats: 48, wasBeats: 11 }
 };
 
 /** Total length of one pass through a voice's looping line, in beats. */
@@ -165,6 +176,13 @@ describe('the arcade scores', () => {
   it('gives Cascade a base tempo its per-level ramp can wind up from', () => {
     expect(BASE_TEMPO).toBe(126);
     expect(CASCADE_MUSIC.tempo).toBe(BASE_TEMPO);
+  });
+
+  it('gives Football a base tempo its knockout ramp can wind up from', () => {
+    // Same split as Cascade: the pace the score was written at belongs to the
+    // arrangement, the stage ramp in `game.ts` belongs to the game.
+    expect(FOOTBALL_BASE_TEMPO).toBe(132);
+    expect(FOOTBALL_MUSIC.tempo).toBe(FOOTBALL_BASE_TEMPO);
   });
 
   it('keeps Snake to two voices, the cabinet that is deliberately minimal', () => {

@@ -465,7 +465,17 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   }
 
   .nav {
-    position: sticky;
+    /*
+     * Sticky everywhere except where a page asks for otherwise, and the ask
+     * goes through this custom property rather than through a `:global(.nav)`
+     * override. Astro scopes this rule to `.nav[data-astro-cid-…]`, which is
+     * specificity 0-2-0, while a page's `:global(.nav)` is 0-1-0 and loses the
+     * cascade whatever order the sheets land in — the arcade cabinets' own
+     * landscape rule was dead CSS for exactly that reason. A custom property
+     * set on `:root` is not competing with this declaration at all, so it
+     * simply works.
+     */
+    position: var(--nav-position, sticky);
     top: 0;
     z-index: 100;
     background: var(--color-bg);
@@ -720,10 +730,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
     .nav-links li {
       padding: var(--space-sm) 0;
-    }
-
-    .nav {
-      position: sticky;
     }
   }
 

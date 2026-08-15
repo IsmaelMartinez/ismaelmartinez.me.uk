@@ -21,6 +21,7 @@ import {
   wireChannelButton,
   createToaster,
   createEffects,
+  formatClock,
   hash01 as hash
 } from '../engine';
 import { CASCADE_MUSIC, BASE_TEMPO } from './music';
@@ -341,12 +342,6 @@ export function initCascadeGame(): void {
     const { best, newRecord } = board().bank(run.score);
     if (newRecord) showToast(`🏅 ${strings.newRecord}`);
     recordEl.textContent = `${best}`;
-  }
-
-  /** m:ss for the countdown readout; rounds up so it lands on 0:00 at zero. */
-  function formatClock(seconds: number): string {
-    const total = Math.max(0, Math.ceil(seconds));
-    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
   }
 
   function applyTempo() {

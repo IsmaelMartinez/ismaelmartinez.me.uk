@@ -55,8 +55,7 @@ export const CABINETS: Record<ChainGameId, CabinetMeta> = {
     icon: '🧱',
     color: '#a855f7',
     path: '/fun/cascade',
-    estYear: 1985,
-    isNew: true
+    estYear: 1985
   },
   city: {
     title: 'MICROCITY',
@@ -67,6 +66,17 @@ export const CABINETS: Record<ChainGameId, CabinetMeta> = {
     color: '#38bdf8',
     path: '/fun/city',
     estYear: 1989
+  },
+  football: {
+    title: "CALCIO '90",
+    taglineKey: 'fun.football.description',
+    genreKey: 'fun.arcade.genre.football',
+    twoPlayer: false,
+    icon: '⚽',
+    color: '#22c55e',
+    path: '/fun/football',
+    estYear: 1990,
+    isNew: true
   },
   lemmings: {
     title: 'CRITTER RESCUE',

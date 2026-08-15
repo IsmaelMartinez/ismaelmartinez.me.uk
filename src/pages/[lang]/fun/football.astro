@@ -1,0 +1,440 @@
+---
+// CALCIO '90 sits on the floor's unlock chain at 1990, between Microcity and
+// Critter Rescue; its cabinet art lives in `src/data/arcadeCabinets.ts` and the
+// floor composes the rest, so nothing about the listing is declared here.
+//
+// Every word the cabinet draws on the canvas rides in on a data-t-* attribute:
+// the framebuffer has its own 5x7 bitmap font and cannot call useTranslations
+// at runtime, so the page hands the strings over at init.
+import Layout from '../../../layouts/Layout.astro';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
+import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return locales.map(lang => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+---
+
+<Layout title="Calcio '90" lang={lang}>
+  <section class="football-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div
+        class="game-container"
+        id="football-root"
+        data-t-kickoff={t('fun.football.kickoff')}
+        data-t-goal={t('fun.football.goal')}
+        data-t-throw-in={t('fun.football.throwIn')}
+        data-t-corner={t('fun.football.corner')}
+        data-t-goal-kick={t('fun.football.goalKick')}
+        data-t-half-time={t('fun.football.halfTime')}
+        data-t-full-time={t('fun.football.fullTime')}
+        data-t-paused={t('fun.football.paused')}
+        data-t-press-start={t('fun.football.pressStart')}
+        data-t-select-team={t('fun.football.selectTeam')}
+        data-t-score={t('fun.football.score')}
+        data-t-best={t('fun.football.best')}
+        data-t-group={t('fun.football.group')}
+        data-t-tables={t('fun.football.tables')}
+        data-t-through={t('fun.football.through')}
+        data-t-penalties={t('fun.football.penalties')}
+        data-t-game-over={t('fun.football.gameOver')}
+        data-t-champions={t('fun.football.champions')}
+        data-t-semi-final={t('fun.football.semiFinal')}
+        data-t-final={t('fun.football.final')}
+        data-t-bracket={t('fun.football.bracket')}
+        data-t-yes={t('fun.football.yes')}
+        data-t-no={t('fun.football.no')}
+        data-t-shootout={t('fun.football.penalties')}
+        data-t-sudden-death={t('fun.football.suddenDeath')}
+        data-t-credit={t('fun.football.credit')}
+        data-t-attract={t('fun.football.attract')}
+        data-t-unlocked={t('fun.football.unlocked')}
+        data-t-ratings={t('fun.football.ratings')}
+        data-t-new-record={t('fun.football.newRecord')}
+      >
+        <div class="game-header">
+          <h1><span class="football-emoji">⚽</span> {t('fun.football.title')}</h1>
+          <div class="header-controls">
+            <SoundToggles lang={lang} />
+            <!--
+              The pause button lives beside the sound toggles rather than over
+              the canvas: the framebuffer's right-hand 72 px is the HUD, so a
+              button in the canvas's top-right corner sat squarely on the
+              clock, the team codes and the score.
+            -->
+            <button id="btn-pause" class="pause-btn" aria-label={t('fun.football.pause')}>❚❚</button>
+          </div>
+        </div>
+        <p class="tagline">{t('fun.football.tagline')}</p>
+
+        <!--
+          The cabinet proper: screen and controls. One wrapper so a landscape
+          phone can lay them out as a single row — stick, screen, buttons —
+          with nothing below the fold.
+        -->
+        <div class="cabinet">
+          <div class="game-area">
+            <canvas id="game-canvas"></canvas>
+            <ToastArea />
+          </div>
+
+          <div class="pad">
+            {/*
+              No `role="application"`: it hands the whole region's keys to the
+              page and suppresses a screen reader's own navigation, and this is
+              a pointer-only affordance that implements none of that model. The
+              keyboard already steers through `game.ts`'s own window handler, so
+              nothing is lost by leaving this as a plain labelled element.
+            */}
+            <div id="stick" class="stick" aria-label={t('fun.football.move')}>
+              <div id="stick-nub" class="stick-nub"></div>
+            </div>
+            <div class="pad-actions">
+              <button id="btn-pass" class="pad-btn pad-c" aria-label={t('fun.football.pass')}>
+                {t('fun.football.pass')}
+              </button>
+              <button id="btn-cross" class="pad-btn pad-b" aria-label={t('fun.football.cross')}>
+                {t('fun.football.cross')}
+              </button>
+              <button id="btn-shoot" class="pad-btn pad-a" aria-label={t('fun.football.shoot')}>
+                {t('fun.football.shoot')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p class="hint">{t('fun.football.hint')}</p>
+        <p class="instructions">{t('fun.football.instructions')}</p>
+
+        <HighScoreTable gameId="football" lang={lang} accent="#22c55e" />
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired cabinet. Re-init after every
+  // swap; initFootballGame no-ops on pages without a fresh root.
+  import { initFootballGame } from '../../../games/football';
+  initFootballGame();
+  document.addEventListener('astro:after-swap', initFootballGame);
+</script>
+
+<style>
+  .football-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: var(--space-xl);
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+  }
+
+  .back-link:hover {
+    color: var(--color-accent);
+  }
+
+  .game-container {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-xs);
+  }
+
+  .game-header h1 {
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+  }
+
+  .football-emoji {
+    animation: ballBounce 2.2s ease-in-out infinite;
+  }
+
+  @keyframes ballBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px) rotate(20deg); }
+  }
+
+  .tagline {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .game-area {
+    position: relative;
+    background: #000;
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 2px solid var(--color-border);
+    /* The cabinet's own bezel: whatever the integer scale leaves over. */
+    display: flex;
+    justify-content: center;
+  }
+
+  /*
+   * The canvas is sized by game.ts, not by this stylesheet, and that is the
+   * whole point. The cabinet is 320 x 224 and it must land on screen as a
+   * whole-number multiple of that in *device* pixels; a `width: 100%` box
+   * hands the browser a fractional scale and it drops framebuffer rows and
+   * columns to fit, which is visible as uneven stems on the wordmark and the
+   * HUD. So: no width, no aspect-ratio here — only the nearest-neighbour hint
+   * for the one case JS cannot avoid, a viewport narrower than 320 device px.
+   */
+  #game-canvas {
+    display: block;
+    max-width: 100%;
+    image-rendering: pixelated;
+    touch-action: manipulation;
+  }
+
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .pause-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 0.9rem;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 0.5rem;
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
+  .pause-btn:hover {
+    border-color: #22c55e;
+  }
+
+
+  .pad {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-top: var(--space-lg);
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .stick {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    flex-shrink: 0;
+  }
+
+  .stick-nub {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 48px;
+    height: 48px;
+    margin: -24px 0 0 -24px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.35);
+    border: 2px solid #22c55e;
+    pointer-events: none;
+  }
+
+  /* Three buttons in a triangle: pass left, cross above, shoot bottom-right. */
+  .pad-actions {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    grid-template-rows: repeat(2, auto);
+    gap: var(--space-sm);
+    align-items: center;
+  }
+
+  .pad-c { grid-area: 2 / 1; }
+  .pad-b { grid-area: 1 / 2; }
+  .pad-a { grid-area: 2 / 2; }
+
+  .pad-btn {
+    min-width: 64px;
+    min-height: 56px;
+    padding: 0 var(--space-sm);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .pad-btn:hover {
+    border-color: #22c55e;
+  }
+
+  .pad-btn:active {
+    background: rgba(34, 197, 94, 0.2);
+    transform: translateY(1px);
+  }
+
+  .pad-a {
+    min-width: 76px;
+    min-height: 68px;
+    border-color: rgba(34, 197, 94, 0.6);
+  }
+
+  .hint {
+    margin-top: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  .instructions {
+    margin: var(--space-md) auto 0;
+    max-width: 60ch;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  @media (max-width: 600px) {
+    .game-header {
+      justify-content: center;
+      text-align: center;
+    }
+
+    .tagline {
+      text-align: center;
+    }
+
+    .pad {
+      gap: var(--space-md);
+    }
+  }
+
+  /*
+   * A phone held sideways. 844 x 390 is ample width — the framebuffer is only
+   * 320 CSS px across — and desperately short of height, so everything that
+   * is not the cabinet goes, and what is left becomes one row: stick, screen,
+   * buttons. Two things were unplayable before this block. The page stacked
+   * screen over pad, which put the pad 500 px down the document and the top
+   * of the canvas 255 px down, so no single scroll position showed both. And
+   * the sticky nav floated over the framebuffer's first 60 rows, which is the
+   * clock, both team codes, the score and the attacking arrow — so the nav is
+   * static here and scrolls away with the rest of the page.
+   */
+  @media (orientation: landscape) and (max-height: 500px) {
+    /*
+     * Layout.astro reads this; see the note on its `.nav` rule for why a
+     * `:global(.nav) { position: static }` here never won the cascade and
+     * left the sticky nav sitting on the framebuffer's first 57 rows.
+     */
+    :global(:root) {
+      --nav-position: static;
+    }
+
+    .football-section {
+      min-height: 0;
+      padding: var(--space-xs) 0;
+    }
+
+    .game-container {
+      max-width: none;
+    }
+
+    .back-link,
+    .game-header h1,
+    .tagline,
+    .hint,
+    .instructions {
+      display: none;
+    }
+
+    .game-header {
+      justify-content: flex-end;
+      margin-bottom: var(--space-xs);
+    }
+
+    .cabinet {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-md);
+    }
+
+    /*
+     * The screen takes the width the two controls leave and letterboxes the
+     * canvas inside it. It has to *claim* that width rather than shrink to
+     * the canvas: game.ts sizes the canvas from its parent's box, so a
+     * content-sized parent would ratchet the integer scale down and never
+     * back up.
+     */
+    .game-area {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    /* The pad's two halves become row items so they can straddle the screen. */
+    .pad {
+      display: contents;
+    }
+
+    .stick {
+      order: -1;
+      width: 108px;
+      height: 108px;
+    }
+
+    .pad-actions {
+      gap: var(--space-xs);
+    }
+  }
+  /*
+   * A fine pointer means a keyboard is to hand; the pad only clutters it.
+   * Last in the file on purpose: the landscape block above turns `.pad` into
+   * a `display: contents` row item, and this has to beat that at equal
+   * specificity on a desktop window that happens to be short and wide.
+   */
+  @media (pointer: fine) {
+    .pad {
+      display: none;
+    }
+  }
+</style>

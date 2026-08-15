@@ -18,7 +18,7 @@
  * ones have pushed it off.
  *
  * Because that state is per blob, the per-address limit is per address per
- * game, not per address overall: one address can spend it on each of the nine
+ * game, not per address overall: one address can spend it on each of the ten
  * boards. Making it global would need a tenth shared blob and a second
  * read-modify-write on every submission, which is not worth it here, because
  * the per-game daily cap below is what actually bounds the quota.
@@ -79,7 +79,7 @@ interface Submission {
   nonce: string;
 }
 
-/** The nine boards: eight cabinets, with Cascade fielding one per mode. */
+/** The ten boards: nine cabinets, with Cascade fielding one per mode. */
 export const GAMES: readonly string[] = [
   'snake',
   'tanks',
@@ -89,7 +89,8 @@ export const GAMES: readonly string[] = [
   'lemmings',
   'towerdefense',
   'cascade',
-  'cascade-countdown'
+  'cascade-countdown',
+  'football'
 ];
 
 const ALLOWED_ORIGINS = [

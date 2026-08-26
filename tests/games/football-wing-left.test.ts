@@ -6,8 +6,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  airGoalsOverCeiling,
   flankTail,
   stationsOutPointingAHuman,
+  AIR_FINALISTS,
   FLANK_DOUBLE_FIGURE_BUDGET,
   FLANK_DOUBLE_FIGURE_ODDS
 } from './football-wing-sweep';
@@ -36,5 +38,20 @@ describe('the wing cross is answerable', () => {
         `against a budget of ${FLANK_DOUBLE_FIGURE_BUDGET} for a claimed 1 in ${FLANK_DOUBLE_FIGURE_ODDS}; ` +
         `biggest scoreline ${tail.biggest}`
     ).toBeLessThanOrEqual(FLANK_DOUBLE_FIGURE_BUDGET);
+  });
+
+  /**
+   * 7.4's air-goals ceiling, on the station this flank's own scan nominated
+   * rather than on one a human pinned (issue #273, finding 4). Why the scan
+   * needs its own depth to nominate at all, and why the confirm is the only
+   * number the ceiling ever sees, are at `airGoalsOverCeiling`.
+   */
+  it('keeps the left flank under the air-goals ceiling', { timeout: 2700000 }, () => {
+    const verdict = airGoalsOverCeiling(-1);
+    expect(verdict.measured.length, 'stations confirmed').toBe(AIR_FINALISTS);
+    expect(
+      verdict.over,
+      `left-flank stations over 7.4's air-goals ceiling:\n  ${verdict.measured.join('\n  ')}`
+    ).toEqual([]);
   });
 });

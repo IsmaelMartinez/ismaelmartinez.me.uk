@@ -44,14 +44,16 @@ import {
   DENSE_DEMAND_MIN,
   COM_JOB_SHARE,
   IND_JOB_SHARE,
-  RES_DEMAND_BASE
+  RES_DEMAND_BASE,
+  type CityStats
 } from '../../src/games/city/simulation';
 import {
   monthlyIncome,
   monthlyExpenses,
   solvency,
   SERVICE_COST_PER_CAPITA,
-  SERVICE_FREE_ALLOWANCE
+  SERVICE_FREE_ALLOWANCE,
+  SERVICE_DENSE_THRESHOLD
 } from '../../src/games/city/budget';
 import {
   targetCarCount,
@@ -1159,6 +1161,73 @@ describe('city milestone ladder reachability (#265)', () => {
     // see a level-4 block are the ones that have already finished.
     expect(DENSITY_UNLOCK_POP).toBeLessThan(POP_MILESTONES[METROPOLIS_INDEX]);
     expect(playOut(1).densest).toBe(DENSE_LEVEL);
+  });
+});
+
+/**
+ * The per-capita bill was calibrated against a demand model that deadlocked a
+ * city near a couple of hundred people. Once #306 let jobs converge on
+ * population, a head brought in 2.5 in tax and cost 1.8 to service, so a
+ * saturated city banked 0.7 a head every month for the rest of the run and the
+ * treasury stopped meaning anything: a played 400-month run ended on £530,000
+ * (issue #309). These pin the property that fixes it — growth past the dense
+ * threshold pays for itself and no more — rather than the constants that
+ * happen to express it today.
+ */
+describe('city treasury at scale (#309)', () => {
+  /** A city the demand model has settled: one job per resident, split by the
+   *  two job shares (which sum to exactly 1 — see the deadlock suite). */
+  const settled = (population: number): CityStats => ({
+    population,
+    comJobs: population * COM_JOB_SHARE,
+    indJobs: population * IND_JOB_SHARE,
+    jobs: population
+  });
+
+  it('bills a head added to a big city at least what that head pays in tax', () => {
+    const tiles = createCity();
+    build(tiles, 0, 0, 'power');
+    for (const population of [600, 1000, 1600, 2400]) {
+      // Both sides of the marginal comparison sit past the threshold, which
+      // is counted in residents *and* jobs.
+      expect(population * 2).toBeGreaterThan(SERVICE_DENSE_THRESHOLD);
+      const before = settled(population);
+      const after = settled(population + 100);
+      const extraTax = monthlyIncome(after) - monthlyIncome(before);
+      const extraBill = monthlyExpenses(tiles, after) - monthlyExpenses(tiles, before);
+      expect(extraBill).toBeGreaterThanOrEqual(extraTax);
+    }
+  });
+
+  it("keeps a saturated city's whole monthly surplus under the price of one power plant", () => {
+    const tiles = maximisedCity();
+    const random = seededRandom(1);
+    for (let t = 0; t < 600; t++) {
+      growthStep(tiles, random, {}, computeCongestion(tiles).map(isCongested));
+    }
+    const stats = cityStats(tiles);
+    expect(stats.population).toBeGreaterThan(POP_MILESTONES[METROPOLIS_INDEX]);
+    const surplus = monthlyIncome(stats) - monthlyExpenses(tiles, stats);
+    // Solvent — a competent metropolis is not doomed by its own size...
+    expect(surplus).toBeGreaterThan(0);
+    // ...but a month of it does not buy a power plant, so what a disaster took
+    // is still rebuilt out of savings rather than out of pocket change.
+    expect(surplus).toBeLessThan(TOOL_COSTS.power);
+  });
+
+  it('leaves a city that is still growing on the rate it always paid', () => {
+    const tiles = createCity();
+    build(tiles, 0, 0, 'road');
+    build(tiles, 1, 0, 'power');
+    const flat = monthlyExpenses(tiles);
+    const growing = settled(400);
+    expect(growing.population + growing.jobs).toBeLessThan(SERVICE_DENSE_THRESHOLD);
+    // Nothing under the threshold moved: the squeeze is on a finished city, so
+    // fixing the runaway by charging the whole city more is ruled out here.
+    const billed = growing.population + growing.jobs - SERVICE_FREE_ALLOWANCE;
+    expect(monthlyExpenses(tiles, growing)).toBe(flat + Math.round(billed * SERVICE_COST_PER_CAPITA));
+    // And it keeps a working surplus — a growing city can still afford to zone.
+    expect(monthlyIncome(growing) - monthlyExpenses(tiles, growing)).toBeGreaterThan(TOOL_COSTS.ind);
   });
 });
 

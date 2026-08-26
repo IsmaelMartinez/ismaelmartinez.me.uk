@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { fetchGlobal, submitGlobal, SCORES_ENDPOINT } from '../../src/games/engine/globalScores';
+import {
+  fetchGlobal,
+  submitGlobal,
+  MAX_SCORE,
+  SCORES_ENDPOINT
+} from '../../src/games/engine/globalScores';
 
 function stubFetchOk(body: unknown): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -176,5 +181,24 @@ describe('submitGlobal request shape', () => {
     stubLocation('ismaelmartinez.me.uk');
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     await expect(submitGlobal('snake', 'ISM', 300)).resolves.toEqual({ status: 'failed' });
+  });
+
+  /*
+   * A marathon run past the API's ceiling is refused for good, and relaying
+   * that as `failed` told the player to try again later — advice that can only
+   * cost them another hour (issue #271). Caught before the POST so no doomed
+   * write goes out, and so the message does not depend on which of the API's
+   * several 400s came back.
+   */
+  it('reports an out-of-range score as its own permanent refusal', async () => {
+    stubLocation('ismaelmartinez.me.uk');
+    const fetchMock = stubFetchOk({ rank: 1, table: [] });
+    expect(await submitGlobal('cascade', 'ISM', MAX_SCORE)).toEqual({ status: 'range' });
+    expect(await submitGlobal('cascade', 'ISM', MAX_SCORE + 1)).toEqual({ status: 'range' });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // One under the ceiling is an ordinary submission.
+    expect(await submitGlobal('cascade', 'ISM', MAX_SCORE - 1)).toMatchObject({ status: 'ok' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

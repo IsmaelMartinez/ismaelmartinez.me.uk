@@ -4,6 +4,7 @@ import { get, put } from '@vercel/blob';
 import {
   GAMES,
   MAX_TOP,
+  MAX_SCORE,
   mergeTop,
   normalizeBoard,
   publish,
@@ -14,6 +15,7 @@ import {
   type StoredBoard
 } from '../../api/scores';
 import { MAX_ENTRIES } from '../../src/games/engine/highscores';
+import { MAX_SCORE as CLIENT_MAX_SCORE } from '../../src/games/engine/globalScores';
 
 /**
  * An in-memory stand-in for the blob store. It has to be built inside
@@ -734,5 +736,16 @@ describe('mergeTop', () => {
 describe('client and server board sizes', () => {
   it('keeps MAX_TOP and the client MAX_ENTRIES in step', () => {
     expect(MAX_TOP).toBe(MAX_ENTRIES);
+  });
+
+  /*
+   * Same seam, same reason. The client checks the ceiling before it POSTs so
+   * an out-of-range run is told it is off the scale rather than being handed
+   * this endpoint's 400 as "not saved, try again later" (issue #271). Lowering
+   * only one of the two would put a whole band of scores back on the wrong
+   * message.
+   */
+  it('keeps MAX_SCORE in step with the client copy', () => {
+    expect(MAX_SCORE).toBe(CLIENT_MAX_SCORE);
   });
 });

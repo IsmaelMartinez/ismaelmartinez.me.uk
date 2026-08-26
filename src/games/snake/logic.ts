@@ -41,7 +41,7 @@ export const ARENA_EVERY = 8;
  * run opens on, so a run's first stretch is the game Snake has always been;
  * later rungs only ever add, so the garden closes in and never re-opens. The
  * last rung lands at 32 apples, well past the point `stepInterval` reaches
- * its floor (22), which is where a run used to stop offering anything new.
+ * its floor (23), which is where a run used to stop offering anything new.
  *
  * Authored light on purpose — short bars and posts, never a maze. Every rung
  * leaves the free cells mutually reachable and none of them a cul-de-sac; the
@@ -203,16 +203,31 @@ function settleWalls(state: SnakeState, hidden: ReadonlySet<number>): void {
   }
 }
 
-/** A uniformly random free cell, or null when the board is full. */
-function freeCell(state: SnakeState, random: () => number): Vec | null {
+/**
+ * A uniformly random free cell, or null when the board is full.
+ *
+ * `within` bounds the pick to cells the head can still walk to in that many
+ * steps (Manhattan distance), which is what the timed bonus needs: the board's
+ * widest span is 38 cells and the bonus only lives for BONUS_TICKS, so an
+ * unbounded pick sometimes dangled a prize that could only be looked at. A
+ * cell exactly `within` away still counts, because `step` checks the eat
+ * before spending the tick. Nothing in range falls back to the whole board —
+ * a distant bonus is still better than silently skipping the spawn.
+ */
+function freeCell(state: SnakeState, random: () => number, within = Infinity): Vec | null {
+  const head = state.snake[0];
   const free: Vec[] = [];
+  const inReach: Vec[] = [];
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
-      if (!occupied(state, { x, y })) free.push({ x, y });
+      if (occupied(state, { x, y })) continue;
+      free.push({ x, y });
+      if (Math.abs(x - head.x) + Math.abs(y - head.y) <= within) inReach.push({ x, y });
     }
   }
-  if (!free.length) return null;
-  return free[Math.floor(random() * free.length)];
+  const pool = inReach.length ? inReach : free;
+  if (!pool.length) return null;
+  return pool[Math.floor(random() * pool.length)];
 }
 
 export function createSnakeState(random: () => number = Math.random): SnakeState {
@@ -314,7 +329,7 @@ export function step(state: SnakeState, random: () => number = Math.random): Ste
     advanceArena(state);
     state.food = freeCell(state, random) ?? { x: -1, y: -1 };
     if (state.foodsEaten % BONUS_EVERY === 0 && !state.bonus) {
-      const pos = freeCell(state, random);
+      const pos = freeCell(state, random, BONUS_TICKS);
       if (pos) state.bonus = { pos, ticksLeft: BONUS_TICKS };
     }
     event = 'ate';

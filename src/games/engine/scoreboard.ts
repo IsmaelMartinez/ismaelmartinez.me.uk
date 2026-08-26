@@ -122,13 +122,15 @@ export interface WorldNoteText {
   rank: string;
   notSaved: string;
   rateLimited: string;
+  outOfRange: string;
 }
 
 /**
  * The panel's status line, kept pure so it can be unit-tested apart from the
- * DOM wiring. Five states: a run refused for being over the submission rate
- * limit, a run whose submission otherwise did not land, a board still
- * loading, a board that could not be reached, or a placed rank.
+ * DOM wiring. Six states: a run past the API's score ceiling, a run refused
+ * for being over the submission rate limit, a run whose submission otherwise
+ * did not land, a board still loading, a board that could not be reached, or
+ * a placed rank.
  *
  * A failed or rate-limited submission speaks first and regardless of the
  * board's own state, because it is the only thing on this panel the player
@@ -139,7 +141,9 @@ export interface WorldNoteText {
  * sharing `notSaved`'s copy: a rate limit means "try again later", not
  * "something is broken", and a grinding session can hit the API's hourly cap
  * well before ten distinct scores have charted, long before anything is
- * actually wrong.
+ * actually wrong. An out-of-range score is kept apart from both for the
+ * mirror-image reason: the API refuses it for good, so "try again later"
+ * would send that player to replay a run that can never land (issue #271).
  *
  * The rank is shown only when it points at a real row of the board being drawn
  * (`count`). A submission sets the rank alongside the board it charted on, but
@@ -158,9 +162,11 @@ export function worldNoteText(
     count: number;
     failed: boolean;
     rateLimited: boolean;
+    outOfRange: boolean;
   },
   text: WorldNoteText
 ): string {
+  if (state.outOfRange) return text.outOfRange;
   if (state.rateLimited) return text.rateLimited;
   if (state.failed) return text.notSaved;
   if (!state.loaded) return state.pending ? text.loading : text.unavailable;
@@ -203,7 +209,8 @@ export function initScoreboard(
     unavailable: panel.dataset.tWorldUnavailable ?? '',
     rank: panel.dataset.tWorldRank ?? '',
     notSaved: panel.dataset.tScoreNotSaved ?? '',
-    rateLimited: panel.dataset.tScoreRateLimited ?? ''
+    rateLimited: panel.dataset.tScoreRateLimited ?? '',
+    outOfRange: panel.dataset.tScoreOutOfRange ?? ''
   };
 
   // Declared up here because `commit` records a finished run through the
@@ -239,6 +246,8 @@ export function initScoreboard(
   // Set when this run's submission was refused for being over the rate limit,
   // as opposed to any other failure. Cleared the same way as `failed`.
   let rateLimited = false;
+  // Set when this run scored past the board's ceiling, which no retry fixes.
+  let outOfRange = false;
 
   function render() {
     if (!list) return;
@@ -267,7 +276,15 @@ export function initScoreboard(
       // The rank rides on the board actually drawn, so a stale refetch that
       // empties the board can't leave "World rank #1" over it.
       const message = worldNoteText(
-        { loaded, pending: fetching, rank, count: table.length, failed, rateLimited },
+        {
+          loaded,
+          pending: fetching,
+          rank,
+          count: table.length,
+          failed,
+          rateLimited,
+          outOfRange
+        },
         worldText
       );
       note.textContent = message;
@@ -324,6 +341,7 @@ export function initScoreboard(
     if (form) form.hidden = true;
     failed = false;
     rateLimited = false;
+    outOfRange = false;
     render();
 
     const token = runToken;
@@ -349,6 +367,7 @@ export function initScoreboard(
       if (token === runToken) {
         if (fresh) rank = fresh.rank;
         else if (result.status === 'limited') rateLimited = true;
+        else if (result.status === 'range') outOfRange = true;
         else if (result.status === 'failed') failed = true;
       }
       render();
@@ -417,6 +436,7 @@ export function initScoreboard(
       rank = 0;
       failed = false;
       rateLimited = false;
+      outOfRange = false;
       runToken++;
       // Every run counts, whether or not the player is asked for initials:
       // an unanswered form is committed with the remembered ones.

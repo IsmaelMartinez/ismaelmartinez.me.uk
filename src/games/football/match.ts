@@ -1516,8 +1516,17 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
   // plane would charge him for it. Above the bar at the line it is not going in
   // and he is not consulted, because `SAVE_FLOOR` would otherwise credit him
   // with saving shots flying over.
-  const toLine = Math.abs(m.ball.y - goalY);
-  const closing = Math.abs(m.ball.vy);
+  //
+  // Both terms are signed along the flight rather than absolute, and that is
+  // not tidiness: a fast enough ball clears his plane and the goal line inside
+  // one tick, so `toLine` is behind it by then and an absolute distance would
+  // project the flight *forward* to a height the ball never had at the line.
+  // Signed, `lineT` simply goes negative and the same parabola answers where it
+  // was when it crossed. `closing` is positive by construction on both paths
+  // above — the ball is moving toward this goal — and the guard is there so a
+  // deflection that arrives on neither reads its height where it stands.
+  const toLine = (m.ball.y - goalY) * dir;
+  const closing = -m.ball.vy * dir;
   const lineT = closing > 1e-6 ? toLine / closing : 0;
   const lineZ = Math.max(0, m.ball.z + m.ball.vz * lineT - (GRAVITY * lineT * lineT) / 2);
   if (lineZ >= GOAL_HEIGHT) return;

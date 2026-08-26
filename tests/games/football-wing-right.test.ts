@@ -39,14 +39,15 @@ describe('the wing cross is answerable', () => {
    * The header aim was `const away = keeper.x <= CENTRE_X ? 1 : -1`, a constant
    * of the policy, so every sweep above measured one shot and reported it as
    * the wing. It is `HeaderAim` now, and this is what stops it quietly becoming
-   * a constant again: a hard-coded aim collapses all four values onto one
-   * number, and the spread between the best and the worst of them is nearly
-   * three goals a match. Measured at 60 matches a cell on the build this was
-   * written against: near 4.00, away 3.35, centre 1.92, far 1.13.
+   * a constant again: the four cells are the same seeds and the same policy, so
+   * an aim that is ignored makes them bit-identical and the spread is exactly
+   * zero. Zero is therefore the whole bound, and it is deliberately not a
+   * balance number — the spread is nearly three goals a match today (60 matches
+   * a cell: near 4.00, away 3.35, centre 1.92, far 1.13) but a later round is
+   * free to move that without this guard turning red on it.
    *
-   * The four rates themselves are held to nothing here. What the aim is worth
-   * is the sweeps' business, and `HeaderAim` records both the numbers and why
-   * this axis is not yet one of the gated ones.
+   * What the aim is *worth* is the sweeps' business, and `HeaderAim` records
+   * both the numbers and why this axis is not yet one of the gated ones.
    */
   it('honours the header aim rather than fixing it', { timeout: 120000 }, () => {
     const [wing, lateral, depth] = WING_REPS[0];
@@ -62,6 +63,6 @@ describe('the wing cross is answerable', () => {
     });
     const label = HEADER_AIMS.map((a, i) => `${a} ${rates[i].toFixed(2)}`).join(', ');
     expect(Math.max(...rates) - Math.min(...rates), `air goals a match by aim: ${label}`)
-      .toBeGreaterThan(1);
+      .toBeGreaterThan(0);
   });
 });

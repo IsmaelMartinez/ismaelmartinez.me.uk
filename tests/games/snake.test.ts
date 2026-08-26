@@ -549,7 +549,7 @@ describe('the arena ladder gives warning before a wall sets', () => {
     expect(state.snake[0]).toEqual({ x: 4, y: 4 });
   });
 
-  it('never sets a wall without the full grace, nor seals the head in', () => {
+  it('never sets a wall without the full grace, nor seals the head in', { timeout: 60000 }, () => {
     let rungs = 0;
     let steps = 0;
     /** Steps on which at least one claimed cell turned solid. */

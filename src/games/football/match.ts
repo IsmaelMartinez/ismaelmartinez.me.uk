@@ -1428,6 +1428,53 @@ function armKeeper(m: MatchState, kickingSide: Side, strike: ContactType): void 
   });
 }
 
+/**
+ * The spot a keeper who is on his feet is walking to, given where his tracker
+ * currently is and what the ball is doing.
+ *
+ * It is exported, and it is the seam 7.3's isolation rig stands him on. The rig
+ * used to *copy* this rule — `restPosition(gk.trackX, ...)`, and only that —
+ * which quietly dropped both of the terms round 6 added: the blend toward the
+ * landing spot (`trackTarget`) and the withdrawn advance (`restPosition`'s
+ * `ballZ`). Every cell of the grid struck the ball off the deck, where both of
+ * those are arithmetically inert, so three rounds of aerial keeper work were
+ * certified by a grid in which the code being certified could not fire at all
+ * (issue #273, finding 1). A copy of a positioning rule is a copy that drifts;
+ * asking for the rule cannot.
+ *
+ * It answers where he is *going*, not where he *is*. His body walks here at
+ * `KEEPER_WALK` and arrives late whenever the target moves faster than he does,
+ * and that gap — not this spot — is what `approachGap` and `commitDive` read.
+ */
+export function keeperRest(m: MatchState, side: Side): Point {
+  const gk = m.keepers[side];
+  const goalY = ownGoalY(side, m.swapped);
+  const dir = attackDir(side, m.swapped);
+  // He sets from his lagged copy of the ball on the deck and from where the
+  // ball is *coming down* while it is over his head — the same point the
+  // strikers are running onto. See `trackTarget`. The lag is untouched and
+  // `airborne` is 0 on the deck, so nothing about a ball at a striker's feet
+  // changes; only a delivery in flight reads differently, and only in
+  // proportion to how far up it is.
+  const meet = airMeetPoint(m.ball);
+  // There is no separate "shade across toward a close carrier" term any more,
+  // and there is no longer anything for it to correct. It existed to buy back
+  // the coverage a keeper clamped to a central band lost against a forward
+  // running in off the wing; a keeper who stands on the angle covers that man
+  // by construction, because the angle is computed from where the ball is.
+  const slow = Math.hypot(m.ball.vx, m.ball.vy) < 150;
+  if (!m.owner && slow && inPenaltyBox(m.ball.x, m.ball.y, goalY) && m.ball.z < KEEPER_JUMP_Z) {
+    return { x: m.ball.x, y: m.ball.y };
+  }
+  return restPosition(
+    trackTarget(gk.trackX, meet ? meet.x : null, m.ball.z),
+    m.ball.y,
+    goalY,
+    dir,
+    m.ball.z
+  );
+}
+
 function stepKeeper(m: MatchState, side: Side, dt: number): void {
   const gk = m.keepers[side];
   const keeper = m.players[side][0];
@@ -1447,33 +1494,8 @@ function stepKeeper(m: MatchState, side: Side, dt: number): void {
   }
 
   gk.trackX = trackBall(gk.trackX, m.ball.x, gk.skill, dt);
-  // He sets from his lagged copy of the ball on the deck and from where the
-  // ball is *coming down* while it is over his head — the same point the
-  // strikers are running onto. See `trackTarget`. The lag above is untouched
-  // and `airborne` is 0 on the deck, so nothing about a ball at a striker's
-  // feet changes; only a delivery in flight reads differently, and only in
-  // proportion to how far up it is.
-  const meet = airMeetPoint(m.ball);
-  const rest = restPosition(
-    trackTarget(gk.trackX, meet ? meet.x : null, m.ball.z),
-    m.ball.y,
-    goalY,
-    dir,
-    m.ball.z
-  );
-  let tx = rest.x;
-  let ty = rest.y;
-  // There is no separate "shade across toward a close carrier" term any more,
-  // and there is no longer anything for it to correct. It existed to buy back
-  // the coverage a keeper clamped to a central band lost against a forward
-  // running in off the wing; a keeper who stands on the angle covers that man
-  // by construction, because the angle is computed from where the ball is.
-  const slow = Math.hypot(m.ball.vx, m.ball.vy) < 150;
-  if (!m.owner && slow && inPenaltyBox(m.ball.x, m.ball.y, goalY) && m.ball.z < KEEPER_JUMP_Z) {
-    tx = m.ball.x;
-    ty = m.ball.y;
-  }
-  moveToward(keeper, tx, ty, KEEPER_WALK, dt);
+  const rest = keeperRest(m, side);
+  moveToward(keeper, rest.x, rest.y, KEEPER_WALK, dt);
   keeper.x = clamp(keeper.x, 12, PITCH_W - 12);
   keeper.y = clamp(
     keeper.y,

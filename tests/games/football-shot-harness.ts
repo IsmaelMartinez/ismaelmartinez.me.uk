@@ -11,24 +11,38 @@
  * rig that only ever fields him there cannot measure the shot that beats him.
  * See `keeperX`.
  *
- * The rig has two axes for where he is, and for five rounds it had only one.
- * `keeperX` says where he *stands*. `trackLag` says how stale his lateral copy
- * of the ball is when the shot is struck — and that is the axis the game
- * itself moves him on, because `restPosition` is fed `gk.trackX` and never
- * `ball.x`. Every cell of the 7.3 grid was measured at lag zero, a converged
- * tracker, which is the honest reading for a carried ball and the wrong one
- * for a crossed one. An exploit that lives entirely at lag >= 30 is invisible
- * to a grid without that axis however wide the grid is, and one was.
+ * **Where the keeper is takes three numbers, not one, because the game moves
+ * him in three stages and reads the last of them.** His tracker is a lagged
+ * copy of the ball (`trackLag`); the spot he is walking to is computed from
+ * that copy (`keeperRest`); and his *body* is however far along the walk to
+ * that spot he has got (`walkLag`). `approachGap` and `commitDive` read the
+ * body and nothing else. For six rounds the rig had the first stage and then
+ * teleported the body onto the third — `gk.x = rest.x` — so the walk lag was
+ * identically zero in every cell by construction, and the quantity the keeper
+ * code actually consumes was the one axis the grid did not have. Measured live
+ * at d = 0.25, the body sits 21 px (competent) to 38 px (a wing routine) from
+ * the ball at aerial contact against a `REACH_BASE` of 26, and roughly half of
+ * that is walk rather than tracker (issue #273, finding 1).
+ *
+ * **And the spot he walks to is asked for rather than copied.** `keeperRest`
+ * is exported from `match.ts` for this rig alone. The three lines it replaces
+ * called `restPosition(trackX, ...)` directly and dropped both of the terms
+ * round 6 added — the blend toward the landing point and the withdrawn advance
+ * — so with the ball off the deck the rig stood him somewhere the game never
+ * would, and `trackTarget` could not fire in the grid that was certifying it.
  */
 import {
+  ASSIST_WINDOW,
   createMatch,
+  keeperRest,
   shoot,
   tickMatch,
   DRIBBLE_OFFSET,
   type ContactType,
   type MatchState
 } from '../../src/games/football/match';
-import { keeperSkill, restPosition } from '../../src/games/football/keeper';
+import { keeperSkill } from '../../src/games/football/keeper';
+import { clamp } from '../../src/games/engine/math';
 import {
   CENTRE_X,
   PITCH_L,
@@ -102,6 +116,60 @@ export interface ShotOptions {
    */
   trackLag?: number;
   /**
+   * How far the keeper's **body** still is from the spot his tracker sends him
+   * to, in pitch pixels, and the axis this grid spent six rounds without.
+   *
+   * `trackLag` above is a lag in what he *believes*; this is a lag in where he
+   * *is*, and they are different quantities with different sizes. He walks to
+   * `keeperRest` at `KEEPER_WALK` = 120 px/s, so a target that moves 40 px
+   * across him leaves him a third of a second — twenty ticks of the match loop
+   * — behind it, and `keeperRest`'s own docstring calls that out as the honest
+   * residual round 6 deliberately left in place. Nothing downstream reads the
+   * spot: `approachGap` takes `keeper.x`, `commitDive` takes `keeper.x` as its
+   * `restX`, and the rig used to write `gk.x = rest.x` before either of them
+   * ran. So the certifying grid measured a keeper who had already arrived, at
+   * every cell, at every station, in every round.
+   *
+   * The sign is the body's position relative to the spot, mirroring
+   * `trackLag`'s: `bodyX = restX - walkLag`, so a positive lag is a body still
+   * short of a target that has moved to its right. Both signs are real — they
+   * are the two flanks — and a sweep that tries one has swept one wing.
+   *
+   * It is lateral only. His depth is a slow function of the ball's, and the
+   * whole of the keeper's positioning story — the angle, the frame, the
+   * tracker, the reach — is written across the goal rather than along the
+   * pitch; lagging his depth as well would move which tick the ball crosses
+   * his plane on and confound the axis with the crossing test.
+   *
+   * Zero is the honest default and is what every cell written before this
+   * parameter existed measures: a shooter who has carried the ball to a spot
+   * and stood still has left the keeper long enough to arrive. It is not the
+   * honest default for a ball that has just been moved across him.
+   */
+  walkLag?: number;
+  /**
+   * Whether the ball arrived off a completed pass or a delivered cross — an
+   * open `m.assist` window at the instant it is struck.
+   *
+   * This is the largest single term in the shot model and the grid could not
+   * express it at all. `armKeeper` charges an assisted ground strike both
+   * `ASSIST_DIVE_PENALTY` (half a dive) and `ASSIST_REACT_LOSS` (0.12 s of
+   * reaction already spent on the previous ball), and the second of those is
+   * worth more than everything else the window does put together. There is not
+   * one occurrence of `assist` anywhere in this rig's history, so `assisted`
+   * was false in every cell of the 7.3 distance rows — while live, about three
+   * quarters of a competent player's shots are struck inside an open window
+   * (issue #273, finding 6).
+   *
+   * `armKeeper` gates it on the strike being a **ground** contact, so setting
+   * this on a header cell is deliberately a no-op on the keeper: that half of
+   * round 6's fix is what the flag lets a cell prove rather than assume.
+   *
+   * Default false, which is every cell written before this parameter existed:
+   * a shooter striking a ball he already had.
+   */
+  assisted?: boolean;
+  /**
    * Seconds of `PARRY_LOCK` still running when the shot is struck, which is
    * what a follow-up off a rebound is.
    *
@@ -130,6 +198,12 @@ export interface ShotOptions {
    * standing exactly where his own tracker says the ball is, which is a keeper
    * who is *not* lagging. There was no way to express a stale tracker at all,
    * and the entire exploit lives at lag >= 30.
+   *
+   * It pins his **tracker** with him, which is what makes it an override
+   * rather than an axis: a cell that says where he stands has said everything
+   * about his position, and nothing is left for a lag to be a lag *of*. A cell
+   * that wants his body away from his target sets `walkLag`, which is the
+   * mechanism; this is for a position no lag of either kind would produce.
    *
    * This parameter used to have no default at all and the keeper was simply
    * parked at `CENTRE_X`. Every offset-shooter cell in the grid therefore
@@ -253,18 +327,31 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
   // than he can copy it — sets `trackLag`, and the tracker is left stale so
   // that it keeps converging through the flight exactly as it does in play.
   const trackX = opts.keeperX ?? m.ball.x - (opts.trackLag ?? 0);
-  const rest = restPosition(trackX, m.ball.y, goalY, -dir as 1 | -1);
-  gk.x = opts.keeperX ?? rest.x;
-  gk.y = rest.y;
-  gk.speed = 0;
   m.keepers[1].trackX = trackX;
   m.keepers[1].dive = null;
   m.keepers[1].parryLock = opts.parryLock ?? 0;
+  // The spot is the game's own — `keeperRest`, the function `stepKeeper` walks
+  // him to — rather than this file's reading of it, so the rig can no longer
+  // certify a positioning rule the game does not run.
+  //
+  // His **body** is `walkLag` px short of that spot, and only a cell that says
+  // so gets a keeper who has arrived. His depth is not lagged; see `walkLag`.
+  //
+  // Clamped to the touchlines exactly as `stepKeeper` clamps him, so no cell
+  // can stand him somewhere his own step function would not leave him.
+  const rest = keeperRest(m, 1);
+  gk.x = clamp(opts.keeperX ?? rest.x - (opts.walkLag ?? 0), 12, PITCH_W - 12);
+  gk.y = rest.y;
+  gk.speed = 0;
 
   // 7.3's header cell is "a header from a cross", and the game distinguishes
   // that from a header met off a hopeful clearance, so the rig has to say
   // which one it is asking about.
   m.lastFromCross = (opts.contact ?? 'ground') === 'header';
+  // A ball that arrived off a completed pass catches the keeper still
+  // adjusting to where it came from, and that window is the largest term in
+  // the shot model. Off by default; see `assisted`.
+  m.assist = opts.assisted ? { side: 0, t: ASSIST_WINDOW } : null;
   shoot(m, 0, opts.power, opts.aim, opts.contact ?? 'ground');
 
   for (let i = 0; i < 300; i++) {

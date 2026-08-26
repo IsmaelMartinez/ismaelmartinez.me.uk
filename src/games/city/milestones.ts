@@ -6,22 +6,27 @@
  * ends only on bankruptcy). Pure so the ladder is testable.
  *
  * The ladder is sized to what a city can actually reach, not to a round
- * number (issue #265). It used to top out at 2000, which nothing ever hit:
- * `computeDemand` bounds total jobs at 0.9× population, so residential demand
- * crosses zero around population 160 and everything above that is per-tick
- * overshoot plus the slow ratchet that political events (a festival's +15 res)
- * add on top. Measured over headless runs of the real modules: a maximised
- * city with unlimited money peaks at a median ~1200 and never reached 2000,
- * while a competent builder paying real prices takes roughly twenty minutes to
- * pass 600 and half an hour to approach four figures. So the top rung sits at
- * 600 — a stretch a strong city reaches inside one long sitting — and the
- * lower rungs come in early enough that a first city is paid for building
- * anything at all. Retuning the ladder is a mitigation, not a cure: the
- * demand deadlock underneath it is tracked separately.
+ * number (issue #265). It used to top out at 2000, which nothing ever hit,
+ * because `computeDemand` deadlocked: a competently built board froze and only
+ * grew again when a disaster knocked buildings down. So the rungs were first
+ * cut to 50/120/250/400/600 against those stalled dynamics.
+ *
+ * Fixing the deadlock (issue #301) moved the distribution the ladder is
+ * measured against rather than the shape of it. Over the same headless sample
+ * of 600 runs across twelve builder profiles — real prices, real terrain, real
+ * disasters and politics — the median peak rose from 1072 to 1216, the upper
+ * quartile from 1536 to 2000 and the best run seen from 1904 to 2536, while a
+ * competent full-map build went from a median 1684 to 2416. A 600 top rung
+ * that a competent city crossed at month 43 is now crossed at month 22, which
+ * is a win handed out in the first few minutes of a run that lasts hours. So
+ * the top two rungs move up with the ceiling: 500 and 1000, reached by 79% and
+ * 69% of that sample against 86% and 78% at 400/600, and 1000 is about where a
+ * player has to zone and service half the map. The lower three are left where
+ * #304 put them — a first city is still paid for building anything at all.
  */
 
 /** Population thresholds, ascending; the last is the metropolis win. */
-export const POP_MILESTONES = [50, 120, 250, 400, 600];
+export const POP_MILESTONES = [50, 120, 250, 500, 1000];
 
 /** Cash paid on crossing each milestone, parallel to POP_MILESTONES. */
 export const MILESTONE_GRANTS = [400, 900, 1800, 4000, 8000];

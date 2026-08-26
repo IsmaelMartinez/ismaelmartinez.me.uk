@@ -4,6 +4,10 @@ import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
+// Derived rather than hardcoded: the runtime readout counts the same rungs, and
+// a hardcoded default goes stale the moment the ladder grows (issue #271).
+// logic.ts is DOM-free, so importing it here costs the page nothing.
+import { ARENA_WALLS } from '../../../games/snake/logic';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -37,7 +41,7 @@ const t = useTranslations(lang);
             </div>
             <div class="score-item">
               <span class="score-label">{t('fun.snake.arena')}</span>
-              <span id="arena" class="score-value">1/5</span>
+              <span id="arena" class="score-value">{`1/${ARENA_WALLS.length}`}</span>
             </div>
           </div>
         </div>

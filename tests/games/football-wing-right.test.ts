@@ -9,8 +9,8 @@ import { playMatch } from './football-paired';
 import {
   flankTail,
   stationsOutPointingAHuman,
-  DOUBLE_FIGURE_BUDGET,
-  DOUBLE_FIGURE_ODDS
+  FLANK_DOUBLE_FIGURE_BUDGET,
+  FLANK_DOUBLE_FIGURE_ODDS
 } from './football-wing-sweep';
 
 describe('the wing cross is answerable', () => {
@@ -34,9 +34,9 @@ describe('the wing cross is answerable', () => {
     expect(
       tail.doubleFigures,
       `${tail.doubleFigures} of ${tail.matches} scanned right-flank matches in double figures ` +
-        `against a budget of ${DOUBLE_FIGURE_BUDGET} for a claimed 1 in ${DOUBLE_FIGURE_ODDS}; ` +
+        `against a budget of ${FLANK_DOUBLE_FIGURE_BUDGET} for a claimed 1 in ${FLANK_DOUBLE_FIGURE_ODDS}; ` +
         `biggest scoreline ${tail.biggest}`
-    ).toBeLessThanOrEqual(DOUBLE_FIGURE_BUDGET);
+    ).toBeLessThanOrEqual(FLANK_DOUBLE_FIGURE_BUDGET);
   });
 
   /**

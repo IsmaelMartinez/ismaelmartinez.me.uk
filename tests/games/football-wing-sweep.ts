@@ -44,12 +44,21 @@ interface FlankSweep {
 }
 
 /**
- * 7.2's double-figure anti-goal as a rate over the flank's own scan. The odds
- * are the ones `football-exploits.test.ts` owns; the budget's arithmetic is at
- * `flankTail`.
+ * 7.2's double-figure anti-goal as a rate over the flank's own scan.
+ *
+ * Named for the flank rather than plainly, because this is the third place in
+ * the football suites to state the same anti-goal and the three are not
+ * interchangeable. The **odds** are deliberately one number everywhere — 7.2
+ * makes one claim about the game — and `football-exploits.test.ts` owns it; if
+ * this and that ever disagree, that file is right. The **budget** is a property
+ * of the sample and differs at each site: 9 over `football-balance.test.ts`'s
+ * 4,800 pooled matches, 10 over `football-exploits.test.ts`'s 6,000, and 6 over
+ * a flank's 1,920. Reading a plain `DOUBLE_FIGURE_BUDGET` at a call site and
+ * assuming it is the one next door is exactly the confusion the prefix removes.
+ * The arithmetic behind this one is at `flankTail`.
  */
-export const DOUBLE_FIGURE_ODDS = 2000;
-export const DOUBLE_FIGURE_BUDGET = 6;
+export const FLANK_DOUBLE_FIGURE_ODDS = 2000;
+export const FLANK_DOUBLE_FIGURE_BUDGET = 6;
 
 /**
  * The ceiling a policy comparison has to clear to be called a win for the
@@ -137,7 +146,7 @@ function sweep(wing: -1 | 1): FlankSweep {
  * the same thirty stations and playing them twice would double the most
  * expensive assertion in the repo.
  */
-const sweeps = new Map<number, FlankSweep>();
+const sweeps = new Map<-1 | 1, FlankSweep>();
 
 function flankSweep(wing: -1 | 1): FlankSweep {
   const hit = sweeps.get(wing);

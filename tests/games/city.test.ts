@@ -1175,24 +1175,25 @@ describe('city milestone ladder reachability (#265)', () => {
  * happen to express it today.
  */
 describe('city treasury at scale (#309)', () => {
-  /** A city the demand model has settled: one job per resident, split by the
-   *  two job shares (which sum to exactly 1 — see the deadlock suite). */
-  const settled = (population: number): CityStats => ({
-    population,
-    comJobs: population * COM_JOB_SHARE,
-    indJobs: population * IND_JOB_SHARE,
-    jobs: population
-  });
+  /** A city the demand model has settled: the two job shares sum to exactly 1
+   *  (see the deadlock suite), so this is one job per resident. `jobs` is
+   *  derived from the two sides rather than restated as `population`, so the
+   *  fixture still holds if the split is ever retuned. */
+  const settled = (population: number): CityStats => {
+    const comJobs = population * COM_JOB_SHARE;
+    const indJobs = population * IND_JOB_SHARE;
+    return { population, comJobs, indJobs, jobs: comJobs + indJobs };
+  };
 
   it('bills a head added to a big city at least what that head pays in tax', () => {
     const tiles = createCity();
     build(tiles, 0, 0, 'power');
     for (const population of [600, 1000, 1600, 2400]) {
-      // Both sides of the marginal comparison sit past the threshold, which
-      // is counted in residents *and* jobs.
-      expect(population * 2).toBeGreaterThan(SERVICE_DENSE_THRESHOLD);
       const before = settled(population);
       const after = settled(population + 100);
+      // Both sides of the marginal comparison sit past the threshold, which is
+      // counted in residents *and* jobs.
+      expect(before.population + before.jobs).toBeGreaterThan(SERVICE_DENSE_THRESHOLD);
       const extraTax = monthlyIncome(after) - monthlyIncome(before);
       const extraBill = monthlyExpenses(tiles, after) - monthlyExpenses(tiles, before);
       expect(extraBill).toBeGreaterThanOrEqual(extraTax);

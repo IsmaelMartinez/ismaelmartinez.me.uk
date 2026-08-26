@@ -202,6 +202,9 @@ const toasted = (text: string) =>
 
 const LOW_FUNDS = 'Low funds! The next monthly bill would empty the treasury.';
 const IN_THE_RED = 'In the red! Balance the books this month or the city goes bankrupt.';
+// The build handler's refusal. The fixture sets no `data-t-cant-afford`, so
+// this is the module's own default.
+const CANT_AFFORD = 'Not enough funds!';
 
 const navLink = () => document.getElementById('site-nav-link') as HTMLAnchorElement;
 
@@ -270,6 +273,33 @@ function overspend(): void {
   buildAt('power', 16, 7);
   buildAt('power', 18, 7);
   for (let x = 14; x <= 18; x++) buildAt('park', x, 2);
+}
+
+/**
+ * A city one month away from the red, built so the grace month has something
+ * to bulldoze. Founded from scratch rather than through `foundCity`, because
+ * this one needs a tax base big enough that shedding the surplus actually
+ * rescues it: a power plant at (14, 8), a six-tile street along y=8, and six
+ * homes above it, which the first growth tick takes to level 1 — 48 residents
+ * (below the 50 milestone, so no grant lands mid-arithmetic) paying £72 a
+ * month against £46 of upkeep.
+ *
+ * On top of that sit the two mistakes: two surplus power plants (£40 a month
+ * each, and the city already had power) and a dozen blocks zoned on row 0 with
+ * no road within reach, which is £600 spent on land that can never develop and
+ * so never pays anything back. £2460 of the £2500 goes out, and month 2's
+ * books charge £126 against £72 of taxes: -£14, the grace month.
+ */
+function overbuild(): void {
+  vi.spyOn(Math, 'random').mockReturnValue(0.9);
+  document.getElementById('start-btn')!.click();
+  vi.spyOn(Math, 'random').mockReturnValue(0.05);
+  buildAt('power', 14, 8);
+  for (let x = 8; x <= 13; x++) buildAt('road', x, 8);
+  for (let x = 8; x <= 13; x++) buildAt('res', x, 7);
+  buildAt('power', 16, 3);
+  buildAt('power', 18, 3);
+  for (let x = 8; x <= 19; x++) buildAt('res', x, 0);
 }
 
 beforeEach(() => {
@@ -462,6 +492,42 @@ describe('Microcity solvency warnings (#266)', () => {
     expect(monthShown()).toBe('4');
     expect(overlayShown()).toBe(false);
     expect(money()).toBeGreaterThan(0);
+    expect(objective()).toContain('residents');
+  });
+
+  /**
+   * The grace month is only a chance to act if the free tool still works while
+   * the treasury is negative. The build handler refused every tool whose cost
+   * exceeded `money`, and bulldoze costs 0 — which is greater than any negative
+   * balance — so the one move the ultimatum asks for was the one move an
+   * overdrawn city could not make. The test above bulldozes a month earlier,
+   * while the city is still in the black, so it never touched this.
+   */
+  it('lets an overdrawn city bulldoze its way out of the grace month', () => {
+    overbuild();
+    advance(21);
+
+    // The grace month: overdrawn, told so, and still running.
+    expect(monthShown()).toBe('2');
+    expect(money()).toBeLessThan(0);
+    expect(toasted(IN_THE_RED)).toBe(true);
+    expect(overlayShown()).toBe(false);
+
+    // Demolishing the two surplus plants costs nothing, so a negative treasury
+    // must not refuse it.
+    buildAt('bulldoze', 16, 3);
+    buildAt('bulldoze', 18, 3);
+    expect(toasted(CANT_AFFORD)).toBe(false);
+
+    // Both plants are off the books: next month is billed £46, not £126.
+    advance(20);
+    expect(monthShown()).toBe('3');
+    expect(toasted('Upkeep -£46')).toBe(true);
+
+    // Which is what the grace month was for — the city is solvent again and
+    // the run carries on.
+    expect(money()).toBeGreaterThan(0);
+    expect(overlayShown()).toBe(false);
     expect(objective()).toContain('residents');
   });
 });

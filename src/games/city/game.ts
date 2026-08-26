@@ -308,6 +308,14 @@ export function initCityGame(): void {
   // Seed the goal strip with the first milestone before the run starts.
   renderObjective();
 
+  /**
+   * Whether the treasury can cover a tool. A *free* tool is never refused: only
+   * bulldoze costs nothing, and the grace month `budget.ts` gives an overdrawn
+   * city is a chance to act only if demolition still works while `money` is
+   * negative (issue #266). Paid tools stay out of reach until the books recover.
+   */
+  const affordable = (cost: number) => cost === 0 || cost <= money;
+
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
     const p = rotatePoint(tx, ty, CITY_W, CITY_H, rotation);
@@ -1683,7 +1691,7 @@ export function initCityGame(): void {
       const x = hoverTile % CITY_W;
       const y = Math.floor(hoverTile / CITY_W);
       const v = rotateTile(x, y, CITY_W, CITY_H, rotation);
-      const valid = canBuild(tiles, x, y, selectedTool) && buildCost(tiles, x, y, selectedTool) <= money;
+      const valid = canBuild(tiles, x, y, selectedTool) && affordable(buildCost(tiles, x, y, selectedTool));
       strokeTile(ctx, VIEW, v.x, v.y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
 
@@ -1744,7 +1752,7 @@ export function initCityGame(): void {
     const y = Math.floor(i / CITY_W);
     if (!canBuild(tiles, x, y, selectedTool)) return;
     const cost = buildCost(tiles, x, y, selectedTool);
-    if (cost > money) {
+    if (!affordable(cost)) {
       showToast(strings.cantAfford);
       return;
     }

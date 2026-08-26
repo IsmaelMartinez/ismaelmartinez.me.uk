@@ -53,16 +53,17 @@ export function playMatch(
 }
 
 /**
- * The scoreline tail of one contender's own half of a set of pairings.
+ * What one contender's own half of a set of pairings did, beyond winning it.
  *
  * It rides on `Paired` because the matches have already been played and thrown
- * away: a comparison reduces each of them to two numbers and the scoreline is
- * not one of them. That is issue #273's finding 4 in one sentence — 7.2's
- * double-figure cap was pooled over four named policies and a five-entry
- * catalogue whose only wing members were two pinned stations, while the sweeps
- * next door were playing thousands of matches across sixty stations and
- * discarding every scoreline in them. Carrying the tail costs one integer per
- * match and lets the cap be measured against the grid the sweep explores.
+ * away: a comparison reduces each of them to two numbers and neither the
+ * scoreline nor the goal mix is one of them. That is issue #273's finding 4 in
+ * one sentence — 7.2's double-figure cap and 7.4's air-goals ceiling were both
+ * measured over a five-entry catalogue whose only wing members were two pinned
+ * stations, while the sweeps next door were playing thousands of matches across
+ * sixty stations and discarding every scoreline in them. Carrying this costs two
+ * more running counters, folded in as each match finishes rather than kept per
+ * match, and lets both caps be measured against the grid the sweep explores.
  */
 export interface Tail {
   matches: number;
@@ -70,17 +71,26 @@ export interface Tail {
   doubleFigures: number;
   /** The biggest single-side scoreline seen. */
   biggest: number;
+  /**
+   * Goals the contender took out of the air — off a cross, a header or a
+   * volley, and never one walked over the line. The definition is
+   * `football-exploits.test.ts`'s `goalMix`, in one place so that a rate
+   * measured over the scan and a rate measured over the catalogue are the same
+   * quantity.
+   */
+  air: number;
 }
 
 export function emptyTail(): Tail {
-  return { matches: 0, doubleFigures: 0, biggest: 0 };
+  return { matches: 0, doubleFigures: 0, biggest: 0, air: 0 };
 }
 
 export function addTail(into: Tail, more: Tail): Tail {
   return {
     matches: into.matches + more.matches,
     doubleFigures: into.doubleFigures + more.doubleFigures,
-    biggest: Math.max(into.biggest, more.biggest)
+    biggest: Math.max(into.biggest, more.biggest),
+    air: into.air + more.air
   };
 }
 
@@ -156,10 +166,17 @@ interface Outcome {
   gd: number;
   /** The bigger of the two scorelines; see `Tail`. */
   biggest: number;
+  /** Goals side 0 took out of the air; see `Tail`. */
+  air: number;
 }
 
 function outcome(m: MatchState): Outcome {
-  return { pts: points(m), gd: goalDiff(m), biggest: Math.max(m.score[0], m.score[1]) };
+  let air = 0;
+  for (const g of m.goals) {
+    if (g.side !== 0 || g.dribbled) continue;
+    if (g.fromCross || g.contact !== 'ground') air++;
+  }
+  return { pts: points(m), gd: goalDiff(m), biggest: Math.max(m.score[0], m.score[1]), air };
 }
 
 /**
@@ -202,10 +219,32 @@ export function pairedAgainst(
     tail.matches++;
     if (withIt.biggest >= 10) tail.doubleFigures++;
     tail.biggest = Math.max(tail.biggest, withIt.biggest);
+    tail.air += withIt.air;
   }
   const p = meanT(pts);
   const g = meanT(gds);
   return { pts: p.mean, ptsT: p.t, gd: g.mean, gdT: g.t, n, tail };
+}
+
+/**
+ * One contender's own matches, with no opponent played beside them.
+ *
+ * A pairing exists to remove the draw and the seeded run of the ball from a
+ * *difference*; a ceiling on what a routine scores is not a difference, so
+ * playing a control alongside it would double the cost and answer nothing. The
+ * reduction is `outcome`'s, the same one a pairing reads, so a rate confirmed
+ * here and a rate collected off a scan cannot drift apart in what they count.
+ */
+export function tailOf(who: Contender, difficulty: number, n: number, seed0 = 1): Tail {
+  const tail = emptyTail();
+  for (let i = 0; i < n; i++) {
+    const one = outcomeOf(who, difficulty, seed0 + i * 7919);
+    tail.matches++;
+    if (one.biggest >= 10) tail.doubleFigures++;
+    tail.biggest = Math.max(tail.biggest, one.biggest);
+    tail.air += one.air;
+  }
+  return tail;
 }
 
 /** The paired difference summed over the ladder, the tournament's currency. */

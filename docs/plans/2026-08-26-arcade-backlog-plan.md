@@ -89,6 +89,20 @@ station a human pinned, without regressing CI shard time past the #287 budget.
 If that proves impossible inside the budget, say so with the numbers and close
 finding 4 as won't-do rather than leaving it half-open.
 
+Done, promoted rather than closed as won't-do. `airGoalsOverCeiling` in
+`tests/games/football-wing-sweep.ts` scans all thirty stations a flank at the
+one rung the ceiling binds at, then confirms the three hottest at 300 matches on
+fresh seeds, and only the confirm is compared with the ceiling. The size that
+matters is the scan's: the ladder scan's own 16 matches a station cannot rank an
+air-goal rate at all, since the same cell reads 1.50 to 4.50 across eight blocks
+of 16 against a true 3.5, and a nomination made off them misses the hottest
+station on the left flank outright. At 64 it picks it first. Both flanks pass,
+the hottest cell at 3.39 against 4.0, and the right flank's winner `(120, 30)`
+is not one of the pinned `WING_REPS` and confirms hotter than the one that is.
+Cost is +25 s a flank standalone and +7 s and +15 s on the two local shards,
+which lands on the two shards that were already 120 s of CI clear of the longest
+one, so the validate wall is unchanged.
+
 ## Tier 3: needs an owner decision before code
 
 These are not blocked on skill. They are blocked on taste, and guessing wastes

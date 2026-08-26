@@ -1,6 +1,9 @@
 /**
  * Microcity treasury: monthly tax income vs. infrastructure upkeep plus the
  * per-capita running cost that keeps income from running away from a flat bill.
+ * That cost is charged in two bands — a growing city's rate and, past
+ * `SERVICE_DENSE_THRESHOLD`, a dense one — so the pressure lands on a finished
+ * city rather than on one still filling its map.
  */
 import type { CityTile, CityTileType } from './tiles';
 import type { CityStats } from './simulation';
@@ -8,11 +11,10 @@ import type { CityStats } from './simulation';
 export const TAX_PER_RESIDENT = 1.5;
 export const TAX_PER_JOB = 1;
 /**
- * Running cost for every resident + job serviced *beyond the free allowance*.
- * Set just under the tax take so, at scale, a city runs only a thin surplus:
- * sprawl, over-servicing, political fines, or a disaster's lost income (while
- * costs lag through the rebuild) can drain the treasury — income no longer
- * trivially outscales a flat per-tile upkeep, so `money<0` is a live threat.
+ * Running cost for every resident + job serviced *beyond the free allowance*
+ * and below the dense threshold — a growing city's rate. Kept under the tax
+ * take so a city that is still filling its map keeps a working surplus to
+ * zone with; the squeeze on a finished one is the dense rate below.
  */
 export const SERVICE_COST_PER_CAPITA = 0.9;
 /**
@@ -22,6 +24,35 @@ export const SERVICE_COST_PER_CAPITA = 0.9;
  * where the audit wanted it (a developed city that can no longer coast).
  */
 export const SERVICE_FREE_ALLOWANCE = 150;
+/**
+ * Residents + jobs past which every further head is billed at the dense rate.
+ * A resident arrives with a job beside them (below), so this is a city of
+ * about 500 people — the fourth rung of the milestone ladder, which is already
+ * the point the game stops treating a city as one that is finding its feet.
+ * Written out rather than read from `POP_MILESTONES` on purpose: retuning the
+ * ladder must not silently retune the economy underneath it.
+ */
+export const SERVICE_DENSE_THRESHOLD = 1000;
+/**
+ * What a head costs to service in a big city: exactly what a head pays in tax.
+ * Not a fudge factor — the demand model makes jobs converge on population
+ * (`COM_JOB_SHARE + IND_JOB_SHARE === 1`, see simulation.ts), so a resident
+ * arrives with one job beside them and the pair pay
+ * `TAX_PER_RESIDENT + TAX_PER_JOB` across two billed heads. Billing the
+ * marginal head at that average is what stops growth from being free money:
+ * past the threshold a metropolis keeps its *exemptions* (the free allowance,
+ * and the discount on everything under the threshold) minus its infrastructure
+ * upkeep, and nothing else — so the books of a finished city are decided by
+ * what it built rather than by how big it got.
+ *
+ * A single flat rate cannot do this job (issue #309). The one rate that
+ * flattens a saturated city's surplus, ~1.18, is charged from the first head
+ * past the allowance, which taxes the mid game hardest of all — measured over
+ * 10 seeds of the full loop it cut the median peak population from 1996 to 920
+ * and bankrupted a competent build on 4 seeds in 10, because a city that
+ * cannot afford to zone stops growing and then cannot afford its own upkeep.
+ */
+export const SERVICE_COST_PER_CAPITA_DENSE = (TAX_PER_RESIDENT + TAX_PER_JOB) / 2;
 
 const UPKEEP: Partial<Record<CityTileType, number>> = {
   road: 1,
@@ -39,8 +70,8 @@ export function monthlyIncome(stats: CityStats): number {
 
 /**
  * Monthly running costs: fixed per-tile infrastructure upkeep, plus — when
- * `stats` is supplied — the per-capita service bill that scales with the
- * population and jobs served. The no-stats form is the pure infrastructure
+ * `stats` is supplied — the two-band per-capita service bill that scales with
+ * the population and jobs served. The no-stats form is the pure infrastructure
  * bill (used where the city's population isn't to hand).
  */
 export function monthlyExpenses(tiles: CityTile[], stats?: CityStats): number {
@@ -49,8 +80,12 @@ export function monthlyExpenses(tiles: CityTile[], stats?: CityStats): number {
     total += UPKEEP[tile.type] ?? 0;
   }
   if (stats) {
-    const billed = Math.max(0, stats.population + stats.jobs - SERVICE_FREE_ALLOWANCE);
-    total += Math.round(billed * SERVICE_COST_PER_CAPITA);
+    const capita = stats.population + stats.jobs;
+    const billed = Math.max(0, capita - SERVICE_FREE_ALLOWANCE);
+    const dense = Math.max(0, capita - SERVICE_DENSE_THRESHOLD);
+    total += Math.round(
+      (billed - dense) * SERVICE_COST_PER_CAPITA + dense * SERVICE_COST_PER_CAPITA_DENSE
+    );
   }
   return total;
 }

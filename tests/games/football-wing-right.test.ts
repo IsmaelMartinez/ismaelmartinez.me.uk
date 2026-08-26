@@ -4,7 +4,7 @@
  * `football-wing-left.test.ts`.
  */
 import { describe, it, expect } from 'vitest';
-import { POLICIES } from './football-policies';
+import { HEADER_AIMS, POLICIES, WING_REPS, winger } from './football-policies';
 import { playMatch } from './football-paired';
 import { stationsOutPointingAHuman } from './football-wing-sweep';
 
@@ -31,5 +31,38 @@ describe('the wing cross is answerable', () => {
     expect(m.stats.passes[0] - m.stats.groundPasses[0], 'lofted balls played').toBeGreaterThan(0);
     const headers = m.goals.filter(g => g.side === 0 && g.contact !== 'ground').length;
     expect(headers + m.stats.shots[0], 'contacts made in the box').toBeGreaterThan(0);
+  });
+
+  /**
+   * And a guard on the axis the routine spent five rounds without.
+   *
+   * The header aim was `const away = keeper.x <= CENTRE_X ? 1 : -1`, a constant
+   * of the policy, so every sweep above measured one shot and reported it as
+   * the wing. It is `HeaderAim` now, and this is what stops it quietly becoming
+   * a constant again: the four cells are the same seeds and the same policy, so
+   * an aim that is ignored makes them bit-identical and the spread is exactly
+   * zero. Zero is therefore the whole bound, and it is deliberately not a
+   * balance number — the spread is nearly three goals a match today (60 matches
+   * a cell: near 4.00, away 3.35, centre 1.92, far 1.13) but a later round is
+   * free to move that without this guard turning red on it.
+   *
+   * What the aim is *worth* is the sweeps' business, and `HeaderAim` records
+   * both the numbers and why this axis is not yet one of the gated ones.
+   */
+  it('honours the header aim rather than fixing it', { timeout: 120000 }, () => {
+    const [wing, lateral, depth] = WING_REPS[0];
+    const rates = HEADER_AIMS.map(aim => {
+      let air = 0;
+      for (let i = 0; i < 60; i++) {
+        const m = playMatch(winger(wing, lateral, depth, aim), 0.25, 1 + i * 7919).match;
+        for (const g of m.goals) {
+          if (g.side === 0 && !g.dribbled && (g.fromCross || g.contact !== 'ground')) air++;
+        }
+      }
+      return air / 60;
+    });
+    const label = HEADER_AIMS.map((a, i) => `${a} ${rates[i].toFixed(2)}`).join(', ');
+    expect(Math.max(...rates) - Math.min(...rates), `air goals a match by aim: ${label}`)
+      .toBeGreaterThan(0);
   });
 });

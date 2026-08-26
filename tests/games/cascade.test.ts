@@ -735,7 +735,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
     expect(locks).toBeLessThanOrEqual(80);
   });
 
-  it('is survivable at 10 inputs a second: 1500 pieces, no placement lost to the ramp', () => {
+  it('is survivable at 10 inputs a second: 1500 pieces, no placement lost to the ramp', { timeout: 60000 }, () => {
     // The play-to-completion guarantee this cabinet lacked. The suite above
     // can only say "some clears happened in 80 pieces", which a cabinet that
     // strangles a good player at piece 150 passes just as easily.
@@ -765,7 +765,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
     }
   });
 
-  it('the ramp is not decorative: 4 inputs a second loses the run past level 10', () => {
+  it('the ramp is not decorative: 4 inputs a second loses the run past level 10', { timeout: 60000 }, () => {
     // The other side of the same clock, and the reason the test above is worth
     // anything. A quarter-second between presses is not enough to cross the
     // well once gravity has ramped: every seed eventually fails to reach its

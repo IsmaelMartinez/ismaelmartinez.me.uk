@@ -456,6 +456,16 @@ describe("7.3 the keeper's body lag, which is the lag the code reads", () => {
         (certain.length > 0 ? certain.join('\n') : '      none') +
         '\n'
     );
+    // #312 is fixed, so the census is a contract rather than a printout. A ball
+    // that is going in always gets the trailing hand, so no cell can convert
+    // past `1 - SAVE_FLOOR` (0.9800), which is under `CERTAINTY_CENSUS`. This
+    // assertion is the whole point of the fix and goes red without it: reading
+    // `m.ball.x` instead of the projected `lineX` puts six cells back at 1.0000.
+    expect(
+      certain,
+      `cells still certain past ${CERTAINTY_CENSUS}, so the desperation floor is ` +
+        `being withheld from a ball that is going in (issue #312):\n${certain.join('\n')}`
+    ).toEqual([]);
     expect(
       wrong,
       `body-lag bands that do not rise with the displacement:\n  ${wrong.join('\n  ')}`

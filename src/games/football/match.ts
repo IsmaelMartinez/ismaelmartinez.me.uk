@@ -1586,7 +1586,17 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
   const reach = (REACH_BODY + (standing - REACH_BODY) * (1 - down)) * heightReach(lineZ);
   // The desperation floor applies only to a ball that is actually going in:
   // he is never credited with saving one that was missing the goal anyway.
-  const inFrame = Math.abs(m.ball.x - CENTRE_X) < GOAL_HALF;
+  //
+  // Measured where the ball crosses the line, not where it passes him, along
+  // the same signed `lineT` the height above is projected with. `m.ball.x` asks
+  // whether the ball is between the posts *as it goes by his plane*, which is a
+  // different question and the wrong one: a ball still travelling across the
+  // face reads outside the frame there and is denied the floor it is owed, so
+  // he is never even given the trailing hand at a shot that is going in. That
+  // was the fourth exactly-1.000 cell in the rig census (#312). There is no
+  // gravity term because lateral flight is linear.
+  const lineX = m.ball.x + m.ball.vx * lineT;
+  const inFrame = Math.abs(lineX - CENTRE_X) < GOAL_HALF;
   const outcome = resolveSave({
     gap,
     reach,

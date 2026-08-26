@@ -1,8 +1,11 @@
 /**
  * Tank Duel — Scorched Earth style artillery game.
  *
- * Pure game rules live in terrain.ts / physics.ts / ai.ts / weapons.ts; this
- * module owns DOM wiring, the turn state machine, and canvas rendering. It
+ * Pure game rules live in terrain.ts / physics.ts / ai.ts / weapons.ts, and the
+ * match itself — rounds, turns, when a round ends, when the match ends, how the
+ * ledger is fed — in the DOM-free match.ts. This module owns DOM wiring,
+ * presentation and canvas rendering: it drives the match, draws whatever it
+ * says, and turns its events into floaters, sound, shake and overlays. It
  * expects the markup defined in src/pages/[lang]/fun/tanks.astro.
  */
 import {
@@ -19,70 +22,35 @@ import {
 } from '../engine';
 import { TANKS_MUSIC } from './music';
 import { markDone } from '../engine/progress';
-import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, isSolidColumn, type ArenaType } from './terrain';
+import type { ArenaType } from './terrain';
+import { submitsToBoard, type TankMode } from './scoring';
+import type { Difficulty } from './ai';
+import { WEAPONS, WEAPON_IDS, type WeaponId } from './weapons';
 import {
-  launchProjectile,
-  stepProjectile,
-  bounceOffSurface,
-  stepFall,
-  explosionDamage,
-  type Projectile
-} from './physics';
-import { createScoreLedger, submitsToBoard } from './scoring';
-import { chooseAiShot, cpuDifficulty, cpuPickWeapon, type Difficulty } from './ai';
-import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster, type Ammo, type WeaponId } from './weapons';
+  createMatch,
+  resetMatch,
+  rollTerrain,
+  startRound,
+  tickMatch,
+  fire,
+  isHumanTurn,
+  WIDTH,
+  HEIGHT,
+  TANK_W,
+  TANK_H,
+  BARREL_LEN,
+  EXPLOSION_TIME,
+  type Award,
+  type MatchEvent,
+  type Shot,
+  type Tank
+} from './match';
 
-const WIDTH = 800;
-const HEIGHT = 450;
-const TANK_W = 34;
-const TANK_H = 14;
-const BARREL_LEN = 24;
-const EXPLOSION_TIME = 0.55;
-const DIRECT_HIT_RADIUS = 14;
-const MAX_WIND = 50;
-/** Speed a Skipper shell keeps after each ground bounce (0..1). */
-const BOUNCE_RESTITUTION = 0.62;
-const WINS_PER_MATCH = 3;
-const CPU_THINK_TIME = 1.1;
-const SAFE_DROP = 30; // px a tank can fall without damage
 const SKY_MARGIN = 20; // backdrop overdraw so screen shake never shows an edge
 /** Colour of the "+NN" award floaters, kept clear of the red damage popups. */
 const AWARD_COLOR = '#fbbf24';
-
-interface Tank {
-  x: number;
-  y: number;
-  hp: number;
-  angle: number;
-  power: number;
-  color: string;
-  weapon: WeaponId;
-  ammo: Ammo;
-  /** y where the current fall started, or null when grounded. */
-  fallFrom: number | null;
-  fallVy: number;
-  /** Damage flash timer. */
-  flash: number;
-}
-
-interface Shot {
-  p: Projectile;
-  weapon: WeaponId;
-  /** Ground bounces left before this shell detonates (Skipper only). */
-  bounces: number;
-  canSplit: boolean;
-  flightTime: number;
-  trail: { x: number; y: number }[];
-}
-
-interface Explosion {
-  x: number;
-  y: number;
-  t: number;
-  radius: number;
-}
-
-type Phase = 'idle' | 'aim' | 'cpu-think' | 'fly' | 'round-over';
+/** Team colours by tank index. Presentation, so the match knows nothing of them. */
+const TANK_COLORS = ['#38bdf8', '#f87171'];
 
 export function initTanksGame(): void {
   const root = document.getElementById('tanks-root');
@@ -163,13 +131,12 @@ export function initTanksGame(): void {
   // anti-aliased ground edge by a LSB and break the byte-identical bake). The
   // SKY_MARGIN overdraw that keeps screen shake from exposing a bare edge is
   // filled live on the rare shaking frames, so the layer stays board-aligned
-  // (see createStaticLayer). `ground` is declared before setupHiDpiCanvas so
-  // scene.rebuild can join it in onApply; paintTerrain guards the empty
-  // pre-round ground.
-  let ground: number[] = [];
-  // Uncarveable columns for the current arena (the bunker pillar); empty
-  // everywhere else. Rolled together with `ground` so they never disagree.
-  let solid: boolean[] = [];
+  // (see createStaticLayer). The match — which owns the heightmap and the
+  // uncarveable mask beside it — is created before setupHiDpiCanvas so
+  // scene.rebuild can read its terrain in onApply; paintTerrain guards the
+  // empty pre-round ground. Creating it draws no randomness, so it costs the
+  // seeded sequence nothing to stand this early.
+  const match = createMatch({ onEvent: handleEvent });
   const scene = createStaticLayer(WIDTH, HEIGHT, paintScene);
   const hiDpi = setupHiDpiCanvas(canvas, ctx, WIDTH, HEIGHT, {
     onApply: scene.rebuild
@@ -235,6 +202,7 @@ export function initTanksGame(): void {
   // Baked terrain: the dirt polygon + green surface line, identical to the old
   // per-frame render. Repainted only when `ground` changes (crater / new round).
   function paintTerrain(target: CanvasRenderingContext2D) {
+    const { ground, solid } = match;
     if (!ground.length) return;
     const dirt = target.createLinearGradient(0, HEIGHT * 0.3, 0, HEIGHT);
     dirt.addColorStop(0, '#1e3a2f');
@@ -287,20 +255,6 @@ export function initTanksGame(): void {
     paintTerrain(target);
   }
 
-  let tanks: Tank[] = [];
-  let current = 0;
-  let wind = 0;
-  let mode: 'cpu' | '2p' = 'cpu';
-  // Selected difficulty tier (start-screen picker); only matters vs the CPU.
-  let difficulty: Difficulty = 'gunner';
-  // Selected battlefield silhouette (start-screen picker).
-  let arena: ArenaType = 'hills';
-  // Rounds decided so far this match, feeding the per-round accuracy ramp.
-  let roundsDecided = 0;
-  let wins = [0, 0];
-  let phase: Phase = 'idle';
-  let shots: Shot[] = [];
-  let explosions: Explosion[] = [];
   const fx = createEffects({
     gravityScale: 420,
     cullBelowY: HEIGHT + 10,
@@ -311,12 +265,12 @@ export function initTanksGame(): void {
   let smoke: { x: number; y: number; r: number; vx: number; life: number; maxLife: number }[] = [];
   let muzzleFlash: { x: number; y: number; t: number } | null = null;
   let shake = 0;
-  let cpuTimer = 0;
-  let cpuShotPending = false;
-  // Running match score per tank: damage landed, direct hits, rounds taken and
-  // (once, at match end) surviving armour. Player 0's total is what the header
-  // shows and what a vs-CPU match submits — the same number by construction.
-  const ledger = createScoreLedger();
+  /** Damage-flash timer per tank index; a render cue, so it stays out here. */
+  const flash = [0, 0];
+  // Player 0's ledger total is what the header shows and what a vs-CPU match
+  // submits — the same number by construction. The ledger itself belongs to the
+  // match, which is the only thing that pays into it.
+  const ledger = match.ledger;
 
   const board = initScoreboard(document.getElementById('highscores'));
 
@@ -325,14 +279,11 @@ export function initTanksGame(): void {
   wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 
   const playerName = (i: number) =>
-    i === 1 && mode === 'cpu' ? strings.cpu : i === 1 ? strings.player2 : strings.player1;
-
-  const isHumanTurn = () => phase === 'aim' && !(mode === 'cpu' && current === 1);
-  const tanksSettled = () => tanks.every(t => t.fallFrom === null);
+    i === 1 && match.mode === 'cpu' ? strings.cpu : i === 1 ? strings.player2 : strings.player1;
 
   function syncWeapons() {
-    const tank = tanks[current];
-    const enabled = isHumanTurn();
+    const tank = match.tanks[match.current];
+    const enabled = isHumanTurn(match);
     for (const btn of weaponButtons) {
       const id = btn.dataset.weapon as WeaponId;
       const ammo = tank ? tank.ammo[id] : WEAPONS[id].ammo;
@@ -344,14 +295,14 @@ export function initTanksGame(): void {
   }
 
   function syncControls() {
-    const tank = tanks[current];
+    const tank = match.tanks[match.current];
     if (tank) {
       angleSlider.value = Math.round(tank.angle).toString();
       powerSlider.value = Math.round(tank.power).toString();
       angleValue.textContent = `${Math.round(tank.angle)}°`;
       powerValue.textContent = Math.round(tank.power).toString();
     }
-    const enabled = isHumanTurn();
+    const enabled = isHumanTurn(match);
     angleSlider.disabled = !enabled;
     powerSlider.disabled = !enabled;
     fireBtn.disabled = !enabled;
@@ -366,7 +317,7 @@ export function initTanksGame(): void {
     // Only a vs-CPU run banks. Two-player totals are farmable (one person can
     // drive both tanks), so they must never touch the personal best that feeds
     // the arcade floor's attract screens, any more than the world board.
-    if (player !== 0 || !submitsToBoard(mode)) return;
+    if (player !== 0 || !submitsToBoard(match.mode)) return;
     const { best, newRecord } = board.bank(ledger.total(0));
     bestEl.textContent = best.toString();
     if (newRecord) showToast(`🏅 ${strings.newRecord}`);
@@ -387,83 +338,10 @@ export function initTanksGame(): void {
   function award(player: number | null, points: number, rise = 30) {
     if (player === null || points <= 0) return;
     if (scoreShown(player)) {
-      const tank = tanks[player];
+      const tank = match.tanks[player];
       fx.floater(tank.x, tank.y - TANK_H - rise, `+${points}`, AWARD_COLOR, { glow: true });
     }
     syncScores(player);
-  }
-
-  /**
-   * Damage landing on `index`, credited to `shooter` (null for fall damage,
-   * which nobody is paid for). The award follows the armour actually removed,
-   * so overkill on a nearly-dead tank is not worth more than the tank was.
-   */
-  function applyDamage(index: number, amount: number, shooter: number | null) {
-    const tank = tanks[index];
-    if (amount <= 0 || tank.hp <= 0) return;
-    const removed = Math.min(tank.hp, amount);
-    tank.hp = Math.max(0, tank.hp - amount);
-    tank.flash = 0.35;
-    fx.floater(tank.x, tank.y - TANK_H - 30, `-${amount}`, '#f87171');
-    // The red loss floats over the tank that took it; the gold gain floats over
-    // the tank that earned it, a little higher than the direct-hit bonus that
-    // may have preceded it on the same shell.
-    award(shooter, ledger.damage(shooter, index, removed), 46);
-  }
-
-  function newWind() {
-    wind = Math.round((Math.random() * 2 - 1) * MAX_WIND);
-  }
-
-  function makeTank(x: number, angle: number, color: string): Tank {
-    return {
-      x,
-      y: surfaceYAt(ground, x),
-      hp: 100,
-      angle,
-      power: 55,
-      color,
-      weapon: 'missile',
-      ammo: freshAmmo(),
-      fallFrom: null,
-      fallVy: 0,
-      flash: 0
-    };
-  }
-
-  // Roll a fresh heightmap and its uncarveable mask for the current arena.
-  function rollTerrain() {
-    ground = generateTerrain(WIDTH, HEIGHT, Math.random, arena);
-    solid = arenaSolid(arena, WIDTH);
-  }
-
-  function newRound() {
-    rollTerrain();
-    scene.rebuild();
-    const p1x = 70 + Math.random() * 90;
-    const p2x = WIDTH - 70 - Math.random() * 90;
-    tanks = [makeTank(p1x, 60, '#38bdf8'), makeTank(p2x, 120, '#f87171')];
-    shots = [];
-    explosions = [];
-    fx.clear();
-    smoke = [];
-    muzzleFlash = null;
-    current = Math.random() < 0.5 ? 0 : 1;
-    newWind();
-    startTurn();
-  }
-
-  function startTurn() {
-    const tank = tanks[current];
-    if (tank.ammo[tank.weapon] <= 0) tank.weapon = 'missile';
-    if (mode === 'cpu' && current === 1) {
-      phase = 'cpu-think';
-      cpuTimer = CPU_THINK_TIME;
-      cpuShotPending = true;
-    } else {
-      phase = 'aim';
-    }
-    syncControls();
   }
 
   /**
@@ -481,11 +359,8 @@ export function initTanksGame(): void {
     bestItem.hidden = false;
   }
 
-  function startMatch(selectedMode: 'cpu' | '2p') {
-    mode = selectedMode;
-    wins = [0, 0];
-    roundsDecided = 0;
-    ledger.reset();
+  function startMatch(selectedMode: TankMode) {
+    resetMatch(match, selectedMode);
     // A best-of-five match is a long run: beginRun arms the one-time record
     // celebration, and banking every award means walking away at 2–0 still
     // keeps whatever the run was worth. Both modes begin a run; only vs-CPU
@@ -500,42 +375,12 @@ export function initTanksGame(): void {
     bestEl.textContent = board.best().toString();
     // The second score belongs to the other human; the shared best has nothing
     // to say about a two-player match, so they swap places.
-    score2Item.hidden = mode === 'cpu';
-    bestItem.hidden = mode === '2p';
+    score2Item.hidden = match.mode === 'cpu';
+    bestItem.hidden = match.mode === '2p';
     startOverlay.style.display = 'none';
     roundOverlay.style.display = 'none';
     audio.start();
-    newRound();
-  }
-
-  function barrelTip(tank: Tank) {
-    const rad = (tank.angle * Math.PI) / 180;
-    return {
-      x: tank.x + Math.cos(rad) * BARREL_LEN,
-      y: tank.y - TANK_H - Math.sin(rad) * BARREL_LEN
-    };
-  }
-
-  function fire() {
-    const tank = tanks[current];
-    const weapon = WEAPONS[tank.weapon];
-    if (tank.ammo[tank.weapon] <= 0) return;
-    if (tank.ammo[tank.weapon] !== Infinity) tank.ammo[tank.weapon]--;
-    const tip = barrelTip(tank);
-    shots = [
-      {
-        p: launchProjectile(tip.x, tip.y, tank.angle, tank.power),
-        weapon: tank.weapon,
-        bounces: weapon.bounces ?? 0,
-        canSplit: weapon.cluster > 1,
-        flightTime: 0,
-        trail: []
-      }
-    ];
-    muzzleFlash = { x: tip.x, y: tip.y, t: 0.12 };
-    audio.playSfx('blip');
-    phase = 'fly';
-    syncControls();
+    startRound(match);
   }
 
   function spawnDirt(x: number, y: number, radius: number) {
@@ -549,7 +394,7 @@ export function initTanksGame(): void {
       fx.emit({
         x: x + (Math.random() - 0.5) * radius * 0.8,
         y,
-        vx: Math.cos(angle) * speed + wind * 0.3,
+        vx: Math.cos(angle) * speed + match.wind * 0.3,
         vy: Math.sin(angle) * speed,
         life: 0.5 + Math.random() * 0.5,
         maxLife: 1,
@@ -560,53 +405,70 @@ export function initTanksGame(): void {
     }
   }
 
-  function impactAt(x: number, y: number, weaponId: WeaponId, shooter: number) {
-    const weapon = WEAPONS[weaponId];
-    explosions.push({ x, y, t: 0, radius: weapon.radius });
-    audio.playSfx('explosion');
-    carveCrater(ground, HEIGHT, x, y, weapon.radius, solid);
-    scene.rebuild(); // re-bake the reshaped terrain
-    spawnDirt(x, y, weapon.radius);
-    shake = Math.min(0.6, shake + weapon.radius / 160);
-    tanks.forEach((tank, index) => {
-      applyDamage(
-        index,
-        explosionDamage(x, y, tank.x, tank.y - TANK_H / 2, weapon.radius, weapon.maxDamage),
-        shooter
-      );
-    });
-  }
-
-  function endTurn() {
-    const dead = tanks.map(t => t.hp <= 0);
-    if (dead[0] || dead[1]) {
-      finishRound(dead[0] && dead[1] ? null : dead[0] ? 1 : 0);
-      return;
+  /**
+   * The presentation half of every match event, called by the match at the
+   * exact moment the old inline code ran. That timing is the contract: the
+   * dirt burst an impact spawns draws from the same `Math.random` the terrain
+   * roll and the wind draw from, so an event handled a step late would move
+   * those draws and change the seeded battlefield. Nothing here may write back
+   * into the match.
+   */
+  function handleEvent(event: MatchEvent) {
+    switch (event.type) {
+      case 'roundStart':
+        scene.rebuild();
+        fx.clear();
+        smoke = [];
+        muzzleFlash = null;
+        flash[0] = 0;
+        flash[1] = 0;
+        return;
+      case 'turn':
+        syncControls();
+        return;
+      case 'fire':
+        muzzleFlash = { x: event.x, y: event.y, t: 0.12 };
+        audio.playSfx('blip');
+        syncControls();
+        return;
+      case 'bounce':
+        audio.playSfx('blip');
+        return;
+      case 'impact':
+        audio.playSfx('explosion');
+        scene.rebuild(); // re-bake the reshaped terrain
+        spawnDirt(event.x, event.y, event.radius);
+        shake = Math.min(0.6, shake + event.radius / 160);
+        return;
+      case 'damage': {
+        const tank = match.tanks[event.target];
+        flash[event.target] = 0.35;
+        fx.floater(tank.x, tank.y - TANK_H - 30, `-${event.amount}`, '#f87171');
+        // The red loss floats over the tank that took it; the gold gain floats
+        // over the tank that earned it, a little higher than the direct-hit
+        // bonus that may have preceded it on the same shell.
+        award(event.shooter, event.points, 46);
+        return;
+      }
+      case 'directHit':
+        award(event.shooter, event.points);
+        return;
+      case 'roundOver':
+        showRoundOver(event.winner, event.matchOver, event.awards);
     }
-    current = current === 0 ? 1 : 0;
-    newWind();
-    startTurn();
   }
 
-  function finishRound(winner: number | null) {
-    phase = 'round-over';
-    // A decided round (win or mutual destruction) tightens the CPU next round.
-    roundsDecided++;
-    syncControls();
+  function showRoundOver(winner: number | null, matchOver: boolean, awards: Award[]) {
     if (winner !== null) {
-      wins[winner]++;
-      (winner === 0 ? p1Wins : p2Wins).textContent = wins[winner].toString();
-      award(winner, ledger.roundWin(winner));
+      (winner === 0 ? p1Wins : p2Wins).textContent = match.wins[winner].toString();
     }
-    const matchOver = winner !== null && wins[winner] >= WINS_PER_MATCH;
     if (matchOver) {
       audio.playSfx('gameover');
       audio.stop();
-      // Surviving armour is folded in exactly once, when the match is over.
-      tanks.forEach((tank, index) => {
-        award(index, ledger.survivingArmour(index, tank.hp));
-      });
     }
+    // In the order the ledger paid them: the round bonus, then the surviving
+    // armour a finished match folds in.
+    for (const { player, points } of awards) award(player, points);
     // Two-player only. A vs-CPU match reaches the board below whatever its
     // result, and `commit()` marks the chain from there, so the rule for this
     // cabinet is the same as every other one: score something and the next
@@ -614,10 +476,10 @@ export function initTanksGame(): void {
     // direct call or the chain's first link would stall for anyone who only
     // ever plays two-player (the score argument is a sentinel — markDone only
     // needs it above zero).
-    if (matchOver && mode === '2p') markDone('tanks', 1);
+    if (matchOver && match.mode === '2p') markDone('tanks', 1);
     // A trophy is for someone in this room. When the CPU takes the match it
     // used to raise one too, which read as congratulating the player on losing.
-    const cpuTookMatch = matchOver && mode === 'cpu' && winner === 1;
+    const cpuTookMatch = matchOver && match.mode === 'cpu' && winner === 1;
     roundEmoji.textContent = matchOver
       ? cpuTookMatch
         ? '🤖'
@@ -635,14 +497,14 @@ export function initTanksGame(): void {
     const finalScore = ledger.total(0);
     // Vs the CPU it is shown at every match end, won or lost: a losing run that
     // earned 900 points is still a finished run worth that much.
-    const submits = matchOver && submitsToBoard(mode);
+    const submits = matchOver && submitsToBoard(match.mode);
     matchScoreEl.textContent = `🏅 ${strings.matchScore}: ${finalScore}`;
     matchScoreEl.style.display = submits ? 'block' : 'none';
     // Two-player ends on both totals side by side instead, under a note saying
     // where they stop.
     localP1El.textContent = `${strings.player1}: ${ledger.total(0)}`;
     localP2El.textContent = `${strings.player2}: ${ledger.total(1)}`;
-    localScoresEl.style.display = matchOver && mode === '2p' ? 'block' : 'none';
+    localScoresEl.style.display = matchOver && match.mode === '2p' ? 'block' : 'none';
     roundOverlay.style.display = 'flex';
     // After the overlay is visible, so the initials input can take focus. The
     // gate is vs-CPU alone and is load-bearing: two-player scores can be farmed
@@ -653,86 +515,17 @@ export function initTanksGame(): void {
     if (submits) board.show(finalScore);
   }
 
-  /** Tanks above the (possibly freshly cratered) surface fall and take damage.
-   *  A drop is nobody's shot, so it pays nobody. */
-  function updateFalls(dt: number) {
-    tanks.forEach((tank, index) => {
-      const drop = stepFall(tank, surfaceYAt(ground, tank.x), dt);
-      if (drop !== null && drop > SAFE_DROP) {
-        applyDamage(index, Math.min(30, Math.round((drop - SAFE_DROP) * 0.5)), null);
-      }
-    });
-  }
-
-  function stepShot(shot: Shot, dt: number, spawned: Shot[]): boolean {
-    stepProjectile(shot.p, wind, dt);
-    shot.flightTime += dt;
-    const p = shot.p;
-    shot.trail.push({ x: p.x, y: p.y });
-    if (shot.trail.length > 40) shot.trail.shift();
-
-    // MIRV splits at apex into a fan of warheads
-    if (shot.canSplit && p.vy >= 0) {
-      const parts = splitCluster(p, WEAPONS[shot.weapon].cluster);
-      spawned.push(
-        ...parts.map(part => ({
-          p: part,
-          weapon: shot.weapon,
-          bounces: 0,
-          canSplit: false,
-          flightTime: shot.flightTime,
-          trail: [] as { x: number; y: number }[]
-        }))
-      );
-      return false;
-    }
-
-    if (p.x < -100 || p.x > WIDTH + 100 || p.y > HEIGHT) return false;
-
-    // Direct hit on a tank detonates mid-air (own tank only after clearing the barrel)
-    const hitIndex = tanks.findIndex(
-      (tank, idx) =>
-        (idx !== current || shot.flightTime > 0.25) &&
-        Math.hypot(p.x - tank.x, p.y - (tank.y - TANK_H / 2)) < DIRECT_HIT_RADIUS
-    );
-    if (hitIndex >= 0) {
-      // Putting a shell on the hull itself is the skill this game is about, so
-      // it pays a bonus on top of the blast damage that follows — but only on a
-      // live tank. A wreck keeps stopping shells (the hull is still there) and
-      // a MIRV's five warheads fly on until the last one lands, so without the
-      // hp the ledger checks, a finishing kill would be paid for four more
-      // times over the same corpse.
-      award(current, ledger.directHit(current, hitIndex, tanks[hitIndex].hp));
-      impactAt(p.x, p.y, shot.weapon, current);
-      return false;
-    }
-    if (p.x >= 0 && p.x < WIDTH && p.y >= surfaceYAt(ground, p.x)) {
-      if (shot.bounces > 0 && !isSolidColumn(solid, p.x, WIDTH)) {
-        // Skip off the dirt: reflect upward, bleed speed, keep flying. A solid
-        // column (the bunker pillar) is not skippable, so the shot detonates
-        // against it instead — that is what makes the cover matter.
-        shot.bounces--;
-        bounceOffSurface(p, surfaceYAt(ground, p.x), BOUNCE_RESTITUTION);
-        audio.playSfx('blip');
-        return true;
-      }
-      impactAt(p.x, p.y, shot.weapon, current);
-      return false;
-    }
-    return true;
-  }
-
   function update(dt: number) {
     shake = Math.max(0, shake - dt);
     if (muzzleFlash) {
       muzzleFlash.t -= dt;
       if (muzzleFlash.t <= 0) muzzleFlash = null;
     }
-    for (const tank of tanks) tank.flash = Math.max(0, tank.flash - dt);
+    for (let i = 0; i < flash.length; i++) flash[i] = Math.max(0, flash[i] - dt);
 
     fx.update(dt);
     // Battle damage: a badly mauled tank trails smoke until the round ends.
-    for (const tank of tanks) {
+    for (const tank of match.tanks) {
       if (tank.hp > 0 && tank.hp <= 35 && Math.random() < dt * 7) {
         smoke.push({
           x: tank.x + (Math.random() - 0.5) * 10,
@@ -751,56 +544,23 @@ export function initTanksGame(): void {
       s.r += 3.5 * dt;
       return s.life > 0;
     });
-    explosions = explosions.filter(e => (e.t += dt) < EXPLOSION_TIME);
 
-    if (phase === 'cpu-think' && cpuShotPending) {
-      cpuTimer -= dt;
-      if (cpuTimer <= 0) {
-        cpuShotPending = false;
-        const cpu = tanks[1];
-        const foe = tanks[0];
-        const shot = chooseAiShot(
-          ground,
-          WIDTH,
-          HEIGHT,
-          { x: cpu.x, y: cpu.y - TANK_H },
-          { x: foe.x, y: foe.y },
-          wind,
-          cpuDifficulty(difficulty, roundsDecided)
-        );
-        cpu.angle = shot.angle;
-        cpu.power = shot.power;
-        cpu.weapon = cpuPickWeapon(cpu.ammo, Math.abs(foe.x - cpu.x), foe.hp);
-        syncControls();
-        fire();
-      }
-    }
-
-    if (phase === 'fly') {
-      const steps = 2;
-      for (let i = 0; i < steps; i++) {
-        const spawned: Shot[] = [];
-        shots = shots.filter(shot => stepShot(shot, dt / steps, spawned));
-        shots.push(...spawned);
-      }
-      updateFalls(dt);
-      if (!shots.length && !explosions.length && tanksSettled()) {
-        endTurn();
-      }
-    } else if (tanks.length) {
-      updateFalls(dt);
-    }
+    // Blasts, the CPU's turn, shells and falls — everything that decides what
+    // happens next — belong to the match, which calls back into handleEvent as
+    // it goes. It runs last so the smoke above keeps drawing from the same
+    // point in the random sequence it always did.
+    tickMatch(match, dt);
   }
 
   function drawTank(tank: Tank, index: number) {
     const destroyed = tank.hp <= 0;
-    const flashing = tank.flash > 0 && Math.floor(tank.flash * 16) % 2 === 0;
+    const flashing = flash[index] > 0 && Math.floor(flash[index] * 16) % 2 === 0;
     ctx.save();
     ctx.translate(tank.x, tank.y);
 
     // Value ramp off the team colour: a dark grounding edge and a lit top rim
     // over the base fill (the drawBlock recipe), so the hull reads as armour.
-    const body = destroyed ? '#44403c' : flashing ? '#fff' : tank.color;
+    const body = destroyed ? '#44403c' : flashing ? '#fff' : TANK_COLORS[index];
     const dark = destroyed ? '#292524' : shadeColor(body, 0.45);
     const lit = flashing ? '#fff' : shadeColor(body, 1.4);
 
@@ -891,8 +651,8 @@ export function initTanksGame(): void {
     ctx.fillText(playerName(index), 0, -TANK_H - 24);
 
     // Active-player marker
-    if (index === current && (phase === 'aim' || phase === 'cpu-think')) {
-      ctx.fillStyle = tank.color;
+    if (index === match.current && (match.phase === 'aim' || match.phase === 'cpu-think')) {
+      ctx.fillStyle = TANK_COLORS[index];
       ctx.font = '14px monospace';
       ctx.fillText('▼', 0, -TANK_H - 38);
     }
@@ -1010,7 +770,8 @@ export function initTanksGame(): void {
     scene.draw(ctx);
 
     // Wind indicator
-    if (phase !== 'idle') {
+    const wind = match.wind;
+    if (match.phase !== 'idle') {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
       ctx.font = '13px monospace';
       ctx.textAlign = 'center';
@@ -1018,16 +779,16 @@ export function initTanksGame(): void {
       ctx.fillText(`${strings.wind} ${arrows} ${Math.abs(wind)}`, WIDTH / 2, 24);
     }
 
-    tanks.forEach((tank, index) => drawTank(tank, index));
+    match.tanks.forEach((tank, index) => drawTank(tank, index));
 
     // Aim guide while a human is lining up a shot
-    if (isHumanTurn()) {
-      const tank = tanks[current];
+    if (isHumanTurn(match)) {
+      const tank = match.tanks[match.current];
       const rad = (tank.angle * Math.PI) / 180;
       const fromX = tank.x + Math.cos(rad) * BARREL_LEN;
       const fromY = tank.y - TANK_H - Math.sin(rad) * BARREL_LEN;
       const len = 14 + tank.power * 1.1;
-      ctx.strokeStyle = `${tank.color}88`;
+      ctx.strokeStyle = `${TANK_COLORS[match.current]}88`;
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 5]);
       ctx.beginPath();
@@ -1044,7 +805,7 @@ export function initTanksGame(): void {
       ctx.fill();
     }
 
-    for (const shot of shots) {
+    for (const shot of match.shots) {
       for (let i = 0; i < shot.trail.length; i++) {
         ctx.fillStyle = `rgba(253, 224, 71, ${(i / shot.trail.length) * 0.6})`;
         ctx.beginPath();
@@ -1065,7 +826,7 @@ export function initTanksGame(): void {
 
     fx.drawParticles(ctx);
 
-    for (const explosion of explosions) {
+    for (const explosion of match.blasts) {
       const progress = explosion.t / EXPLOSION_TIME;
       const radius = explosion.radius * Math.min(1, progress * 1.6);
       const glow = ctx.createRadialGradient(
@@ -1094,7 +855,7 @@ export function initTanksGame(): void {
   let aiming = false;
 
   function aimFromPointer(e: PointerEvent) {
-    const tank = tanks[current];
+    const tank = match.tanks[match.current];
     if (!tank) return;
     const p = hiDpi.toLogical(e);
     const dx = p.x - tank.x;
@@ -1107,14 +868,14 @@ export function initTanksGame(): void {
   }
 
   canvas.addEventListener('pointerdown', e => {
-    if (!isHumanTurn()) return;
+    if (!isHumanTurn(match)) return;
     aiming = true;
     canvas.setPointerCapture(e.pointerId);
     aimFromPointer(e);
     e.preventDefault();
   });
   canvas.addEventListener('pointermove', e => {
-    if (aiming && isHumanTurn()) aimFromPointer(e);
+    if (aiming && isHumanTurn(match)) aimFromPointer(e);
   });
   canvas.addEventListener('pointerup', () => {
     aiming = false;
@@ -1124,27 +885,27 @@ export function initTanksGame(): void {
   });
 
   angleSlider.addEventListener('input', () => {
-    if (!isHumanTurn()) return;
-    tanks[current].angle = parseInt(angleSlider.value, 10);
+    if (!isHumanTurn(match)) return;
+    match.tanks[match.current].angle = parseInt(angleSlider.value, 10);
     angleValue.textContent = `${angleSlider.value}°`;
   });
 
   powerSlider.addEventListener('input', () => {
-    if (!isHumanTurn()) return;
-    tanks[current].power = parseInt(powerSlider.value, 10);
+    if (!isHumanTurn(match)) return;
+    match.tanks[match.current].power = parseInt(powerSlider.value, 10);
     powerValue.textContent = powerSlider.value;
   });
 
   fireBtn.addEventListener('click', () => {
-    if (isHumanTurn()) fire();
+    if (isHumanTurn(match)) fire(match);
   });
 
   weaponButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      if (!isHumanTurn()) return;
+      if (!isHumanTurn(match)) return;
       const id = btn.dataset.weapon as WeaponId;
-      if (tanks[current].ammo[id] <= 0) return;
-      tanks[current].weapon = id;
+      if (match.tanks[match.current].ammo[id] <= 0) return;
+      match.tanks[match.current].weapon = id;
       syncWeapons();
     });
   });
@@ -1157,9 +918,9 @@ export function initTanksGame(): void {
       (target instanceof HTMLInputElement && target.type !== 'range'));
 
   const onKeydown = (e: KeyboardEvent) => {
-    if (!isHumanTurn() || isTextEntry(e.target)) return;
+    if (!isHumanTurn(match) || isTextEntry(e.target)) return;
     if (gameKeys.has(e.key)) e.preventDefault();
-    const tank = tanks[current];
+    const tank = match.tanks[match.current];
     const weaponIdx = ['1', '2', '3', '4'].indexOf(e.key);
     if (weaponIdx >= 0) {
       const id = WEAPON_IDS[weaponIdx];
@@ -1183,7 +944,7 @@ export function initTanksGame(): void {
         tank.power = Math.max(10, tank.power - 1);
         break;
       case ' ':
-        fire();
+        fire(match);
         return;
       default:
         return;
@@ -1204,7 +965,7 @@ export function initTanksGame(): void {
   difficultyButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const picked = btn.dataset.difficulty;
-      if (isDifficulty(picked)) difficulty = picked;
+      if (isDifficulty(picked)) match.difficulty = picked;
       for (const other of difficultyButtons) {
         other.classList.toggle('active', other === btn);
         other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
@@ -1217,13 +978,13 @@ export function initTanksGame(): void {
   arenaButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const picked = btn.dataset.arena;
-      if (isArena(picked)) arena = picked;
+      if (isArena(picked)) match.arena = picked;
       for (const other of arenaButtons) {
         other.classList.toggle('active', other === btn);
         other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
       }
       // Repaint the idle backdrop so the picked arena previews immediately.
-      rollTerrain();
+      rollTerrain(match);
       scene.rebuild();
     });
   });
@@ -1232,7 +993,7 @@ export function initTanksGame(): void {
   twoPlayerBtn.addEventListener('click', () => startMatch('2p'));
   nextRoundBtn.addEventListener('click', () => {
     roundOverlay.style.display = 'none';
-    newRound();
+    startRound(match);
   });
   playAgainBtn.addEventListener('click', () => {
     roundOverlay.style.display = 'none';
@@ -1240,12 +1001,12 @@ export function initTanksGame(): void {
     board.hide();
     idleScores();
     startOverlay.style.display = 'flex';
-    phase = 'idle';
+    match.phase = 'idle';
   });
 
   // Idle backdrop so the canvas isn't empty behind the start overlay
   idleScores();
-  rollTerrain();
+  rollTerrain(match);
   scene.rebuild();
   syncControls();
   createGameLoop(update, render).start();

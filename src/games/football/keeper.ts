@@ -51,7 +51,7 @@
  * out at each constant.
  */
 import { clamp } from '../engine/math';
-import { CENTRE_X, GOAL_HALF, PITCH_L, SIX_DEPTH } from './pitch';
+import { CENTRE_X, GOAL_HALF, GOAL_HEIGHT, PITCH_L, SIX_DEPTH } from './pitch';
 
 /** Walking pace along the line while the ball is live. */
 export const KEEPER_WALK = 120;
@@ -559,6 +559,49 @@ export function diveProgress(elapsed: number): number {
 export function keeperReach(elapsed: number): number {
   const react = clamp(elapsed / REACT_TIME, 0, 1);
   return REACH_BODY + (REACH_BASE - REACH_BODY) * react + REACH_DIVE * diveProgress(elapsed);
+}
+
+/**
+ * How much of that reach he still has against a ball crossing the line at
+ * `ballZ`: all of it up to the top of his standing claim, none of it at the
+ * bar, and a straight line between the two.
+ *
+ * This is the third exactly-1.000 cell in this module's history and it has the
+ * same shape as the two before it. `keeperPlane` opened with
+ * `if (m.ball.z > KEEPER_JUMP_Z) return;` against a `GOAL_HEIGHT` of 26, so a
+ * ball on its way in between those two heights was a goal he was never
+ * consulted about: no gap, no reach, no roll, not even the desperation floor.
+ * Through the isolation rig a header met 20 px out and 30 px wide converted
+ * 0.907 over 400 seeds at 23, at 24 and at 25 alike, the height making no
+ * difference at all because he was not in the arithmetic. The `gap > reach` and
+ * `parryLock > 0` returns were both converted into rolls for exactly this
+ * reason, and this is the last of the three.
+ *
+ * **Raising `KEEPER_JUMP_Z` to `GOAL_HEIGHT` is the fix this is not.** A keeper
+ * who claims a ball at the bar as readily as one at his chest is a keeper a
+ * cross can no longer beat at all, and the cabinet's steer is that a cross is
+ * supposed to be dangerous. What is wrong is the cliff, not the height: a ball
+ * a hand's width over his claim is one he can plausibly get something to and a
+ * ball on the underside of the bar is one he cannot, and between the two there
+ * is a gradient rather than a door. `reach` is already a scale rather than a
+ * wall, so a ball he cannot reach at all still runs into `SAVE_FLOOR` the way a
+ * shot past his hands does, and no height is a certainty either way.
+ *
+ * **The height it is read at is the height at the goal line, not the height
+ * over his own plane**, and getting that wrong costs more than leaving the bug
+ * in. He stands 8 to 34 px in front of his line and the ball is falling, so a
+ * ball that clears his claim going over him and drops into his hands before the
+ * line has not beaten him at all; charging him for the height it passed his
+ * plane at turned four of six rig cells *worse* than the bug did, because it
+ * spent his one roll early at a reduced reach where the old early return had
+ * quietly deferred it until the ball came down. Read at the line, every ball
+ * that lands inside his claim is arithmetically unchanged, and so is every
+ * ball struck off the deck: `heightReach` is exactly 1 at or below
+ * `KEEPER_JUMP_Z`, which is the whole of the isolation grid.
+ */
+export function heightReach(ballZ: number): number {
+  if (ballZ <= KEEPER_JUMP_Z) return 1;
+  return clamp(1 - (ballZ - KEEPER_JUMP_Z) / (GOAL_HEIGHT - KEEPER_JUMP_Z), 0, 1);
 }
 
 /**

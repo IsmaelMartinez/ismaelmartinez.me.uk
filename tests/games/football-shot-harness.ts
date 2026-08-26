@@ -144,6 +144,23 @@ export interface ShotOptions {
    * widest cells read 0.20-0.23 either side.
    */
   keeperX?: number;
+  /**
+   * How high the ball is when it is struck, which for a header off a cross is
+   * never zero and in this rig always was.
+   *
+   * `kick` carries the ball's height through the strike untouched, so a header
+   * met at `ballZ` crosses the keeper's plane at very nearly that height: at
+   * `HEADER_SPEED` a ball struck twenty pixels in front of him is over him in
+   * 0.07 s and has fallen about two pixels doing it. That is the whole of the
+   * 22-to-26 band this axis exists to reach. `KEEPER_JUMP_Z` is 22 and
+   * `HEADER_Z` lets a header be met as high as 30, so every header struck
+   * between those two crosses him above his standing claim, and until
+   * `heightReach` those were goals he was never rolled for.
+   *
+   * Default 0, which is every cell written before this parameter existed: a
+   * shooter striking a still ball off the deck, and `kick` then leaves it there.
+   */
+  ballZ?: number;
 }
 
 /**
@@ -215,7 +232,7 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
   m.owner = { side: 0, idx: shooter };
   m.ball.x = p.x;
   m.ball.y = p.y + dir * DRIBBLE_OFFSET;
-  m.ball.z = 0;
+  m.ball.z = opts.ballZ ?? 0;
   m.ball.vx = 0;
   m.ball.vy = 0;
   m.ball.vz = 0;

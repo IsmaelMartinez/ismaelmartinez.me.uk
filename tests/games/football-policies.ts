@@ -261,6 +261,65 @@ export const WING_STATIONS: Array<[number, number]> = (() => {
 })();
 
 /**
+ * Which part of the goal a header off a cross is aimed at.
+ *
+ * `near` is the post the man meeting the ball is stood beside, `far` is the one
+ * across the mouth from him, `centre` is straight down the middle, and `away` is
+ * the reflex this routine shipped with: whichever half of the goal the keeper is
+ * not standing in at the instant of the contact.
+ *
+ * **It is a parameter for exactly the reason `CampAim` is one.** `winger`
+ * computed the aim as `const away = keeper.x <= CENTRE_X ? 1 : -1`, a constant
+ * of the policy that the thirty-station sweep never varied, which is the same
+ * omission that hid the camp exploit for a round (a hard-coded aim) and the wing
+ * exploit for another (a pinned depth). The near-post variant is worth more than
+ * the shipped one at every rung, and the suite could not see it because there
+ * was nothing to sweep.
+ *
+ * Measured at the pinned rep station `(-1, 90, 30)`, 300 matches a rung, air
+ * goals a match across d = 0.25 / 0.45 / 0.65 / 0.85, with the ladder margin at
+ * 150 matched pairs a rung beside it:
+ *
+ *   near    4.06 / 2.70 / 1.99 / 1.93   +0.727 +- 0.131 vs competent
+ *   away    3.56 / 2.05 / 1.42 / 1.70   +0.207 +- 0.138
+ *   centre  2.20 / 1.04 / 0.66 / 0.56   -1.300 +- 0.159
+ *   far     1.18 / 0.77 / 0.54 / 0.44   -2.047 +- 0.161
+ *
+ * The axis is worth three goals a match between its ends, so it is the widest
+ * of the routine's three. It is also, on this build, the axis that carries a
+ * live exploit: `near` clears `LADDER_CEILING` and sits on `AIR_GOALS_CEILING`,
+ * and it is not the keeper's height cliff that puts it there. That was measured
+ * five ways (the cliff left in, the reach faded to the bar, faded to the header
+ * ceiling, composed as a radius, and the keeper's set depth read from the
+ * landing spot) and the cell moved by less than the sampling noise every time.
+ * What it beats is the keeper's dive budget: a header met 20 px in front of him
+ * arrives in 0.07 s, which is three pixels of dive, and no positioning rule
+ * changes that. Answering it is a balance round rather than a rig fix, which is
+ * why the sweeps below are not yet gated on this axis.
+ *
+ * The naming is from the man heading it, as `CampAim`'s is from the man
+ * shooting. An audit that measured this same cell called it the far post
+ * because it named the posts from the crossing flank, which is the opposite
+ * label for the same shot: the runner arrives across the face of goal, so the
+ * post he is stood beside is the one furthest from the winger who crossed it.
+ */
+export type HeaderAim = 'near' | 'far' | 'centre' | 'away';
+
+export const HEADER_AIMS: readonly HeaderAim[] = ['near', 'far', 'centre', 'away'];
+
+/**
+ * The stick deflection one of those aims asks for, as `shoot` reads it: the aim
+ * scale is a point across the mouth and positive is the right-hand side of the
+ * goal, so the near post is the side the striker himself is on.
+ */
+function headerAim(m: MatchState, striker: { x: number }, aim: HeaderAim): number {
+  if (aim === 'centre') return 0;
+  if (aim === 'away') return m.players[1][0].x <= CENTRE_X ? 1 : -1;
+  const near = striker.x <= CENTRE_X ? -1 : 1;
+  return aim === 'near' ? near : -near;
+}
+
+/**
  * The wing-cross routine: carry the ball to a fixed wide station, put it in
  * on the head of the most advanced teammate, and attack every dropping ball.
  * Three verbs, one station, no reading of the game at all.
@@ -293,7 +352,8 @@ export const WING_STATIONS: Array<[number, number]> = (() => {
 export function winger(
   wing: -1 | 1,
   lateral = WING_LATERAL,
-  depth = WING_DEPTH
+  depth = WING_DEPTH,
+  aim: HeaderAim = 'away'
 ): Policy {
   let think = 0;
   let held: MatchInput = NEUTRAL_INPUT;
@@ -319,9 +379,7 @@ export function winger(
     // `competent` has, verbatim, so the two policies differ in what they do
     // with the ball and not in how they meet it.
     if (!owns && canAirStrike(m, 0, m.controlled)) {
-      const keeper = m.players[1][0];
-      const away = keeper.x <= CENTRE_X ? 1 : -1;
-      held = { x: away, y: Math.sign(goalY - p.y), a: true, b: false, c: false };
+      held = { x: headerAim(m, p, aim), y: Math.sign(goalY - p.y), a: true, b: false, c: false };
       button = 'a';
       pressing = 2;
       return held;

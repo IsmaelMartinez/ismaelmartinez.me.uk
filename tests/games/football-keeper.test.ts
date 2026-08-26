@@ -31,6 +31,7 @@ import {
   diveProgress,
   errorFraction,
   flightTime,
+  heightReach,
   keeperReach,
   keeperSkill,
   parryVelocity,
@@ -44,6 +45,7 @@ import {
 import {
   CENTRE_X,
   GOAL_HALF,
+  GOAL_HEIGHT,
   PITCH_L,
   SIX_DEPTH,
   TEAM_SIZE,
@@ -559,6 +561,93 @@ describe('keeper: parries', () => {
       );
       expect(rates[1], `${label} fades as he gets up`).toBeLessThanOrEqual(rates[0] + 0.02);
     }
+  });
+
+  /**
+   * `KEEPER_JUMP_Z` is a fading reach, not a door, and the 22-to-26 band is a
+   * roll rather than a free goal.
+   *
+   * `keeperPlane` opened with `if (m.ball.z > KEEPER_JUMP_Z) return;` while the
+   * goal test accepts anything under `GOAL_HEIGHT` = 26, so a ball on its way in
+   * between those two heights was resolved not at all. It is not an exotic
+   * cell: `HEADER_Z` lets a header be met as high as 30 and a routine that
+   * presses A at the first frame a cross is meetable takes it at 24 on average,
+   * so this was most of the crossing game rather than an edge of it.
+   *
+   * Two things are pinned here, and the second is the one a re-fix is most
+   * likely to lose. A ball crossing the line inside the band is contested: the
+   * band cell below read 0.907 on all 400 seeds at every height before the fix
+   * and reads 0.087 to 0.242 after it, rising with height because his reach
+   * fades rather than stopping. And a ball that clears his claim *over him* and
+   * drops back inside it before the line costs him nothing at all, because
+   * `heightReach` reads the height at the goal line and not the height over his
+   * own plane: the four cells whose headers land inside his claim are
+   * arithmetically identical at every launch height, which is what an earlier
+   * draft of this fix broke by spending his one roll early at a reduced reach.
+   */
+  it('gives a ball crossing under the bar but over his claim a roll rather than a free goal', () => {
+    // The one launch height in the rig that is still above his claim when it
+    // reaches the line: struck 20 px out, it is over the line before it falls.
+    const inBand = [23, 24, 25].map(ballZ => {
+      let goals = 0;
+      for (let i = 0; i < 400; i++) {
+        const opts = {
+          distance: 20,
+          aim: 1,
+          power: 1,
+          offsetX: 30,
+          ballZ,
+          contact: 'header' as const,
+          rng: seededRandom(i * 7919 + 13)
+        };
+        if (shootAt(opts) === 'goal') goals++;
+      }
+      return goals / 400;
+    });
+    const label = `in-band header: ${inBand.map(r => r.toFixed(3)).join(' / ')}`;
+    for (const rate of inBand) {
+      expect(rate, `${label} is still a roll`).toBeLessThan(0.5);
+      expect(rate, `${label} is still a chance`).toBeGreaterThan(0);
+    }
+    // ...and the higher it crosses the line, the less of him is in the way.
+    expect(inBand[2], `${label} costs him more the higher it is`).toBeGreaterThan(inBand[0]);
+
+    // A header launched above his claim that lands back inside it before the
+    // line is the same shot at every launch height: he tracks it down.
+    for (const [distance, offsetX, aim] of [
+      [12, -55, 0],
+      [25, 0, 1],
+      [45, 55, -1],
+      [78, 0, 0.5]
+    ] as Array<[number, number, number]>) {
+      const rates = [0, 22, 25].map(ballZ => {
+        let goals = 0;
+        for (let i = 0; i < 200; i++) {
+          const opts = {
+            distance,
+            aim,
+            power: 1,
+            offsetX,
+            ballZ,
+            contact: 'header' as const,
+            rng: seededRandom(i * 7919 + 13)
+          };
+          if (shootAt(opts) === 'goal') goals++;
+        }
+        return goals / 200;
+      });
+      expect(rates[2], `${distance} px, offset ${offsetX}: lands inside his claim`).toBe(rates[1]);
+    }
+  });
+
+  it('keeps the whole of his reach at or below his claim and none of it at the bar', () => {
+    expect(heightReach(0)).toBe(1);
+    expect(heightReach(KEEPER_JUMP_Z)).toBe(1);
+    expect(heightReach(GOAL_HEIGHT)).toBe(0);
+    expect(heightReach(GOAL_HEIGHT + 20)).toBe(0);
+    // ...and a straight line between the two, so no height is a cliff.
+    const half = (KEEPER_JUMP_Z + GOAL_HEIGHT) / 2;
+    expect(heightReach(half)).toBeCloseTo(0.5, 10);
   });
 });
 

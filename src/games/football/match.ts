@@ -45,6 +45,7 @@ import {
   approachGap,
   commitDive,
   flightTime,
+  heightReach,
   keeperReach,
   keeperSkill,
   parryVelocity,
@@ -1507,7 +1508,19 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
   // about that shot rather than about where it ended up.
   const inside = relNow <= relKeeper && relPrev > 0 && m.ball.vy * dir < 0;
   if (!(crossing || (inside && !gk.contested))) return;
-  if (m.ball.z > KEEPER_JUMP_Z) return;
+  // How high the ball will be when it reaches the goal line, which is both the
+  // height that decides whether it is a goal at all and the height he has to
+  // beat. It is *not* the height over his own plane, and the difference is the
+  // whole of this fix: a ball that clears his claim going over him and drops
+  // into his hands before the line has not beaten him, and reading his own
+  // plane would charge him for it. Above the bar at the line it is not going in
+  // and he is not consulted, because `SAVE_FLOOR` would otherwise credit him
+  // with saving shots flying over.
+  const toLine = Math.abs(m.ball.y - goalY);
+  const closing = Math.abs(m.ball.vy);
+  const lineT = closing > 1e-6 ? toLine / closing : 0;
+  const lineZ = Math.max(0, m.ball.z + m.ball.vz * lineT - (GRAVITY * lineT * lineT) / 2);
+  if (lineZ >= GOAL_HEIGHT) return;
 
   const speed = Math.hypot(m.ball.vx, m.ball.vy);
   if (speed < 40) return;
@@ -1534,7 +1547,12 @@ function keeperPlane(m: MatchState, side: Side, prevY: number, events: MatchEven
   // audit's second exactly-100 % cell: 1,175 follow-ups inside the lock, 1,175
   // goals. See `PARRY_LOCK`. He is handicapped, not absent.
   const down = clamp(gk.parryLock / PARRY_LOCK, 0, 1);
-  const reach = REACH_BODY + (standing - REACH_BODY) * (1 - down);
+  // ...and a ball crossing the line above his standing claim is one he is
+  // stretching for, so what he has left of that reach falls off with height
+  // rather than the whole roll being skipped. `heightReach` is exactly 1 at or
+  // below `KEEPER_JUMP_Z`, so every ball that lands inside his claim, and every
+  // ball struck off the deck, is arithmetically unchanged.
+  const reach = (REACH_BODY + (standing - REACH_BODY) * (1 - down)) * heightReach(lineZ);
   // The desperation floor applies only to a ball that is actually going in:
   // he is never credited with saving one that was missing the goal anyway.
   const inFrame = Math.abs(m.ball.x - CENTRE_X) < GOAL_HALF;

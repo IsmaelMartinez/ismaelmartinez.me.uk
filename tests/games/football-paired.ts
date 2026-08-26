@@ -16,6 +16,7 @@ import { createMatch, tickMatch, type MatchState } from '../../src/games/footbal
 import { teamByCode, type Team } from '../../src/games/football/teams';
 import { competent, expert, type Policy } from './football-policies';
 import { lcg } from './football-shot-harness';
+import { meanT } from './paired-stats';
 
 export const DT = 1 / 60;
 
@@ -93,14 +94,6 @@ export interface Paired {
   n: number;
   /** The scoreline tail of `a`'s own matches; see `Tail`. */
   tail: Tail;
-}
-
-export function meanT(xs: number[]): { mean: number; t: number } {
-  const mean = xs.reduce((sum, x) => sum + x, 0) / xs.length;
-  const variance =
-    xs.reduce((sum, x) => sum + (x - mean) * (x - mean), 0) / Math.max(1, xs.length - 1);
-  const se = Math.sqrt(variance / xs.length);
-  return { mean, t: se > 0 ? mean / se : 0 };
 }
 
 export function points(m: MatchState): number {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, bunkerColumns, isSolidColumn } from '../../src/games/tanks/terrain';
+import { generateTerrain, surfaceYAt, carveCrater, arenaSolid, bunkerColumns, isSolidColumn, type ArenaType } from '../../src/games/tanks/terrain';
 import {
   launchProjectile,
   stepProjectile,
@@ -14,19 +14,33 @@ import {
   createScoreLedger,
   submitsToBoard,
   DIRECT_HIT_POINTS,
-  ROUND_WIN_POINTS
+  ROUND_WIN_POINTS,
+  type TankMode
 } from '../../src/games/tanks/scoring';
 import {
   chooseAiShot,
   cpuDifficulty,
   cpuPickWeapon,
-  DIFFICULTY_BASE
+  DIFFICULTY_BASE,
+  type Difficulty
 } from '../../src/games/tanks/ai';
 import { WEAPONS, WEAPON_IDS, freshAmmo, splitCluster } from '../../src/games/tanks/weapons';
+import {
+  createMatch,
+  resetMatch,
+  startRound,
+  tickMatch,
+  fire,
+  isHumanTurn,
+  WIDTH,
+  HEIGHT,
+  WINS_PER_MATCH,
+  TANK_H,
+  type MatchEvent,
+  type MatchState
+} from '../../src/games/tanks/match';
 import { seededRandom } from './seeded-random';
-
-const WIDTH = 800;
-const HEIGHT = 450;
+import { meanT } from './paired-stats';
 
 describe('terrain', () => {
   it('generates one height per column within bounds', () => {
@@ -620,5 +634,243 @@ describe('weapons', () => {
       expect(part.y).toBe(p.y);
       expect(part.vy).toBe(p.vy);
     }
+  });
+});
+
+describe('headless playthrough (seeded, deterministic)', () => {
+  /**
+   * A shot chooser: it sets the current tank's angle, power and shell, and the
+   * harness pulls the trigger. `rng` is the policy's own stream, kept apart
+   * from the match's so that two policies compared on one seed open on the
+   * same terrain, spawns, wind and first turn.
+   */
+  type Gunner = (m: MatchState, rng: () => number) => void;
+
+  /**
+   * The competent player: the same grid search over the real ballistics the
+   * CPU aims with, at near-perfect accuracy and on the unlimited missile. An
+   * oracle rather than an optimum — it never reads the arena, never spends a
+   * special and never lays up — which is what makes it a usable answer to
+   * "can this cabinet be played at all".
+   */
+  const competent: Gunner = (m, rng) => {
+    const me = m.tanks[m.current];
+    const foe = m.tanks[m.current === 0 ? 1 : 0];
+    const shot = chooseAiShot(
+      m.ground,
+      WIDTH,
+      HEIGHT,
+      { x: me.x, y: me.y - TANK_H },
+      { x: foe.x, y: foe.y },
+      m.wind,
+      0.9,
+      rng
+    );
+    me.angle = shot.angle;
+    me.power = shot.power;
+    me.weapon = 'missile';
+  };
+
+  /** One repeated input: the same lob every turn, wind and terrain be damned. */
+  const oneNote: Gunner = m => {
+    const me = m.tanks[m.current];
+    me.angle = m.current === 0 ? 45 : 135;
+    me.power = 60;
+    me.weapon = 'missile';
+  };
+
+  /** A legal shot picked at random every turn. */
+  const scattergun: Gunner = (m, rng) => {
+    const me = m.tanks[m.current];
+    me.angle = 5 + rng() * 170;
+    me.power = 10 + rng() * 90;
+    me.weapon = 'missile';
+  };
+
+  const DT = 1 / 60;
+  /**
+   * The runaway guard. A plain literal on purpose: derive it from
+   * WINS_PER_MATCH, CPU_THINK_TIME or EXPLOSION_TIME and it moves whenever the
+   * thing it is guarding moves, which is how a harness ends up unable to fail
+   * (issue #260). At 1/60 s a tick this is a quarter of an hour of play,
+   * against observed matches of a few thousand ticks.
+   */
+  const TICK_CAP = 50000;
+
+  interface Played {
+    match: MatchState;
+    events: MatchEvent[];
+    ticks: number;
+    /** Whether a match end was actually reached, rather than the cap hit. */
+    finished: boolean;
+    /** What the cabinet would put on the board: player 0's running total. */
+    score: number;
+  }
+
+  /**
+   * Plays one seeded match to its end through the real match module, driving
+   * every human turn from `gunner` and taking the Next Round button between
+   * rounds exactly as a player does.
+   */
+  function playMatch(
+    gunner: Gunner,
+    options: { seed: number; difficulty?: Difficulty; arena?: ArenaType; mode?: TankMode }
+  ): Played {
+    const { seed, difficulty = 'gunner', arena = 'hills', mode = 'cpu' } = options;
+    const events: MatchEvent[] = [];
+    let finished = false;
+    const m = createMatch({
+      difficulty,
+      arena,
+      random: seededRandom(seed),
+      onEvent: event => {
+        events.push(event);
+        if (event.type === 'roundOver' && event.matchOver) finished = true;
+      }
+    });
+    // The policy's own stream, so its draws never perturb the match's.
+    const rng = seededRandom(seed * 7919 + 1);
+    resetMatch(m, mode);
+    startRound(m);
+    let ticks = 0;
+    while (ticks < TICK_CAP && !finished) {
+      if (m.phase === 'round-over') startRound(m);
+      else if (isHumanTurn(m)) {
+        gunner(m, rng);
+        fire(m);
+      }
+      tickMatch(m, DT);
+      ticks++;
+    }
+    return { match: m, events, ticks, finished, score: m.ledger.total(0) };
+  }
+
+  /** Every gold "+NN" the event stream floated over a given tank. */
+  function awardsSeen(events: MatchEvent[], player: number): number {
+    let total = 0;
+    for (const event of events) {
+      if (event.type === 'damage' && event.shooter === player) total += event.points;
+      else if (event.type === 'directHit' && event.shooter === player) total += event.points;
+      else if (event.type === 'roundOver') {
+        for (const award of event.awards) if (award.player === player) total += award.points;
+      }
+    }
+    return total;
+  }
+
+  it('plays a vs-CPU match through to a result and submits what the player watched land', () => {
+    const played = playMatch(competent, { seed: 7 });
+
+    // The match ended on its own, and the guard that knows nothing about it was
+    // never in the running: a match is a few thousand ticks, not the quarter of
+    // an hour the cap allows, so the cap stays a backstop rather than becoming
+    // the thing that ends a run.
+    expect(played.finished).toBe(true);
+    expect(played.ticks, `${played.ticks} ticks`).toBeLessThan(TICK_CAP / 2);
+
+    // A best-of-five ends the moment somebody reaches three, once.
+    const finals = played.events.filter(e => e.type === 'roundOver' && e.matchOver);
+    expect(finals).toHaveLength(1);
+    expect(Math.max(...played.match.wins)).toBe(WINS_PER_MATCH);
+    expect(played.match.phase).toBe('round-over');
+
+    // The number the overlay shows and submits is the running total, and that
+    // total is exactly the gains that floated over the player's own tank —
+    // re-derived from the event stream the cabinet renders, not read off the
+    // ledger a second time.
+    expect(played.score).toBe(awardsSeen(played.events, 0));
+    expect(played.score).toBeGreaterThan(0);
+    // And it is a vs-CPU run, so it reaches the shared board.
+    expect(submitsToBoard(played.match.mode)).toBe(true);
+  });
+
+  it('leaves every arena playable: a competent gunner finishes and scores on all five', () => {
+    const arenas: ArenaType[] = ['hills', 'canyon', 'mesa', 'ridges', 'bunker'];
+    for (const arena of arenas) {
+      const played = playMatch(competent, { seed: 31, arena });
+      expect(played.finished, `${arena} never resolved`).toBe(true);
+      expect(played.score, `${arena} scored nothing`).toBeGreaterThan(0);
+      expect(played.score).toBe(awardsSeen(played.events, 0));
+    }
+  });
+
+  it('finishes and puts a number on the board at every difficulty tier', () => {
+    const tiers: Difficulty[] = ['rookie', 'gunner', 'veteran'];
+    for (const difficulty of tiers) {
+      const played = playMatch(competent, { seed: 91, difficulty });
+      expect(played.finished, `${difficulty} never resolved`).toBe(true);
+      expect(played.score, `${difficulty} scored nothing`).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * The competent control plays the same seeds in both comparisons below, so
+   * its half of each pairing is played once and remembered — the same saving
+   * the football harness makes, and worth making here because a competent
+   * match is the expensive one (both sides run the full shot search).
+   */
+  const controlScores = new Map<number, number>();
+  function controlScore(seed: number): number {
+    const seen = controlScores.get(seed);
+    if (seen !== undefined) return seen;
+    const score = playMatch(competent, { seed }).score;
+    controlScores.set(seed, score);
+    return score;
+  }
+
+  /**
+   * A paired common-random-numbers comparison against the competent control:
+   * both play the same seed, so the terrain, the spawns, the opening wind and
+   * who shoots first are shared and only the shooting differs. `meanT` is
+   * borrowed from the football harness rather than copied, because two
+   * implementations of the statistic is how two suites end up disagreeing
+   * about whether an effect is real.
+   */
+  function pairedAgainstCompetent(
+    challenger: Gunner,
+    n: number,
+    seed0 = 5
+  ): { mean: number; t: number } {
+    const diffs: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const seed = seed0 + i * 7919;
+      diffs.push(controlScore(seed) - playMatch(challenger, { seed }).score);
+    }
+    return meanT(diffs);
+  }
+
+  it('out-scores a one-note gunner, on matched seeds with a reported t', () => {
+    const paired = pairedAgainstCompetent(oneNote, 12);
+    const line = `competent - oneNote: ${paired.mean.toFixed(1)} points (t=${paired.t.toFixed(2)})`;
+    expect(paired.mean, line).toBeGreaterThan(0);
+    expect(paired.t, line).toBeGreaterThan(2);
+  });
+
+  it('out-scores a random gunner, on matched seeds with a reported t', () => {
+    const paired = pairedAgainstCompetent(scattergun, 12);
+    const line = `competent - scattergun: ${paired.mean.toFixed(1)} points (t=${paired.t.toFixed(2)})`;
+    expect(paired.mean, line).toBeGreaterThan(0);
+    expect(paired.t, line).toBeGreaterThan(2);
+  });
+
+  it('scores a two-player match the same way and still keeps it off the board', () => {
+    const played = playMatch(competent, { seed: 7, mode: '2p' });
+    expect(played.finished).toBe(true);
+    // Both tanks are driven from the one keyboard, so both totals grow...
+    expect(played.match.ledger.total(0)).toBeGreaterThan(0);
+    expect(played.match.ledger.total(1)).toBeGreaterThan(0);
+    expect(played.match.ledger.total(0)).toBe(awardsSeen(played.events, 0));
+    expect(played.match.ledger.total(1)).toBe(awardsSeen(played.events, 1));
+    // ...and neither reaches the shared board. Load-bearing: do not widen.
+    expect(submitsToBoard(played.match.mode)).toBe(false);
+  });
+
+  it('replays a seed exactly, and a different seed differently', () => {
+    const a = playMatch(competent, { seed: 404 });
+    const b = playMatch(competent, { seed: 404 });
+    const c = playMatch(competent, { seed: 405 });
+    expect(b.score).toBe(a.score);
+    expect(b.ticks).toBe(a.ticks);
+    expect([c.score, c.ticks]).not.toEqual([a.score, a.ticks]);
   });
 });

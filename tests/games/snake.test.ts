@@ -283,6 +283,67 @@ describe('bonus apples', () => {
     expect(state.bonus).toBeNull();
   });
 
+  /*
+   * The board's widest Manhattan span is 38 cells and the bonus only lives for
+   * BONUS_TICKS, so a uniform pick over every free cell dangled a prize the
+   * snake could not physically reach on about one spawn in a hundred (issue
+   * #271). The bound is `<=`, not `<`: `step` checks the eat before it spends
+   * the tick, so a bonus exactly BONUS_TICKS away is still edible.
+   */
+  it('never spawns a bonus further away than its clock allows', () => {
+    let spawns = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const random = seededRandom(seed);
+      const state = createSnakeState(random);
+      for (let n = 0; n < BONUS_EVERY * 8 && state.alive; n++) {
+        eatSafely(state, random);
+        // A bonus on full ticks is one this step just placed; anything older
+        // has been counted down at least once.
+        if (!state.bonus || state.bonus.ticksLeft !== BONUS_TICKS) continue;
+        spawns++;
+        const head = state.snake[0];
+        const distance =
+          Math.abs(state.bonus.pos.x - head.x) + Math.abs(state.bonus.pos.y - head.y);
+        expect(distance).toBeLessThanOrEqual(BONUS_TICKS);
+        // Clearing it re-arms the spawn: this test eats an apple every step,
+        // so a bonus left standing would block every later spawn on its clock.
+        state.bonus = null;
+      }
+    }
+    // Guards the assertion above against passing on an empty loop.
+    expect(spawns).toBeGreaterThan(20);
+  });
+
+  it('still places a bonus when nothing at all is within reach', () => {
+    const random = seededRandom(9);
+    const state = createSnakeState(random);
+    // Corner the snake, then wall off every cell the clock could reach from
+    // where the head is about to land. The only free cells left are far ones,
+    // and a distant bonus still beats no bonus at all.
+    state.snake = [
+      { x: 0, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: 2 }
+    ];
+    state.direction = { x: 1, y: 0 };
+    state.foodsEaten = BONUS_EVERY - 1;
+    state.food = { x: 1, y: 0 };
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (Math.abs(x - 1) + y > BONUS_TICKS) continue;
+        if (x === 1 && y === 0) continue;
+        if (state.snake.some(sq => sq.x === x && sq.y === y)) continue;
+        state.walls.add(cellIndex(x, y));
+      }
+    }
+
+    expect(step(state, random)).toBe('ate');
+    expect(state.bonus).not.toBeNull();
+    const head = state.snake[0];
+    expect(Math.abs(state.bonus!.pos.x - head.x) + Math.abs(state.bonus!.pos.y - head.y))
+      .toBeGreaterThan(BONUS_TICKS);
+  });
+
   it('awards bonus points when collected', () => {
     const random = seededRandom(3);
     const state = createSnakeState(random);

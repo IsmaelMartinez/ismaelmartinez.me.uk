@@ -88,7 +88,11 @@ export const BASH_WIDTH = 4;
 export const BUILD_INTERVAL = 6; // ticks between builder treads
 export const BUILD_BRICKS = 12;
 export const BRICK_WIDTH = 6;
-export const BASH_PATIENCE = 6; // steps a basher walks toward a wall before giving up
+// A basher assigned this far short of a wall still walks into it and connects. The
+// guard below is `stall > BASH_PATIENCE`, so one more step than this is taken before
+// the basher reverts to a walker, which makes the corridor the player has to click
+// inside BASH_PATIENCE + 1 px wide (6 gave a 7px window, barely 117ms of walking).
+export const BASH_PATIENCE = 12; // stalled steps a basher tolerates before giving up
 export const BOMBER_FUSE = 150; // ticks (2.5s @ 60Hz) from lighting the fuse to the blast
 
 export function createCritter(id: number, x: number, y: number, dir: 1 | -1 = 1): Critter {

@@ -527,8 +527,12 @@ export function initSnakeGame(): void {
   const gameKeys = new Set(Object.keys(KEY_DIRECTIONS));
 
   const onKeydown = (e: KeyboardEvent) => {
-    if (gameKeys.has(e.key)) e.preventDefault();
+    // Below the phase guard on purpose: this listener is document-wide, so
+    // swallowing arrows and WASD before it would leave a visitor unable to
+    // scroll the page from the idle or game-over screen (issue #271). Typing
+    // initials is unaffected either way — the input stops propagation.
     if (phase !== 'play') return;
+    if (gameKeys.has(e.key)) e.preventDefault();
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
       paused = !paused;
       return;

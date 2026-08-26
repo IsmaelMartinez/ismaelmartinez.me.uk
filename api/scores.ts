@@ -108,7 +108,13 @@ const ALLOWED_ORIGINS = [
  */
 export const MAX_TOP = 10;
 const MAX_BODY_CHARS = 1024;
-const MAX_SCORE = 10_000_000;
+/**
+ * The submission ceiling. Exported for the same reason `MAX_TOP` is: the
+ * client duplicates it (`globalScores.ts`) so it can tell a player their run
+ * is off the scale rather than relaying this endpoint's 400 as a generic
+ * "not saved", and a test holds the two in step.
+ */
+export const MAX_SCORE = 10_000_000;
 const INITIALS = /^[A-Z0-9]{1,3}$/;
 
 /**

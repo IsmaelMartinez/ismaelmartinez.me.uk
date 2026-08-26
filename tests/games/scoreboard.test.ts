@@ -6,7 +6,8 @@ const TEXT = {
   unavailable: 'World scores unavailable',
   rank: 'World rank #{rank}',
   notSaved: 'Score not saved. Try again later',
-  rateLimited: 'Too many scores submitted. Try again later'
+  rateLimited: 'Too many scores submitted. Try again later',
+  outOfRange: 'Score is off the scale. The board cannot hold it'
 };
 
 const state = (over: Partial<Parameters<typeof worldNoteText>[0]> = {}) => ({
@@ -16,6 +17,7 @@ const state = (over: Partial<Parameters<typeof worldNoteText>[0]> = {}) => ({
   count: 0,
   failed: false,
   rateLimited: false,
+  outOfRange: false,
   ...over
 });
 
@@ -78,6 +80,23 @@ describe('worldNoteText', () => {
     );
     expect(worldNoteText(state({ rateLimited: true, loaded: true, rank: 1, count: 3 }), TEXT)).toBe(
       'Too many scores submitted. Try again later'
+    );
+  });
+
+  /*
+   * The API refuses a score past its ceiling for good, so this one outranks
+   * even the rate limit: "try again later" would send a player to replay an
+   * hour-long run that can never land (issue #271).
+   */
+  it('reports an out-of-range score ahead of every other notice', () => {
+    expect(worldNoteText(state({ outOfRange: true }), TEXT)).toBe(
+      'Score is off the scale. The board cannot hold it'
+    );
+    expect(worldNoteText(state({ outOfRange: true, rateLimited: true, failed: true }), TEXT)).toBe(
+      'Score is off the scale. The board cannot hold it'
+    );
+    expect(worldNoteText(state({ outOfRange: true, loaded: true, rank: 1, count: 3 }), TEXT)).toBe(
+      'Score is off the scale. The board cannot hold it'
     );
   });
 });

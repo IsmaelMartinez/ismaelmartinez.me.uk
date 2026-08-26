@@ -20,8 +20,14 @@ export const CRIME_DECAY_CHANCE = 0.05;
 export const RESIDENTS_PER_LEVEL = 8;
 export const COM_JOBS_PER_LEVEL = 6;
 export const IND_JOBS_PER_LEVEL = 8;
-/** Population at which zones may densify past MAX_LEVEL to DENSE_LEVEL. */
-export const DENSITY_UNLOCK_POP = 600;
+/**
+ * Population at which zones may densify past MAX_LEVEL to DENSE_LEVEL. Sits
+ * midway up the milestone ladder (between the 250 and 400 rungs) so the
+ * reward lands while there is still city left to build with it. It used to be
+ * 600, which was the practical ceiling rather than a mid-game gate — almost
+ * no run ever saw a level-4 block (issue #265).
+ */
+export const DENSITY_UNLOCK_POP = 300;
 /** Densifying needs genuinely hot demand, not a merely positive bar. */
 export const DENSE_DEMAND_MIN = 20;
 

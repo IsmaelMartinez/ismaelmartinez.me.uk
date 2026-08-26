@@ -46,7 +46,10 @@ const PAGE_HTML = `
   <a id="site-nav-link" href="/en/">Home</a>
   <div id="city-root"
        data-t-retired="City Retired"
-       data-t-retired-desc="You called time on a solvent city.">
+       data-t-retired-desc="You called time on a solvent city."
+       data-t-obj-pop="{n} residents"
+       data-t-low-funds="Low funds! The next monthly bill would empty the treasury."
+       data-t-in-the-red="In the red! Balance the books this month or the city goes bankrupt.">
     <span id="money">£2500</span>
     <span id="population">0</span>
     <span id="jobs">0</span>
@@ -88,6 +91,8 @@ const PAGE_HTML = `
       <button class="tool-btn active" data-tool="road"></button>
       <button class="tool-btn" data-tool="res"></button>
       <button class="tool-btn" data-tool="power"></button>
+      <button class="tool-btn" data-tool="park"></button>
+      <button class="tool-btn" data-tool="bulldoze"></button>
     </div>
     <div class="demand-meter">
       <div id="demand-res"></div><div id="demand-com"></div><div id="demand-ind"></div>
@@ -189,6 +194,14 @@ const cancelBtn = () => document.getElementById('retire-cancel') as HTMLButtonEl
 const promptShown = () =>
   (document.getElementById('retire-overlay') as HTMLElement).style.display === 'flex';
 const monthShown = () => document.getElementById('month')!.textContent;
+const objective = () => document.getElementById('objective')!.textContent;
+const toasted = (text: string) =>
+  Array.from(document.querySelectorAll('#toast-area .toast')).some(t =>
+    (t.textContent ?? '').includes(text)
+  );
+
+const LOW_FUNDS = 'Low funds! The next monthly bill would empty the treasury.';
+const IN_THE_RED = 'In the red! Balance the books this month or the city goes bankrupt.';
 
 const navLink = () => document.getElementById('site-nav-link') as HTMLAnchorElement;
 
@@ -241,6 +254,22 @@ function foundCity(): void {
   buildAt('res', 9, 8);
   buildAt('res', 11, 8);
   advance(3);
+}
+
+/**
+ * The #266 opening, near enough: a visitor who spends on plant and parkland
+ * and never builds a tax base. Three surplus power plants and five parks bill
+ * £176 a month against £24 in taxes, leaving £240 in the treasury — so the
+ * books warn at month 2, go into the red at month 3, and end the run at month
+ * 4. That is inside the political grace period (`EVENT_GRACE_MONTHS`, 4), so
+ * no random windfall can rescue the city and change the answer, and inside
+ * the disaster one (8) so nothing burns down either.
+ */
+function overspend(): void {
+  buildAt('power', 14, 7);
+  buildAt('power', 16, 7);
+  buildAt('power', 18, 7);
+  for (let x = 14; x <= 18; x++) buildAt('park', x, 2);
 }
 
 beforeEach(() => {
@@ -327,15 +356,13 @@ describe('Microcity retire control', () => {
       .dispatchEvent(new Event('submit', { cancelable: true }));
     const retiredScore = vi.mocked(submitGlobal).mock.calls[0][2];
 
-    // Same city, same population, run into the ground instead: three more
-    // power plants leave the treasury unable to cover its own upkeep, and it
-    // goes negative at the month-4 books.
+    // Same city, same population, run into the ground instead: the overspend
+    // above leaves the treasury unable to cover its own upkeep, and the run
+    // ends at the month-4 books, one grace month after it went into the red.
     vi.mocked(submitGlobal).mockClear();
     document.getElementById('restart-btn')!.click();
     foundCity();
-    buildAt('power', 14, 7);
-    buildAt('power', 16, 7);
-    buildAt('power', 18, 7);
+    overspend();
     advance(70);
 
     expect(money()).toBeLessThan(0);
@@ -370,6 +397,72 @@ describe('Microcity retire control', () => {
     expect(overlayShown()).toBe(false);
     expect(panel().hidden).toBe(true);
     expect(submitGlobal).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The other end of the run, and the one a first-time visitor actually met
+ * (issue #266): the treasury emptying. Measured over the audit's runs, random
+ * plonking went bankrupt 40 times out of 40 inside a minute and scored zero,
+ * because the loss was instant and silent — the affordability guard refuses to
+ * spend money you do not have, but nothing ever mentioned the money you were
+ * about to owe, and the first negative balance ended the run.
+ *
+ * So these play the ruinous opening through to its end and assert what the
+ * player is told on the way: a warning while the city can still act on it, a
+ * grace month with the run still live, and only then the overlay. The pair
+ * matters — the second test does the one thing the warning is for and the same
+ * city is still standing at the month the first one dies.
+ */
+describe('Microcity solvency warnings (#266)', () => {
+  it('warns, then gives one grace month, before ending the run', () => {
+    foundCity();
+    overspend();
+
+    // Month 2: still solvent, but the bill just charged would take it under.
+    advance(27);
+    expect(monthShown()).toBe('2');
+    expect(money()).toBeGreaterThanOrEqual(0);
+    expect(toasted(LOW_FUNDS)).toBe(true);
+    expect(overlayShown()).toBe(false);
+    // The goal strip is still the goal strip while the city is in the black.
+    expect(objective()).toContain('residents');
+
+    // Month 3: overdrawn. The run does not end here — it is told, in the one
+    // place on the page that says what to do next, and given the month.
+    advance(20);
+    expect(monthShown()).toBe('3');
+    expect(money()).toBeLessThan(0);
+    expect(toasted(IN_THE_RED)).toBe(true);
+    expect(objective()).toBe(IN_THE_RED);
+    expect(overlayShown()).toBe(false);
+    expect(retireBtn().disabled).toBe(false);
+
+    // Month 4: still overdrawn, and now it ends.
+    advance(20);
+    expect(monthShown()).toBe('4');
+    expect(overlayShown()).toBe(true);
+    expect(document.getElementById('over-title')!.textContent).toBe('Bankrupt!');
+  });
+
+  it('warns early enough that acting on it saves the city', () => {
+    foundCity();
+    overspend();
+    advance(27);
+    expect(toasted(LOW_FUNDS)).toBe(true);
+
+    // What the warning is for: bulldoze the three plants the city never needed.
+    // Upkeep drops from £176 to £56 against the same £24 of taxes.
+    buildAt('bulldoze', 14, 7);
+    buildAt('bulldoze', 16, 7);
+    buildAt('bulldoze', 18, 7);
+
+    // Month 4 is where the untouched city above is on the game-over overlay.
+    advance(40);
+    expect(monthShown()).toBe('4');
+    expect(overlayShown()).toBe(false);
+    expect(money()).toBeGreaterThan(0);
+    expect(objective()).toContain('residents');
   });
 });
 

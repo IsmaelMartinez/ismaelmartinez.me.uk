@@ -29,6 +29,16 @@ const SUBMIT_HOSTS = ['ismaelmartinez.me.uk', 'ismaelmartinezmeuk.vercel.app'];
 
 const TIMEOUT_MS = 5000;
 
+/**
+ * The ceiling `api/scores.ts` refuses a score at, duplicated here rather than
+ * imported for the same reason `MAX_ENTRIES` duplicates `MAX_TOP`: importing
+ * across the seam would pull server code into the browser bundle, and a test
+ * holds the two in step. Checked before the POST so the panel can say the
+ * score is off the scale, which is permanent, instead of the API's 400
+ * arriving as the generic "not saved, try again later" (issue #271).
+ */
+export const MAX_SCORE = 10_000_000;
+
 /** The wire shape, kept short because whole boards travel in one response. */
 interface WireEntry {
   i: string;
@@ -71,11 +81,16 @@ function canSubmit(): boolean {
  * cabinet can hit the hourly cap well before ten distinct scores have charted,
  * and telling that player the same "not saved, try again" as a genuine outage
  * would send them refreshing a board that is working exactly as designed.
+ *
+ * `range` is kept apart from `failed` for the mirror-image reason: the API
+ * refuses a score at or above MAX_SCORE for good, so telling that player to
+ * try again later would send them to replay a run that can never land.
  */
 export type SubmitResult =
   | { status: 'ok'; rank: number; table: ScoreEntry[] }
   | { status: 'skipped' }
   | { status: 'limited' }
+  | { status: 'range' }
   | { status: 'failed' };
 
 /**
@@ -133,6 +148,7 @@ export async function submitGlobal(
   score: number
 ): Promise<SubmitResult> {
   if (!canSubmit()) return { status: 'skipped' };
+  if (score >= MAX_SCORE) return { status: 'range' };
   try {
     const res = await fetch(SCORES_ENDPOINT, {
       method: 'POST',

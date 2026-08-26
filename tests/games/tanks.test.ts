@@ -32,6 +32,8 @@ import {
   tickMatch,
   fire,
   isHumanTurn,
+  WIDTH,
+  HEIGHT,
   WINS_PER_MATCH,
   TANK_H,
   type MatchEvent,
@@ -39,9 +41,6 @@ import {
 } from '../../src/games/tanks/match';
 import { seededRandom } from './seeded-random';
 import { meanT } from './football-paired';
-
-const WIDTH = 800;
-const HEIGHT = 450;
 
 describe('terrain', () => {
   it('generates one height per column within bounds', () => {

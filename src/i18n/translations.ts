@@ -127,7 +127,7 @@ export const translations = {
     'fun.lemmings.progress': 'Rescued so far',
     'fun.lemmings.out': 'Out',
     'fun.lemmings.level': 'Level',
-    'fun.lemmings.best': 'Best',
+    'fun.lemmings.cleared': 'Cleared',
     'fun.lemmings.spawnRate': 'Release rate',
     'fun.lemmings.nuke': 'Nuke',
     'fun.lemmings.nukeTitle':
@@ -693,7 +693,7 @@ export const translations = {
     'fun.lemmings.progress': 'Rescatados hasta ahora',
     'fun.lemmings.out': 'En juego',
     'fun.lemmings.level': 'Nivel',
-    'fun.lemmings.best': 'Récord',
+    'fun.lemmings.cleared': 'Superados',
     'fun.lemmings.spawnRate': 'Ritmo de salida',
     'fun.lemmings.nuke': 'Detonar',
     'fun.lemmings.nukeTitle':
@@ -1261,7 +1261,7 @@ export const translations = {
     'fun.lemmings.progress': 'Rescatats fins ara',
     'fun.lemmings.out': 'En joc',
     'fun.lemmings.level': 'Nivell',
-    'fun.lemmings.best': 'Rècord',
+    'fun.lemmings.cleared': 'Superats',
     'fun.lemmings.spawnRate': 'Ritme de sortida',
     'fun.lemmings.nuke': 'Detonar',
     'fun.lemmings.nukeTitle':

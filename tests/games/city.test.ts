@@ -1067,10 +1067,17 @@ describe('city milestone ladder reachability (#265)', () => {
     const tiles = createCity();
     const isRoadCell = (x: number, y: number) => (2 * x + y) % 5 === 0;
     const taken = new Set<number>();
+    /** Places a building at the first free, non-road tile from (x, y)
+     *  rightwards. It steps rather than skipping because four of the service
+     *  buildings below sit on a road cell of the dominating pattern, and a
+     *  fixture that dropped those would quietly under-cover the city it
+     *  claims is maximised while still passing. */
     const place = (x: number, y: number, tool: CityTool) => {
-      if (isRoadCell(x, y) || taken.has(cityIdx(x, y))) return;
-      taken.add(cityIdx(x, y));
-      build(tiles, x, y, tool);
+      let cx = x;
+      while (cx < CITY_W && (isRoadCell(cx, y) || taken.has(cityIdx(cx, y)))) cx++;
+      if (cx >= CITY_W) throw new Error(`no room for a ${tool} on row ${y}`);
+      taken.add(cityIdx(cx, y));
+      build(tiles, cx, y, tool);
     };
     place(7, 7, 'power');
     place(16, 7, 'power');

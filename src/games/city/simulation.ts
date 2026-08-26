@@ -22,7 +22,7 @@ export const COM_JOBS_PER_LEVEL = 6;
 export const IND_JOBS_PER_LEVEL = 8;
 /**
  * Population at which zones may densify past MAX_LEVEL to DENSE_LEVEL. Sits
- * midway up the milestone ladder (between the 250 and 400 rungs) so the
+ * midway up the milestone ladder (between the 250 and 500 rungs) so the
  * reward lands while there is still city left to build with it. It used to be
  * 600, which was the practical ceiling rather than a mid-game gate — almost
  * no run ever saw a level-4 block (issue #265).
@@ -82,16 +82,54 @@ export function cityStats(tiles: CityTile[]): CityStats {
 export type Demand = Record<ZoneType, number>;
 
 /**
+ * Shares of the workforce the two job sides are expected to carry, as a
+ * fraction of the population: three industrial jobs for every two commercial.
+ * **They sum to exactly 1**, which is the same one-job-per-resident that
+ * residential demand asks for below, and that identity is load-bearing rather
+ * than tidy (issue #301).
+ *
+ * They used to be 0.35 and 0.55, summing to 0.9, so a city that had satisfied
+ * both job sides still fell 0.1 jobs per head short of what its residents
+ * wanted: residential demand was bounded by `RES_DEMAND_BASE - 0.1 × pop` and
+ * crossed zero at population 160. Past there no zone of any type could grow,
+ * and the only thing that ever unstuck a city was a disaster knocking
+ * buildings down. Measured over the full loop with real prices and terrain: a
+ * competent full-map build with disasters and politics off peaked at a median
+ * 200, reached that peak in its sixth month, and then sat with zero growth for
+ * 386 of the next 400; with them on the same build reached 1684.
+ *
+ * With the shares summing to 1 no such standstill exists at any size: satisfy
+ * com and ind and total jobs are at least the population, which leaves
+ * residential demand at `RES_DEMAND_BASE` — always positive. The city is then
+ * held back by the things a player controls (land, power, roads, the zoning
+ * mix, schools, congestion, and the bill for all of it) rather than by an
+ * arithmetic ceiling. Any smaller sum only moves the deadlock to
+ * `RES_DEMAND_BASE / (1 - sum)`; any larger one makes residential demand grow
+ * with the city, which runs away.
+ */
+export const COM_JOB_SHARE = 0.4;
+/** The rest of the workforce, 0.6. Derived rather than written out so the sum
+ *  holds by construction: the split is one free parameter and not two, and the
+ *  deadlock above was precisely the two halves drifting apart. */
+export const IND_JOB_SHARE = 1 - COM_JOB_SHARE;
+/**
+ * Households the city has room for beyond the jobs it can offer. Bootstraps a
+ * fresh city off zero, and once the job sides are balanced it is the whole of
+ * residential demand — the steady immigration pressure that keeps a well-run
+ * city growing.
+ */
+export const RES_DEMAND_BASE = 16;
+
+/**
  * Classic coupled RCI demand, clamped to ±50. People move in where there are
- * jobs; shops want customers; industry wants workers. The +16 base keeps a
- * fresh city bootstrappable. `modifier` layers temporary event effects
- * (festivals, strikes…) on top before clamping.
+ * jobs; shops want customers; industry wants workers. `modifier` layers
+ * temporary event effects (festivals, strikes…) on top before clamping.
  */
 export function computeDemand(stats: CityStats, modifier: Partial<Demand> = {}): Demand {
   return {
-    res: clamp(stats.jobs + 16 - stats.population + (modifier.res ?? 0), -50, 50),
-    com: clamp(stats.population * 0.35 - stats.comJobs + (modifier.com ?? 0), -50, 50),
-    ind: clamp(stats.population * 0.55 - stats.indJobs + (modifier.ind ?? 0), -50, 50)
+    res: clamp(stats.jobs + RES_DEMAND_BASE - stats.population + (modifier.res ?? 0), -50, 50),
+    com: clamp(stats.population * COM_JOB_SHARE - stats.comJobs + (modifier.com ?? 0), -50, 50),
+    ind: clamp(stats.population * IND_JOB_SHARE - stats.indJobs + (modifier.ind ?? 0), -50, 50)
   };
 }
 

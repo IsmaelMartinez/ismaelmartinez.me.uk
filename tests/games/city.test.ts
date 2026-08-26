@@ -13,7 +13,9 @@ import {
   buildCost,
   build,
   cityIdx,
-  TOOL_COSTS
+  TOOL_COSTS,
+  type CityTile,
+  type CityTool
 } from '../../src/games/city/tiles';
 import {
   carveRiver,
@@ -44,6 +46,7 @@ import {
 import {
   monthlyIncome,
   monthlyExpenses,
+  solvency,
   SERVICE_COST_PER_CAPITA,
   SERVICE_FREE_ALLOWANCE
 } from '../../src/games/city/budget';
@@ -880,7 +883,10 @@ describe('city police and crime', () => {
     build(tiles, 6, 6, 'road');
     build(tiles, 6, 5, 'res');
     tiles[cityIdx(6, 5)].level = 3;
-    for (let x = 10; x < 15; x++) {
+    // Four backdrop blocks, not five: crime starts at 250 and densification
+    // now unlocks at 300, so the window this fixture has to sit inside is
+    // 50 residents wide.
+    for (let x = 10; x < 14; x++) {
       build(tiles, x, 2, 'res');
       tiles[cityIdx(x, 2)].level = 8;
     }
@@ -1041,5 +1047,126 @@ describe('city milestones', () => {
     }
     expect(MILESTONE_GRANTS.every(g => g > 0)).toBe(true);
     expect(METROPOLIS_INDEX).toBe(POP_MILESTONES.length - 1);
+  });
+});
+
+/**
+ * The ladder used to top out at 2000 and nothing ever reached it (issue #265):
+ * the metropolis grant never paid, the win banner never appeared, and the goal
+ * strip parked forever on a target no city could hit. Monotonicity — all this
+ * suite asserted before — cannot see that, because an unreachable ladder is
+ * perfectly monotonic. So this plays a city instead: the best layout the rules
+ * allow, grown until it stops, with the top rung inside what it reached.
+ */
+describe('city milestone ladder reachability (#265)', () => {
+  /** Roads on a perfect dominating set — `(2x + y) % 5 === 0` puts every
+   *  remaining tile orthogonally beside one — with two plants blanketing the
+   *  grid, schools/police/parks placed for full coverage, and everything else
+   *  zoned. About as well as a city can be laid out under these rules. */
+  function maximisedCity(): CityTile[] {
+    const tiles = createCity();
+    const isRoadCell = (x: number, y: number) => (2 * x + y) % 5 === 0;
+    const taken = new Set<number>();
+    /** Places a building at the first free, non-road tile from (x, y)
+     *  rightwards. It steps rather than skipping because four of the service
+     *  buildings below sit on a road cell of the dominating pattern, and a
+     *  fixture that dropped those would quietly under-cover the city it
+     *  claims is maximised while still passing. */
+    const place = (x: number, y: number, tool: CityTool) => {
+      let cx = x;
+      while (cx < CITY_W && (isRoadCell(cx, y) || taken.has(cityIdx(cx, y)))) cx++;
+      if (cx >= CITY_W) throw new Error(`no room for a ${tool} on row ${y}`);
+      taken.add(cityIdx(cx, y));
+      build(tiles, cx, y, tool);
+    };
+    place(7, 7, 'power');
+    place(16, 7, 'power');
+    for (const [sx, sy] of [
+      [5, 3],
+      [5, 10],
+      [18, 3],
+      [18, 10]
+    ]) {
+      place(sx, sy, 'school');
+      place(sx + 1, sy, 'police');
+    }
+    for (const px of [3, 10, 17, 21]) for (const py of [3, 10]) place(px, py, 'park');
+    for (let y = 0; y < CITY_H; y++)
+      for (let x = 0; x < CITY_W; x++) if (isRoadCell(x, y)) build(tiles, x, y, 'road');
+    let n = 0;
+    for (let y = 0; y < CITY_H; y++)
+      for (let x = 0; x < CITY_W; x++) {
+        if (isRoadCell(x, y) || taken.has(cityIdx(x, y))) continue;
+        // 40 / 25 / 35 residential / commercial / industrial, interleaved so
+        // no quarter of the map is single-use.
+        const r = n++ % 100;
+        place(x, y, r < 40 ? 'res' : r < 65 ? 'com' : 'ind');
+      }
+    return tiles;
+  }
+
+  /** Grows the city until it plateaus, returning its peak population — the
+   *  number this cabinet scores and the ladder is measured against — and the
+   *  highest level any zone reached. */
+  function playOut(seed: number, ticks = 600): { peak: number; densest: number } {
+    const tiles = maximisedCity();
+    const random = seededRandom(seed);
+    let peak = 0;
+    let densest = 0;
+    for (let t = 0; t < ticks; t++) {
+      growthStep(tiles, random, {}, computeCongestion(tiles).map(isCongested));
+      peak = Math.max(peak, cityStats(tiles).population);
+      for (const tile of tiles) {
+        if (tile.type === 'res' || tile.type === 'com' || tile.type === 'ind') {
+          densest = Math.max(densest, tile.level);
+        }
+      }
+    }
+    return { peak, densest };
+  }
+
+  it('lets a maximised city reach the metropolis rung', () => {
+    const top = POP_MILESTONES[METROPOLIS_INDEX];
+    for (const seed of [1, 7919, 15838]) {
+      expect(playOut(seed).peak).toBeGreaterThanOrEqual(top);
+    }
+  });
+
+  it('unlocks high density on the way up rather than at the ceiling', () => {
+    // A mid-game reward has to sit below the win, or the only cities that ever
+    // see a level-4 block are the ones that have already finished.
+    expect(DENSITY_UNLOCK_POP).toBeLessThan(POP_MILESTONES[METROPOLIS_INDEX]);
+    expect(playOut(1).densest).toBe(DENSE_LEVEL);
+  });
+});
+
+/**
+ * Bankruptcy used to be instant and silent: the first negative balance ended
+ * the run, and nothing on screen ever projected the bill that did it (issue
+ * #266). These are the two steps that replaced it.
+ */
+describe('city solvency', () => {
+  it('leaves a city that can pay its way alone', () => {
+    expect(solvency(500, 40, false)).toBe('ok');
+    // Losing money is fine while the treasury can absorb it.
+    expect(solvency(500, -100, false)).toBe('ok');
+  });
+
+  it('warns the month before the treasury cannot cover its own bill', () => {
+    expect(solvency(90, -100, false)).toBe('lowFunds');
+    // Exactly break-even survives, so the warning is about going under.
+    expect(solvency(100, -100, false)).toBe('ok');
+  });
+
+  it('gives one grace month before ending the run', () => {
+    expect(solvency(-10, -100, false)).toBe('grace');
+    expect(solvency(-10, -100, true)).toBe('bankrupt');
+  });
+
+  it('clears the grace when the city climbs back into the black', () => {
+    // Overdrawn last month, solvent this month: the reprieve is spent per
+    // slide, not per run, so the next slide gets its own grace month.
+    expect(solvency(200, 40, true)).toBe('ok');
+    expect(solvency(90, -100, true)).toBe('lowFunds');
   });
 });

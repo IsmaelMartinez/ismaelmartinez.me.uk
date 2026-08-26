@@ -333,6 +333,9 @@ export const translations = {
     'fun.city.quakeAlert': 'Earthquake!',
     'fun.city.crimeAlert': 'Crime is rising. Build a police station!',
     'fun.city.densityUnlocked': 'High-density zoning unlocked!',
+    'fun.city.lowFunds': 'Low funds! The next monthly bill would empty the treasury.',
+    'fun.city.inTheRed':
+      'In the red! Balance the books this month or the city goes bankrupt.',
     'fun.city.newRecord': 'New record population!',
     'fun.city.eventGrant': 'Government grant awarded',
     'fun.city.eventProtest': 'Tax protest at the town hall',
@@ -901,6 +904,9 @@ export const translations = {
     'fun.city.quakeAlert': '¡Terremoto!',
     'fun.city.crimeAlert': 'La delincuencia crece. ¡Construye una comisaría!',
     'fun.city.densityUnlocked': '¡Zonificación de alta densidad desbloqueada!',
+    'fun.city.lowFunds': '¡Fondos bajos! La factura del mes que viene vaciaría las arcas.',
+    'fun.city.inTheRed':
+      '¡Números rojos! Cuadra las cuentas este mes o la ciudad quebrará.',
     'fun.city.newRecord': '¡Nueva población récord!',
     'fun.city.eventGrant': 'Subvención del gobierno',
     'fun.city.eventProtest': 'Protesta contra los impuestos',
@@ -1469,6 +1475,9 @@ export const translations = {
     'fun.city.quakeAlert': 'Terratrèmol!',
     'fun.city.crimeAlert': 'La delinqüència creix. Construeix una comissaria!',
     'fun.city.densityUnlocked': 'Zonificació d\'alta densitat desbloquejada!',
+    'fun.city.lowFunds': 'Fons baixos! La factura del mes vinent buidaria les arques.',
+    'fun.city.inTheRed':
+      'Números vermells! Quadra els comptes aquest mes o la ciutat farà fallida.',
     'fun.city.newRecord': 'Nova població rècord!',
     'fun.city.eventGrant': 'Subvenció del govern',
     'fun.city.eventProtest': 'Protesta contra els impostos',

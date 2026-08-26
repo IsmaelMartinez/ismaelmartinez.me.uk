@@ -54,3 +54,26 @@ export function monthlyExpenses(tiles: CityTile[], stats?: CityStats): number {
   }
   return total;
 }
+
+/** What a month's books mean for the run. */
+export type Solvency = 'ok' | 'lowFunds' | 'grace' | 'bankrupt';
+
+/**
+ * Reads the month's books as a verdict on the run: `money` is the treasury
+ * after they were charged, `cashflow` the income minus expenses just charged
+ * (the closest thing to a projection of next month's, since nothing else
+ * knows what the player is about to build), and `wasOverdrawn` whether the
+ * *previous* books already left the city in the red — its grace month.
+ *
+ * Bankruptcy used to be the first negative balance, unannounced: a first-time
+ * visitor was out inside a minute with no idea which bill did it (issue #266).
+ * So a solvent city whose own cashflow would take it under next month is
+ * warned first, and an overdrawn one gets one grace month to bulldoze what it
+ * cannot pay for or grow its tax base. The run ends only when a second set of
+ * books in a row finds the treasury still empty — and a city that climbs back
+ * into the black clears its grace, so the reprieve is per slide, not per run.
+ */
+export function solvency(money: number, cashflow: number, wasOverdrawn: boolean): Solvency {
+  if (money < 0) return wasOverdrawn ? 'bankrupt' : 'grace';
+  return cashflow < 0 && money + cashflow < 0 ? 'lowFunds' : 'ok';
+}

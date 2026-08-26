@@ -59,7 +59,7 @@ import {
   growthStep,
   DENSITY_UNLOCK_POP
 } from './simulation';
-import { monthlyIncome, monthlyExpenses } from './budget';
+import { monthlyIncome, monthlyExpenses, solvency } from './budget';
 import { targetCarCount, spawnCar, stepCar, computeCongestion, isCongested, type Car } from './traffic';
 import { POP_MILESTONES, MILESTONE_GRANTS, METROPOLIS_INDEX } from './milestones';
 import {
@@ -217,6 +217,9 @@ export function initCityGame(): void {
     quakeAlert: root.dataset.tQuakeAlert || 'Earthquake!',
     crimeAlert: root.dataset.tCrimeAlert || 'Crime is rising. Build a police station!',
     densityUnlocked: root.dataset.tDensityUnlocked || 'High-density zoning unlocked!',
+    lowFunds: root.dataset.tLowFunds || 'Low funds! The next monthly bill would empty the treasury.',
+    inTheRed:
+      root.dataset.tInTheRed || 'In the red! Balance the books this month or the city goes bankrupt.',
     newRecord: root.dataset.tNewRecord || 'New record population!',
     retired: root.dataset.tRetired || 'City Retired',
     retiredDesc:
@@ -272,6 +275,17 @@ export function initCityGame(): void {
   let shake = 0; // seconds of screen shake left (earthquakes)
   let densityToastShown = false;
   let crimeToastShown = false;
+  /**
+   * The treasury went negative at the last month's books and the city is
+   * living on its grace month. The next set of books either finds it solvent
+   * again — this clears — or ends the run.
+   */
+  let inTheRed = false;
+  /** Whether the "next month's bill is bigger than the treasury" warning has
+   *  already been raised for the current slide; cleared once the projection
+   *  says the city survives another month, so it fires on the way in rather
+   *  than every month until the end. */
+  let lowFundsWarned = false;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let sparks: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
@@ -293,6 +307,14 @@ export function initCityGame(): void {
   recordEl.textContent = board.best().toString();
   // Seed the goal strip with the first milestone before the run starts.
   renderObjective();
+
+  /**
+   * Whether the treasury can cover a tool. A *free* tool is never refused: only
+   * bulldoze costs nothing, and the grace month `budget.ts` gives an overdrawn
+   * city is a chance to act only if demolition still works while `money` is
+   * negative (issue #266). Paid tools stay out of reach until the books recover.
+   */
+  const affordable = (cost: number) => cost === 0 || cost <= money;
 
   /** Projects fractional world-tile coordinates through the current rotation. */
   function projectWorld(tx: number, ty: number): { x: number; y: number } {
@@ -331,9 +353,20 @@ export function initCityGame(): void {
     congested = computeCongestion(tiles).map(isCongested);
   }
 
-  /** Paints the goal strip: the next population milestone and progress, or the
-   *  "metropolis" banner once the city is established. */
+  /** Paints the goal strip: the grace month's ultimatum while the treasury is
+   *  overdrawn, otherwise the next population milestone and progress, or the
+   *  "metropolis" banner once the city is established.
+   *
+   *  The overdraft takes the strip because a toast is a 2.4s notice inside a
+   *  20s grace month, and this is the one line on the page that says what the
+   *  player must do next. It is `aria-live="polite"`, which the toast stack
+   *  deliberately is not, so the ultimatum is also the only one of the two a
+   *  screen reader announces. */
   function renderObjective() {
+    if (inTheRed) {
+      if (objectiveEl.textContent !== strings.inTheRed) objectiveEl.textContent = strings.inTheRed;
+      return;
+    }
     if (established || milestoneIdx >= POP_MILESTONES.length) {
       if (objectiveEl.textContent !== strings.established) objectiveEl.textContent = strings.established;
       return;
@@ -361,6 +394,8 @@ export function initCityGame(): void {
     shake = 0;
     densityToastShown = false;
     crimeToastShown = false;
+    inTheRed = false;
+    lowFundsWarned = false;
     board.beginRun();
     activeEvents = [];
     smoke = [];
@@ -643,7 +678,35 @@ export function initCityGame(): void {
         showToast(`${event.emoji} ${strings.events[event.id]}${delta}`);
       }
       refreshDerivedState();
-      if (money < 0) gameOver('bankrupt');
+
+      // The books, read for the run rather than just for the treasury: a
+      // warning while the city can still act on it, then one grace month in
+      // the red before this becomes the terminal state it used to be on the
+      // first negative balance (issue #266). The rule itself is pure — see
+      // budget.ts's `solvency` — so only what the player sees lives here.
+      const verdict = solvency(money, income - expenses, inTheRed);
+      if (verdict === 'bankrupt') {
+        gameOver('bankrupt');
+        return;
+      }
+      const wasInTheRed = inTheRed;
+      inTheRed = verdict === 'grace';
+      if (verdict === 'grace') {
+        showToast(`🚨 ${strings.inTheRed}`);
+        audio.playSfx('hit');
+      } else if (verdict === 'lowFunds') {
+        // Once per slide into danger, not once a month until the end of it.
+        if (!lowFundsWarned) {
+          lowFundsWarned = true;
+          showToast(`⚠️ ${strings.lowFunds}`);
+          audio.playSfx('hit');
+        }
+      } else {
+        lowFundsWarned = false;
+      }
+      // The goal strip carries the ultimatum while the city is overdrawn, so
+      // it has to be repainted at both edges of the grace month.
+      if (wasInTheRed !== inTheRed) renderObjective();
     }
   }
 
@@ -1628,7 +1691,7 @@ export function initCityGame(): void {
       const x = hoverTile % CITY_W;
       const y = Math.floor(hoverTile / CITY_W);
       const v = rotateTile(x, y, CITY_W, CITY_H, rotation);
-      const valid = canBuild(tiles, x, y, selectedTool) && buildCost(tiles, x, y, selectedTool) <= money;
+      const valid = canBuild(tiles, x, y, selectedTool) && affordable(buildCost(tiles, x, y, selectedTool));
       strokeTile(ctx, VIEW, v.x, v.y, valid ? 'rgba(74, 222, 128, 0.9)' : 'rgba(248, 113, 113, 0.9)', 2);
     }
 
@@ -1689,7 +1752,7 @@ export function initCityGame(): void {
     const y = Math.floor(i / CITY_W);
     if (!canBuild(tiles, x, y, selectedTool)) return;
     const cost = buildCost(tiles, x, y, selectedTool);
-    if (cost > money) {
+    if (!affordable(cost)) {
       showToast(strings.cantAfford);
       return;
     }

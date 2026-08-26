@@ -41,7 +41,10 @@ import {
   CRIME_ONSET_POP,
   RESIDENTS_PER_LEVEL,
   DENSITY_UNLOCK_POP,
-  DENSE_DEMAND_MIN
+  DENSE_DEMAND_MIN,
+  COM_JOB_SHARE,
+  IND_JOB_SHARE,
+  RES_DEMAND_BASE
 } from '../../src/games/city/simulation';
 import {
   monthlyIncome,
@@ -1051,63 +1054,82 @@ describe('city milestones', () => {
 });
 
 /**
+ * The best layout the rules allow, as the ordered list of clicks that builds
+ * it: roads on a perfect dominating set — `(2x + y) % 5 === 0` puts every
+ * remaining tile orthogonally beside one — with two plants blanketing the
+ * grid, schools/police/parks placed for full coverage, and everything else
+ * zoned. Service spine first, then zones, which is the order a player follows.
+ *
+ * A plan rather than a finished board because the two suites below need the
+ * same city built two different ways: all at once, and a few tiles at a time
+ * (see the deadlock suite for why the difference matters).
+ */
+function maximisedPlan(): [number, number, CityTool][] {
+  const isRoadCell = (x: number, y: number) => (2 * x + y) % 5 === 0;
+  const taken = new Set<number>();
+  const plan: [number, number, CityTool][] = [];
+  /** Queues a building at the first free, non-road tile from (x, y)
+   *  rightwards. It steps rather than skipping because four of the service
+   *  buildings below sit on a road cell of the dominating pattern, and a
+   *  fixture that dropped those would quietly under-cover the city it
+   *  claims is maximised while still passing. */
+  const place = (x: number, y: number, tool: CityTool) => {
+    let cx = x;
+    while (cx < CITY_W && (isRoadCell(cx, y) || taken.has(cityIdx(cx, y)))) cx++;
+    if (cx >= CITY_W) throw new Error(`no room for a ${tool} on row ${y}`);
+    taken.add(cityIdx(cx, y));
+    plan.push([cx, y, tool]);
+  };
+  place(7, 7, 'power');
+  place(16, 7, 'power');
+  for (const [sx, sy] of [
+    [5, 3],
+    [5, 10],
+    [18, 3],
+    [18, 10]
+  ]) {
+    place(sx, sy, 'school');
+    place(sx + 1, sy, 'police');
+  }
+  for (const px of [3, 10, 17, 21]) for (const py of [3, 10]) place(px, py, 'park');
+  for (let y = 0; y < CITY_H; y++)
+    for (let x = 0; x < CITY_W; x++) if (isRoadCell(x, y)) plan.push([x, y, 'road']);
+  let n = 0;
+  for (let y = 0; y < CITY_H; y++)
+    for (let x = 0; x < CITY_W; x++) {
+      if (isRoadCell(x, y) || taken.has(cityIdx(x, y))) continue;
+      // 40 / 25 / 35 residential / commercial / industrial, interleaved so
+      // no quarter of the map is single-use.
+      const r = n++ % 100;
+      place(x, y, r < 40 ? 'res' : r < 65 ? 'com' : 'ind');
+    }
+  return plan;
+}
+
+/** The whole plan applied at once — a finished city on a fresh board. */
+function maximisedCity(): CityTile[] {
+  const tiles = createCity();
+  for (const [x, y, tool] of maximisedPlan()) build(tiles, x, y, tool);
+  return tiles;
+}
+
+/**
  * The ladder used to top out at 2000 and nothing ever reached it (issue #265):
  * the metropolis grant never paid, the win banner never appeared, and the goal
  * strip parked forever on a target no city could hit. Monotonicity — all this
  * suite asserted before — cannot see that, because an unreachable ladder is
- * perfectly monotonic. So this plays a city instead: the best layout the rules
- * allow, grown until it stops, with the top rung inside what it reached.
+ * perfectly monotonic. So this plays a city instead, with the top rung inside
+ * what it reached.
  */
 describe('city milestone ladder reachability (#265)', () => {
-  /** Roads on a perfect dominating set — `(2x + y) % 5 === 0` puts every
-   *  remaining tile orthogonally beside one — with two plants blanketing the
-   *  grid, schools/police/parks placed for full coverage, and everything else
-   *  zoned. About as well as a city can be laid out under these rules. */
-  function maximisedCity(): CityTile[] {
-    const tiles = createCity();
-    const isRoadCell = (x: number, y: number) => (2 * x + y) % 5 === 0;
-    const taken = new Set<number>();
-    /** Places a building at the first free, non-road tile from (x, y)
-     *  rightwards. It steps rather than skipping because four of the service
-     *  buildings below sit on a road cell of the dominating pattern, and a
-     *  fixture that dropped those would quietly under-cover the city it
-     *  claims is maximised while still passing. */
-    const place = (x: number, y: number, tool: CityTool) => {
-      let cx = x;
-      while (cx < CITY_W && (isRoadCell(cx, y) || taken.has(cityIdx(cx, y)))) cx++;
-      if (cx >= CITY_W) throw new Error(`no room for a ${tool} on row ${y}`);
-      taken.add(cityIdx(cx, y));
-      build(tiles, cx, y, tool);
-    };
-    place(7, 7, 'power');
-    place(16, 7, 'power');
-    for (const [sx, sy] of [
-      [5, 3],
-      [5, 10],
-      [18, 3],
-      [18, 10]
-    ]) {
-      place(sx, sy, 'school');
-      place(sx + 1, sy, 'police');
-    }
-    for (const px of [3, 10, 17, 21]) for (const py of [3, 10]) place(px, py, 'park');
-    for (let y = 0; y < CITY_H; y++)
-      for (let x = 0; x < CITY_W; x++) if (isRoadCell(x, y)) build(tiles, x, y, 'road');
-    let n = 0;
-    for (let y = 0; y < CITY_H; y++)
-      for (let x = 0; x < CITY_W; x++) {
-        if (isRoadCell(x, y) || taken.has(cityIdx(x, y))) continue;
-        // 40 / 25 / 35 residential / commercial / industrial, interleaved so
-        // no quarter of the map is single-use.
-        const r = n++ % 100;
-        place(x, y, r < 40 ? 'res' : r < 65 ? 'com' : 'ind');
-      }
-    return tiles;
-  }
-
-  /** Grows the city until it plateaus, returning its peak population — the
+  /** Grows the maximised city for `ticks`, returning its peak population — the
    *  number this cabinet scores and the ladder is measured against — and the
-   *  highest level any zone reached. */
+   *  highest level any zone reached.
+   *
+   *  The budget is a real one since #301: this board used to stop moving
+   *  around tick 46 and every tick after that was dead weight, while now the
+   *  last rise lands between ticks 307 and 444 across these seeds. 600 ticks
+   *  is a little over half an hour of city time at GROWTH_INTERVAL. */
   function playOut(seed: number, ticks = 600): { peak: number; densest: number } {
     const tiles = maximisedCity();
     const random = seededRandom(seed);
@@ -1137,6 +1159,94 @@ describe('city milestone ladder reachability (#265)', () => {
     // see a level-4 block are the ones that have already finished.
     expect(DENSITY_UNLOCK_POP).toBeLessThan(POP_MILESTONES[METROPOLIS_INDEX]);
     expect(playOut(1).densest).toBe(DENSE_LEVEL);
+  });
+});
+
+/**
+ * The demand model used to deadlock (issue #301). `computeDemand` asked for a
+ * job per resident but only ever aimed to supply 0.9 of one, so past a
+ * population of 160 a city that had satisfied both job sides could not grow,
+ * and nothing of any type grew again for the rest of the run. The only thing
+ * that ever unstuck it was a disaster knocking buildings down, which is a game
+ * growing because it is being destroyed.
+ */
+describe('city demand deadlock (#301)', () => {
+  /** As far as the old model ever got on this board. Its arithmetic fixed
+   *  point sat at 160 people; per-tick overshoot carried the worst of forty
+   *  seeded runs of the full loop to 264, and this fixture — which zones
+   *  faster than a player could afford to, so its quanta overshoot further —
+   *  to 536. The bar below is double that, and the fixed model clears it
+   *  nearly fivefold. */
+  const OLD_CEILING = 536;
+
+  /**
+   * The same maximised layout, laid down the way a player lays it: the service
+   * spine first, then zones three tiles at a time. Incremental zoning is what
+   * makes the deadlock visible — drop the whole board on at once and every
+   * zone develops in lockstep, so population and jobs leap in quanta big
+   * enough to carry the city past the pin before it can settle onto it.
+   */
+  function playWhileZoning(seed: number, ticks = 600): number[] {
+    const tiles = createCity();
+    const zones: [number, number, CityTool][] = [];
+    for (const [x, y, tool] of maximisedPlan()) {
+      if (tool === 'res' || tool === 'com' || tool === 'ind') zones.push([x, y, tool]);
+      else build(tiles, x, y, tool);
+    }
+    const random = seededRandom(seed);
+    const pops: number[] = [];
+    let next = 0;
+    for (let t = 0; t < ticks; t++) {
+      if (t % 4 === 0) {
+        for (let k = 0; k < 3 && next < zones.length; k++, next++) {
+          const [x, y, tool] = zones[next];
+          build(tiles, x, y, tool);
+        }
+      }
+      growthStep(tiles, random, {}, computeCongestion(tiles).map(isCongested));
+      pops.push(cityStats(tiles).population);
+    }
+    return pops;
+  }
+
+  it('leaves a city that has satisfied both job sides still wanting residents', () => {
+    // The deadlock in one line. Commercial and industrial each aim at their
+    // share of the population, so a city that has met both has exactly as many
+    // jobs as people — and residential still wants RES_DEMAND_BASE households
+    // more, at any size. The old shares summed to 0.9, which made that
+    // quantity `16 - 0.1 × population` and turned it negative at 160 people,
+    // from where no zone of any type could grow again.
+    expect(COM_JOB_SHARE + IND_JOB_SHARE).toBeCloseTo(1, 10);
+    for (const population of [160, 250, 600, 1000, 2500]) {
+      const comJobs = population * COM_JOB_SHARE;
+      const indJobs = population * IND_JOB_SHARE;
+      const demand = computeDemand({ population, comJobs, indJobs, jobs: comJobs + indJobs });
+      expect(demand.com).toBeCloseTo(0, 6);
+      expect(demand.ind).toBeCloseTo(0, 6);
+      expect(demand.res).toBeCloseTo(RES_DEMAND_BASE, 6);
+    }
+  });
+
+  it('keeps a city growing with nothing helping it and nothing hitting it', () => {
+    // No disasters, no political events, no grants — just a good layout being
+    // zoned. This used to stop dead: 160 people, then nothing for the rest of
+    // the run however much land was left, and the run's whole score came from
+    // whatever a tornado later shook loose.
+    for (const seed of [1, 7919, 15838]) {
+      const pops = playWhileZoning(seed);
+      expect(Math.max(...pops)).toBeGreaterThan(OLD_CEILING * 2);
+      // And it climbs the whole way rather than lurching once and stopping:
+      // the longest stretch of ticks with no growth, while there is still land
+      // being zoned, stays short. Under the old model it was the rest of the
+      // run.
+      let stall = 0;
+      let longest = 0;
+      for (let t = 1; t < 300; t++) {
+        stall = pops[t] > pops[t - 1] ? 0 : stall + 1;
+        longest = Math.max(longest, stall);
+      }
+      expect(longest).toBeLessThan(120);
+    }
   });
 });
 

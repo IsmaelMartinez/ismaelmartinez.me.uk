@@ -40,7 +40,7 @@ import {
   type MatchState
 } from '../../src/games/tanks/match';
 import { seededRandom } from './seeded-random';
-import { meanT } from './football-paired';
+import { meanT } from './paired-stats';
 
 describe('terrain', () => {
   it('generates one height per column within bounds', () => {

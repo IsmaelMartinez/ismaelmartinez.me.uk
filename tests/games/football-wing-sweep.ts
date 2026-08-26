@@ -19,7 +19,10 @@
  * they were the most expensive assertion in the repo at eight minutes of CI on
  * their own, and Vitest gives a file one worker however many cores are free.
  * The air-goals gate at the bottom of this file is per flank for the same
- * reason, and shares the ladder scan's matches through the same memo.
+ * reason. It does not call the ladder sweep, so it stands on its own if a
+ * `-t` filter runs it alone; what it shares when the file runs whole, which is
+ * how CI runs it, is `outcomeCache`, and the sixteen seeds the ladder scan has
+ * already played are then free to it.
  */
 import { winger, WING_DEPTH, WING_LATERAL, WING_STATIONS } from './football-policies';
 import {
@@ -260,8 +263,10 @@ const AIR_RUNG = 0;
  * 64, 0.19 at 150 and 0.13 at 300. 64 is where the scan's spread drops below the
  * gap between the flank's best station and its third best, which is all the
  * ranking has to resolve, and at 64 the nomination does pick that station first.
- * 16 of those 64 matches are the ladder scan's own and come out of the cache, so
- * the scan costs 48 new matches a station.
+ * 16 of those 64 matches are the ladder scan's own, so when the file runs whole
+ * they are already in `outcomeCache` and the scan costs 48 new matches a
+ * station; run under a `-t` filter on its own it pays for all 64, and measures
+ * the same thing either way.
  */
 const AIR_SCAN = 64;
 

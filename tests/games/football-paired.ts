@@ -61,9 +61,9 @@ export function playMatch(
  * one sentence — 7.2's double-figure cap and 7.4's air-goals ceiling were both
  * measured over a five-entry catalogue whose only wing members were two pinned
  * stations, while the sweeps next door were playing thousands of matches across
- * sixty stations and discarding every scoreline in them. Carrying this costs
- * two integers per match and lets both caps be measured against the grid the
- * sweep explores.
+ * sixty stations and discarding every scoreline in them. Carrying this costs two
+ * more running counters, folded in as each match finishes rather than kept per
+ * match, and lets both caps be measured against the grid the sweep explores.
  */
 export interface Tail {
   matches: number;

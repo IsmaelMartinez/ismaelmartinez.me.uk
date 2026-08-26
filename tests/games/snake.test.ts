@@ -20,6 +20,7 @@ import {
 } from '../../src/games/snake/logic';
 import { bfsFrom } from '../../src/games/engine/pathfind';
 import { seededRandom } from './seeded-random';
+import { meanT } from './paired-stats';
 
 /** Drops the food right in front of the head so the next step eats it. */
 function placeFoodAhead(state: SnakeState) {
@@ -678,5 +679,262 @@ describe('the arena ladder gives warning before a wall sets', () => {
     expect(unwarned).toEqual([]);
     expect(underSnake).toEqual([]);
     expect(sealedTheHeadIn).toEqual([]);
+  });
+});
+
+/**
+ * Issue #260: every cabinet needs at least one test that plays a full run
+ * through the real rules and asserts a player-visible outcome rather than a
+ * mechanical invariant. Snake had a whole-run harness already — the 1,200-run
+ * sweep above — but every assertion in it is about the wall grace, and its
+ * step and rung counters exist only to stop those checks going vacuous. It
+ * never once asked what the run was worth or how it ended.
+ *
+ * The three tests below are the four acceptance criteria the issue names: a
+ * run terminates, a competent policy scores above zero, a degenerate one does
+ * not beat it, and the comparison is paired on common random numbers with its
+ * t-statistic reported in the failure message.
+ */
+describe('headless playthrough (seeded, deterministic)', () => {
+  /**
+   * How long a run is allowed to go on before the harness stops it.
+   *
+   * Deliberately a bare number with no arithmetic in it. The whole defect this
+   * issue exists to eliminate is a harness whose guard is derived from the
+   * thing under test — Critter Rescue resolved its playthroughs on a
+   * `levelTimeLimit` of at most 9,000 against a runaway guard of 12,000, so no
+   * level could ever report "never ended" and every assertion passed
+   * unconditionally. Nothing here may be spelled in terms of `ARENA_EVERY`,
+   * `WALL_GRACE_STEPS`, `BONUS_TICKS` or `stepInterval`: retuning any of those
+   * must be able to move a run against a fixed ceiling.
+   *
+   * At the speed floor of 70 ms a step this is close to twelve minutes of
+   * play, and long enough that the competent policy below reaches its own
+   * ending on 38 of 40 sweep seeds rather than being cut off here.
+   */
+  const STEP_CAP = 10_000;
+
+  /** How a run stopped. `cap` is a valid ending; it is just not the game's. */
+  type Ending = 'died' | 'cap';
+
+  interface Played {
+    state: SnakeState;
+    steps: number;
+    ending: Ending;
+  }
+
+  /** A player: it may buffer a turn each step, and nothing else. */
+  type Policy = (state: SnakeState, roll: () => number) => void;
+
+  /**
+   * The competent player, and the oracle for "is this cabinet survivable".
+   *
+   * Route to the apple with the engine's shared BFS (`pathfind.ts`, the
+   * required channel), take the first step of that route that still leaves the
+   * head a way out, and settle for the roomiest cell when none does. Three
+   * details are what make it play the cabinet rather than a simplified copy of
+   * it:
+   *
+   * - The map it paths over blocks the *whole* snake, not the body minus its
+   *   tail. A route through the cell the tail is vacating is a route through
+   *   the snake's own wake: legal for exactly one step, and a lie for the rest
+   *   of the path. Allowing it walked the bot into a closed ring of its own
+   *   body that it then followed for thousands of steps without ever eating.
+   * - Ghosting cells are treated as wall. That is what the grace is for, and a
+   *   policy that ignored every warning would only ever prove itself careless.
+   * - The way-out test is the head reaching its own tail, *or* opening onto at
+   *   least as much space as the snake is long. Tail reachability alone is
+   *   over-strict — it refuses a perfectly safe move into the open board
+   *   whenever the tail happens to be boxed in by the snake's own turn — and
+   *   the runs it produced stalled short of the ladder's top rung.
+   *
+   * It is competent, not perfect: it dies, which is the point. A policy that
+   * could not be killed would certify a cabinet that had stopped being a game.
+   */
+  function chooseMove(state: SnakeState): Vec | null {
+    const blocked = new Uint8Array(COLS * ROWS);
+    for (const i of state.walls) blocked[i] = 1;
+    for (const i of state.pendingWalls.keys()) blocked[i] = 1;
+    for (const s of state.snake) blocked[cellIndex(s.x, s.y)] = 1;
+
+    const head = state.snake[0];
+    const length = state.snake.length;
+    /** The cell the tail leaves this step, and the one it leaves next. */
+    const last = cellIndex(state.snake[length - 1].x, state.snake[length - 1].y);
+    const secondLast = cellIndex(state.snake[length - 2].x, state.snake[length - 2].y);
+
+    const moves: { d: Vec; cell: number; eats: boolean }[] = [];
+    for (const d of TURNS) {
+      if (d.x === -state.direction.x && d.y === -state.direction.y) continue;
+      const x = head.x + d.x;
+      const y = head.y + d.y;
+      if (x < 0 || x >= COLS || y < 0 || y >= ROWS) continue;
+      const cell = cellIndex(x, y);
+      if (state.walls.has(cell) || state.pendingWalls.has(cell)) continue;
+      const eats = x === state.food.x && y === state.food.y;
+      const body = eats ? state.snake : state.snake.slice(0, -1);
+      if (body.some(s => s.x === x && s.y === y)) continue;
+      moves.push({ d, cell, eats });
+    }
+    if (!moves.length) return null;
+
+    const distancesTo = (goal: Vec) =>
+      bfsFrom(COLS, ROWS, i => !blocked[i], cellIndex(goal.x, goal.y)).dist;
+
+    let target = state.food;
+    let distance = distancesTo(state.food);
+    if (state.bonus) {
+      const toBonus = distancesTo(state.bonus.pos);
+      const nearest = Math.min(...moves.map(m => toBonus[m.cell]).filter(v => v !== -1));
+      // Worth the detour only while it can still be reached before it expires.
+      if (Number.isFinite(nearest) && nearest + 1 < state.bonus.ticksLeft) {
+        target = state.bonus.pos;
+        distance = toBonus;
+      }
+    }
+
+    // Ties break toward the axis with the further to go, so two equal-length
+    // routes cut across the board instead of hugging one edge until the snake
+    // has folded itself into a U it cannot get out of.
+    const dx = Math.abs(target.x - head.x);
+    const dy = Math.abs(target.y - head.y);
+    const offAxis = (d: Vec) => (dy > dx ? (d.y !== 0 ? 0 : 1) : d.x !== 0 ? 0 : 1);
+    const ranked = moves
+      .map(m => ({ ...m, goal: distance[m.cell], off: offAxis(m.d) }))
+      .sort(
+        (a, b) =>
+          (a.goal === -1 ? 1 : 0) - (b.goal === -1 ? 1 : 0) || a.goal - b.goal || a.off - b.off
+      );
+
+    let roomiest: { d: Vec; room: number } | null = null;
+    for (const m of ranked) {
+      // The board as it stands *after* the move: the tail cell is empty, and
+      // on a step that does not grow the snake so is the one behind it, which
+      // is where the tail will be.
+      const freed = m.eats ? [last] : [last, secondLast];
+      for (const cell of freed) blocked[cell] = 0;
+      const { dist } = bfsFrom(COLS, ROWS, i => !blocked[i], m.cell);
+      for (const cell of freed) blocked[cell] = 1;
+
+      let room = 0;
+      for (const v of dist) if (v !== -1) room++;
+      if (dist[m.eats ? last : secondLast] !== -1 || room >= length + (m.eats ? 1 : 0)) {
+        return m.d;
+      }
+      if (!roomiest || room > roomiest.room) roomiest = { d: m.d, room };
+    }
+    return roomiest!.d;
+  }
+
+  const competent: Policy = state => {
+    const d = chooseMove(state);
+    if (d) queueDirection(state, d);
+  };
+
+  /** Press Start and walk away. */
+  const idle: Policy = () => {};
+
+  /** A direction at random every step: the degenerate baseline. */
+  const masher: Policy = (state, roll) => {
+    queueDirection(state, TURNS[Math.floor(roll() * TURNS.length)]);
+  };
+
+  /**
+   * One seeded run. The policy rolls from its own generator so that the game's
+   * stream is spent on the game alone: both arms of a pairing therefore open on
+   * the same board and are served the same apples for as long as their play
+   * agrees, which is the common-random-numbers half of the issue's fourth
+   * criterion.
+   */
+  function playRun(policy: Policy, seed: number): Played {
+    const random = seededRandom(seed);
+    const roll = seededRandom(seed * 31 + 7);
+    const state = createSnakeState(random);
+    let steps = 0;
+    for (; steps < STEP_CAP && state.alive; steps++) {
+      policy(state, roll);
+      step(state, random);
+    }
+    return { state, steps, ending: state.alive ? 'cap' : 'died' };
+  }
+
+  /** Spread wide: consecutive seeds barely move the LCG's first draw. */
+  const seedAt = (n: number) => n * 7919 + 13;
+  const SEEDS = [0, 1, 2, 3, 4, 5].map(seedAt);
+  /** Matched pairs in the policy comparison below. */
+  const PAIRS = 12;
+
+  /** Every cell the ladder claims once the last rung has landed. */
+  const LADDER_CELLS = new Set(ARENA_WALLS.flat()).size;
+
+  it('a competent run walks the ladder to its last rung, banks a score, and ends', { timeout: 60000 }, () => {
+    for (const seed of SEEDS) {
+      const { state, steps, ending } = playRun(competent, seed);
+      const where = `seed ${seed}: ${steps} steps, ${state.foodsEaten} apples, ${state.score} points, ended by ${ending}`;
+
+      // 1. The run terminates, and on these seeds it is the game that ends it
+      //    rather than the harness. Reaching STEP_CAP would be a valid ending
+      //    too; needing it would mean the cabinet had become unloseable.
+      expect(ending, where).toBe('died');
+
+      // 2. It is worth something. The board only ever sees a finished run's
+      //    number, so a cabinet a competent player finishes on nothing is a
+      //    cabinet with no scoreboard.
+      expect(state.score, where).toBeGreaterThan(0);
+      // ...and more than the apples alone pay for, so the timed bonus is
+      // reachable in play and not only in the unit tests that place it by hand.
+      expect(state.score, where).toBeGreaterThan(FOOD_POINTS * state.foodsEaten);
+
+      // 3. The arena ladder is not decoration: the run eats past the last rung
+      //    and every cell it claims is standing by the end.
+      expect(state.foodsEaten, where).toBeGreaterThan(ARENA_EVERY * (ARENA_WALLS.length - 1));
+      expect(state.arena, where).toBe(ARENA_WALLS.length - 1);
+      expect(state.walls.size, where).toBe(LADDER_CELLS);
+    }
+  });
+
+  it('press Start and walk away: the run dies at the far wall with nothing on the board', { timeout: 60000 }, () => {
+    // The idle degenerate, and Line Hold's `an idle run scores nothing` under
+    // another name. Snake gives an idle player no rope at all: the opening
+    // direction is east, so the head runs out of board in the width of it.
+    const openingX = createSnakeState(seededRandom(1)).snake[0].x;
+    for (const seed of SEEDS) {
+      const { state, steps, ending } = playRun(idle, seed);
+      const where = `seed ${seed}`;
+      expect(ending, where).toBe('died');
+      expect(steps, where).toBe(COLS - openingX);
+      // Nothing reaches the board, on these seeds because the opening apple is
+      // never in the lane the head walks down.
+      expect(state.score, where).toBe(0);
+      expect(state.foodsEaten, where).toBe(0);
+    }
+  });
+
+  it('a masher never out-scores a competent player: paired seeds, t reported', { timeout: 60000 }, () => {
+    // The issue's third and fourth criteria. Paired rather than two means: the
+    // arms share a seed, so they open on the same board and are served the same
+    // apples until their play parts, and the difference is per-run rather than
+    // between two averages that each carry their own sampling error.
+    const differences: number[] = [];
+    let worstCompetent = Infinity;
+    let bestMasher = 0;
+    for (let n = 0; n < PAIRS; n++) {
+      const seed = seedAt(n);
+      const good = playRun(competent, seed).state.score;
+      const bad = playRun(masher, seed).state.score;
+      differences.push(good - bad);
+      worstCompetent = Math.min(worstCompetent, good);
+      bestMasher = Math.max(bestMasher, bad);
+    }
+    const { mean, t } = meanT(differences);
+    const detail =
+      `competent - masher: ${mean.toFixed(0)} points (t=${t.toFixed(2)}, n=${PAIRS}), ` +
+      `worst competent ${worstCompetent}, best masher ${bestMasher}`;
+
+    // Not one pairing goes the other way, so the claim is not an average
+    // hiding a cabinet that rewards mashing on some boards.
+    expect(Math.min(...differences), detail).toBeGreaterThan(0);
+    expect(t, detail).toBeGreaterThan(5);
+    expect(worstCompetent, detail).toBeGreaterThan(bestMasher);
   });
 });

@@ -614,10 +614,25 @@ describe('keeper: parries', () => {
 
     // A header launched above his claim that lands back inside it before the
     // line is the same shot at every launch height: he tracks it down.
+    //
+    // The station that used to sit third here was `(45 px, +55, across goal)`,
+    // and it came out when the rig stopped standing him where the game does not
+    // (issue #273, finding 1). `restPosition` withdraws his advance entirely
+    // while the ball is over his head, so the corrected rig has him on his line
+    // rather than 23 px off it, and the ball therefore has 29 px of pitch to
+    // cover to reach him instead of 6. On a flat across-goal header that is long
+    // enough to **land and bounce first** — 141 of 200 seeds at z = 22 and 121 at
+    // z = 25 — and a ball that has bounced has taken `BOUNCE_H` off its pace, so
+    // the two launch heights are two different balls rather than one ball at two
+    // heights. It duly reads 0.1105 against 0.1380, which is 0.47 of a standard
+    // error and no systematic effect at all, but it is not the identity this
+    // assertion is for. `(45 px, +30, across goal)` is the same shot from a
+    // station whose flight still reaches him in the air, and it reads 0.1985 at
+    // both heights.
     for (const [distance, offsetX, aim] of [
       [12, -55, 0],
       [25, 0, 1],
-      [45, 55, -1],
+      [45, 30, -1],
       [78, 0, 0.5]
     ] as Array<[number, number, number]>) {
       const rates = [0, 22, 25].map(ballZ => {

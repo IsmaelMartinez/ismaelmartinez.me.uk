@@ -21,17 +21,44 @@
  */
 import { winger, WING_DEPTH, WING_LATERAL, WING_STATIONS } from './football-policies';
 import {
+  addTail,
+  emptyTail,
   DIFFICULTIES,
   keyed,
   ladderDiff,
   ladderPaired,
   ladderSe,
   pairedAgainst,
-  pairedLine
+  pairedLine,
+  type Tail
 } from './football-paired';
 
 /** Matched pairs per difficulty in the re-measure. */
 const PAIRS = 150;
+
+interface FlankSweep {
+  /** Stations that out-point a scripted human, with their numbers. */
+  beaten: string[];
+  /** Every scoreline the scan played, pooled; see `flankTail`. */
+  tail: Tail;
+}
+
+/**
+ * 7.2's double-figure anti-goal as a rate over the flank's own scan.
+ *
+ * Named for the flank rather than plainly, because this is the third place in
+ * the football suites to state the same anti-goal and the three are not
+ * interchangeable. The **odds** are deliberately one number everywhere — 7.2
+ * makes one claim about the game — and `football-exploits.test.ts` owns it; if
+ * this and that ever disagree, that file is right. The **budget** is a property
+ * of the sample and differs at each site: 9 over `football-balance.test.ts`'s
+ * 4,800 pooled matches, 10 over `football-exploits.test.ts`'s 6,000, and 6 over
+ * a flank's 1,920. Reading a plain `DOUBLE_FIGURE_BUDGET` at a call site and
+ * assuming it is the one next door is exactly the confusion the prefix removes.
+ * The arithmetic behind this one is at `flankTail`.
+ */
+export const FLANK_DOUBLE_FIGURE_ODDS = 2000;
+export const FLANK_DOUBLE_FIGURE_BUDGET = 6;
 
 /**
  * The ceiling a policy comparison has to clear to be called a win for the
@@ -48,9 +75,10 @@ const WING_FINALISTS = 3;
 
 /**
  * The thirty stations of one flank, scanned cheaply, with the strongest
- * re-measured properly against both scripted humans. Returns the ones that
- * out-point a human, so the assertion is an empty array and every failure is
- * reported together with its number.
+ * re-measured properly against both scripted humans. It answers two things off
+ * the one set of matches: the stations that out-point a human, so that
+ * assertion is an empty array and every failure is reported together with its
+ * number, and the scoreline tail of the whole scanned grid — see `flankTail`.
  *
  * The pinned station is kept in the finalist set unconditionally rather than
  * having to earn its place, so that its own number is always on the record
@@ -70,16 +98,22 @@ const WING_FINALISTS = 3;
  * Both opponents are measured, because beating a competent player and beating
  * an expert are different claims and the audit made the second one.
  */
-export function stationsOutPointingAHuman(wing: -1 | 1): string[] {
-  const scan = WING_STATIONS.map(([lateral, depth]) => ({
-    lateral,
-    depth,
-    diff: ladderDiff(
-      DIFFICULTIES.map(d =>
-        pairedAgainst(() => winger(wing, lateral, depth), 'competent', d, WING_SCAN_PAIRS)
+function sweep(wing: -1 | 1): FlankSweep {
+  let tail = emptyTail();
+  const scan = WING_STATIONS.map(([lateral, depth]) => {
+    const rungs = DIFFICULTIES.map(d =>
+      pairedAgainst(
+        keyed(`winger|${wing}|${lateral}|${depth}`, () => winger(wing, lateral, depth)),
+        'competent',
+        d,
+        WING_SCAN_PAIRS
       )
-    )
-  }));
+    );
+    // The station's own scorelines, which the scan has already played and used
+    // to be throwing away. See `Tail` and `flankTail` below.
+    for (const rung of rungs) tail = addTail(tail, rung.tail);
+    return { lateral, depth, diff: ladderDiff(rungs) };
+  });
   const finalists = scan.slice().sort((a, b) => b.diff - a.diff).slice(0, WING_FINALISTS);
   // ...plus the station this suite used to pin, always, so the round's
   // diagnosis stays legible in the output.
@@ -104,5 +138,58 @@ export function stationsOutPointingAHuman(wing: -1 | 1): string[] {
       );
     }
   }
-  return beaten;
+  return { beaten, tail };
+}
+
+/**
+ * One sweep per flank, memoised, because the flank's two contracts are read off
+ * the same thirty stations and playing them twice would double the most
+ * expensive assertion in the repo.
+ */
+const sweeps = new Map<-1 | 1, FlankSweep>();
+
+function flankSweep(wing: -1 | 1): FlankSweep {
+  const hit = sweeps.get(wing);
+  if (hit) return hit;
+  const fresh = sweep(wing);
+  sweeps.set(wing, fresh);
+  return fresh;
+}
+
+export function stationsOutPointingAHuman(wing: -1 | 1): string[] {
+  return flankSweep(wing).beaten;
+}
+
+/**
+ * The flank's scoreline tail, pooled over the **scanned grid** rather than over
+ * a pinned station.
+ *
+ * Issue #273's finding 4: 7.2's double-figure cap is measured in two places and
+ * both of them ask a catalogue rather than a grid. `football-balance.test.ts`
+ * pools four named policies; `football-exploits.test.ts` pools a five-entry
+ * `MIXED` whose only wing members are the two hard-coded `WING_REPS`. The audit
+ * that filed the issue found four offending stations at 1 in 150 matches apiece
+ * and **not one of them was a catalogued policy** — worse, two of the four carry
+ * negative ladder margins, so no finalist selection made on points would ever
+ * promote them into the catalogue either.
+ *
+ * The fix is to stop selecting at all for this cap. The scan already plays every
+ * station on the flank, so the tail is pooled over all thirty of them and costs
+ * nothing beyond one integer per match: 30 stations x 4 rungs x
+ * `WING_SCAN_PAIRS` = 1,920 seeded matches per flank, against 300 for one
+ * catalogued station at one rung.
+ *
+ * What that buys and what it does not. The claim is the same one both other
+ * files make — a double-figure scoreline stays rarer than one match in
+ * `DOUBLE_FIGURE_ODDS` — so a flank sitting exactly on the cap expects
+ * `lambda` = 1920 / 2000 = 0.96 of them, counts of a rare event over a fixed
+ * sample are Poisson to well inside the precision that matters, and
+ * P(X > 6 | lambda = 0.96) = 0.021 %, so `DOUBLE_FIGURE_BUDGET` = 6 fails a
+ * build that is exactly on the cap about once in five thousand runs. At 64
+ * matches per station the sample cannot resolve a *single* station at 1 in 150 —
+ * that is 0.4 expected — but four such stations are 1.7, and the audit found
+ * four. What it can no longer do is miss them because they were not in a list.
+ */
+export function flankTail(wing: -1 | 1): Tail {
+  return flankSweep(wing).tail;
 }

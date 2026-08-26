@@ -52,6 +52,38 @@ export function playMatch(
   return { match: m, seconds: ticks * DT };
 }
 
+/**
+ * The scoreline tail of one contender's own half of a set of pairings.
+ *
+ * It rides on `Paired` because the matches have already been played and thrown
+ * away: a comparison reduces each of them to two numbers and the scoreline is
+ * not one of them. That is issue #273's finding 4 in one sentence — 7.2's
+ * double-figure cap was pooled over four named policies and a five-entry
+ * catalogue whose only wing members were two pinned stations, while the sweeps
+ * next door were playing thousands of matches across sixty stations and
+ * discarding every scoreline in them. Carrying the tail costs one integer per
+ * match and lets the cap be measured against the grid the sweep explores.
+ */
+export interface Tail {
+  matches: number;
+  /** Matches in which either side reached ten. */
+  doubleFigures: number;
+  /** The biggest single-side scoreline seen. */
+  biggest: number;
+}
+
+export function emptyTail(): Tail {
+  return { matches: 0, doubleFigures: 0, biggest: 0 };
+}
+
+export function addTail(into: Tail, more: Tail): Tail {
+  return {
+    matches: into.matches + more.matches,
+    doubleFigures: into.doubleFigures + more.doubleFigures,
+    biggest: Math.max(into.biggest, more.biggest)
+  };
+}
+
 export interface Paired {
   /** Mean per-match difference in tournament points (2-1-0). */
   pts: number;
@@ -60,6 +92,8 @@ export interface Paired {
   gd: number;
   gdT: number;
   n: number;
+  /** The scoreline tail of `a`'s own matches; see `Tail`. */
+  tail: Tail;
 }
 
 export function points(m: MatchState): number {
@@ -120,6 +154,12 @@ export function keyed(key: string, make: () => Policy): KeyedPolicy {
 interface Outcome {
   pts: number;
   gd: number;
+  /** The bigger of the two scorelines; see `Tail`. */
+  biggest: number;
+}
+
+function outcome(m: MatchState): Outcome {
+  return { pts: points(m), gd: goalDiff(m), biggest: Math.max(m.score[0], m.score[1]) };
 }
 
 /**
@@ -133,17 +173,13 @@ const outcomeCache = new Map<string, Outcome>();
 function outcomeOf(who: Contender, difficulty: number, seed: number): Outcome {
   const make = typeof who === 'string' ? CONTROLS[who] : typeof who === 'function' ? who : who.make;
   const label = typeof who === 'string' ? who : typeof who === 'function' ? null : who.key;
-  if (label === null) {
-    const m = playMatch(make(), difficulty, seed).match;
-    return { pts: points(m), gd: goalDiff(m) };
-  }
+  if (label === null) return outcome(playMatch(make(), difficulty, seed).match);
   const key = `${label}|${difficulty}|${seed}`;
   const hit = outcomeCache.get(key);
   if (hit) return hit;
-  const m = playMatch(make(), difficulty, seed).match;
-  const outcome = { pts: points(m), gd: goalDiff(m) };
-  outcomeCache.set(key, outcome);
-  return outcome;
+  const fresh = outcome(playMatch(make(), difficulty, seed).match);
+  outcomeCache.set(key, fresh);
+  return fresh;
 }
 
 /** Play `n` matched pairs of `a` against `b` at one difficulty. */
@@ -156,16 +192,20 @@ export function pairedAgainst(
 ): Paired {
   const pts: number[] = [];
   const gds: number[] = [];
+  const tail = emptyTail();
   for (let i = 0; i < n; i++) {
     const seed = seed0 + i * 7919;
     const withIt = outcomeOf(a, difficulty, seed);
     const without = outcomeOf(b, difficulty, seed);
     pts.push(withIt.pts - without.pts);
     gds.push(withIt.gd - without.gd);
+    tail.matches++;
+    if (withIt.biggest >= 10) tail.doubleFigures++;
+    tail.biggest = Math.max(tail.biggest, withIt.biggest);
   }
   const p = meanT(pts);
   const g = meanT(gds);
-  return { pts: p.mean, ptsT: p.t, gd: g.mean, gdT: g.t, n };
+  return { pts: p.mean, ptsT: p.t, gd: g.mean, gdT: g.t, n, tail };
 }
 
 /** The paired difference summed over the ladder, the tournament's currency. */

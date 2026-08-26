@@ -1215,7 +1215,9 @@ describe('city demand deadlock (#301)', () => {
     // jobs as people — and residential still wants RES_DEMAND_BASE households
     // more, at any size. The old shares summed to 0.9, which made that
     // quantity `16 - 0.1 × population` and turned it negative at 160 people,
-    // from where no zone of any type could grow again.
+    // from where no zone of any type could grow again. The industrial share is
+    // derived from the commercial one, so this line is here to catch anyone
+    // replacing that derivation with a second hand-written literal.
     expect(COM_JOB_SHARE + IND_JOB_SHARE).toBeCloseTo(1, 10);
     for (const population of [160, 250, 600, 1000, 2500]) {
       const comJobs = population * COM_JOB_SHARE;

@@ -108,7 +108,10 @@ export type Demand = Record<ZoneType, number>;
  * with the city, which runs away.
  */
 export const COM_JOB_SHARE = 0.4;
-export const IND_JOB_SHARE = 0.6;
+/** The rest of the workforce, 0.6. Derived rather than written out so the sum
+ *  holds by construction: the split is one free parameter and not two, and the
+ *  deadlock above was precisely the two halves drifting apart. */
+export const IND_JOB_SHARE = 1 - COM_JOB_SHARE;
 /**
  * Households the city has room for beyond the jobs it can offer. Bootstraps a
  * fresh city off zero, and once the job sides are balanced it is the whole of

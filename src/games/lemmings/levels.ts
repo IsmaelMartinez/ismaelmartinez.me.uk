@@ -248,7 +248,8 @@ export const LEVELS: LevelDef[] = [
     spawnCount: 12,
     needed: 4,
     stock: { floater: 12, basher: 3, builder: 4, blocker: 3, digger: 2 },
-    par: 3600
+    par: 3600,
+    hint: 'fun.lemmings.hint6'
   },
   // 7 — Hold the Line: the upper shelf ends in a bottomless cliff, so a blocker
   // has to turn the crowd back before they march off it while a digger opens a
@@ -603,27 +604,29 @@ export const LEVELS: LevelDef[] = [
     timeLimit: 5400,
     hint: 'fun.lemmings.hint24'
   },
-  // 25 — Last Stand: the campaign's hardest. Two crowds pour in under a hard
-  // clock, and each side meets its own barrier — the left an earth wall to bash
-  // through, the right a steel stub no fist can dent, so it must be ramped over
-  // — before both converge on the middle door. Everything, at once, on the
-  // clock: the gauntlet's harder twin.
+  // 25 — Last Stand: the campaign's hardest, and the gauntlet's harder twin
+  // rather than its copy. 24 gives each crowd one barrier; here the right crowd
+  // gets two, so the ramp it builds over the steel stub only buys it a walk into
+  // an earth wall it must then bash. Both bashers are spoken for, a builder came
+  // out of the hand, and the clock is tighter than 24's rather than kinder, which
+  // is the whole difference the difficulty tiers claim between the two.
   {
     shapes: [
       { kind: 'rect', x: 0, y: 180, w: 320, h: 20 }, // main floor (feet 179)
       { kind: 'rect', x: 0, y: 140, w: 6, h: 40 }, // left outer wall
       { kind: 'rect', x: 314, y: 140, w: 6, h: 40 }, // right outer wall
       { kind: 'rect', x: 110, y: 150, w: 12, h: 30 }, // left earth wall (bash)
-      { kind: 'rect', x: 200, y: 172, w: 10, h: 8, material: 'steel' } // right steel stub (ramp over)
+      { kind: 'rect', x: 178, y: 150, w: 12, h: 30 }, // right earth wall (bash)
+      { kind: 'rect', x: 214, y: 172, w: 10, h: 8, material: 'steel' } // right steel stub (ramp over)
     ],
     hatch: { x: 30, y: 140, dir: 1 },
     hatch2: { x: 290, y: 140, dir: -1 },
     exit: { x: 160, y: 179 },
     spawnCount: 14,
     needed: 8,
-    stock: { basher: 2, builder: 3, blocker: 2, floater: 2, digger: 1 },
-    par: 4800,
-    timeLimit: 6000,
+    stock: { basher: 2, builder: 2, blocker: 2, floater: 2, digger: 1 },
+    par: 4200,
+    timeLimit: 5100,
     hint: 'fun.lemmings.hint25'
   }
 ];

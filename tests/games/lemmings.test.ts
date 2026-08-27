@@ -441,11 +441,11 @@ describe('levels', () => {
     expect(rightCol).toBeGreaterThan(leftCol);
   });
 
-  it('gives every level from 7 onward a hint key that resolves in every locale', () => {
-    // Levels 7 onward chain skills or twist the rules in non-obvious ways, so
+  it('gives every level from 6 onward a hint key that resolves in every locale', () => {
+    // Levels 6 onward chain skills or twist the rules in non-obvious ways, so
     // each carries a one-line hint. The value is an i18n key, not raw text.
     // Ranging over LEVELS.length keeps this guard covering future batches.
-    for (let index = 6; index < LEVELS.length; index++) {
+    for (let index = 5; index < LEVELS.length; index++) {
       const key = LEVELS[index].hint;
       expect(key, `level ${index + 1} should have a hint`).toBeTruthy();
       if (!key) continue;
@@ -456,8 +456,12 @@ describe('levels', () => {
     }
   });
 
-  it('leaves the introductory levels (1–6) hint-free so their mechanic is discovered', () => {
-    for (let i = 0; i < 6; i++) {
+  it('leaves the single-mechanic levels (1–5) hint-free so each one is discovered', () => {
+    // 6 used to sit inside this rule and does not belong there: it is the act's
+    // finale and the only level in it that chains three skills, which made it the
+    // least-signposted hard level in the game (#267). One mechanic a level is
+    // what earns the silence, and 6 has three.
+    for (let i = 0; i < 5; i++) {
       expect(LEVELS[i].hint, `level ${i + 1} should not have a hint`).toBeUndefined();
     }
   });
@@ -505,6 +509,33 @@ describe('levels', () => {
     expect(tiers[23 - 1]).toBeGreaterThan(earlyMax);
     expect(tiers[24 - 1]).toBeGreaterThan(earlyMax);
     expect(tiers[25 - 1]).toBeGreaterThan(earlyMax);
+  });
+
+  it('never ships the same level twice', () => {
+    // Levels 24 and 25 were once identical in every field that decides what the
+    // player has to do — shapes, both hatches, exit, spawn count, quota and
+    // stock — and differed only in `par` and `timeLimit`, both of which were
+    // *kinder* on 25. So the campaign's capstone was its predecessor with the
+    // clock loosened, while the tier test above asserted a step up. This guard
+    // compares what a level asks of the player and ignores what it pays out, so
+    // a copy-pasted level cannot pass by retiming alone.
+    const asks = (l: (typeof LEVELS)[number]) =>
+      JSON.stringify({
+        shapes: l.shapes,
+        hatch: l.hatch,
+        hatch2: l.hatch2,
+        exit: l.exit,
+        spawnCount: l.spawnCount,
+        needed: l.needed,
+        stock: l.stock
+      });
+    const seen = new Map<string, number>();
+    for (let i = 0; i < LEVELS.length; i++) {
+      const key = asks(LEVELS[i]);
+      const twin = seen.get(key);
+      expect(twin, `level ${i + 1} asks exactly what level ${(twin ?? 0) + 1} asks`).toBeUndefined();
+      seen.set(key, i);
+    }
   });
 
   it('detects a critter standing in the exit', () => {
@@ -1260,7 +1291,58 @@ describe('levels — solvable playthroughs', () => {
     expectCleared(LEVELS[23], outcome);
   });
 
-  it('25: the harder gauntlet — bash left, ramp over the steel right, beat the clock', () => {
+  it('25: the harder gauntlet — the right crowd ramps the steel and then bashes', () => {
+    // What separates 25 from 24: the ramp over the steel stub does not reach the
+    // door, it only drops the right crowd into a pocket behind a second earth
+    // wall. Both bashers are spent, one a side, and the clock is 24's minus 300.
+    let bashedLeft = false;
+    let built = false;
+    let bashedRight = false;
+    const outcome = playLevel(
+      LEVELS[24],
+      ({ critters, assign }) => {
+        if (!bashedLeft) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 104 && c.x <= 108
+          );
+          if (w && assign(w, 'basher')) bashedLeft = true;
+        }
+        if (!built) {
+          // Same ramp maths as 24, carried 14px right with the stub.
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 231 && c.x <= 235
+          );
+          if (w && assign(w, 'builder')) built = true;
+        }
+        if (built && !bashedRight) {
+          // Anyone who came over the ramp is now in the 190–214 pocket walking
+          // at the second wall, well inside the basher's patience.
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 192 && c.x <= 201
+          );
+          if (w && assign(w, 'basher')) bashedRight = true;
+        }
+      },
+      TRICKLE
+    );
+    expectCleared(LEVELS[24], outcome);
+  });
+
+  it('25 needs a third assignment where 24 needs two', () => {
+    // The difficulty tiers claim 25 is a step up from 24. This is that claim as a
+    // measurement rather than an authored number, and it is the claim the old data
+    // could not support, because the two levels were the same level.
+    //
+    // Play 25 with the *shape* of 24's solution — bash the left wall, ramp the
+    // right crowd over the steel — and it falls short, because on 25 the ramp only
+    // drops that crowd into a pocket behind a second earth wall. The ramp window is
+    // read off the level's own steel stub rather than pinned, so this stays a
+    // statement about what the level asks and not about where a rect happens to sit:
+    // give 25 back 24's geometry and the two assignments clear it, and this goes red.
+    const steel = LEVELS[24].shapes.find(sh => sh.kind === 'rect' && sh.material === 'steel');
+    expect(steel, '25 should still field a steel stub for the right crowd').toBeTruthy();
+    const rampFrom = steel!.x + steel!.w - 1 + 8;
+
     let bashed = false;
     let built = false;
     const outcome = playLevel(
@@ -1274,14 +1356,20 @@ describe('levels — solvable playthroughs', () => {
         }
         if (!built) {
           const w = critters.find(
-            c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 217 && c.x <= 221
+            c =>
+              c.state === 'walker' &&
+              c.dir === -1 &&
+              c.y === 179 &&
+              c.x >= rampFrom &&
+              c.x <= rampFrom + 4
           );
           if (w && assign(w, 'builder')) built = true;
         }
       },
       TRICKLE
     );
-    expectCleared(LEVELS[24], outcome);
+    expect(bashed && built, 'both of 24\u2019s assignments should land on 25 too').toBe(true);
+    expect(outcome.saved).toBeLessThan(LEVELS[24].needed);
   });
 });
 

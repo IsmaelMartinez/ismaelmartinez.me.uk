@@ -148,6 +148,7 @@ export function initLemmingsGame(): void {
   const progressFill = document.getElementById('progress-fill');
   const levelNum = el('level-num');
   const bestLevel = el('best-level');
+  const bestScoreEl = el('best-score');
   const levelHint = el('level-hint');
   const stuckHint = el('stuck-hint');
   const skillButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.skill-btn'));
@@ -307,6 +308,10 @@ export function initLemmingsGame(): void {
   let cleared = loadClearedLevels(board.best(), LEVELS.length);
 
   bestLevel.textContent = cleared.toString();
+  // The persisted personal best was banked but never shown (#267). It is read
+  // rather than armed: this cabinet still does not call beginRun, so nothing
+  // here arms the mid-run record toast.
+  bestScoreEl.textContent = board.best().toString();
 
   function blankStock(): Record<Skill, number> {
     return { blocker: 0, digger: 0, basher: 0, builder: 0, floater: 0, bomber: 0 };
@@ -561,7 +566,7 @@ export function initLemmingsGame(): void {
       // Keep the run's points safe even if the tab closes mid-run. This
       // cabinet never calls beginRun, so the record celebration is never armed
       // and banking here cannot fire a mid-run record toast.
-      board.bank(runScore);
+      bestScoreEl.textContent = board.bank(runScore).best.toString();
     }
     const victory = won && last;
     // One outcome chain sets both faces of the result, so emoji and title can

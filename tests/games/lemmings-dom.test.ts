@@ -372,7 +372,8 @@ describe('game loop — no level is ever unescapable', () => {
     levelBonuses({
       saved: num('saved-count'),
       needed: level.needed,
-      spawnCount: level.spawnCount,
+      // Only the speed half is read here, and `lost` does not feed it.
+      lost: 0,
       ticks,
       par: level.par
     }).time;

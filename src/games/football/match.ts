@@ -597,6 +597,11 @@ export interface MatchState {
   prev: { a: boolean; b: boolean; c: boolean };
   cpuThink: number;
   cpuPlan: CarrierPlan | null;
+  /**
+   * Whether the CPU has already been asked to challenge for the ball currently
+   * in the air over its own box. One roll per ball — see `cpuAirStrike`.
+   */
+  cpuAirRolled: boolean;
   knockout: boolean;
   pendingShootout: boolean;
   winner: Side | null;
@@ -710,6 +715,7 @@ export function createMatch(opts: MatchOptions = {}): MatchState {
     prev: { a: false, b: false, c: false },
     cpuThink: 0,
     cpuPlan: null,
+    cpuAirRolled: false,
     knockout: opts.knockout ?? false,
     pendingShootout: false,
     winner: null,
@@ -1298,9 +1304,36 @@ function airStrike(m: MatchState, side: Side, idx: number, aim: number): void {
   // committing late. A ball met off a hoof collects neither — `shoot` charges
   // that one `RUSH_HOOF` instead, which is what keeps the anti-goal in 7.4
   // from being reached by punting the ball forward and running after it.
-  if (m.lastFromCross) m.assist = { side, t: ASSIST_WINDOW };
+  // ...and it has to be *your* side that delivered it. `lastFromCross` only
+  // records that the ball in the air was crossed, not by whom, so heading an
+  // opponent's cross away used to collect the delivered-ball reward for the
+  // side that had nothing to do with delivering it. Nothing exercised that
+  // before `headClear` existed — the only defensive header in the game was the
+  // human pressing A in his own box — but it was already wrong there.
+  if (m.lastFromCross && m.passInFlight === side) m.assist = { side, t: ASSIST_WINDOW };
   m.owner = { side, idx };
   shoot(m, side, contact === 'header' ? 1 : 0.8, aim, contact);
+}
+
+/**
+ * A defensive header: meet the ball in your own box and put it away from goal,
+ * rather than strike it at one four hundred pixels away.
+ *
+ * `airStrike` is not that verb. It goes straight to `shoot`, which always aims
+ * at the striker's attacking goal, and the aerial path has no range split of
+ * the kind the ground path gets at `SHOOT_RANGE` — so a header met in your own
+ * six-yard box is a shot at the far end. This is the aerial half of
+ * `clearUpfield`, and it delegates to it so the two cannot drift: a hoof is
+ * blind, costs the same off-balance recovery, and scatters the more rushed it
+ * is.
+ *
+ * He aims at the touchline he is nearest rather than up the middle, which is
+ * the one piece of judgement a defender is allowed here — clearing a ball
+ * across your own box is the mistake the verb exists to avoid.
+ */
+function headClear(m: MatchState, side: Side, idx: number): void {
+  m.owner = { side, idx };
+  clearUpfield(m, side, 1, m.ball.x <= CENTRE_X ? -1 : 1);
 }
 
 /**
@@ -1966,19 +1999,132 @@ function stepCpuSide(m: MatchState, dt: number): void {
   stepCpuDefence(m, dt);
 }
 
-/** The CPU attacks a cross in its attacking box, the same weapon the human has. */
+/**
+ * How near either goal a ball in the air has to be for the CPU to go up for it.
+ * The attacking half of this is the box it scores headers in; the defending
+ * half is the box it defends them in, and they are the same distance because
+ * they are the same event seen from the two ends.
+ */
+const AIR_BOX = 90;
+
+/**
+ * How often a CPU defender wins a cross delivered into his own box.
+ *
+ * Swept against the two bounds issue #308 is judged on and the one bound that
+ * ruled out every previous attempt at it. The station is the pinned
+ * `(-1, 90, 30)` on the near-post header aim; air goals a match are over 300
+ * matches at d = 0.25 against an `AIR_GOALS_CEILING` of 4.0; the ladder margin
+ * is over `competent` at 150 matched pairs a rung against a `LADDER_CEILING` of
+ * 0.4; and `expert` is 7.2's win-rate floor at d = 0.25, which is 0.800 and had
+ * five matches of slack before any of this:
+ *
+ *   0     4.060 air   +0.727 ladder   expert 0.8167   <- the defect
+ *   0.22  3.237       +0.333 (0.140)  pass
+ *   0.28  3.057       +0.160 (0.145)  pass            <- shipped
+ *   0.35  2.963       +0.093 (0.146)  expert 0.7967   <- fails 7.2 by one match
+ *   1     1.377       -1.120 (0.164)  -               <- a certainty, and it
+ *                                                        abolishes crossing
+ *
+ * The window is real but narrow, and 0.28 is picked to sit in the middle of it
+ * rather than at either edge: it clears the ladder ceiling by 1.65 standard
+ * errors where 0.22 clears it by 0.48, and it leaves 7.2's floor intact where
+ * 0.35 does not. That floor is the same one `HEADER_SPREAD` fell foul of when it
+ * was the candidate lever, and the difference is that this taxes only
+ * uncontested crosses while `HEADER_SPREAD` taxed every header in the game.
+ *
+ * The routine is deliberately still a threat at the shipped value: +0.173 at
+ * d = 0.25 and a biggest scoreline of eight. A cross is supposed to be
+ * dangerous, and the curve is monotone, so this is a point on a dial rather than
+ * a threshold that happened to measure well.
+ */
+const AIR_WIN_CHANCE = 0.28;
+
+/**
+ * The CPU goes up for a ball in the air in either box: to score in one, to
+ * clear it out of the other.
+ *
+ * The defending half was missing outright, and it is issue #308's real cause.
+ * The gate here read the *attacking* goal alone, so a CPU defender stood in his
+ * own six-yard box under a dropping cross had no path to touch it — measured on
+ * the near-post wing routine at the pinned station `(-1, 90, 30)`, a defender
+ * satisfied `canAirStrike` on 320 of the 516 ticks where the human could head
+ * it, and this gate opened on 0 of them. That is what made the near-post header
+ * free: not that the man arriving in the box was unmarked (the nearest defender
+ * averages 27 px from the ball, inside `CROSS_STRIKE_R`), but that being marked
+ * cost the attacker nothing.
+ *
+ * Two rounds of keeper work were spent on that cell for the same reason. A
+ * header met 20 px in front of the keeper arrives in 0.07 s, which is three
+ * pixels of dive, so no keeper model can reach it; the contest that *is*
+ * available happens a beat earlier, in the air, and nobody was allowed to enter
+ * it. `HEADER_SPREAD` was the other candidate lever and it cost `expert` its
+ * 7.2 win-rate floor, because it taxes every header in the game rather than the
+ * uncontested ones.
+ *
+ * The defender is not given a difficulty dial. He challenges whenever the rules
+ * already let him, which keeps this out of 6.8's four channels: it is not the
+ * CPU being sharper at higher difficulty, it is the CPU being allowed to play
+ * the ball at all. The human needs no equivalent — he has had this since the
+ * cabinet shipped, as A in his own box, and `canAirStrike` never gated him on
+ * position.
+ */
 function cpuAirStrike(m: MatchState): void {
-  if (m.owner || m.ball.z < TRAP_Z || m.ball.z > HEADER_Z) return;
-  const goalY = attackGoalY(1, m.swapped);
-  if (Math.abs(m.ball.y - goalY) > 90) return;
+  if (m.owner || m.ball.z < TRAP_Z || m.ball.z > HEADER_Z) {
+    // Not a live aerial challenge, so the next one that is gets a fresh roll. A
+    // ball that bounces back up into the band is a second ball.
+    m.cpuAirRolled = false;
+    return;
+  }
+  const attackY = attackGoalY(1, m.swapped);
+  const ownY = ownGoalY(1, m.swapped);
+  const attacking = Math.abs(m.ball.y - attackY) <= AIR_BOX;
+  // Only a ball the opponent has *delivered* into this box is contested. A
+  // rebound, a parry, a hoof and the CPU's own goal kick are all airborne in
+  // the same place and none of them is the event this defends against, and
+  // challenging for all of them is what took `expert` under its 7.2 win-rate
+  // floor at d = 0.25 (0.787 against 0.800) — the same floor, and the same five
+  // matches of slack, that ruled out `HEADER_SPREAD` as the lever for #308.
+  // `shoot` clears `passInFlight` and keeps `lastFromCross`, so the second ball
+  // off a header is not a cross by inheritance.
+  const defending =
+    Math.abs(m.ball.y - ownY) <= AIR_BOX && m.lastFromCross && m.passInFlight === 0;
+  if (!attacking && !defending) {
+    m.cpuAirRolled = false;
+    return;
+  }
+  // First eligible, not nearest: the attacking branch below has picked its man
+  // this way since the cabinet shipped, and switching it to nearest moves goals
+  // that have nothing to do with this issue — measured at 0.2 air goals a match
+  // off the near-post cell on its own, which is most of the headroom the ceiling
+  // has. The defensive branch has no reason to disagree with it.
+  let ready = -1;
   for (let idx = 1; idx < TEAM_SIZE; idx++) {
-    if (!canAirStrike(m, 1, idx)) continue;
+    if (canAirStrike(m, 1, idx)) {
+      ready = idx;
+      break;
+    }
+  }
+  if (ready < 0) {
+    m.cpuAirRolled = false;
+    return;
+  }
+  if (attacking) {
     const keeper = m.players[0][0];
     const away = keeper.x <= CENTRE_X ? 1 : -1;
     const aim = clamp(away * (0.4 + 0.3 * m.difficulty) + signed(m) * 0.5 * (1 - m.difficulty), -1, 1);
-    airStrike(m, 1, idx, aim);
+    airStrike(m, 1, ready, aim);
     return;
   }
+  // One roll per ball, exactly as the keeper gets one roll per shot, and for the
+  // same reason: a defender who takes every ball he is legally able to take is
+  // not contesting a cross, he is abolishing it. Taken as a certainty this moved
+  // the wing routine from +0.727 over `competent` to -1.793, with air goals at
+  // 0.817 a match and a biggest scoreline of four. A cross is supposed to be
+  // dangerous; it is just not supposed to be uncontested.
+  if (m.cpuAirRolled) return;
+  m.cpuAirRolled = true;
+  if (m.rng() >= AIR_WIN_CHANCE) return;
+  headClear(m, 1, ready);
 }
 
 function stepCpuCarrier(m: MatchState, dt: number): void {

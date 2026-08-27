@@ -220,7 +220,7 @@ export function flankTail(wing: -1 | 1): Tail {
  * top, including the measurement showing that the only lever that moves it is a
  * cliff rather than a dial, is written out at its `AIR_GOALS_CEILING`.
  */
-const FLANK_AIR_CEILING = [4.0, 3.6, 3.4, 3.0];
+export const FLANK_AIR_CEILING = [4.0, 3.6, 3.4, 3.0];
 
 /**
  * The rung the ceiling actually binds at, which is why the scan below walks one
@@ -236,7 +236,7 @@ const FLANK_AIR_CEILING = [4.0, 3.6, 3.4, 3.0];
  * catalogue, by `football-exploits.test.ts`; what they are not is gated on the
  * grid, and that is a budget decision rather than a claim that they cannot move.
  */
-const AIR_RUNG = 0;
+export const AIR_RUNG = 0;
 
 /**
  * Matches per station in the air scan, and the number this whole test turns on.

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
+import {
+  TOWERS,
+  TOWER_KINDS,
+  createTower,
+  towerDps,
+  towerRange
+} from '../../src/games/towerdefense/towers';
 
 // Build tests assert on ./dist and skip when no build exists. CI always
 // builds first, so there they always run; locally, `npm run build` first
@@ -31,6 +38,33 @@ describe.skipIf(!hasDist)('build output', () => {
         const html = readFileSync(`dist/${locale}/connect/index.html`, 'utf-8');
         expect(html).toContain(`http-equiv="refresh" content="0;url=/${locale}/about#connect"`);
         expect(html).toContain(`rel="canonical" href="https://ismaelmartinez.me.uk/${locale}/about#connect"`);
+      });
+    }
+  });
+
+  // The tool bar used to carry `70`, `110` and `90` typed straight into the
+  // markup and nothing else — no damage, no reach, no splash — which is how a
+  // player came to rank three towers by price when price ranks them the wrong
+  // way round (#263). It is rendered from the tower table now, and this is the
+  // guard that keeps it that way: the numbers are computed here from the same
+  // TOWERS the game fires with, so putting a literal back in the page turns
+  // this red the moment anyone retunes a tower.
+  describe('Line Hold tool bar carries the tower table\u2019s own numbers', () => {
+    for (const locale of locales) {
+      it(`${locale} tool bar shows dps, range and splash from TOWERS`, () => {
+        const html = readFileSync(`dist/${locale}/fun/towerdefense/index.html`, 'utf-8');
+        for (const kind of TOWER_KINDS) {
+          const fresh = createTower(kind, 0);
+          expect(html, `${kind} cost`).toContain(`>${TOWERS[kind].cost}<`);
+          expect(html, `${kind} dps`).toContain(`\u2694 ${Math.round(towerDps(fresh))}`);
+          expect(html, `${kind} range`).toContain(`\u25ce ${towerRange(fresh)}`);
+          if (TOWERS[kind].splash > 0) {
+            expect(html, `${kind} splash`).toContain(`\ud83d\udca5 ${TOWERS[kind].splash}`);
+          }
+          if (TOWERS[kind].slow > 0) {
+            expect(html, `${kind} slow`).toContain(`\u2744 ${TOWERS[kind].slow}`);
+          }
+        }
       });
     }
   });

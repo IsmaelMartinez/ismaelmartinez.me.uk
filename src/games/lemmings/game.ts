@@ -148,6 +148,7 @@ export function initLemmingsGame(): void {
   const progressFill = document.getElementById('progress-fill');
   const levelNum = el('level-num');
   const bestLevel = el('best-level');
+  const bestScoreEl = el('best-score');
   const levelHint = el('level-hint');
   const stuckHint = el('stuck-hint');
   const skillButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('.skill-btn'));
@@ -281,6 +282,10 @@ export function initLemmingsGame(): void {
   let selected: Skill | null = null;
   let spawned = 0;
   let saved = 0;
+  // Critters the level killed, and the ids of the two deaths the *player*
+  // chose (a bomber's fuse, the Nuke's chain) so they are not counted as such.
+  let lost = 0;
+  const deliberate = new Set<number>();
   let spawnTimer = 0;
   let nextId = 1;
   let phase: 'title' | 'playing' | 'result' = 'title';
@@ -307,6 +312,10 @@ export function initLemmingsGame(): void {
   let cleared = loadClearedLevels(board.best(), LEVELS.length);
 
   bestLevel.textContent = cleared.toString();
+  // The persisted personal best was banked but never shown (#267). It is read
+  // rather than armed: this cabinet still does not call beginRun, so nothing
+  // here arms the mid-run record toast.
+  bestScoreEl.textContent = board.best().toString();
 
   function blankStock(): Record<Skill, number> {
     return { blocker: 0, digger: 0, basher: 0, builder: 0, floater: 0, bomber: 0 };
@@ -350,6 +359,8 @@ export function initLemmingsGame(): void {
     particles = [];
     textPops = [];
     saved = 0;
+    lost = 0;
+    deliberate.clear();
     spawned = 0;
     spawnTimer = 0;
     nuking = false;
@@ -504,6 +515,7 @@ export function initLemmingsGame(): void {
    * bomber's fuse — the pick-one and kill-all paths detonate identically.
    */
   function detonate(c: Critter) {
+    deliberate.add(c.id);
     c.alive = false;
     c.state = 'splatted';
     bmp.eraseCircle(c.x, Math.round(c.y - CRITTER_H / 2), 8);
@@ -545,7 +557,7 @@ export function initLemmingsGame(): void {
     const bonuses = levelBonuses({
       saved,
       needed: def.needed,
-      spawnCount: def.spawnCount,
+      lost,
       ticks: atTick,
       par: def.par
     });
@@ -561,7 +573,7 @@ export function initLemmingsGame(): void {
       // Keep the run's points safe even if the tab closes mid-run. This
       // cabinet never calls beginRun, so the record celebration is never armed
       // and banking here cannot fire a mid-run record toast.
-      board.bank(runScore);
+      bestScoreEl.textContent = board.bank(runScore).best.toString();
     }
     const victory = won && last;
     // One outcome chain sets both faces of the result, so emoji and title can
@@ -666,6 +678,7 @@ export function initLemmingsGame(): void {
         spawnParticles(c.x, c.y - CRITTER_H / 2, '#4ade80', combo.streak > 1 ? 14 : 8);
         audio.playSfx('rescue');
       } else if (wasAlive && c.state === 'splatted') {
+        if (!deliberate.has(c.id)) lost++;
         spawnParticles(c.x, c.y - CRITTER_H / 2, '#f43f5e', 6);
       }
     }

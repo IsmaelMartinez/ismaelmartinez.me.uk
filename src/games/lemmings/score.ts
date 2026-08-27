@@ -19,7 +19,7 @@ export const COMBO_STEP = 25;
 export const COMBO_MAX_STREAK = 6;
 /** Points per rescue beyond the level quota. */
 export const OVER_QUOTA_POINTS = 50;
-/** Bonus for bringing every spawned critter home. */
+/** Bonus for finishing a level without losing a critter to it. */
 export const PERFECT_BONUS = 300;
 /** Ceiling of the par-time bonus (paid in full only at instant clears). */
 export const TIME_BONUS_MAX = 400;
@@ -50,7 +50,17 @@ export function rescuePoints(streak: number): number {
 export interface LevelOutcome {
   saved: number;
   needed: number;
-  spawnCount: number;
+  /**
+   * Critters the *level* killed: a fatal fall, or a hazard. The player's own
+   * two deliberate kills are not losses — a bomber is a skill spent to open
+   * terrain, exactly as a blocker is, and the Nuke is the player conceding a
+   * crowd the level has already stranded. That distinction is the whole of
+   * #280: the bonus used to require `saved >= spawnCount`, which ten of the
+   * twenty-five levels make unreachable, eight by stranding a critter behind
+   * terrain no solution can clear and two more by spending a blocker who then
+   * has nowhere to go. A reward no play can earn is not a reward.
+   */
+  lost: number;
   /** Ticks the level took, from first spawn to resolution. */
   ticks: number;
   /** The level's par time in ticks; the time bonus fades to zero here. */
@@ -60,7 +70,7 @@ export interface LevelOutcome {
 export interface BonusBreakdown {
   /** Under-par speed bonus, linear from TIME_BONUS_MAX at 0 ticks to 0 at par. */
   time: number;
-  /** PERFECT_BONUS when every spawned critter was rescued. */
+  /** PERFECT_BONUS when the level killed nobody. */
   perfect: number;
   /** OVER_QUOTA_POINTS per rescue beyond the level quota. */
   overQuota: number;
@@ -77,7 +87,7 @@ export function levelBonuses(o: LevelOutcome): BonusBreakdown {
   if (o.saved < o.needed) return NO_BONUS;
   const time =
     o.par > 0 ? Math.max(0, Math.round((TIME_BONUS_MAX * (o.par - o.ticks)) / o.par)) : 0;
-  const perfect = o.spawnCount > 0 && o.saved >= o.spawnCount ? PERFECT_BONUS : 0;
+  const perfect = o.lost === 0 ? PERFECT_BONUS : 0;
   const overQuota = Math.max(0, o.saved - o.needed) * OVER_QUOTA_POINTS;
   return { time, perfect, overQuota, total: time + perfect + overQuota };
 }

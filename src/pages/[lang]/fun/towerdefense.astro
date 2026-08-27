@@ -5,6 +5,13 @@ import SoundToggles from '../../../components/SoundToggles.astro';
 import ToastArea from '../../../components/ToastArea.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
+import {
+  TOWERS,
+  TOWER_KINDS,
+  createTower,
+  towerDps,
+  towerRange
+} from '../../../games/towerdefense/towers';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -12,6 +19,26 @@ export function getStaticPaths() {
 
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
+
+// The tool bar is rendered from the tower table rather than typed into the
+// markup (#263). Cost used to be the only figure on a button and it ranks the
+// three the wrong way round: frost is cheaper than blast and a ninth of a
+// bolt's damage per pound against a warlord, so a player buying by price
+// builds a line that never recovers. These are level-1 figures, which is what
+// the button is offering to sell. Deriving them here is also what stops the UI
+// drifting from the table: the old markup had `70`, `110` and `90` hand-typed.
+const tools = TOWER_KINDS.map(kind => {
+  const fresh = createTower(kind, 0);
+  return {
+    kind,
+    name: t(`fun.towerdefense.tower${kind[0].toUpperCase()}${kind.slice(1)}` as never),
+    cost: TOWERS[kind].cost,
+    dps: Math.round(towerDps(fresh)),
+    range: towerRange(fresh),
+    splash: TOWERS[kind].splash,
+    slow: TOWERS[kind].slow
+  };
+});
 ---
 
 <Layout title="Line Hold" lang={lang}>
@@ -64,6 +91,10 @@ const t = useTranslations(lang);
             <div class="score-item">
               <span class="score-label">{t('fun.towerdefense.record')}</span>
               <span id="record" class="score-value">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.towerdefense.seed')}</span>
+              <span id="seed" class="score-value seed">—</span>
             </div>
           </div>
         </div>
@@ -140,21 +171,37 @@ const t = useTranslations(lang);
 
         <div class="controls">
           <div class="tool-bar">
-            <button class="tower-tool active" data-kind="bolt" disabled>
-              <span class="tool-swatch swatch-bolt"></span>
-              <span class="tool-name">{t('fun.towerdefense.towerBolt')}</span>
-              <span class="tool-cost">70</span>
-            </button>
-            <button class="tower-tool" data-kind="blast" disabled>
-              <span class="tool-swatch swatch-blast"></span>
-              <span class="tool-name">{t('fun.towerdefense.towerBlast')}</span>
-              <span class="tool-cost">110</span>
-            </button>
-            <button class="tower-tool" data-kind="frost" disabled>
-              <span class="tool-swatch swatch-frost"></span>
-              <span class="tool-name">{t('fun.towerdefense.towerFrost')}</span>
-              <span class="tool-cost">90</span>
-            </button>
+            {
+              tools.map((tool, i) => (
+                <button
+                  class:list={['tower-tool', { active: i === 0 }]}
+                  data-kind={tool.kind}
+                  disabled
+                >
+                  <span class:list={['tool-swatch', `swatch-${tool.kind}`]} />
+                  <span class="tool-name">{tool.name}</span>
+                  <span class="tool-cost">{tool.cost}</span>
+                  <span class="tool-stats">
+                    <span class="tool-stat" title={t('fun.towerdefense.statDps')}>
+                      ⚔ {tool.dps}
+                    </span>
+                    <span class="tool-stat" title={t('fun.towerdefense.statRange')}>
+                      ◎ {tool.range}
+                    </span>
+                    {tool.splash > 0 && (
+                      <span class="tool-stat" title={t('fun.towerdefense.statSplash')}>
+                        💥 {tool.splash}
+                      </span>
+                    )}
+                    {tool.slow > 0 && (
+                      <span class="tool-stat" title={t('fun.towerdefense.statSlow')}>
+                        ❄ {tool.slow}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))
+            }
           </div>
           <div class="action-bar">
             <span id="tower-info" class="tower-info" hidden></span>
@@ -272,6 +319,16 @@ const t = useTranslations(lang);
 
   .score-value.lives {
     color: #f87171;
+  }
+
+  /* The run seed is reference information, not a score: it sits at the end of
+     the row and is deliberately quieter than the numbers the player is playing
+     for, while staying readable enough to copy down. */
+  .score-value.seed {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
   }
 
   .game-area {
@@ -437,6 +494,22 @@ const t = useTranslations(lang);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-weight: 700;
+  }
+
+  /* Stats sit under the name and cost, quieter than both: they are what the
+     player reads to *choose*, not what they read to check affordability. */
+  .tool-stats {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 0.65rem;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tool-stat {
+    white-space: nowrap;
   }
 
   .tool-cost {

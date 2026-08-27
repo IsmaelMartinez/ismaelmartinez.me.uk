@@ -519,15 +519,33 @@ describe('levels', () => {
     // clock loosened, while the tier test above asserted a step up. This guard
     // compares what a level asks of the player and ignores what it pays out, so
     // a copy-pasted level cannot pass by retiming alone.
+    // Canonical, because `JSON.stringify` is order-sensitive and a duplicate
+    // that listed its rects or its stock in another order would slip straight
+    // through the guard meant to catch it. Shapes are sorted by their own
+    // serialisation and stock keys by name, so two levels that ask the same
+    // thing compare equal however they were typed.
+    const canon = (v: unknown): string =>
+      JSON.stringify(v, (_k, val) =>
+        val && typeof val === 'object' && !Array.isArray(val)
+          ? Object.fromEntries(Object.entries(val as object).sort(([a], [b]) => (a < b ? -1 : 1)))
+          : val
+      );
+    // A hard clock is part of what a level asks; how generous that clock is is
+    // not. So `clocked` is in the key and `timeLimit` is not, which is exactly
+    // the line between the two reuses in this campaign. 14 is 2's terrain on
+    // purpose ("the wall level again, but now against a hard timer") and the
+    // timer is the whole lesson, so they differ. 24 and 25 both ran a clock and
+    // differed only in it being kinder on 25, so they did not.
     const asks = (l: (typeof LEVELS)[number]) =>
-      JSON.stringify({
-        shapes: l.shapes,
+      canon({
+        shapes: [...l.shapes].map(canon).sort(),
         hatch: l.hatch,
         hatch2: l.hatch2,
         exit: l.exit,
         spawnCount: l.spawnCount,
         needed: l.needed,
-        stock: l.stock
+        stock: l.stock,
+        clocked: l.timeLimit !== undefined
       });
     const seen = new Map<string, number>();
     for (let i = 0; i < LEVELS.length; i++) {

@@ -65,6 +65,10 @@ const t = useTranslations(lang);
               <span class="score-label">{t('fun.towerdefense.record')}</span>
               <span id="record" class="score-value">0</span>
             </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.towerdefense.seed')}</span>
+              <span id="seed" class="score-value seed">—</span>
+            </div>
           </div>
         </div>
 
@@ -272,6 +276,16 @@ const t = useTranslations(lang);
 
   .score-value.lives {
     color: #f87171;
+  }
+
+  /* The run seed is reference information, not a score: it sits at the end of
+     the row and is deliberately quieter than the numbers the player is playing
+     for, while staying readable enough to copy down. */
+  .score-value.seed {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
   }
 
   .game-area {

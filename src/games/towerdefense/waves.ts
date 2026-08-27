@@ -145,6 +145,21 @@ export function hpScale(waveIndex: number): number {
   return 1 + waveIndex * 0.14 + late * late * 0.05;
 }
 
+/**
+ * How far a run's seed may stretch or squeeze a gap between two spawns, as a
+ * fraction of the authored gap. This is the *only* thing a seed touches, and
+ * the limit is deliberate: kinds, counts, pauses and `hpScale` all stay a pure
+ * function of the wave index, so two players on different seeds still face the
+ * same enemies with the same total hp and the same bounty, and the shared score
+ * board stays comparable. A seed changes the *shape* of a wave's arrival — what
+ * bunches, what strings out, which corridor is loaded when — and never its
+ * difficulty in any quantity the score is made of.
+ *
+ * At 0.35 a gap lands in [0.65g, 1.35g], which is visible in play without ever
+ * reaching zero or turning negative.
+ */
+export const SPAWN_JITTER = 0.35;
+
 export interface Spawner {
   /** Index into the wave's entry list. */
   entry: number;
@@ -152,10 +167,22 @@ export interface Spawner {
   spawned: number;
   /** Seconds until the next spawn is due. */
   timer: number;
+  /**
+   * The run's seeded stream, when the run has one. Without it the spawner is
+   * bit-for-bit what it always was, which is what keeps the difficulty proofs
+   * (`playRun`) measuring a layout rather than a seed.
+   */
+  rng?: () => number;
 }
 
-export function createSpawner(wave: WaveEntry[]): Spawner {
-  return { entry: 0, spawned: 0, timer: wave[0]?.pause ?? 0 };
+export function createSpawner(wave: WaveEntry[], rng?: () => number): Spawner {
+  return { entry: 0, spawned: 0, timer: wave[0]?.pause ?? 0, rng };
+}
+
+/** An authored gap under the run's seed, or the authored gap when there is none. */
+function seededGap(gap: number, rng?: () => number): number {
+  if (!rng) return gap;
+  return gap * (1 + (rng() * 2 - 1) * SPAWN_JITTER);
 }
 
 /** True once every entry of the wave has finished spawning. */
@@ -177,9 +204,9 @@ export function stepSpawner(spawner: Spawner, wave: WaveEntry[], dt: number): En
     if (spawner.spawned >= entry.count) {
       spawner.entry++;
       spawner.spawned = 0;
-      spawner.timer += (wave[spawner.entry]?.pause ?? 0) + entry.gap;
+      spawner.timer += (wave[spawner.entry]?.pause ?? 0) + seededGap(entry.gap, spawner.rng);
     } else {
-      spawner.timer += entry.gap;
+      spawner.timer += seededGap(entry.gap, spawner.rng);
     }
   }
   return out;

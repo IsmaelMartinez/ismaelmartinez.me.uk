@@ -12,9 +12,9 @@ import {
   DEMO_DIFFICULTY,
   DEMO_HALF_SECONDS,
   createDemoDriver,
-  demoPairing,
-  seededRng
+  demoPairing
 } from '../../src/games/football/demo';
+import { seededRng } from '../../src/games/engine/math';
 import { createMatch, tickMatch, type MatchState } from '../../src/games/football/match';
 import { TEAMS } from '../../src/games/football/teams';
 

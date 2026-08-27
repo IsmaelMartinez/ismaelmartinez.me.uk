@@ -65,6 +65,7 @@ const GAME_HTML = `
     <span id="out-count">0</span>
     <span id="run-score">0</span>
     <span id="best-level">0</span>
+    <span id="best-score">0</span>
     <div id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemax="1">
       <div id="progress-fill"></div>
     </div>

@@ -194,6 +194,50 @@ const SHOT_SPEED_CHARGE = 155;
  * come from crosses and headers is still met with room to spare.
  */
 const HEADER_SPEED = 295;
+/**
+ * Left at 6, and #308 is the reason the number is worth a note rather than a
+ * value. The near-post header aim scores **4.070 air goals a match** at the
+ * pinned station (four independent 300-match blocks: 4.01 4.12 3.98 4.17, so a
+ * block SE of about 0.043) against a 4.0 `AIR_GOALS_CEILING`, and beats
+ * `competent` by **+0.673 +- 0.130** ladder points against a 0.4 ceiling. The
+ * owner's call was to nerf the cross rather than move the ceiling. Four levers
+ * were measured and none of them can be spent, so nothing moved; the numbers
+ * are here so the next round starts after them rather than before them.
+ *
+ * **This constant works, and its price is another bound.** At 10 the cell reads
+ * 3.755 (3.80 3.82 3.71 3.69) and +0.293 +- 0.138, clearing both of #308's
+ * bounds without flattening the axis — the shipped `away` aim still takes 3.487
+ * a match and the order near > away > centre > far is unchanged. But a header
+ * is not only the wing routine's weapon: `expert`'s win rate at d = 0.25 falls
+ * from **0.8167 to 0.7833**, against 7.2's floor of 0.80. At 8 it is 0.7967,
+ * still short. The floor has five matches in three hundred of slack and the
+ * nerf costs six to ten, so #308's ceiling and 7.2's floor cannot both hold
+ * through this lever, and relaxing either is the one move the round forbids.
+ *
+ * **Header aim authority is nearly inert.** Scaling how much of the stick a
+ * header converts into placement, swept 1.0 / 0.85 / 0.7 / 0.55 / 0.4, moved
+ * the cell 4.01 / 4.23 / 4.03 / 3.91 / 3.63 — non-monotone, with only the far
+ * end outside the +-0.09 single-cell noise. Symmetric error cannot help here:
+ * the header is already beating the keeper at a `gap / reach` of about 1.03, so
+ * noise around that point costs the striker as often as it saves him.
+ *
+ * **Cross delivery error moves it the wrong way.** A signed error on the range
+ * `loftWeight` is weighted for, swept 0 to 0.3, moved it 4.11 / 4.10 / 4.15 /
+ * 4.19 / 4.24. The routine attacks *any* dropping ball, so a worse cross is not
+ * a worse chance, and a short one is a nearer one.
+ *
+ * **`CROSS_STRIKE_R` stays untouched** for the reason `AIR_GOALS_CEILING` gives
+ * at length: it is also the window a human has to time a volley in.
+ *
+ * What the sweeps did turn up is the reason a cross-and-header is unanswerable
+ * in the first place, and it is not in this file. **`ai.ts` has no off-ball
+ * marking at all**: a defender either presses the carrier or sits on
+ * `coverPoint`, which is a function of the ball and his own formation anchor,
+ * so the man arriving in the box is never tracked by anybody. The ball is
+ * contested and the man never is. Answering that is a defensive-AI round, it
+ * would make the CPU better rather than the player's weapon worse, and it is
+ * the thing to try before reaching for a constant in here again.
+ */
 const HEADER_SPREAD = 6;
 /** Placement error, before quality: a scuffed tap sprays, a struck shot does not. */
 const SPREAD_BASE = 8;

@@ -297,6 +297,17 @@ export const WING_STATIONS: Array<[number, number]> = (() => {
  * changes that. Answering it is a balance round rather than a rig fix, which is
  * why the sweeps below are not yet gated on this axis.
  *
+ * That balance round was attempted on 2026-08-27 and spent nothing. Four levers
+ * were swept and the numbers are written out at `HEADER_SPREAD` in `match.ts`:
+ * the one that works (`HEADER_SPREAD` 6 to 10 gives 3.755 air goals and +0.293
+ * ladder, clearing both bounds) costs `expert` its 7.2 win-rate floor, which had
+ * five matches in three hundred of slack against a nerf that costs six to ten;
+ * header aim authority and cross delivery error are both inert or backwards; and
+ * `CROSS_STRIKE_R` is the human's volley window. The sweeps also found what is
+ * actually behind it, which is not in `match.ts` at all: `ai.ts` has no off-ball
+ * marking, so the man arriving in the box is never tracked by anybody. Read that
+ * note before reaching for a constant.
+ *
  * The naming is from the man heading it, as `CampAim`'s is from the man
  * shooting. An audit that measured this same cell called it the far post
  * because it named the posts from the crossing flank, which is the opposite

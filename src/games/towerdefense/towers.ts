@@ -67,6 +67,21 @@ export function towerCooldown(tower: Tower): number {
   return TOWERS[tower.kind].cooldown * COOLDOWN_MUL[tower.level - 1];
 }
 
+/**
+ * Sustained damage per second at the tower's current level — damage per hit
+ * over the seconds between hits.
+ *
+ * This is the number the cabinet was missing (#263). Cost was the only figure
+ * on a tower button, and cost ranks the three the wrong way round: frost is
+ * cheaper than blast and a ninth of a bolt's damage per pound against a
+ * warlord, so a player buying by price builds a line that cannot recover.
+ * There is one formula and everything reads it, tool bar and selected tower
+ * alike, so the UI cannot drift from the table a balance change edits.
+ */
+export function towerDps(tower: Tower): number {
+  return towerDamage(tower) / towerCooldown(tower);
+}
+
 /** The route tile a marching enemy currently stands on. */
 export function enemyTile(route: number[], enemy: Enemy): number {
   return route[Math.min(Math.floor(enemy.progress), route.length - 1)];

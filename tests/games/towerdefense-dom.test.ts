@@ -19,6 +19,7 @@ import { initTowerDefenseGame } from '../../src/games/towerdefense';
 import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
 import { doneKey } from '../../src/games/engine/progress';
 import { GRID_W, GRID_H } from '../../src/games/towerdefense/path';
+import { TOWERS, createTower, towerDps } from '../../src/games/towerdefense/towers';
 
 vi.mock('../../src/games/engine/globalScores', () => ({
   fetchGlobal: vi.fn(async () => null),
@@ -184,9 +185,8 @@ function mountPage(): HTMLElement {
   return document.getElementById('towerdefense-root')!;
 }
 
-/** Selects a tower kind and clicks the centre of the tile at (x, y). */
-function buildAt(kind: string, x: number, y: number): void {
-  document.querySelector<HTMLButtonElement>(`.tower-tool[data-kind="${kind}"]`)!.click();
+/** Clicks the centre of the tile at (x, y), touching nothing else. */
+function clickTile(x: number, y: number): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
   canvas.dispatchEvent(
     new MouseEvent('click', {
@@ -195,6 +195,12 @@ function buildAt(kind: string, x: number, y: number): void {
       bubbles: true
     })
   );
+}
+
+/** Selects a tower kind and clicks the centre of the tile at (x, y). */
+function buildAt(kind: string, x: number, y: number): void {
+  document.querySelector<HTMLButtonElement>(`.tower-tool[data-kind="${kind}"]`)!.click();
+  clickTile(x, y);
 }
 
 const num = (id: string) => Number(document.getElementById(id)!.textContent);
@@ -301,6 +307,27 @@ afterEach(() => {
 });
 
 describe('Line Hold stand-down control', () => {
+  it('a selected tower reads out what it does, not just its level (#263)', () => {
+    // Cost was the only number the cabinet ever showed, and cost ranks the
+    // three towers the wrong way round. A placed tower now carries its own
+    // damage per second and reach, at the level it has actually reached.
+    // holdFirstWave leaves bolts standing at (10, 1) and (11, 1); clicking an
+    // occupied tile selects rather than builds.
+    holdFirstWave();
+    clickTile(10, 1);
+    advance(0.25); // the HUD syncs on the next frame, not on the click
+    const info = document.getElementById('tower-info')!;
+    expect(info.hidden).toBe(false);
+    const fresh = createTower('bolt', 0);
+    expect(info.textContent).toContain(`⚔ ${Math.round(towerDps(fresh))}`);
+    expect(info.textContent).toContain('◎ 2');
+    // Bolt has neither, and saying so by omission is what makes the three read
+    // as different tools rather than three prices.
+    expect(info.textContent).not.toContain('💥');
+    expect(info.textContent).not.toContain('❄');
+    expect(TOWERS.bolt.splash).toBe(0);
+  });
+
   it('shows the run seed once a run starts (#264)', () => {
     // The seed is only worth having if the player can read it: a run they want
     // to compare, or to tell someone else about, is identified by this number

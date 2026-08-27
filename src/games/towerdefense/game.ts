@@ -42,6 +42,8 @@ import {
   createTower,
   upgradeCost,
   towerRange,
+  towerDamage,
+  towerDps,
   stepTowers,
   type Tower,
   type TowerKind
@@ -1579,7 +1581,25 @@ export function initTowerDefenseGame(): void {
 
     if (selectedTower) {
       const cost = upgradeCost(selectedTower);
-      towerInfoEl.textContent = `${strings.towerNames[selectedTower.kind]} ${strings.level}${selectedTower.level}`;
+      // The same figures the tool bar sells the tower on, at the level this one
+      // has actually reached, so an upgrade's effect is visible before it is
+      // bought and after (#263). Splash and chill only appear on the towers
+      // that have them, which is what makes the three read as different tools
+      // rather than as three prices.
+      const def = TOWERS[selectedTower.kind];
+      // Damage per second is the number that ranks the three towers, and it is
+      // what the tool bar sells them on. Here there is room for the hit behind
+      // it too, which is what a blast's splash actually applies.
+      const stats = [
+        `⚔ ${Math.round(towerDps(selectedTower))}`,
+        `✊ ${towerDamage(selectedTower)}`,
+        `◎ ${towerRange(selectedTower)}`
+      ];
+      if (def.splash > 0) stats.push(`💥 ${def.splash}`);
+      if (def.slow > 0) stats.push(`❄ ${def.slow}`);
+      towerInfoEl.textContent =
+        `${strings.towerNames[selectedTower.kind]} ${strings.level}${selectedTower.level}` +
+        ` · ${stats.join(' · ')}`;
       towerInfoEl.hidden = false;
       upgradeBtn.hidden = false;
       if (cost === null) {

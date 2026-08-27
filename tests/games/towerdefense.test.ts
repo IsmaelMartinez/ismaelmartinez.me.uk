@@ -24,6 +24,7 @@ import {
   towerRange,
   towerDamage,
   towerCooldown,
+  towerDps,
   enemyTile,
   acquireTarget,
   stepTowers,
@@ -530,6 +531,36 @@ function spawnLog(wave: WaveEntry[], rng?: () => number): { tick: number; kind: 
   }
   return out;
 }
+
+describe('a tower says what it does (#263)', () => {
+  it('derives dps from the same damage and cooldown the tower fires with', () => {
+    // One formula, read by the tool bar and by the selected-tower readout
+    // alike, so a balance change to TOWERS cannot leave the UI claiming the
+    // old numbers. Checked at every level because the upgrade multipliers move
+    // damage and cooldown in opposite directions.
+    for (const kind of TOWER_KINDS) {
+      const tower = createTower(kind, 0);
+      for (let level = 1; level <= MAX_LEVEL; level++) {
+        tower.level = level;
+        expect(towerDps(tower)).toBeCloseTo(towerDamage(tower) / towerCooldown(tower), 10);
+      }
+    }
+  });
+
+  it('shows the gap that cost alone hides', () => {
+    // The reason the readout is worth having. Ranked by price a new player
+    // reads frost (90) as a middling option between bolt (70) and blast (110);
+    // ranked by what it does to a marcher it is a third of a bolt. That gap was
+    // invisible, and a plan that buys two frost towers before its first bolt
+    // never recovers, because income comes only from kills.
+    const dpsOf = (kind: TowerKind) => towerDps(createTower(kind, 0));
+    expect(dpsOf('bolt')).toBeGreaterThan(dpsOf('blast'));
+    expect(dpsOf('blast')).toBeGreaterThan(dpsOf('frost'));
+    expect(dpsOf('bolt')).toBeGreaterThan(dpsOf('frost') * 3);
+    // And cost does not rank them the same way, which is the whole problem.
+    expect(TOWERS.frost.cost).toBeGreaterThan(TOWERS.bolt.cost);
+  });
+});
 
 describe('a run has a seed (#264)', () => {
   // The cabinet had no RNG in its rules at all: `Math.random` appeared once and

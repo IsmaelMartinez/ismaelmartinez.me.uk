@@ -127,6 +127,7 @@ export const translations = {
     'fun.lemmings.progress': 'Rescued so far',
     'fun.lemmings.out': 'Out',
     'fun.lemmings.level': 'Level',
+    'fun.lemmings.best': 'Best',
     'fun.lemmings.cleared': 'Cleared',
     'fun.lemmings.spawnRate': 'Release rate',
     'fun.lemmings.nuke': 'Nuke',
@@ -142,6 +143,8 @@ export const translations = {
       'Tap or click a critter to apply the selected skill. Stuck? 💥 Nuke clears the field and ends the level there and then.',
     'fun.lemmings.stuckHint':
       'Nothing has moved for a while: the critters look stuck. Give one of them a skill to open a way through, or press 💥 Nuke to clear the field and end the level with whoever you have already rescued.',
+    'fun.lemmings.hint6':
+      'Float down off the ledge, bash through the pillar, then build up to the exit.',
     'fun.lemmings.hint7': 'Block the crowd before the cliff, then dig a shaft down to the exit.',
     'fun.lemmings.hint8':
       'Build a staircase up onto the shelf, then bash through the wall to the exit.',
@@ -179,7 +182,7 @@ export const translations = {
       'Bash the earth wall on the left, ramp over the steel on the right — two crowds, one clock.',
     'fun.lemmings.score': 'Score',
     'fun.lemmings.timeBonus': 'Time bonus',
-    'fun.lemmings.perfectBonus': 'Everyone home!',
+    'fun.lemmings.perfectBonus': 'Nobody lost!',
     'fun.lemmings.quotaBonus': 'Extra rescues',
     'fun.lemmings.nextLevel': 'Next Level',
     'fun.lemmings.retry': 'Retry',
@@ -701,6 +704,7 @@ export const translations = {
     'fun.lemmings.progress': 'Rescatados hasta ahora',
     'fun.lemmings.out': 'En juego',
     'fun.lemmings.level': 'Nivel',
+    'fun.lemmings.best': 'Récord',
     'fun.lemmings.cleared': 'Superados',
     'fun.lemmings.spawnRate': 'Ritmo de salida',
     'fun.lemmings.nuke': 'Detonar',
@@ -716,6 +720,8 @@ export const translations = {
       'Toca un bicho para aplicar la habilidad seleccionada. ¿Atascado? 💥 Detonar despeja el campo y termina el nivel ahí mismo.',
     'fun.lemmings.stuckHint':
       'Hace un rato que no se mueve nada: los bichos parecen atascados. Dale una habilidad a alguno para abrir paso, o pulsa 💥 Detonar para despejar el campo y terminar el nivel con los que ya hayas rescatado.',
+    'fun.lemmings.hint6':
+      'Baja flotando de la repisa, perfora el pilar y luego construye una rampa hasta la salida.',
     'fun.lemmings.hint7':
       'Bloquea a la multitud antes del precipicio y luego excava un pozo hasta la salida.',
     'fun.lemmings.hint8':
@@ -755,7 +761,7 @@ export const translations = {
       'Perfora el muro de tierra a la izquierda, sube por una rampa sobre el acero a la derecha: dos grupos, un reloj.',
     'fun.lemmings.score': 'Puntos',
     'fun.lemmings.timeBonus': 'Bonus de tiempo',
-    'fun.lemmings.perfectBonus': '¡Todos a casa!',
+    'fun.lemmings.perfectBonus': '¡Sin bajas!',
     'fun.lemmings.quotaBonus': 'Rescates extra',
     'fun.lemmings.nextLevel': 'Siguiente Nivel',
     'fun.lemmings.retry': 'Reintentar',
@@ -1277,6 +1283,7 @@ export const translations = {
     'fun.lemmings.progress': 'Rescatats fins ara',
     'fun.lemmings.out': 'En joc',
     'fun.lemmings.level': 'Nivell',
+    'fun.lemmings.best': 'Rècord',
     'fun.lemmings.cleared': 'Superats',
     'fun.lemmings.spawnRate': 'Ritme de sortida',
     'fun.lemmings.nuke': 'Detonar',
@@ -1292,6 +1299,8 @@ export const translations = {
       'Toca una bestiola per aplicar l\'habilitat seleccionada. Encallat? 💥 Detonar neteja el camp i acaba el nivell allà mateix.',
     'fun.lemmings.stuckHint':
       'Fa estona que no es mou res: les bestioles semblen encallades. Dona una habilitat a alguna per obrir pas, o prem 💥 Detonar per netejar el camp i acabar el nivell amb les que ja hagis rescatat.',
+    'fun.lemmings.hint6':
+      'Baixa surant de la lleixa, perfora el pilar i després construeix una rampa fins a la sortida.',
     'fun.lemmings.hint7':
       'Bloqueja la munió abans del precipici i després cava un pou fins a la sortida.',
     'fun.lemmings.hint8':
@@ -1331,7 +1340,7 @@ export const translations = {
       'Perfora el mur de terra a l\'esquerra, puja per una rampa sobre l\'acer a la dreta: dos grups, un rellotge.',
     'fun.lemmings.score': 'Punts',
     'fun.lemmings.timeBonus': 'Bonus de temps',
-    'fun.lemmings.perfectBonus': 'Tothom a casa!',
+    'fun.lemmings.perfectBonus': 'Sense baixes!',
     'fun.lemmings.quotaBonus': 'Rescats extra',
     'fun.lemmings.nextLevel': 'Nivell Següent',
     'fun.lemmings.retry': 'Reintenta',

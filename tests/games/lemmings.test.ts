@@ -441,11 +441,11 @@ describe('levels', () => {
     expect(rightCol).toBeGreaterThan(leftCol);
   });
 
-  it('gives every level from 7 onward a hint key that resolves in every locale', () => {
-    // Levels 7 onward chain skills or twist the rules in non-obvious ways, so
+  it('gives every level from 6 onward a hint key that resolves in every locale', () => {
+    // Levels 6 onward chain skills or twist the rules in non-obvious ways, so
     // each carries a one-line hint. The value is an i18n key, not raw text.
     // Ranging over LEVELS.length keeps this guard covering future batches.
-    for (let index = 6; index < LEVELS.length; index++) {
+    for (let index = 5; index < LEVELS.length; index++) {
       const key = LEVELS[index].hint;
       expect(key, `level ${index + 1} should have a hint`).toBeTruthy();
       if (!key) continue;
@@ -456,8 +456,12 @@ describe('levels', () => {
     }
   });
 
-  it('leaves the introductory levels (1–6) hint-free so their mechanic is discovered', () => {
-    for (let i = 0; i < 6; i++) {
+  it('leaves the single-mechanic levels (1–5) hint-free so each one is discovered', () => {
+    // 6 used to sit inside this rule and does not belong there: it is the act's
+    // finale and the only level in it that chains three skills, which made it the
+    // least-signposted hard level in the game (#267). One mechanic a level is
+    // what earns the silence, and 6 has three.
+    for (let i = 0; i < 5; i++) {
       expect(LEVELS[i].hint, `level ${i + 1} should not have a hint`).toBeUndefined();
     }
   });
@@ -505,6 +509,51 @@ describe('levels', () => {
     expect(tiers[23 - 1]).toBeGreaterThan(earlyMax);
     expect(tiers[24 - 1]).toBeGreaterThan(earlyMax);
     expect(tiers[25 - 1]).toBeGreaterThan(earlyMax);
+  });
+
+  it('never ships the same level twice', () => {
+    // Levels 24 and 25 were once identical in every field that decides what the
+    // player has to do — shapes, both hatches, exit, spawn count, quota and
+    // stock — and differed only in `par` and `timeLimit`, both of which were
+    // *kinder* on 25. So the campaign's capstone was its predecessor with the
+    // clock loosened, while the tier test above asserted a step up. This guard
+    // compares what a level asks of the player and ignores what it pays out, so
+    // a copy-pasted level cannot pass by retiming alone.
+    // Canonical, because `JSON.stringify` is order-sensitive and a duplicate
+    // that listed its rects or its stock in another order would slip straight
+    // through the guard meant to catch it. Shapes are sorted by their own
+    // serialisation and stock keys by name, so two levels that ask the same
+    // thing compare equal however they were typed.
+    const canon = (v: unknown): string =>
+      JSON.stringify(v, (_k, val) =>
+        val && typeof val === 'object' && !Array.isArray(val)
+          ? Object.fromEntries(Object.entries(val as object).sort(([a], [b]) => (a < b ? -1 : 1)))
+          : val
+      );
+    // A hard clock is part of what a level asks; how generous that clock is is
+    // not. So `clocked` is in the key and `timeLimit` is not, which is exactly
+    // the line between the two reuses in this campaign. 14 is 2's terrain on
+    // purpose ("the wall level again, but now against a hard timer") and the
+    // timer is the whole lesson, so they differ. 24 and 25 both ran a clock and
+    // differed only in it being kinder on 25, so they did not.
+    const asks = (l: (typeof LEVELS)[number]) =>
+      canon({
+        shapes: [...l.shapes].map(canon).sort(),
+        hatch: l.hatch,
+        hatch2: l.hatch2,
+        exit: l.exit,
+        spawnCount: l.spawnCount,
+        needed: l.needed,
+        stock: l.stock,
+        clocked: l.timeLimit !== undefined
+      });
+    const seen = new Map<string, number>();
+    for (let i = 0; i < LEVELS.length; i++) {
+      const key = asks(LEVELS[i]);
+      const twin = seen.get(key);
+      expect(twin, `level ${i + 1} asks exactly what level ${(twin ?? 0) + 1} asks`).toBeUndefined();
+      seen.set(key, i);
+    }
   });
 
   it('detects a critter standing in the exit', () => {
@@ -607,6 +656,16 @@ interface SimApi {
 
 interface PlayOutcome {
   saved: number;
+  /** Critters the level killed — deliberate detonations excluded, as in game.ts. */
+  lost: number;
+  /**
+   * One line per loss: which critter, on what tick, where, and what it was
+   * doing. Only ever read by the assertion message, and worth the field —
+   * "lost 1 critter(s)" on a twenty-five level sweep is not enough to find the
+   * one that fell, and this is how level 23's faller was traced to the tip of
+   * an unfinished span rather than to the near lip.
+   */
+  lostAt?: string[];
   /** Tick the level resolved on, or null if it never did inside `maxTicks`. */
   endedAt: number | null;
   /**
@@ -638,6 +697,9 @@ function playLevel(
   const stock = levelStock(level);
   let critters: Critter[] = [];
   let saved = 0;
+  let lost = 0;
+  const lostAt: string[] = [];
+  const deliberate = new Set<number>();
   let spawned = 0;
   let spawnTimer = 0;
   let id = 1;
@@ -667,6 +729,7 @@ function playLevel(
   };
   /** game.ts's `detonate`: a real crater, and the critter is gone. */
   const detonate = (c: Critter) => {
+    deliberate.add(c.id);
     c.alive = false;
     c.state = 'splatted';
     bmp.eraseCircle(c.x, Math.round(c.y - CRITTER_H / 2), 8);
@@ -718,7 +781,9 @@ function playLevel(
           continue;
         }
       }
+      const before = c.state;
       stepCritter(c, world);
+      if (before !== 'splatted' && c.state === 'splatted' && !deliberate.has(c.id)) { lost++; lostAt.push(`id${c.id} tick${tick} @${c.x},${c.y} was=${before}`); }
       // A lit fuse is a commitment: game.ts refuses the rescue at the door.
       if (isActive(c) && c.fuse < 0 && atExit(c, level)) {
         c.state = 'exited';
@@ -751,10 +816,10 @@ function playLevel(
       // Billed as game.ts bills it: the ticks that really elapsed, or the tick
       // the player conceded on when they did. An authored clock running out is
       // billed for the whole clock, standstill or no standstill.
-      return { saved, endedAt: tick, ticks: concededAt ?? tick, endedBy, nuked: nuking };
+      return { saved, lost, lostAt, endedAt: tick, ticks: concededAt ?? tick, endedBy, nuked: nuking };
     }
   }
-  return { saved, endedAt: null, ticks: concededAt ?? maxTicks, endedBy: null, nuked: nuking };
+  return { saved, lost, lostAt, endedAt: null, ticks: concededAt ?? maxTicks, endedBy: null, nuked: nuking };
 }
 
 /**
@@ -789,6 +854,22 @@ function expectCleared(level: LevelDef, outcome: PlayOutcome, { nuked = false } 
   expect(outcome.endedAt).toBeLessThan(RESOLVE_BY);
   expect(outcome.saved).toBeGreaterThanOrEqual(level.needed);
   expect(outcome.nuked).toBe(nuked);
+  // And the shipped solution earns the perfect bonus — on every level, which
+  // is the whole of #280. The bonus used to ask for `saved >= spawnCount` and
+  // ten of the twenty-five levels cannot pay that at all: eight strand a
+  // critter behind terrain and two spend a blocker who then has nowhere to go,
+  // so a third of the scoring ladder was unreachable content. It now asks that
+  // the *level* killed nobody, which every solution here satisfies. Asserting
+  // it inside the shared helper is deliberate: a rule that has to hold on all
+  // twenty-five is worth more than a twenty-sixth test that says so once.
+  const bonuses = levelBonuses({
+    saved: outcome.saved,
+    needed: level.needed,
+    lost: outcome.lost,
+    ticks: outcome.ticks,
+    par: level.par
+  });
+  expect(bonuses.perfect, `lost ${outcome.lost} critter(s) to the level: ${JSON.stringify(outcome.lostAt)}`).toBe(PERFECT_BONUS);
 }
 
 /**
@@ -806,7 +887,7 @@ function timeBonusFor(level: LevelDef, outcome: PlayOutcome): number {
   return levelBonuses({
     saved: outcome.saved,
     needed: level.needed,
-    spawnCount: level.spawnCount,
+    lost: outcome.lost,
     ticks: outcome.ticks,
     par: level.par
   }).time;
@@ -1205,9 +1286,15 @@ describe('levels — solvable playthroughs', () => {
     expectCleared(LEVELS[21], outcome, STRANDS_A_CRITTER);
   });
 
-  it('23: a second builder takes over at the first bridge tip to span the gorge', () => {
+  it('23: builders hand off at the tip until the span reaches the far bank', () => {
+    // The gorge is bottomless, so a critter that walks off an unfinished span is
+    // gone for good. The level hands out five builders for a bridge two can
+    // *reach* across, and the spares are the answer: whoever arrives at the open
+    // tip takes over rather than stepping off it. Played that way nobody is lost,
+    // which is what the perfect bonus now asks for (#280) — the level's own note
+    // once called the faller the price of the delay, and it is not one the player
+    // has to pay.
     let first = false;
-    let second = false;
     const outcome = playLevel(
       LEVELS[22],
       ({ critters, assign }) => {
@@ -1218,8 +1305,38 @@ describe('levels — solvable playthroughs', () => {
           );
           if (w && assign(w, 'builder')) first = true;
         }
-        // Second builder continues from the tip (usually the same critter,
-        // freshly out of bricks and about to walk off the end).
+        // Anyone walking off the tip while the far bank is still out of reach
+        // gets the next bag of bricks. `assign` refuses once the stock is gone,
+        // so this cannot spend more than the level allows.
+        if (first) {
+          const tip = critters.find(
+            c =>
+              c.state === 'walker' && c.dir === 1 && c.y < 159 && c.x >= 146 && c.x < 160
+          );
+          if (tip) assign(tip, 'builder');
+        }
+      },
+      TRICKLE
+    );
+    expectCleared(LEVELS[22], outcome);
+  });
+
+  it('23 played the cheap way meets the quota and loses the bonus', () => {
+    // The other half of #280's goal. Making the bonus reachable everywhere is
+    // only worth something if it can still be missed, so here is the same level
+    // under the solution it used to ship with: hand the bricks over once and
+    // walk away. The quota comes home either way, and the crowd is one short.
+    let first = false;
+    let second = false;
+    const outcome = playLevel(
+      LEVELS[22],
+      ({ critters, assign }) => {
+        if (!first) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === 1 && c.y === 159 && c.x >= 132 && c.x <= 138
+          );
+          if (w && assign(w, 'builder')) first = true;
+        }
         if (first && !second) {
           const w = critters.find(
             c => c.state === 'walker' && c.dir === 1 && c.y < 155 && c.x >= 146
@@ -1227,9 +1344,19 @@ describe('levels — solvable playthroughs', () => {
           if (w && assign(w, 'builder')) second = true;
         }
       },
-      { interval: 48 }
+      TRICKLE
     );
-    expectCleared(LEVELS[22], outcome);
+    expect(outcome.saved).toBeGreaterThanOrEqual(LEVELS[22].needed);
+    expect(outcome.lost).toBeGreaterThan(0);
+    expect(
+      levelBonuses({
+        saved: outcome.saved,
+        needed: LEVELS[22].needed,
+        lost: outcome.lost,
+        ticks: outcome.ticks,
+        par: LEVELS[22].par
+      }).perfect
+    ).toBe(0);
   });
 
   it('24: the gauntlet — bash the earth wall left, build over the steel right, beat the clock', () => {
@@ -1260,7 +1387,58 @@ describe('levels — solvable playthroughs', () => {
     expectCleared(LEVELS[23], outcome);
   });
 
-  it('25: the harder gauntlet — bash left, ramp over the steel right, beat the clock', () => {
+  it('25: the harder gauntlet — the right crowd ramps the steel and then bashes', () => {
+    // What separates 25 from 24: the ramp over the steel stub does not reach the
+    // door, it only drops the right crowd into a pocket behind a second earth
+    // wall. Both bashers are spent, one a side, and the clock is 24's minus 300.
+    let bashedLeft = false;
+    let built = false;
+    let bashedRight = false;
+    const outcome = playLevel(
+      LEVELS[24],
+      ({ critters, assign }) => {
+        if (!bashedLeft) {
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === 1 && c.y === 179 && c.x >= 104 && c.x <= 108
+          );
+          if (w && assign(w, 'basher')) bashedLeft = true;
+        }
+        if (!built) {
+          // Same ramp maths as 24, carried 14px right with the stub.
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 231 && c.x <= 235
+          );
+          if (w && assign(w, 'builder')) built = true;
+        }
+        if (built && !bashedRight) {
+          // Anyone who came over the ramp is now in the 190–214 pocket walking
+          // at the second wall, well inside the basher's patience.
+          const w = critters.find(
+            c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 192 && c.x <= 201
+          );
+          if (w && assign(w, 'basher')) bashedRight = true;
+        }
+      },
+      TRICKLE
+    );
+    expectCleared(LEVELS[24], outcome);
+  });
+
+  it('25 needs a third assignment where 24 needs two', () => {
+    // The difficulty tiers claim 25 is a step up from 24. This is that claim as a
+    // measurement rather than an authored number, and it is the claim the old data
+    // could not support, because the two levels were the same level.
+    //
+    // Play 25 with the *shape* of 24's solution — bash the left wall, ramp the
+    // right crowd over the steel — and it falls short, because on 25 the ramp only
+    // drops that crowd into a pocket behind a second earth wall. The ramp window is
+    // read off the level's own steel stub rather than pinned, so this stays a
+    // statement about what the level asks and not about where a rect happens to sit:
+    // give 25 back 24's geometry and the two assignments clear it, and this goes red.
+    const steel = LEVELS[24].shapes.find(sh => sh.kind === 'rect' && sh.material === 'steel');
+    expect(steel, '25 should still field a steel stub for the right crowd').toBeTruthy();
+    const rampFrom = steel!.x + steel!.w - 1 + 8;
+
     let bashed = false;
     let built = false;
     const outcome = playLevel(
@@ -1274,14 +1452,20 @@ describe('levels — solvable playthroughs', () => {
         }
         if (!built) {
           const w = critters.find(
-            c => c.state === 'walker' && c.dir === -1 && c.y === 179 && c.x >= 217 && c.x <= 221
+            c =>
+              c.state === 'walker' &&
+              c.dir === -1 &&
+              c.y === 179 &&
+              c.x >= rampFrom &&
+              c.x <= rampFrom + 4
           );
           if (w && assign(w, 'builder')) built = true;
         }
       },
       TRICKLE
     );
-    expectCleared(LEVELS[24], outcome);
+    expect(bashed && built, 'both of 24\u2019s assignments should land on 25 too').toBe(true);
+    expect(outcome.saved).toBeLessThan(LEVELS[24].needed);
   });
 });
 
@@ -1618,7 +1802,7 @@ describe('score — combos', () => {
 });
 
 describe('score — end-of-level bonuses', () => {
-  const base = { saved: 5, needed: 5, spawnCount: 10, ticks: 1000, par: 2000 };
+  const base = { saved: 5, needed: 5, lost: 0, ticks: 1000, par: 2000 };
 
   it('pays nothing on a failed quota', () => {
     const b = levelBonuses({ ...base, saved: 4 });
@@ -1632,9 +1816,9 @@ describe('score — end-of-level bonuses', () => {
     expect(levelBonuses({ ...base, ticks: 5000 }).time).toBe(0);
   });
 
-  it('pays the perfect bonus only when every spawned critter came home', () => {
-    expect(levelBonuses({ ...base, saved: 10 }).perfect).toBe(PERFECT_BONUS);
-    expect(levelBonuses({ ...base, saved: 9 }).perfect).toBe(0);
+  it('pays the perfect bonus only when the level killed nobody', () => {
+    expect(levelBonuses({ ...base, lost: 0 }).perfect).toBe(PERFECT_BONUS);
+    expect(levelBonuses({ ...base, lost: 1 }).perfect).toBe(0);
   });
 
   it('pays per rescue beyond the quota', () => {

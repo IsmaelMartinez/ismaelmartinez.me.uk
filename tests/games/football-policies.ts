@@ -303,10 +303,14 @@ export const WING_STATIONS: Array<[number, number]> = (() => {
  * ladder, clearing both bounds) costs `expert` its 7.2 win-rate floor, which had
  * five matches in three hundred of slack against a nerf that costs six to ten;
  * header aim authority and cross delivery error are both inert or backwards; and
- * `CROSS_STRIKE_R` is the human's volley window. The sweeps also found what is
- * actually behind it, which is not in `match.ts` at all: `ai.ts` has no off-ball
- * marking, so the man arriving in the box is never tracked by anybody. Read that
- * note before reaching for a constant.
+ * `CROSS_STRIKE_R` is the human's volley window. What is actually behind it is
+ * not a constant in `match.ts` at all: the CPU had no way to challenge a cross
+ * dropping in its own box, because `cpuAirStrike` was gated on its *attacking*
+ * goal alone. Not a marking gap — the nearest defender is 27 px from the ball
+ * at the header window and can legally head it on 62 per cent of those ticks —
+ * but a gate that opened on none of them. Fixed in PR #327, and gated here by
+ * `tests/games/football-air.test.ts`. Read that note before reaching for a
+ * constant.
  *
  * The naming is from the man heading it, as `CampAim`'s is from the man
  * shooting. An audit that measured this same cell called it the far post

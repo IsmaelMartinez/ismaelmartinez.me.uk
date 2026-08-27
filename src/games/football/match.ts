@@ -229,14 +229,22 @@ const HEADER_SPEED = 295;
  * **`CROSS_STRIKE_R` stays untouched** for the reason `AIR_GOALS_CEILING` gives
  * at length: it is also the window a human has to time a volley in.
  *
- * What the sweeps did turn up is the reason a cross-and-header is unanswerable
- * in the first place, and it is not in this file. **`ai.ts` has no off-ball
- * marking at all**: a defender either presses the carrier or sits on
- * `coverPoint`, which is a function of the ball and his own formation anchor,
- * so the man arriving in the box is never tracked by anybody. The ball is
- * contested and the man never is. Answering that is a defensive-AI round, it
- * would make the CPU better rather than the player's weapon worse, and it is
- * the thing to try before reaching for a constant in here again.
+ * The reason a cross-and-header was unanswerable is not in this file, and the
+ * first answer written here was **wrong**: it read `ai.ts`, saw that a defender
+ * either presses the carrier or sits on `coverPoint`, and concluded there was
+ * no off-ball marking, so the man arriving in the box was never tracked.
+ * Measuring it says otherwise. At the pinned station the nearest CPU defender
+ * is **27.4 px** from the ball at the header window against a `CROSS_STRIKE_R`
+ * of 30, and satisfies `canAirStrike` on 320 of the 516 ticks where the human
+ * can head it. He is tracked, and he is allowed to challenge.
+ *
+ * What he had no path to was *touching* it: `cpuAirStrike` was gated on the
+ * CPU's **attacking** goal alone, so that gate opened on **0** of those 320
+ * ticks. Presence without agency, one beat earlier than the keeper work aimed
+ * at the same cell. Fixed in PR #327 by giving the CPU a defensive header, at
+ * which point this cell reads 3.057 air goals and +0.173 ladder. The lesson is
+ * worth more than the fix: a claim about what the AI does not do is a
+ * measurement, not a reading.
  */
 const HEADER_SPREAD = 6;
 /** Placement error, before quality: a scuffed tap sprays, a struck shot does not. */

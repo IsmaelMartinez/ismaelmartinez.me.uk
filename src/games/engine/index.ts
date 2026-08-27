@@ -3,7 +3,7 @@ export { setupHiDpiCanvas, createStaticLayer, hash01, blink } from './canvas';
 export type { HiDpiCanvas, StaticLayer } from './canvas';
 export type { GameLoop } from './loop';
 export { loadScore, saveScore } from './storage';
-export { clamp } from './math';
+export { clamp, seededRng } from './math';
 export { formatClock } from './clock';
 export { initScoreboard, createRunRecord } from './scoreboard';
 export type { Scoreboard, ScoreboardOptions, RunRecordBank } from './scoreboard';

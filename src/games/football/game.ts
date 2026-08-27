@@ -18,6 +18,7 @@ import {
   initScoreboard,
   loadScore,
   saveScore,
+  seededRng,
   wireChannelButton
 } from '../engine';
 import { BASE_TEMPO, FOOTBALL_MUSIC } from './music';
@@ -31,7 +32,6 @@ import {
   DEMO_HALF_SECONDS,
   createDemoDriver,
   demoPairing,
-  seededRng,
   type DemoDriver
 } from './demo';
 import {

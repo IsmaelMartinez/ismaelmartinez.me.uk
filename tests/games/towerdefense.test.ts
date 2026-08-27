@@ -24,6 +24,7 @@ import {
   towerRange,
   towerDamage,
   towerCooldown,
+  towerDps,
   enemyTile,
   acquireTarget,
   stepTowers,
@@ -39,6 +40,7 @@ import {
   createSpawner,
   stepSpawner,
   spawnerDone,
+  SPAWN_JITTER,
   type WaveEntry
 } from '../../src/games/towerdefense/waves';
 import {
@@ -54,6 +56,7 @@ import {
   score
 } from '../../src/games/towerdefense/economy';
 import { chebyshev } from '../../src/games/engine/grid2d';
+import { seededRng } from '../../src/games/engine/math';
 
 const map = createTdMap();
 
@@ -454,7 +457,11 @@ interface BuildStep {
   notBefore?: number;
 }
 
-function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
+function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES, seed?: number) {
+  // One stream for the whole run, exactly as game.ts opens it. Left undefined
+  // the spawner is bit-for-bit the old one, which is what keeps every
+  // difficulty proof below measuring a layout rather than a seed.
+  const runRng = seed === undefined ? undefined : seededRng(seed);
   const world = createTdMap();
   const eco = createEconomy();
   const towers: Tower[] = [];
@@ -463,6 +470,8 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
   let waveIdx = 0;
   /** Whether each finished wave was held, in order — the leak count's ledger. */
   const heldByWave: boolean[] = [];
+  /** What actually got through, by kind: the stakes ledger (#263). */
+  const leaksByKind: Record<EnemyKind, number> = { scout: 0, sprinter: 0, brute: 0, warlord: 0 };
 
   const buy = () => {
     while (next < plan.length) {
@@ -489,7 +498,7 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
   for (waveIdx = 0; waveIdx < maxWave; waveIdx++) {
     buy();
     const wave = waveDef(waveIdx);
-    const spawner = createSpawner(wave);
+    const spawner = createSpawner(wave, runRng);
     let enemies: Enemy[] = [];
     for (let guard = 0; ; guard++) {
       if (guard > 60 * 600) throw new Error(`wave ${waveIdx + 1} never ended`);
@@ -497,20 +506,109 @@ function playRun(plan: BuildStep[], maxWave: number = AUTHORED_WAVES) {
         enemies.push(spawnEnemy(kind, hpScale(waveIdx)));
       }
       for (const leaked of stepEnemies(enemies, world.route.length, dt)) {
+        leaksByKind[leaked.kind]++;
         leak(eco, leaked.livesCost);
       }
       for (const event of stepTowers(towers, enemies, world.route, dt)) {
         if (event.type === 'kill') awardKill(eco, event.bounty);
       }
-      if (eco.lives <= 0) return { survived: false, eco, waveIdx, heldByWave };
+      if (eco.lives <= 0) return { survived: false, eco, waveIdx, heldByWave, leaksByKind };
       if (enemies.length > 64) enemies = enemies.filter(e => e.alive);
       if (spawnerDone(spawner, wave) && enemies.every(e => !e.alive)) break;
     }
     heldByWave.push(clearWave(eco).held);
     buy();
   }
-  return { survived: true, eco, waveIdx: maxWave, heldByWave };
+  return { survived: true, eco, waveIdx: maxWave, heldByWave, leaksByKind };
 }
+
+/**
+ * Every spawn in a wave, as (tick, kind), played out at the game's own dt.
+ * `rng` absent is the unseeded spawner.
+ */
+function spawnLog(wave: WaveEntry[], rng?: () => number): { tick: number; kind: EnemyKind }[] {
+  const spawner = createSpawner(wave, rng);
+  const out: { tick: number; kind: EnemyKind }[] = [];
+  for (let tick = 0; tick < 60 * 600 && !spawnerDone(spawner, wave); tick++) {
+    for (const kind of stepSpawner(spawner, wave, 1 / 60)) out.push({ tick, kind });
+  }
+  return out;
+}
+
+describe('a tower says what it does (#263)', () => {
+  it('derives dps from the same damage and cooldown the tower fires with', () => {
+    // One formula, read by the tool bar and by the selected-tower readout
+    // alike, so a balance change to TOWERS cannot leave the UI claiming the
+    // old numbers. Checked at every level because the upgrade multipliers move
+    // damage and cooldown in opposite directions.
+    for (const kind of TOWER_KINDS) {
+      const tower = createTower(kind, 0);
+      for (let level = 1; level <= MAX_LEVEL; level++) {
+        tower.level = level;
+        expect(towerDps(tower)).toBeCloseTo(towerDamage(tower) / towerCooldown(tower), 10);
+      }
+    }
+  });
+
+  it('shows the gap that cost alone hides', () => {
+    // The reason the readout is worth having. Ranked by price a new player
+    // reads frost (90) as a middling option between bolt (70) and blast (110);
+    // ranked by what it does to a marcher it is a third of a bolt. That gap was
+    // invisible, and a plan that buys two frost towers before its first bolt
+    // never recovers, because income comes only from kills.
+    const dpsOf = (kind: TowerKind) => towerDps(createTower(kind, 0));
+    expect(dpsOf('bolt')).toBeGreaterThan(dpsOf('blast'));
+    expect(dpsOf('blast')).toBeGreaterThan(dpsOf('frost'));
+    expect(dpsOf('bolt')).toBeGreaterThan(dpsOf('frost') * 3);
+    // And cost does not rank them the same way, which is the whole problem.
+    expect(TOWERS.frost.cost).toBeGreaterThan(TOWERS.bolt.cost);
+  });
+});
+
+describe('a run has a seed (#264)', () => {
+  // The cabinet had no RNG in its rules at all: `Math.random` appeared once and
+  // only for a shot's visual zigzag, so a replay was the same run and the board
+  // rewarded knowing the twelve best tiles rather than playing well. A seed now
+  // varies *when* a wave's marchers arrive. What it must not vary is anything
+  // the score is made of, or two players' boards stop being comparable.
+
+  const finale = waveDef(AUTHORED_WAVES - 1);
+
+  it('changes when the marchers arrive and never what arrives', () => {
+    const plain = spawnLog(finale);
+    const a = spawnLog(finale, seededRng(11));
+    const b = spawnLog(finale, seededRng(22));
+
+    // Same enemies, same count, same order, on every seed.
+    expect(a.map(s => s.kind)).toEqual(plain.map(s => s.kind));
+    expect(b.map(s => s.kind)).toEqual(plain.map(s => s.kind));
+
+    // And genuinely different arrivals, not a seed that happens to do nothing.
+    expect(a.map(s => s.tick)).not.toEqual(plain.map(s => s.tick));
+    expect(a.map(s => s.tick)).not.toEqual(b.map(s => s.tick));
+  });
+
+  it('keeps every gap inside the jitter band', () => {
+    // The band is what makes the variation safe: no gap collapses to zero (a
+    // wave arriving all at once) and none stretches so far the wave outlasts
+    // the run. Measured against the unseeded gaps entry by entry.
+    const plain = spawnLog(finale);
+    for (const seed of [1, 2, 3, 7, 99]) {
+      const seeded = spawnLog(finale, seededRng(seed));
+      for (let i = 1; i < plain.length; i++) {
+        // Only compare gaps *within* an entry: a pause between entries is
+        // structural and is not jittered.
+        if (plain[i].kind !== plain[i - 1].kind) continue;
+        const authored = plain[i].tick - plain[i - 1].tick;
+        const actual = seeded[i].tick - seeded[i - 1].tick;
+        if (authored <= 1) continue; // a one-tick gap cannot resolve the band
+        expect(actual).toBeGreaterThanOrEqual(Math.floor(authored * (1 - SPAWN_JITTER)) - 1);
+        expect(actual).toBeLessThanOrEqual(Math.ceil(authored * (1 + SPAWN_JITTER)) + 1);
+      }
+    }
+  });
+
+});
 
 describe('headless playthrough', () => {
   it('an undefended line is overrun early', () => {
@@ -580,6 +678,87 @@ describe('headless playthrough', () => {
     { kind: 'blast', x: 9, y: 4, upgrade: true },
     { kind: 'blast', x: 9, y: 8, upgrade: true }
   ];
+
+  const SEEDS = [1, 2, 99, 1337, 4242];
+
+  it('a seed changes the run, and the same seed brings it back (#264)', () => {
+    // The player-visible half. It is measured on a run pushed into the endless
+    // assault rather than on the 18-wave campaign, and that choice is the
+    // interesting part: on the campaign the same layout scores 5,164 or 5,284
+    // across these five seeds and holds 17 waves on every one of them, because
+    // the authored layout is over-built for 18 waves and only warlords can
+    // reach the keep anyway (#263). Run it to 27 and the seeds separate
+    // properly — 7,210 to 8,398, falling on wave 23, 25 or 26 — because that is
+    // where the line is actually close to breaking and *when* a marcher arrives
+    // starts to decide whether it dies in the corridor or walks through it.
+    //
+    // Asserting a spread over five seeds rather than a difference between two
+    // is deliberate: the first version of this test compared 4242 against 1337,
+    // which happen to give the same 18-wave run, and read as "the seed does
+    // nothing" when the seed does plenty.
+    const runs = SEEDS.map(seed => playRun(CAMPAIGN_PLAN, 27, seed));
+    expect(new Set(runs.map(r => score(r.eco))).size).toBeGreaterThan(1);
+
+    // And it is reproducible, or the number in the HUD is decoration.
+    const again = playRun(CAMPAIGN_PLAN, 27, SEEDS[0]);
+    expect(score(again.eco)).toBe(score(runs[0].eco));
+    expect(again.eco.lives).toBe(runs[0].eco.lives);
+    expect(again.heldByWave).toEqual(runs[0].heldByWave);
+  });
+
+  it('a seed is variety, not a difficulty roll (#264)', () => {
+    // The constraint that keeps the shared board fair. Whatever the seed, the
+    // campaign is still winnable and still bleeds, which is the Round 6
+    // no-perfect-runs contract, and the layout still holds the same number of
+    // waves — the seed moves what a wave *looks* like, never what it is worth.
+    const runs = SEEDS.map(seed => playRun(CAMPAIGN_PLAN, AUTHORED_WAVES, seed));
+    for (const run of runs) {
+      expect(run.survived).toBe(true);
+      expect(run.eco.wavesCleared).toBe(AUTHORED_WAVES);
+      expect(run.eco.lives).toBeGreaterThan(0);
+      expect(run.eco.lives).toBeLessThan(START_LIVES);
+    }
+    expect(new Set(runs.map(r => r.eco.wavesHeld)).size).toBe(1);
+  });
+
+  it('only the finale costs the player anything, and only warlords do it (#263)', () => {
+    // Recorded rather than fixed, in the shape of Critter Rescue's "ten of the
+    // twenty-five levels never resolve" sentinel: the fact is the ticket, and
+    // pinning it means a future balance change cannot move it silently.
+    //
+    // What was measured while trying to fix it, and why it was not fixed here:
+    //
+    // - The campaign holds a near-uniform margin against a competent line on
+    //   *every* wave. Tracking the deepest marcher on a line built as the run
+    //   pays for it, waves 1–17 read 47, 22, 45, 45, 21, 43, 47, 26, 43, 21, 24,
+    //   44, 45, 25, 51, 42, 52 per cent of the route, and wave 18 reads 100.
+    //   Nothing is drifting; the curve and the economy track each other, and the
+    //   finale is the one wave deliberately tuned to break through (the Round 6
+    //   contract above: "even a maxed-out kill corridor cannot stop every crown").
+    // - Difficulty here is a step, not a slope, because every marcher of a kind
+    //   in a wave is identical and meets the same defence. A per-kind toughness
+    //   term swept at 0, 0.005, 0.008, 0.012, 0.016 leaks zero brutes; 0.02 leaks
+    //   four to seven and 0.025 leaks ten and loses the run. There is no setting
+    //   between "no consequence" and "overrun". This is also why the ticket found
+    //   tower count non-monotonic past about twelve.
+    // - Standard-bearers (one marcher in N at a multiple of the hp) were built
+    //   and swept over share 3–8 and hp 2.2–6. They change how hard wave 18 hits
+    //   (one warlord through becomes three) and never which waves hurt: every
+    //   cell still held 17 of 18.
+    //
+    // So making waves 10–17 bleed is a rebalance of the difficulty curve against
+    // the economy's growth curve, and it has to re-derive the no-perfect-runs
+    // contract rather than tune a constant. Filed separately.
+    const result = playRun(CAMPAIGN_PLAN, AUTHORED_WAVES, 4242);
+    expect(result.survived).toBe(true);
+    expect(result.leaksByKind.scout).toBe(0);
+    expect(result.leaksByKind.sprinter).toBe(0);
+    expect(result.leaksByKind.brute).toBe(0);
+    expect(result.leaksByKind.warlord).toBeGreaterThan(0);
+    // Every wave but the last is held, and the last is the only one that is not.
+    expect(result.heldByWave.slice(0, -1).every(Boolean)).toBe(true);
+    expect(result.heldByWave[result.heldByWave.length - 1]).toBe(false);
+  });
 
   it('survives all 18 authored waves with a known layout — but never 20/20', () => {
     const result = playRun(CAMPAIGN_PLAN);

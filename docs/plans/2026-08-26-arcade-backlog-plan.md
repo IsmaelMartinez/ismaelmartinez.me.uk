@@ -255,9 +255,10 @@ a measurement contradicted the ticket, not because the ticket was wrong to file.
   win-rate floor, which had five matches in three hundred of slack against a nerf
   costing six to ten. Header aim authority is non-monotone inside the noise, cross
   delivery error moves the rate the wrong way, and `CROSS_STRIKE_R` is the human's
-  volley window. What the sweeps found instead is that `ai.ts` has **no off-ball
-  marking at all**, so the man arriving in the box is never tracked. #308 stays
-  open and should be re-scoped to that.
+  volley window. The round then read `ai.ts`, saw a defence that only presses the
+  carrier or sits on `coverPoint`, and concluded it has **no off-ball marking at
+  all**. **That conclusion was wrong**, and it was wrong because it was read
+  rather than measured — see the closing round below.
 
 ### What this round would tell the next one
 
@@ -291,3 +292,62 @@ Anything found along the way that is not the item in hand becomes an issue with
 its measurement attached, in the shape #308 and #312 already use. That habit is
 what turned three vague audit claims into checkable tickets this week, and it is
 cheaper than widening a PR.
+
+## #308, closed 2026-08-27
+
+#308 is the item that cost three diagnoses before it cost one line of behaviour,
+and all three of the wrong ones were arrived at by reading code. The lesson is
+narrow and repeatable: **a claim about what the AI does not do is a measurement,
+not a reading.**
+
+Instrumenting the wing routine at the pinned station `(-1, 90, 30)` over 40
+matches, at the ticks where the human could head the ball:
+
+    nearest CPU defender to the ball      27.4 px   (CROSS_STRIKE_R is 30)
+    defender inside that radius           320 / 516 ticks   (62 %)
+    defender legally able to head it      320 / 516 ticks   (62 %)
+    cpuAirStrike's gate open              0 / 516 ticks
+
+The man arriving in the box *is* tracked, to within the width of the strike
+radius, and he is legally able to challenge on nearly two thirds of the ticks
+that matter. What he had no path to was *touching* the ball: `cpuAirStrike`
+gated on `attackGoalY(1)` alone, so a CPU defender standing under a cross
+dropping in his own box could never act. Presence without agency — and the
+contest that was missing sits one beat before the one three rounds of keeper
+work were spent on, and one beat after where the marking hypothesis looked.
+
+### What shipped, in PR #327
+
+A defensive header, with three parts that each had to be measured into place
+rather than chosen:
+
+- **One roll per ball** at `AIR_WIN_CHANCE` = 0.28, the keeper's own idiom. As a
+  certainty it does not contest crossing, it abolishes it: -1.793 against
+  `competent` and 0.817 air goals a match.
+- **Only a ball the opponent delivered.** Challenging for every aerial ball over
+  his own box — rebounds, parries, hoofs, his own goal kicks — put `expert`
+  under 7.2's win-rate floor at d = 0.25, the same floor that ruled out
+  `HEADER_SPREAD`.
+- **A clearance, not a shot.** `airStrike` goes straight to `shoot`, which aims
+  at the striker's attacking goal, and the aerial path has no `SHOOT_RANGE`
+  split, so a header in your own box was a shot at the far end.
+
+Landed at 3.057 air goals and +0.160 ladder against ceilings of 4.0 and 0.4,
+with the four aims still ordered near > away > centre > far and the shipped
+`away` aim still a live threat. A latent bug went with it, worth 0.2 of the drop
+on its own: `lastFromCross` records that a ball was crossed and never by whom,
+so heading an opponent's cross away collected the delivered-ball assist for the
+side that had nothing to do with delivering it.
+
+### Two things this round would tell the next one
+
+7.2's `expert` win-rate floor at d = 0.25 has about five matches of slack and is
+now the binding constraint on *any* CPU defensive improvement — it has stopped
+two candidate fixes. It deserves either more headroom or an explicit decision
+that the easiest rung is allowed to get harder. That is a question for the
+owner, not a measurement.
+
+And a comparison at 300 matches cannot resolve a six-match difference. The first
+rolled version's failure against that floor (0.7967 against 0.800) was inside
+the reseeding noise its own `m.rng()` draw introduced, which is why the value
+was re-swept against the floor directly rather than argued about.

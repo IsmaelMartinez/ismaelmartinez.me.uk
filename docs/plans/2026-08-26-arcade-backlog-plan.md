@@ -216,6 +216,63 @@ Split into two PRs, determinate half first.
   survives all 18 waves. Raise non-warlord threat rather than adding warlords, per
   the ticket's own suggested direction.
 
+## Tier 3 outcomes, 2026-08-27
+
+All six were worked. Five landed as code; one is recorded rather than fixed, and
+one of the five turned out to be two-thirds stale before any code was written.
+The pattern worth keeping from the round is that three of the six moved because
+a measurement contradicted the ticket, not because the ticket was wrong to file.
+
+- **#314** — PR #320. CLAUDE.md now states the rule and why CALCIO '90 is the one
+  framebuffer exception. No code, as decided.
+- **#267** — PR #321. Level 25 was 24 with a kinder clock; it now gives the right
+  crowd a second wall behind the ramp, one fewer builder and a tighter clock, and
+  24's two assignments no longer clear it. Level 6 gains a hint. **Claim 3 was
+  already fixed**: `BASH_PATIENCE` is 12, not the 6 the ticket measured, since
+  PR #302 — which also removed the ordering constraint against #280.
+- **#280** — PR #322. The perfect bonus now asks that the *level* killed nobody
+  rather than that everyone came home, so it is obtainable on all 25 rather than
+  15. Level 23 moved too: its reference solution spent a critter to the gorge and
+  did not have to, since the level deals five builders for a bridge two can reach
+  across. Worth knowing, because it is the obvious thing to try: the slowest
+  release rate the slider offers does *not* save that critter.
+- **#264** — PR #323. A run rolls a six-digit seed, shown in the HUD, and one
+  stream feeds every wave's spawner; the jitter touches only the gap inside an
+  entry, so the shared board stays comparable. The measurement that shaped the
+  test: the seed barely moves the 18-wave campaign (5,164 or 5,284 across five
+  seeds) and separates properly at 27 (7,210 to 8,398), so the test asserts a
+  spread over five seeds rather than a difference between two.
+- **#263** — PR #324. The readability half is fixed and guarded by a build-output
+  test that recomputes every figure from `TOWERS`. The stakes half is **recorded
+  rather than fixed** and filed as **#325**: the campaign holds a near-uniform 2x
+  margin on every wave (deepest marcher 21-52 per cent of the route on waves 1-17,
+  100 on wave 18), difficulty is a step rather than a slope because every marcher
+  of a kind in a wave is identical, and standard-bearers move how hard the finale
+  hits without moving which waves hurt.
+- **#308** — PR #326, documentation only, and **the one item where the decision
+  did not survive measurement**. "Nerf the cross" has no lever that can be spent.
+  `HEADER_SPREAD` 6 to 10 clears both of #308's bounds and costs `expert` its 7.2
+  win-rate floor, which had five matches in three hundred of slack against a nerf
+  costing six to ten. Header aim authority is non-monotone inside the noise, cross
+  delivery error moves the rate the wrong way, and `CROSS_STRIKE_R` is the human's
+  volley window. What the sweeps found instead is that `ai.ts` has **no off-ball
+  marking at all**, so the man arriving in the box is never tracked. #308 stays
+  open and should be re-scoped to that.
+
+### What this round would tell the next one
+
+Three of the six tickets carried at least one claim that measurement contradicted
+(#267's corridors, #263's blast and range findings, #308's whole prescribed fix).
+Re-measuring before implementing cost far less than the work it saved, and it is
+the reason two of these PRs are smaller than the tickets asked for.
+
+Two mechanical notes. CI in this repo runs on PRs **targeting main**, so a stacked
+PR gets no CI until its base merges and GitHub retargets it — #322 and #324 both
+sat on five Vercel-only checks until then, which reads exactly like a green run.
+And an assertion that compares two noisy cells can be green or red by luck: the
+first version of #264's seed test compared two seeds that happen to agree, and the
+first version of #267's ordering test passed under mutation for the wrong reason.
+
 ## Tier 4: no action
 
 #268 and #269 are parked cabinets. Neither is routed, sitemapped, in `CABINETS`

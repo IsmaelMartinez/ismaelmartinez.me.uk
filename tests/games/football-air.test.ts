@@ -112,6 +112,22 @@ describe('a cross into the CPU box is contested (#308)', () => {
     expect(m.lastFromCross).toBe(false);
   });
 
+  /**
+   * A clearance is not a pass, and `clearUpfield` did not say so. `shoot` clears
+   * `passInFlight` explicitly and `kick` does not do it for either of them, so
+   * after a defensive header the ball stayed marked as an in-flight pass from
+   * the side that crossed it. That reaches three places: `tryCapture` grades
+   * intercept and receive radii off it, `offBallTarget` sends two attackers to
+   * `airMeetPoint` for a ball their side no longer has in flight, and the gate
+   * above would let the CPU challenge the same clearance again on the way down,
+   * since the ball leaves the heading band and re-arms the roll.
+   */
+  it('stops the cleared ball being the crosser\'s pass', () => {
+    const m = crossIntoCpuBox(0);
+    tickMatch(m, DT, NEUTRAL);
+    expect(m.passInFlight).toBeNull();
+  });
+
   it('is left alone when the CPU loses the roll', () => {
     const m = crossIntoCpuBox(0.99);
     tickMatch(m, DT, NEUTRAL);
@@ -208,7 +224,7 @@ describe('the header aim axis stays under the ceiling (#308)', () => {
   /**
    * And the nerf has to reshape rather than flatten. Before the defensive
    * header the four aims ran near 4.047 / away 3.393 / centre 2.233 / far
-   * 1.277 air goals a match; after it they run 3.057 / 2.663 / 1.490 / 0.870.
+   * 1.277 air goals a match; after it the near cell runs 2.893.
    * The order is the thing being kept: a fix that made every aim equally
    * useless would clear the ceiling above and be a worse cabinet.
    *

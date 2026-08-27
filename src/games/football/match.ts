@@ -1047,6 +1047,14 @@ function clearUpfield(m: MatchState, side: Side, power: number, aim: number): vo
   kick(m, (lateral / len) * speed, ((dir as number) / len) * speed, 150);
   m.lastContact = 'ground';
   m.lastFromCross = false;
+  // A hoof is nobody's pass. `shoot` says the same thing about a shot and `kick`
+  // does it for neither, so without this a ball cleared off an opponent's cross
+  // stays marked as that opponent's ball in flight — which grades `tryCapture`'s
+  // intercept and receive radii for the wrong side, sends two of their men to
+  // `airMeetPoint` for a ball nobody played, and lets `cpuAirStrike` challenge
+  // its own clearance a second time on the way down.
+  m.passInFlight = null;
+  m.passTarget = -1;
   armKeeper(m, side, 'ground');
 }
 
@@ -2020,22 +2028,29 @@ const AIR_BOX = 90;
  *
  *   0     4.060 air   +0.727 ladder   expert 0.8167   <- the defect
  *   0.22  3.237       +0.333 (0.140)  pass
- *   0.28  3.057       +0.160 (0.145)  pass            <- shipped
+ *   0.28  2.893       +0.260 (0.145)  pass            <- shipped
  *   0.35  2.963       +0.093 (0.146)  expert 0.7967   <- fails 7.2 by one match
  *   1     1.377       -1.120 (0.164)  -               <- a certainty, and it
  *                                                        abolishes crossing
  *
+ * The sweep was run before `clearUpfield` was taught to clear `passInFlight`;
+ * the shipped row is re-measured after it and the rest are not, which is why
+ * 0.28 and 0.35 do not sit in order on the air column. They are a tenth of a
+ * goal apart against a standard error of about 0.13 a cell, so the two rows are
+ * one number, and re-running the whole sweep would buy an ordering rather than a
+ * decision.
+ *
  * The window is real but narrow, and 0.28 is picked to sit in the middle of it
- * rather than at either edge: it clears the ladder ceiling by 1.65 standard
+ * rather than at either edge: it clears the ladder ceiling by 0.96 standard
  * errors where 0.22 clears it by 0.48, and it leaves 7.2's floor intact where
  * 0.35 does not. That floor is the same one `HEADER_SPREAD` fell foul of when it
  * was the candidate lever, and the difference is that this taxes only
  * uncontested crosses while `HEADER_SPREAD` taxed every header in the game.
  *
- * The routine is deliberately still a threat at the shipped value: +0.173 at
- * d = 0.25 and a biggest scoreline of eight. A cross is supposed to be
- * dangerous, and the curve is monotone, so this is a point on a dial rather than
- * a threshold that happened to measure well.
+ * The routine is deliberately still a threat at the shipped value: a biggest
+ * scoreline of eight. A cross is supposed to be dangerous, and the curve is
+ * monotone, so this is a point on a dial rather than a threshold that happened
+ * to measure well.
  */
 const AIR_WIN_CHANCE = 0.28;
 

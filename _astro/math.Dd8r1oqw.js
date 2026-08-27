@@ -1,0 +1,1 @@
+function e(e,t,n){return Math.min(n,Math.max(t,e))}function t(e){let t=e>>>0;return()=>(t=Math.imul(t,1664525)+1013904223>>>0,t/4294967296)}export{t as n,e as t};

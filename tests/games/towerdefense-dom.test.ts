@@ -54,6 +54,7 @@ const PAGE_HTML = `
     <span id="wave-num">—</span>
     <span id="score">0</span>
     <span id="record">0</span>
+    <span id="seed">—</span>
     <div id="canvas-scroll"><canvas id="game-canvas"></canvas></div>
     <div id="toast-area"></div>
     <div id="start-overlay"><button id="start-btn">Man the Towers</button></div>
@@ -300,6 +301,17 @@ afterEach(() => {
 });
 
 describe('Line Hold stand-down control', () => {
+  it('shows the run seed once a run starts (#264)', () => {
+    // The seed is only worth having if the player can read it: a run they want
+    // to compare, or to tell someone else about, is identified by this number
+    // and by nothing else on screen. Blank until there is a run to identify.
+    const seedEl = () => document.getElementById('seed')!.textContent ?? '';
+    expect(seedEl()).toBe('—');
+    holdFirstWave();
+    expect(seedEl()).toMatch(/^\d+$/);
+    expect(Number(seedEl())).toBeLessThan(1000000);
+  });
+
   it('lets a holding line end its run and reach the shared board', async () => {
     holdFirstWave();
     // The whole point: this line is not failing. A breach — the only terminal

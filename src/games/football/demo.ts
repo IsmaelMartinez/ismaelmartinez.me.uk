@@ -44,20 +44,6 @@ export const DEMO_HALF_SECONDS = 14;
 /** Difficulty both demo sides are matched at: an even, watchable game. */
 export const DEMO_DIFFICULTY = 0.5;
 
-/**
- * Deterministic 32-bit LCG (Numerical Recipes constants), the same shape the
- * test suites seed their matches with. A demo seeded with the same number
- * replays exactly, which is the only way to test something that is otherwise
- * a random match.
- */
-export function seededRng(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
-}
-
 /** Quantise to the eight directions the cabinet's stick can express. */
 function quantise8(x: number, y: number): { x: number; y: number } {
   const len = Math.hypot(x, y);

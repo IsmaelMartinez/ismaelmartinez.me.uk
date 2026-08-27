@@ -30,6 +30,7 @@ import {
   wireChannelButton,
   createToaster,
   createEffects,
+  seededRng,
   type IsoView,
   hash01 as hash
 } from '../engine';
@@ -141,6 +142,7 @@ export function initTowerDefenseGame(): void {
   const waveEl = el('wave-num');
   const scoreEl = el('score');
   const recordEl = el('record');
+  const seedEl = el('seed');
   const waveBtn = el('wave-btn') as HTMLButtonElement;
   const upgradeBtn = el('upgrade-btn') as HTMLButtonElement;
   const standDownBtn = el('stand-down-btn') as HTMLButtonElement;
@@ -311,6 +313,12 @@ export function initTowerDefenseGame(): void {
   });
   const hiDpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, { onApply: ground.rebuild });
 
+  /** A fresh run seed. Six digits: long enough to be worth reading out, short
+   *  enough to fit the HUD beside five other readouts. */
+  function rollSeed(): number {
+    return Math.floor(Math.random() * 1000000);
+  }
+
   // --- Game state ---------------------------------------------------------
   let phase: Phase = 'idle';
   let eco: Economy = createEconomy();
@@ -322,7 +330,14 @@ export function initTowerDefenseGame(): void {
   // The launched wave, cached at each wave boundary — endless waves are built
   // fresh by waveDef, so the per-frame loop must not call it every tick.
   let currentWave: WaveEntry[] = waveDef(0);
-  let spawner: Spawner = createSpawner(currentWave);
+  // The run's seed, and the single stream every wave's spawner draws from
+  // (#264). One stream for the whole run rather than one per wave is what makes
+  // a seed reproduce a run rather than reproduce a wave. It is shown to the
+  // player because a number nobody can read is not a seed, it is noise: two
+  // people comparing boards can now see whether they held the same line.
+  let runSeed = rollSeed();
+  let runRng = seededRng(runSeed);
+  let spawner: Spawner = createSpawner(currentWave, runRng);
   let buildTimer = BUILD_TIME;
   let selectedTool: TowerKind | null = 'bolt';
   let selectedTower: Tower | null = null;
@@ -382,7 +397,10 @@ export function initTowerDefenseGame(): void {
     waveIdx = 0;
     clearedCampaign = false;
     currentWave = waveDef(0);
-    spawner = createSpawner(currentWave);
+    runSeed = rollSeed();
+    runRng = seededRng(runSeed);
+    seedEl.textContent = `${runSeed}`;
+    spawner = createSpawner(currentWave, runRng);
     buildTimer = BUILD_TIME;
     selectedTower = null;
     selectedTool = 'bolt';
@@ -452,7 +470,7 @@ export function initTowerDefenseGame(): void {
   function launchWave() {
     phase = 'wave';
     currentWave = waveDef(waveIdx);
-    spawner = createSpawner(currentWave);
+    spawner = createSpawner(currentWave, runRng);
     bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
     bannerTimer = 1.8;
     showToast(`⚔️ ${bannerText}`);

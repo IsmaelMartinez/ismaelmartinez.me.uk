@@ -312,7 +312,7 @@ const BAND_STEP = 2 * Math.SQRT2 * Math.sqrt(0.25 / THINNEST_COLUMN);
  * `(12 px, -100 offset, half stick)` convert **1.0000 over 2,000 seeds**, and 18
  * of 1,680 swept cells sit above 0.99.
  *
- * The mechanism was measured rather than guessed. `keeperPlane` computes
+ * The mechanism was measured rather than guessed. `keeperPlane` computed
  *
  *     const inFrame = Math.abs(m.ball.x - CENTRE_X) < GOAL_HALF;
  *
@@ -328,12 +328,14 @@ const BAND_STEP = 2 * Math.SQRT2 * Math.sqrt(0.25 / THINNEST_COLUMN);
  * exactly 0.9800, which is `1 - SAVE_FLOOR` and is the arithmetic confirming the
  * diagnosis.
  *
- * It is a one-line change to `match.ts` and it is a change to the game, so it is
- * not made in a rig round: this file reports the census and **issue #312**
- * carries the fix, exactly as issue #300 carried what issue #273 found about the
- * height cliff. Until then the census is printed and its *shape* is asserted, so
- * that a table which silently stopped measuring anything would still fail; the
- * assertion — no cell of the grid is a certainty — lands with the fix.
+ * It was a one-line change to `match.ts` and it was a change to the game, so it
+ * was not made in a rig round: this file reported the census and **issue #312**
+ * carried the fix, exactly as issue #300 carried what issue #273 found about the
+ * height cliff. PR #317 landed it on 2026-08-26, `inFrame` now measures the
+ * frame at the line, and the census below is a **contract** rather than a
+ * printout: no cell of the grid may be a certainty. The shape of the table is
+ * still asserted beside it, so one that silently stopped measuring anything
+ * would fail too.
  */
 const CERTAINTY_CENSUS = 0.99;
 /**

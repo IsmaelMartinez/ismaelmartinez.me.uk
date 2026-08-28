@@ -332,7 +332,7 @@ rather than chosen:
   at the striker's attacking goal, and the aerial path has no `SHOOT_RANGE`
   split, so a header in your own box was a shot at the far end.
 
-Landed at 3.057 air goals and +0.160 ladder against ceilings of 4.0 and 0.4,
+Landed at 2.893 air goals and +0.260 ladder against ceilings of 4.0 and 0.4,
 with the four aims still ordered near > away > centre > far and the shipped
 `away` aim still a live threat. A latent bug went with it, worth 0.2 of the drop
 on its own: `lastFromCross` records that a ball was crossed and never by whom,
@@ -351,3 +351,83 @@ And a comparison at 300 matches cannot resolve a six-match difference. The first
 rolled version's failure against that floor (0.7967 against 0.800) was inside
 the reseeding noise its own `m.rng()` draw introduced, which is why the value
 was re-swept against the floor directly rather than argued about.
+
+## The batch in retrospect, 2026-08-28
+
+Seven PRs (#320 to #324, #326, #327) merged and six issues closed (#263, #264,
+#267, #280, #308, #314), on top of the five that closed on 2026-08-26 (#260,
+#265, #266, #271, #272, #273's finding 4, #300, #301, #309, #312). Tier 1 and
+tier 2 are empty. What is left open is two decisions and two parked cabinets.
+
+### What worked
+
+Re-measuring a ticket before implementing it. Three of the six tier 3 tickets
+carried at least one claim that measurement contradicted, and #308 carried a
+prescribed fix that had no lever to spend. Two of those PRs are smaller than
+their ticket asked for and one is documentation only, which is the habit paying
+rather than the tickets being badly written.
+
+Filing rather than widening. #325 and #328 both left the round as issues with
+their measurements attached instead of as scope added to a PR that was already
+green. #325 in particular carries three sweeps that a future attempt would
+otherwise repeat.
+
+Treating "the AI does not do X" as a measurement. #308 cost three diagnoses, and
+the two wrong ones were both arrived at by reading `ai.ts`. Instrumenting the
+actual routine took one probe and inverted the conclusion: the defender is
+there, tracked to within the width of the strike radius, and simply had no gate
+to act through.
+
+### What did not
+
+Documentation written before the last measurement. #326 and this plan both
+recorded 3.057 air goals and +0.160 ladder, which were the numbers before the
+`clearUpfield` fix in #327 re-measured the shipped cell at 2.893 and +0.260.
+Both were corrected on 2026-08-28, a day later, and only because someone went
+looking. The rule that would have caught it is that the number in prose should
+be copied from the constant's own docstring rather than from the round's notes,
+since `match.ts` had the right figure the whole time.
+
+CLAUDE.md and a test file describing a fix as pending after it shipped. #312
+closed with PR #317 on 2026-08-26 and CLAUDE.md still called it open two days
+later, while `football-keeper-rig.test.ts` carried a docstring saying the census
+assertion "lands with the fix" about sixty lines above the assertion itself.
+Both corrected here. A doc drift inside the same file as the code it describes
+is the cheapest kind to catch and was still missed.
+
+Delegation fell off under load. The `delegate-local` hook raised 24 opportunity
+nags against this repo on 2026-08-27 and four delegations answered them, all
+before 13:02; every commit message after that point was hand-written. The
+recorded reason each draft was a scaffold rather than a hit is consistent and
+worth acting on rather than re-observing: the body is usually usable and the
+subject is usually a category label where the repo's convention is to name the
+mechanism.
+
+### What went wrong in a way worth writing down
+
+Three merge hazards, all from the same root, which is that this repo squash-
+merges and runs CI only on PRs targeting `main`. They are now recorded in
+CLAUDE.md's Testing and CI section, and the underlying trigger filter is filed
+as its own issue.
+
+Merging #321 with `--delete-branch` deleted the base of the stacked #322 before
+GitHub retargeted it, which closed #322 and blocked reopening until the base ref
+was pushed back. #323 was then merged without the flag and #324 survived and
+retargeted itself, which is the ordering to keep.
+
+Every stacked branch conflicted after its parent was squashed, because the child
+still carried the parent's pre-squash commits. Force-pushing is not available
+here, so each was resolved by merging `main` in.
+
+The one that nearly shipped: resolving CLAUDE.md on #324 with
+`git checkout --ours` took the whole file and silently dropped the perfect-bonus
+paragraph #322 had just merged. Nothing failed. It was caught only by grepping
+the resolved file for content each merged PR was expected to contribute, and
+redone with `git checkout -m` resolving the single conflicting hunk. Two test
+files resolved with `--ours` in the same batch were verified as genuine supersets
+afterwards rather than assumed to be.
+
+One thing that is still unexplained rather than fixed: two vitest failures
+appeared on #323 under heavy local contention and vitest truncated the output
+before either could be named. A clean local pass and green CI both followed, so
+load is the likely cause, but it is a guess and is recorded as one.

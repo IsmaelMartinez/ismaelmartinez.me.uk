@@ -355,9 +355,9 @@ was re-swept against the floor directly rather than argued about.
 ## The batch in retrospect, 2026-08-28
 
 Seven PRs (#320 to #324, #326, #327) merged and six issues closed (#263, #264,
-#267, #280, #308, #314), on top of the five that closed on 2026-08-26 (#260,
-#265, #266, #271, #272, #273's finding 4, #300, #301, #309, #312). Tier 1 and
-tier 2 are empty. What is left open is two decisions and two parked cabinets.
+#267, #280, #308, #314), on top of the ten that closed on 2026-08-26 (#260,
+#265, #266, #271, #272, #273, #300, #301, #309, #312). Tier 1 and tier 2 are
+empty. What is left open is two decisions and two parked cabinets.
 
 ### What worked
 

@@ -408,7 +408,7 @@ mechanism.
 Three merge hazards, all from the same root, which is that this repo squash-
 merges and runs CI only on PRs targeting `main`. They are now recorded in
 CLAUDE.md's Testing and CI section, and the underlying trigger filter is filed
-as its own issue.
+as **#330**, which is the only determinate item left open on this backlog.
 
 Merging #321 with `--delete-branch` deleted the base of the stacked #322 before
 GitHub retargeted it, which closed #322 and blocked reopening until the base ref

@@ -298,19 +298,21 @@ const THINNEST_COLUMN =
 const BAND_STEP = 2 * Math.SQRT2 * Math.sqrt(0.25 / THINNEST_COLUMN);
 
 /**
- * The exactly-100 % cells the widened rig found, which are a **live defect and
- * are deliberately not fixed here**.
+ * The exactly-100 % cells the widened rig found, **fixed in PR #317** on
+ * 2026-08-26 (issue #312). Everything from here to the census below is the
+ * historical diagnosis, written while the defect was live and kept because the
+ * mechanism is what the assertion at the end of this file now guards against.
  *
  * `keeper.ts` opens by forbidding them: "No configuration of distance, aim,
  * power and skill produces exactly 0 % or exactly 100 %." Three previous rounds
  * each found one and each converted it into a roll — `gap > reach`,
  * `parryLock > 0`, and (issue #300) `ball.z > KEEPER_JUMP_Z`. This is the
  * fourth, it has the same shape, and it was invisible for the same reason all
- * the others were: it lives on the axis the rig could not express.
+ * the others were: it lived on the axis the rig could not express.
  *
  * At 60 px of body lag, cells such as `(45 px, +55 offset, full stick)` and
- * `(12 px, -100 offset, half stick)` convert **1.0000 over 2,000 seeds**, and 18
- * of 1,680 swept cells sit above 0.99.
+ * `(12 px, -100 offset, half stick)` converted **1.0000 over 2,000 seeds**, and
+ * 18 of 1,680 swept cells sat above 0.99.
  *
  * The mechanism was measured rather than guessed. `keeperPlane` computed
  *

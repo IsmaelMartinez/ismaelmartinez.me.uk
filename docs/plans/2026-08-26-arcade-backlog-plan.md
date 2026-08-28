@@ -385,8 +385,11 @@ recorded 3.057 air goals and +0.160 ladder, which were the numbers before the
 `clearUpfield` fix in #327 re-measured the shipped cell at 2.893 and +0.260.
 Both were corrected on 2026-08-28, a day later, and only because someone went
 looking. The rule that would have caught it is that the number in prose should
-be copied from the constant's own docstring rather than from the round's notes,
-since `match.ts` had the right figure the whole time.
+be copied from the authoritative table rather than from the round's notes:
+`AIR_WIN_CHANCE`'s own sweep in `match.ts` carried the shipped figure the whole
+time. The `HEADER_SPREAD` docstring a few hundred lines above it did not, and is
+corrected here too, which sharpens the rule rather than weakening it. One
+constant's measured table is authoritative and the prose around it is not.
 
 CLAUDE.md and a test file describing a fix as pending after it shipped. #312
 closed with PR #317 on 2026-08-26 and CLAUDE.md still called it open two days

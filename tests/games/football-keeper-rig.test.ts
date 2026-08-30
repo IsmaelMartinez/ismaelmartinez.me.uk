@@ -298,21 +298,23 @@ const THINNEST_COLUMN =
 const BAND_STEP = 2 * Math.SQRT2 * Math.sqrt(0.25 / THINNEST_COLUMN);
 
 /**
- * The exactly-100 % cells the widened rig found, which are a **live defect and
- * are deliberately not fixed here**.
+ * The exactly-100 % cells the widened rig found, **fixed in PR #317** on
+ * 2026-08-26 (issue #312). Everything from here to the census below is the
+ * historical diagnosis, written while the defect was live and kept because the
+ * mechanism is what the assertion at the end of this file now guards against.
  *
  * `keeper.ts` opens by forbidding them: "No configuration of distance, aim,
  * power and skill produces exactly 0 % or exactly 100 %." Three previous rounds
  * each found one and each converted it into a roll — `gap > reach`,
  * `parryLock > 0`, and (issue #300) `ball.z > KEEPER_JUMP_Z`. This is the
  * fourth, it has the same shape, and it was invisible for the same reason all
- * the others were: it lives on the axis the rig could not express.
+ * the others were: it lived on the axis the rig could not express.
  *
  * At 60 px of body lag, cells such as `(45 px, +55 offset, full stick)` and
- * `(12 px, -100 offset, half stick)` convert **1.0000 over 2,000 seeds**, and 18
- * of 1,680 swept cells sit above 0.99.
+ * `(12 px, -100 offset, half stick)` converted **1.0000 over 2,000 seeds**, and
+ * 18 of 1,680 swept cells sat above 0.99.
  *
- * The mechanism was measured rather than guessed. `keeperPlane` computes
+ * The mechanism was measured rather than guessed. `keeperPlane` computed
  *
  *     const inFrame = Math.abs(m.ball.x - CENTRE_X) < GOAL_HALF;
  *
@@ -328,12 +330,14 @@ const BAND_STEP = 2 * Math.SQRT2 * Math.sqrt(0.25 / THINNEST_COLUMN);
  * exactly 0.9800, which is `1 - SAVE_FLOOR` and is the arithmetic confirming the
  * diagnosis.
  *
- * It is a one-line change to `match.ts` and it is a change to the game, so it is
- * not made in a rig round: this file reports the census and **issue #312**
- * carries the fix, exactly as issue #300 carried what issue #273 found about the
- * height cliff. Until then the census is printed and its *shape* is asserted, so
- * that a table which silently stopped measuring anything would still fail; the
- * assertion — no cell of the grid is a certainty — lands with the fix.
+ * It was a one-line change to `match.ts` and it was a change to the game, so it
+ * was not made in a rig round: this file reported the census and **issue #312**
+ * carried the fix, exactly as issue #300 carried what issue #273 found about the
+ * height cliff. PR #317 landed it on 2026-08-26, `inFrame` now measures the
+ * frame at the line, and the census below is a **contract** rather than a
+ * printout: no cell of the grid may be a certainty. The shape of the table is
+ * still asserted beside it, so one that silently stopped measuring anything
+ * would fail too.
  */
 const CERTAINTY_CENSUS = 0.99;
 /**

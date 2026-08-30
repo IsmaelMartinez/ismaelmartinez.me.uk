@@ -5,9 +5,13 @@ on:
     branches:
       - main
       - develop
+  # Deliberately unfiltered by base branch. Under `branches: [main]` a pull
+  # request stacked on another feature branch matched no filter and ran no CI
+  # at all, leaving only the handful of Vercel checks on the page. That reads
+  # exactly like a green run, so a reviewer could approve untested code and did
+  # (#330, PRs #322 and #324). The cost is a few extra runs on stacked PRs; the
+  # benefit is that a green PR always means the suite actually ran on it.
   pull_request:
-    branches:
-      - main
   schedule:
     # Six-hourly rebuild: the health dashboard's data is fetched at build
     # time, so a scheduled run keeps it fresh. Deploy is not triggered here;

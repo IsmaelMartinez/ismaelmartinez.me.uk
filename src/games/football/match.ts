@@ -242,7 +242,9 @@ const HEADER_SPEED = 295;
  * CPU's **attacking** goal alone, so that gate opened on **0** of those 320
  * ticks. Presence without agency, one beat earlier than the keeper work aimed
  * at the same cell. Fixed in PR #327 by giving the CPU a defensive header, at
- * which point this cell reads 3.057 air goals and +0.173 ladder. The lesson is
+ * which point this cell read 3.057 air goals and +0.173 ladder. That pair
+ * predates the `clearUpfield` fix in the same PR; `AIR_WIN_CHANCE`'s sweep
+ * table below carries the shipped figures, 2.893 and +0.260. The lesson is
  * worth more than the fix: a claim about what the AI does not do is a
  * measurement, not a reading.
  */

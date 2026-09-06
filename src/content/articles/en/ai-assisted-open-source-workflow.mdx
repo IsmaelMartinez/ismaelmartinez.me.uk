@@ -1,7 +1,7 @@
 ---
 title: "AI-Assisted Open Source: The Workflow"
 description: "The practical workflow behind maintaining teams-for-linux with AI: from CLAUDE.md to research, dependency upgrades, feature implementation, and quality gates."
-publishedDate: 2026-03-11
+publishedDate: 2026-08-09
 tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
 draft: true
 ---
@@ -18,37 +18,39 @@ This project has several layers of documentation. First, the technical documents
 
 Then there are the documents for contributors. The classic CONTRIBUTING.md, which I can now trim of some of the technical filler that already lives in those other documents.
 
-I also have another category for research, for the projects or parts that need an implementation phase. Sometimes I even commit the implementation plans, though I treat these two kinds of document more ephemerally: once the phase or project is done, I update the other documents or create new ones, and delete these. If I need those details, I can always look in the git history.
+I also have another category for research, for the projects or parts that need an implementation phase. Sometimes I even commit the implementation plans, though I treat these two kinds of document more ephemerally: they live while the work lasts, and I'll get to what happens to them later.
 
-And finally there are the documents for users. Good, concise documentation is essential when you maintain hundreds of thousands of users. I don't want people wasting time opening issues in the repo when there's a config option that solves their problem.
+And finally there are the documents for users. Good, concise documentation is essential when you maintain that many users. I don't want people wasting time opening issues in the repo when there's a config option that solves their problem.
 
-All these documents are alive, or I try to keep them alive, and they get a little better with each iteration. It's maybe the part that gets talked about least, but it's where AI helps the most and with the least effort, and the part it depends on most, in my opinion. My advice is to keep them to the point: concise and focused on what's current. That way you don't confuse yourself or the AI.
+All these documents are alive, or I try to keep them alive, and they get a little better with each iteration. It's maybe the part that gets talked about least, but it's where AI helps the most and with the least effort, and the part it depends on most, in my opinion. My advice is to keep them to the point: concise and focused on what's current. That way you don't get yourself in a muddle, or the AI either.
 
 ## Research Before Coding
 
-With that base, the first thing I always do is research. AI is very good at finding and pulling information together, especially when it's well structured (and no, you don't need a RAG for that). I run every issue and request through the AI to check whether we've already solved or tried it. There's often something on record, and that saves me a ton of time: with AI I analyse in minutes what would take days (and that, otherwise, I'd end up putting off, or solving from memory or gut feeling).
+With that base, the first thing I always do is research. AI is very good at finding and pulling information together, especially when it's well structured (and no, you don't need a RAG for that). I run every issue and request through the AI to check whether we've already solved or tried it (the reply, though, is always mine). There's often something on record, and that saves me a ton of time: with AI I analyse in minutes what by hand would eat the whole afternoon (and that, otherwise, I'd end up leaving until tomorrow...).
 
-If I then think there's a bug or a feature worth adding, I do some research. It's important to always focus the first iterations on investigating, gathering data, and testing hypotheses. I delegate all of that to the AI agent. I describe the problem ("screen sharing breaks on Wayland with the latest Electron update") and the agent investigates the relevant source, the changelog, and the upstream issues, and brings me a report. I correct it where needed and, for anything I'm not sure about, I ask for a throwaway prototype to test the hypothesis.
+If I then think there's a bug or a feature worth adding, I do some research. It's important to always focus the first iterations on investigating, gathering data, and testing hypotheses. I delegate all of that to the AI agent. I describe the problem ("screen sharing breaks on Wayland with the latest Electron update") and the agent investigates the relevant source, the changelog, and the upstream issues, and brings me a report. I steer it and correct it where needed and, for anything I'm not sure about, I ask for a throwaway prototype to test the hypothesis.
 
 Sometimes it's a single iteration; other times, several sessions. That's why I keep research documents in the repo too. When an approach looks viable, I ask the agent to write an action plan. I review it and open another conversation to reduce risk and gain clarity. Only then does implementation begin.
 
-For simple things, that conversation ends quickly; in some cases, like updating dependencies, the process is almost automatic and there's no need for prototypes or anything like that. For complex things it can stretch over several sessions, so the research document gets split into phases. We rarely implement them all: just because the AI can churn them out effortlessly doesn't mean you need them, and that's free complexity. The process adapts; what doesn't change is that I understand what's going on before committing to an approach.
+For simple things, that conversation ends quickly; in some cases, like updating dependencies, the process is almost automatic and there's no need for prototypes or anything like that (though I still read the diff myself: dependencies are exactly the place you don't want to get sloppy). For complex things it can stretch over several sessions, so the research document gets split into phases.
+
+To be honest, when the research documents end up long, we rarely implement all of it: just because the AI can churn them out effortlessly doesn't mean you need them, and that's free complexity. The process adapts; what doesn't change is that I understand what's going on before committing to an approach.
 
 ## Features and the Context-Clean Habit
 
-When a feature gets the green light, the flow is always the same: a clear specification that includes what *not* to do, incremental implementation in reviewable chunks, tests written alongside (the AI follows the patterns documented in CLAUDE.md), and a full read of every diff. The AI produces good code almost always, but "almost always" isn't good enough for thousands of users.
+When a feature gets the green light, the flow is always the same: a clear specification that includes what *not* to do, incremental implementation in reviewable chunks, tests written alongside (the AI follows the patterns documented in CLAUDE.md), and a full read of every diff. The AI produces good code almost always, but "almost always" isn't good enough for thousands of users. The solution has to be verifiable.
 
-When the work is done, the outcome becomes an ADR and the research that led there gets deleted. Git remembers the dead ends; the working directory doesn't need to. If you keep old research documents around, they tend to confuse the AI more than help it: it gets lost less if you give it what's current and leave the historical detail in the git history.
+When the work is done, the research documents are distilled into an ADR and/or update the existing documents. The research that led there gets deleted. Git remembers the dead ends; the working directory doesn't need to. If you keep old research documents around, they tend to confuse the AI more than help it: it gets lost less if you give it what's current and leave the historical detail in the git history.
 
 ## Keeping the Pace
 
-Dependency upgrades are the most frequent kind of session, but not the only one. Security sessions evaluate and apply the patches from advisories. Documentation passes update the READMEs and refresh CLAUDE.md with newly discovered invariants. Metrics sessions look at issue trends, contributor activity, build times, or changes in test coverage. Each one follows the same shape: I set the scope, the AI executes, I review.
+Dependency upgrades are the most frequent kind of session, and these days they're almost fully automated: the bot opens the PR, I review it, and I only roll up my sleeves when something goes off script. But they're not the only kind of session. Security sessions evaluate and apply the patches from advisories. Documentation passes update the READMEs and refresh CLAUDE.md with newly discovered invariants. Metrics sessions look at issue trends, contributor activity, or build times (and to keep an eye on the project's overall state there's the repo-butler, but we'll talk about that another day). Each one follows the same shape: I set the scope, the AI executes, I review.
 
 The hardest of all is keeping pace with the Teams web app, which changes without notice. Coding defensively against those changes is one of the most complicated parts of the project. When something breaks, the agent helps me classify it: is it a regression of ours or an upstream change? Then it investigates the differences in the DOM, the network, or the API responses. Some changes can be worked around; others can't. Recognising when a problem has no fix is a human call, and the response to users is mine.
 
-Nothing ships without passing the usual gates: CI has to be green with no exceptions (the linter, type checking, and the full test suite), every AI-assisted commit carries its `Co-authored-by` tag, every diff gets read by hand, and the release notes are written to explain the *why* rather than list files.
+Nothing ships without passing the gates from the first article: every diff read by hand and CI green with no exceptions (the linter, the unit tests, and the end-to-end ones), with its `Co-authored-by` tag on every assisted commit. The only one I'll add here: the release notes are written to explain the *why* rather than list files.
 
-Once you've built enough constraints around the AI (CLAUDE.md, the research-then-prototype loop, manual review, the CI gates), you stop using a tool and start directing a system. The pattern is the same one you'd apply to any growing software: you build trust with data, add hardness as you go, and simplify or remove what stops earning its place. The difference is that here the cycles run much faster. Treat it like a team.
+Once you've built enough constraints around the AI (CLAUDE.md, the research-then-prototype loop, manual review, the CI gates), you stop using a tool and start directing a system. The pattern is the same one you'd apply to any growing software: you build trust with data, add hardness as you go, and simplify or remove what stops earning its place. The difference is that here the cycles run much faster.
 
 ## Closing Thought
 

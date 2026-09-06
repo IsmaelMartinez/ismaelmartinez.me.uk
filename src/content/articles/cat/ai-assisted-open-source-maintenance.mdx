@@ -1,22 +1,22 @@
 ---
 title: "Codi obert assistit per IA: què canvia i què no"
 description: "Com les eines d'IA encaixen en el manteniment d'un projecte de codi obert de 7 anys: què accelera, què no pot reemplaçar i per què existeix l'arxiu CLAUDE.md."
-publishedDate: 2026-03-03
+publishedDate: 2026-08-09
 tags: ["IA", "Codi Obert", "Desenvolupament de Software", "Teams for Linux"]
-draft: true
+draft: false
 ---
 
 ## Set anys i encara creixent
 
-teams-for-linux va començar el 2018. Microsoft no tenia cap client per a Linux i l'aplicació web ni tan sols enviava notificacions, cosa que la feia força inútil com a aplicació de xat, així que vaig ressuscitar un wrapper Electron per cobrir una necessitat pròpia. No m'esperava gaire més que això, però la comunitat em va empènyer a mantenir-lo. Ara ja frega les 5.000 estrelles, 365 forks i més de 100 persones que han fet un commit.
+teams-for-linux va començar el 2018. Microsoft no tenia cap client per a Linux i l'aplicació web ni tan sols enviava notificacions, cosa que la feia força inútil com a aplicació de xat, així que vaig ressuscitar un wrapper Electron per cobrir una necessitat pròpia. No m'esperava gaire més que això, però la comunitat em va empènyer a mantenir-lo. Ara ja frega les 5.000 estrelles, 370 forks i més de 100 persones que han fet un commit.
 
-Aquest nombre de contribuïdors encara em sorprèn. Persones amb qui mai no he parlat apareixen amb una correcció, un informe d'error o una PR per afegir noves funcionalitats. De tant en tant arriba una donació d'algú que no sabia que el feia servir, que sempre és benvinguda. Set anys després, el codi obert encara funciona així, i el poc que ha canviat la IA és que algunes d'aquestes contribucions venen fetes amb l'ajuda de la IA, i en això hi ha qui la fa servir millor que altres, però tots estem aprenent.
+Aquest nombre de contribuïdors encara em sorprèn. Persones amb qui mai no he parlat apareixen amb una correcció, un informe d'error o una PR per afegir noves funcionalitats. Set anys després, el codi obert encara funciona així, i el poc que ha canviat la IA és que algunes d'aquestes contribucions venen fetes amb l'ajuda de la IA, i en això hi ha qui la fa servir millor que altres, però tots estem aprenent.
 
-El que la IA ha canviat és si una sola persona pot seguir el ritme d'un projecte d'aquesta mida. Adoptar-la no va ser la història d'origen. El codi, l'arquitectura i les decisions són anteriors a les eines en anys. Gràcies a la IA puc millorar el suport i la qualitat d'aquest producte mentre la demanda augmenta. La resta d'aquest article mostra com es veu això a la pràctica: què accelera, què no pot tocar i altres detalls com ara per què hi ha un arxiu CLAUDE.md al repositori. Són una sèrie d'articles: aquest tracta el perquè, i [el següent](/cat/articles/ai-assisted-open-source-workflow) és el com del dia a dia.
+El que la IA ha canviat és si una sola persona pot seguir el ritme d'un projecte d'aquesta mida. Adoptar-la no va ser la història d'origen. El codi, l'arquitectura i les decisions són anteriors a les eines en anys. Gràcies a la IA puc millorar el suport i la qualitat d'aquest producte mentre la demanda augmenta. La resta d'aquest article mostra com es veu això a la pràctica: què accelera, què no pot tocar i altres detalls com ara per què hi ha un arxiu CLAUDE.md al repositori. Són una sèrie d'articles: aquest tracta el perquè, i el següent serà el com del dia a dia.
 
 ## Què és realment CLAUDE.md
 
-Comencem per l'elefant a l'habitació. Més d'un m'ha retret tenir un arxiu CLAUDE.md al repositori. Alguns assumeixen que significa que el projecte està escrit per IA, vibe coded i poca cosa més. Això és un malentès del que fa l'arxiu.
+Comencem per l'elefant a l'habitació. Més d'un m'ha retret tenir un arxiu CLAUDE.md al repositori. Alguns assumeixen que significa que el projecte està escrit per IA, "vibe coded" i poca cosa més. Clarament un malentès del que fa l'arxiu.
 
 CLAUDE.md és un arxiu de configuració, semblant a `.editorconfig` o `tsconfig.json`. Li diu a l'eina d'IA com comportar-se en aquest codi específic. Documenta decisions arquitectòniques, com estan estructurades les coses, com m'agrada treballar amb el codi, requisits i altres coses que es trenquen una vegada i una altra. Bàsicament, el que normalment tinc al cap i aquelles coses que per un motiu o un altre són així.
 
@@ -32,11 +32,11 @@ La implementació de funcionalitats ben enteses és el més obvi. Un cop he deci
 
 Les actualitzacions de dependències i els pegats de seguretat són on l'estalvi de temps realment s'acumula. L'ecosistema npm envia avisos diverses vegades per setmana, i atendre cadascun a mà pot menjar-se la majoria de les hores d'un mantenidor.
 
-Explorar APIs poc familiars és una altra àrea on la IA destaca. La superfície d'API d'Electron és enorme, Wayland té les seves pròpies peculiaritats, i Linux en general sempre et sorprèn. Tenir una eina que pot digerir ràpidament documentació rellevant, valorar solucions i patrons, redueix significativament el temps d'exploració i planificació.
+Explorar APIs poc familiars és una altra àrea on la IA destaca. La superfície d'API d'Electron és enorme, Wayland té les seves pròpies peculiaritats, i Linux en general sempre et sorprèn. Tenir una eina que pot digerir ràpidament documentació rellevant, valorar solucions i patrons, redueix significativament el temps d'exploració, planificació i resolució.
 
 També m'ajuda a fer una feina de més qualitat. Gràcies a la IA, quan arriba una issue nova, no només he de dependre de la memòria i la intuïció. Puc posar-la a analitzar issues antigues, buscar solucions anteriors i entendre millor el problema. Depèn menys de si és un dilluns al matí o un divendres a les deu de la nit. Bàsicament, donar una resposta millor i més ràpida a qui fa servir l'aplicació, que al cap i a la fi és del que es tracta.
 
-Tot i així, la IA no serveix per a tot. Dona molt i sovint sembla saber-ne més que tu. Però hi ha coses on l'ésser humà encara controla. Mirem-les.
+Tot i així, hi ha moltes vegades en què l'he de dirigir per trobar la solució i sí, la IA no serveix per a tot (per molt que t'ho venguin a tot arreu). Dona molt i sovint sembla saber-ne més que tu. Però hi ha coses on l'ésser humà encara controla. Mirem-les.
 
 ## Què no pot reemplaçar la IA
 
@@ -46,7 +46,7 @@ Decidir què construir i què no construir requereix entendre la direcció del p
 
 La gestió de la comunitat és feina completament humana. Quan els usuaris van començar a queixar-se de la freqüència d'actualitzacions (la conversa de "calma amb les actualitzacions"), això requeria empatia, llegir l'ambient i fer un judici sobre la cadència de llançaments.
 
-Les decisions arquitectòniques estan en la mateixa categoria. Quan refactoritzar versus quan aplicar un pegat. On traçar els límits dels mòduls. Quanta compatibilitat cap enrere mantenir i quan trencar-la. Aquestes decisions donen forma al projecte durant anys i no es poden delegar a una eina que optimitza per a la tasca immediata.
+Les decisions arquitectòniques estan en la mateixa categoria. Quan refactoritzar versus quan aplicar un pegat. On traçar els límits dels mòduls. Quanta compatibilitat cap enrere mantenir i quan trencar-la. Aquestes decisions donen forma al projecte durant anys i no es poden delegar a una eina que optimitza per a la tasca immediata. Sí, la pots consultar, però la decisió l'has de prendre tu.
 
 El criteri de llançament és més matisat del que sembla. Està llesta aquesta versió? Hauria d'acumular més correccions primer? És la correcció de Wayland prou estable per publicar, o necessita una altra setmana de proves? Aquestes decisions requereixen context al qual cap eina té accés. De vegades és un "feeling" difícil d'explicar.
 
@@ -56,9 +56,9 @@ I després hi ha dir no a les peticions de funcionalitats. Això és potser la p
 
 teams-for-linux és un projecte d'un sol mantenidor amb centenars de milers d'usuaris actius diaris. Aquesta proporció és el desafiament fonamental.
 
-Sense eines d'IA, els números no surten. Respondre les issues porta més temps. Els llançaments es fan menys sovint. Els pegats de seguretat es queden a la cua. Al final s'acumulen, i o bé el projecte s'abandona o bé els usuaris acaben havent d'esperar anys per veure canvis.
+Durant anys ho vaig portar tot a mà, però a aquesta mida els números ja no surten. Respondre les issues porta més temps. Els llançaments es fan menys sovint. Els pegats de seguretat es queden a la cua. Al final s'acumulen, i o bé el projecte s'abandona o bé els usuaris acaben havent d'esperar anys per veure canvis.
 
-Amb eines d'IA, li puc seguir el ritme. Puc mantenir el projecte amb molt pocs bugs oberts (molts d'ells depenen d'altres frameworks o llibreries).
+Amb eines d'IA, li puc seguir el ritme. Puc mantenir el projecte amb molt pocs bugs oberts (molts d'ells depenen d'altres frameworks o llibreries). Això sí, res no entra sense passar per mi: cada diff que genera la IA me'l llegeixo a mà, res no es publica sense el CI en verd, i cada commit assistit porta la seva etiqueta `Co-authored-by`.
 
 La realitat és que la IA ha vingut per quedar-se. Per a mantenidors de codi obert en solitari, és una eina de sostenibilitat, no una drecera. Pot ajudar a redreçar aquells projectes amb centenars d'issues obertes, perquè això no agrada a ningú. Ni als mantenidors ni als usuaris.
 

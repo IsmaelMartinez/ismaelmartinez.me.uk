@@ -279,45 +279,6 @@ img {
   color: var(--color-text-muted);
 }
 
-/* Links list */
-.link-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  background: var(--color-bg-secondary);
-  border: var(--frame-width) solid var(--color-frame);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
-}
-
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .link-card:hover {
-    transform: translate(3px, 3px);
-    box-shadow: var(--shadow-card-pressed);
-  }
-}
-
-.link-card-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-}
-
-.link-card-content h3 {
-  font-size: 1.05rem;
-  margin-bottom: 0.125rem;
-}
-
-.link-card-content p {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-}
-
 /* Scroll reveal (classes only applied by Layout script, so no-JS users see everything) */
 @media (prefers-reduced-motion: no-preference) {
   .js-reveal .reveal {

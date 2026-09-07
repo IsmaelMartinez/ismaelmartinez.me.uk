@@ -1,6 +1,5 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import LinkCard from '../../components/LinkCard.astro';
 import { useTranslations, locales } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { socialLinks, feedLink } from '../../data/links';
@@ -13,13 +12,23 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
-const readLinks = [{ ...feedLink, url: `/${lang}/rss.xml` }, ...socialLinks.filter(link => link.group === 'read')];
-const connectLinks = socialLinks.filter(link => link.group === 'connect');
+// The page reads as a timeline: three past eras, then a "now" node that holds
+// the current focus areas. Eras are labelled by rough period rather than exact
+// year on purpose (owner's choice, 2026-09); the labels are plain translated
+// strings so a locale can phrase "late 1990s" its own way.
+const eras = [
+  { label: t('about.era1Label'), title: t('about.era1Title'), body: t('about.era1') },
+  { label: t('about.era2Label'), title: t('about.era2Title'), body: t('about.era2') },
+  { label: t('about.era3Label'), title: t('about.era3Title'), body: t('about.era3') },
+];
 
-const focusAreas = [
-  { icon: '🤖', title: t('about.focus1Title'), body: t('about.focus1') },
-  { icon: '⚡', title: t('about.focus2Title'), body: t('about.focus2') },
-  { icon: '🌍', title: t('about.focus3Title'), body: t('about.focus3') },
+const focusAreas = [t('about.focus1Title'), t('about.focus2Title'), t('about.focus3Title')];
+
+// Somewhere to read first, then somewhere to reach me; RSS is the primary
+// action and is rendered separately ahead of these.
+const elsewhere = [
+  ...socialLinks.filter(link => link.group === 'read'),
+  ...socialLinks.filter(link => link.group === 'connect'),
 ];
 
 const aboutJsonLd = {
@@ -32,146 +41,280 @@ const aboutJsonLd = {
 <Layout title={t('about.title')} description={t('about.description')} lang={lang}>
   <script slot="head" type="application/ld+json" set:html={toJsonLd(aboutJsonLd)} />
 
-  <section class="section">
-    <div class="container">
+  <section class="section about">
+    <div class="container about-column">
       <header class="page-header">
-        <h1 class="page-title">{t('about.title')}</h1>
-        <p class="page-description">{t('about.description')}</p>
+        <p class="kicker">{t('about.title')}</p>
+        <h1 class="page-title">{t('about.headline')}</h1>
+        <p class="page-lede">{t('about.lede')}</p>
       </header>
 
-      <div class="about-content">
-        <div class="about-section">
-          <h2>{t('about.bioTitle')}</h2>
-          <p>{t('about.bio')}</p>
-        </div>
-
-        <div class="about-section">
-          <h2>{t('about.focusTitle')}</h2>
-          <div class="grid focus-grid">
-            {focusAreas.map(area => (
-              <div class="card focus-card">
-                <span class="focus-icon" aria-hidden="true">{area.icon}</span>
-                <h3>{area.title}</h3>
-                <p>{area.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* id must match connectAnchorPath in src/data/links.ts */}
-        <div class="about-section" id="connect">
-          <h2>{t('section.connect')}</h2>
-          <p>{t('section.connect.description')}</p>
-
-          <div class="link-group">
-            <h2 class="group-title">{t('connect.readTitle')}</h2>
-            <div class="links-list">
-              {readLinks.map(link => (
-                <LinkCard link={link} lang={lang} />
-              ))}
+      <ol class="timeline">
+        {eras.map(era => (
+          <li class="era">
+            <span class="era-label">{era.label}</span>
+            <span class="era-rail" aria-hidden="true"><span class="era-node"></span></span>
+            <div class="era-body">
+              <h2>{era.title}</h2>
+              <p>{era.body}</p>
             </div>
-          </div>
-
-          <div class="link-group">
-            <h2 class="group-title">{t('connect.connectTitle')}</h2>
-            <div class="links-list">
-              {connectLinks.map(link => (
-                <LinkCard link={link} lang={lang} />
+          </li>
+        ))}
+        <li class="era era-now">
+          <span class="era-label">{t('about.nowLabel')}</span>
+          <span class="era-rail" aria-hidden="true"><span class="era-node"></span></span>
+          <div class="era-body">
+            <h2>{t('about.nowTitle')}</h2>
+            <p>{t('about.now')}</p>
+            <p class="kicker now-kicker">{t('about.focusTitle')}</p>
+            <ul class="grid now-grid">
+              {focusAreas.map((title, i) => (
+                <li class="card now-card">
+                  <span class="now-index">0{i + 1}</span>
+                  <span class="now-title">{title}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
-        </div>
+        </li>
+      </ol>
+
+      <blockquote class="about-quote">
+        <p>“{t('about.quote')}”</p>
+      </blockquote>
+    </div>
+  </section>
+
+  {/* id must match connectAnchorPath in src/data/links.ts */}
+  <section class="connect" id="connect">
+    <div class="container about-column">
+      <p class="kicker">{t('section.connect')}</p>
+      <h2 class="connect-title">{t('about.connectHeadline')}</h2>
+      <p class="connect-body">{t('about.connectBody')}</p>
+      <div class="connect-actions">
+        <a href={`/${lang}/rss.xml`} class="btn btn-primary" title={feedLink.description[lang]}>{t('about.subscribe')} →</a>
+        {elsewhere.map(link => (
+          <a href={link.url} class="btn btn-outline" target="_blank" rel="noopener noreferrer" title={link.description[lang]}>{link.name}</a>
+        ))}
       </div>
     </div>
   </section>
 </Layout>
 
 <style>
+  /* One reading column for the whole page: the timeline is a single-column
+     story, so the wide .container measure would leave it stranded on the left. */
+  .about-column {
+    max-width: calc(760px + 2 * var(--space-lg));
+  }
+
   .page-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
     margin-bottom: var(--space-2xl);
   }
 
   .page-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: var(--space-md);
+    font-size: clamp(2.2rem, 5vw, 3.25rem);
+    line-height: 1.08;
+    max-width: 18ch;
   }
 
-  .page-description {
-    font-size: 1.125rem;
+  .page-lede {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 1.2rem;
+    line-height: 1.7;
     color: var(--color-text-muted);
     max-width: 600px;
   }
 
-  .about-content {
-    max-width: 800px;
-  }
-
-  .about-section {
+  /* Timeline: label | rail | body. The rail column draws the square node and,
+     on every entry but the last, the line down to the next one. */
+  .timeline {
+    list-style: none;
     margin-bottom: var(--space-2xl);
   }
 
-  /* Keep the anchored section clear of the sticky nav when reached via #connect. */
-  #connect {
+  .era {
+    display: grid;
+    grid-template-columns: 120px 32px minmax(0, 1fr);
+    grid-template-areas: "label rail body";
+    column-gap: var(--space-md);
+  }
+
+  .era-label {
+    grid-area: label;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-align: right;
+    padding-top: 4px;
+  }
+
+  .era-now .era-label {
+    color: var(--color-accent);
+  }
+
+  .era-rail {
+    grid-area: rail;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .era-rail::after {
+    content: '';
+    flex: 1;
+    width: 2px;
+    background: var(--color-frame);
+  }
+
+  .era:last-child .era-rail::after {
+    display: none;
+  }
+
+  .era-node {
+    width: 14px;
+    height: 14px;
+    margin-top: 6px;
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    background: var(--color-bg-secondary);
+  }
+
+  .era-now .era-node {
+    background: var(--color-accent-solid);
+    box-shadow: 3px 3px 0 var(--color-shadow);
+  }
+
+  .era-body {
+    grid-area: body;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-2xl);
+  }
+
+  .era:last-child .era-body {
+    padding-bottom: 0;
+  }
+
+  .era-body h2 {
+    font-size: 1.375rem;
+  }
+
+  .era-body > p {
+    line-height: 1.75;
+    color: var(--color-text-muted);
+  }
+
+  .now-kicker {
+    margin-top: var(--space-md);
+  }
+
+  .now-grid {
+    list-style: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .now-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    box-shadow: 4px 4px 0 var(--color-shadow);
+  }
+
+  .now-index {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--color-text-muted);
+  }
+
+  .now-title {
+    font-weight: 700;
+    font-size: 0.9375rem;
+  }
+
+  .about-quote {
+    padding: var(--space-xl) var(--space-xl);
+    background: var(--color-bg-secondary);
+    border: var(--frame-width) solid var(--color-frame);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: clamp(1.35rem, 2.6vw, 1.75rem);
+    line-height: 1.35;
+  }
+
+  /* The connect band shares the Hero's hatched paper so the page ends the
+     way the site opens. Keep the anchored section clear of the sticky nav
+     when reached via #connect. */
+  .connect {
+    padding: var(--space-3xl) 0;
+    border-top: var(--frame-width) solid var(--color-frame);
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        transparent 0 34px,
+        color-mix(in srgb, var(--color-frame) 3%, transparent) 34px 35px
+      );
     scroll-margin-top: calc(var(--nav-height) + var(--space-md));
   }
 
-  .about-section h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: var(--space-md);
-  }
-
-  .about-section > p {
-    line-height: 1.8;
-    color: var(--color-text-muted);
-  }
-
-  .focus-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .focus-card h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin: var(--space-sm) 0;
-  }
-
-  .focus-card p {
-    font-size: 0.9375rem;
-    line-height: 1.7;
-    color: var(--color-text-muted);
-  }
-
-  .focus-icon {
-    font-size: 1.5rem;
-  }
-
-  @media (min-width: 768px) {
-    .focus-grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
-  }
-
-  .link-group {
-    margin-top: var(--space-xl);
-  }
-
-  /* Group titles are h2 for the document outline (LinkCard names are h3),
-     but keep the small-caps look; the extra specificity beats .about-section h2. */
-  .about-section .group-title {
-    font-size: 0.8rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
-    margin-bottom: var(--space-md);
-  }
-
-  .links-list {
+  .connect .about-column {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-lg);
+  }
+
+  .connect-title {
+    font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+    max-width: 18ch;
+  }
+
+  .connect-body {
+    line-height: 1.75;
+    color: var(--color-text-muted);
+    max-width: 52ch;
+  }
+
+  .connect-actions {
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-md);
-    max-width: 600px;
+  }
+
+  @media (max-width: 600px) {
+    /* Label moves above the title; the rail stays as a slim left gutter. */
+    .era {
+      grid-template-columns: 24px minmax(0, 1fr);
+      grid-template-areas:
+        "rail label"
+        "rail body";
+      column-gap: var(--space-sm);
+    }
+
+    .era-label {
+      text-align: left;
+      padding-top: 0;
+      line-height: 26px;
+    }
+
+    .now-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .about-quote {
+      padding: var(--space-lg);
+    }
   }
 </style>

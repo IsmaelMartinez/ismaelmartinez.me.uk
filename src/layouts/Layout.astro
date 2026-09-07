@@ -374,7 +374,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
           }
         }, { threshold: 0.1, rootMargin: '0px 0px -8% 0px' });
 
-        const targets = document.querySelectorAll('.grid > *, .related-grid > *, .link-card, .section-title, .section-description');
+        const targets = document.querySelectorAll('.grid > *, .related-grid > *, .section-title, .section-description');
         let index = 0;
         targets.forEach((el) => {
           if (el.classList.contains('revealed')) return;

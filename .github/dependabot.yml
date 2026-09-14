@@ -13,3 +13,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # github/codeql-action's init and analyze steps must run the same
+      # version; bumping them in separate PRs fails analyze with a config
+      # version mismatch (#335, #336).
+      github-actions:
+        patterns:
+          - "*"

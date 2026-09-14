@@ -16,7 +16,8 @@ updates:
     groups:
       # github/codeql-action's init and analyze steps must run the same
       # version; bumping them in separate PRs fails analyze with a config
-      # version mismatch (#335, #336).
-      github-actions:
+      # version mismatch (#335, #336). Scoped to codeql-action only so
+      # unrelated action bumps keep arriving individually.
+      codeql-action:
         patterns:
-          - "*"
+          - "github/codeql-action"

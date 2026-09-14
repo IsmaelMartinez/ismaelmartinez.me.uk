@@ -17,7 +17,10 @@ updates:
       # github/codeql-action's init and analyze steps must run the same
       # version; bumping them in separate PRs fails analyze with a config
       # version mismatch (#335, #336). Scoped to codeql-action only so
-      # unrelated action bumps keep arriving individually.
+      # unrelated action bumps keep arriving individually. The wildcard is
+      # load-bearing: Dependabot names sub-path actions in full, so
+      # `github/codeql-action/init` and `/analyze` do not match the bare name
+      # (#348 and #349 arrived split under the unwildcarded pattern).
       codeql-action:
         patterns:
-          - "github/codeql-action"
+          - "github/codeql-action*"

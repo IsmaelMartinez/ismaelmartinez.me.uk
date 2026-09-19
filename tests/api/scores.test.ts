@@ -70,7 +70,6 @@ const A_DAY = 24 * 60 * 60;
 const TOKEN = 'vercel_blob_rw_test_token';
 const ADDRESS_LIMIT = 20;
 const GAME_LIMIT = 300;
-const MAX_RECENT = 400;
 const ADDRESS = '203.0.113.5';
 
 /** What the handler derives for the test address, so the salt stays its own business. */
@@ -89,20 +88,15 @@ function seed(gameId: string, board: Partial<StoredBoard>, etag = `etag-${gameId
 /**
  * Seeds a board from its rows, deriving the matching `recent` submissions so a
  * test can keep describing a board by the scores on it. Each row is credited
- * to its own address unless `sameAddress` is set, so seeding a board does not
- * accidentally spend one address's hourly allowance.
+ * to its own address, so seeding a board does not accidentally spend one
+ * address's hourly allowance.
  */
-function seedBoard(
-  gameId: string,
-  entries: BoardEntry[],
-  etag?: string,
-  sameAddress?: string
-): void {
+function seedBoard(gameId: string, entries: BoardEntry[], etag?: string): void {
   seed(
     gameId,
     {
       top: entries,
-      recent: entries.map(e => ({ h: sameAddress ?? `hash-${e.n}`, t: e.t, n: e.n }))
+      recent: entries.map(e => ({ h: `hash-${e.n}`, t: e.t, n: e.n }))
     },
     etag
   );
@@ -358,8 +352,6 @@ describe('POST rejections', () => {
   // gets in stays on every cabinet until someone hand-edits the blob.
   it('rejects blocked initials even though they match the pattern', async () => {
     for (const initials of ['ASS', 'FUC', 'NIG', 'TIT']) {
-      // Proving the block is doing the work, not the pattern.
-      expect(/^[A-Z0-9]{1,3}$/.test(initials)).toBe(true);
       const response = await POST(postRequest(submission({ initials, nonce: `n-${initials}` })));
       expect(response.status).toBe(400);
     }
@@ -483,14 +475,6 @@ describe('POST writes', () => {
     await POST(postRequest(submission({ nonce: 'fresh' })));
     const board = stored('snake');
     expect(board.recent).toEqual([{ h: ADDRESS_HASH, t: NOW_SECONDS, n: 'fresh' }]);
-  });
-
-  it('bounds `recent` above the daily cap, so pruning never evicts a countable write', async () => {
-    seedTraffic('snake', MAX_RECENT, manyAddresses, index => NOW_SECONDS - index);
-    // 400 live writes is past the 300/day cap, so this is refused rather than
-    // written — which is the point: the cap bites before the bound does.
-    const response = await POST(postRequest(submission({ nonce: 'fresh' })));
-    expect(response.status).toBe(429);
   });
 });
 

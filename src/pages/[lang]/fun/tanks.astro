@@ -317,6 +317,10 @@ const weapons = [
   .difficulty-buttons,
   .arena-buttons {
     display: inline-flex;
+    /* Five arena pills are wider than a phone frame; unwrapped they set the
+       overlay's minimum width and the whole start screen clips both sides. */
+    flex-wrap: wrap;
+    justify-content: center;
     gap: var(--space-xs);
     padding: 4px;
     background: var(--color-bg-secondary);

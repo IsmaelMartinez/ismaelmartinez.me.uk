@@ -496,7 +496,8 @@ const hintAttrs = Object.fromEntries(
     margin-bottom: var(--space-xl);
   }
 
-  .level-cell {
+  /* The cells are built by game.ts, so they carry no scope attribute. */
+  .level-grid :global(.level-cell) {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -514,17 +515,17 @@ const hintAttrs = Object.fromEntries(
     transition: all 0.15s ease;
   }
 
-  .level-cell:hover:not(:disabled) {
+  .level-grid :global(.level-cell:hover:not(:disabled)) {
     border-color: #84cc16;
     background: rgba(132, 204, 22, 0.16);
   }
 
-  .level-cell:disabled {
+  .level-grid :global(.level-cell:disabled) {
     opacity: 0.45;
     cursor: not-allowed;
   }
 
-  .level-cell .level-lock {
+  .level-grid :global(.level-lock) {
     font-size: 0.85rem;
   }
 

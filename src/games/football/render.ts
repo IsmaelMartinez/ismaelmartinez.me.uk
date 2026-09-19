@@ -93,8 +93,8 @@ export { PALETTE, CROWD_COLOURS } from './sprites';
 export const FB_W = 320;
 export const FB_H = 224;
 /** The HUD column occupies the right-hand 72 px; the playfield is the rest. */
-export const HUD_X = VIEW_W;
-export const HUD_W = FB_W - VIEW_W;
+const HUD_X = VIEW_W;
+const HUD_W = FB_W - VIEW_W;
 
 /**
  * The largest whole multiple of the framebuffer that fits `availW x availH`
@@ -117,9 +117,9 @@ export function integerScale(availW: number, availH: number, dpr: number): numbe
 }
 
 /** Terrace baked around the pitch, which is also the camera's slack. */
-export const LAYER_MARGIN = 40;
-export const LAYER_W = PITCH_W + LAYER_MARGIN * 2;
-export const LAYER_H = PITCH_L + LAYER_MARGIN * 2;
+const LAYER_MARGIN = 40;
+const LAYER_W = PITCH_W + LAYER_MARGIN * 2;
+const LAYER_H = PITCH_L + LAYER_MARGIN * 2;
 
 /** Radar geometry, per 8.4. */
 const RADAR = { x: 254, y: 68, w: 56, h: 104 };
@@ -264,7 +264,7 @@ export const DEFAULT_TEXT: RenderText = {
 /* ------------------------------------------------------------------ */
 /* view models                                                         */
 
-export interface MatchView {
+interface MatchView {
   /** Real seconds since the last frame; drives the camera and the run cycle. */
   dt: number;
   runScore: number;
@@ -284,12 +284,12 @@ export interface MatchView {
   attract?: boolean;
 }
 
-export interface TitleView {
+interface TitleView {
   /** Seconds since the screen appeared; the cursor blinks off it. */
   clock: number;
 }
 
-export interface TeamSelectView {
+interface TeamSelectView {
   clock: number;
   /** Index into the visible roster, 0..11 — or 12 once the secret side is in. */
   cursor: number;
@@ -308,7 +308,7 @@ export interface TeamSelectView {
  * renderer takes the physics from the engine and does its own rasterising —
  * see {@link Renderer.drawEffects}.
  */
-export interface EffectsView {
+interface EffectsView {
   readonly particles: ReadonlyArray<{
     x: number;
     y: number;
@@ -326,23 +326,23 @@ export interface EffectsView {
   }>;
 }
 
-export interface TablesView {
+interface TablesView {
   run: RunState;
   /** Headline above the tables, e.g. the matchday. */
   heading?: string;
 }
 
-export interface BracketView {
+interface BracketView {
   run: RunState;
 }
 
-export interface ShootoutView {
+interface ShootoutView {
   teams: [Team, Team];
   /** The strips the fixture was played in, so the taker keeps his shirt. */
   kits: [Kit, Kit];
 }
 
-export interface FullTimeView {
+interface FullTimeView {
   match: MatchState;
   /** The word under the scorers: THROUGH, PENALTIES, GAME OVER… */
   outcome: string;
@@ -350,13 +350,13 @@ export interface FullTimeView {
   best: number;
 }
 
-export interface ChampionView {
+interface ChampionView {
   team: Team;
   runScore: number;
   best: number;
 }
 
-export interface GameOverView {
+interface GameOverView {
   run: RunState;
   runScore: number;
   best: number;

@@ -129,11 +129,10 @@ export const SLIDE_H = 16;
 export const DIVE_W = 18;
 export const DIVE_H = 12;
 export const BALL_MIN = 6;
-export const BALL_MAX = 9;
+const BALL_MAX = 9;
 export const TRIANGLE_W = 7;
-export const TRIANGLE_H = 6;
 export const SHADOW_W = 6;
-export const SHADOW_H = 2;
+const SHADOW_H = 2;
 export const MARKER_SIZE = 9;
 
 /**
@@ -395,7 +394,7 @@ export interface PlayerSprites {
   slide: [HTMLCanvasElement, HTMLCanvasElement];
 }
 
-export interface KeeperSprites extends PlayerSprites {
+interface KeeperSprites extends PlayerSprites {
   /** Dive frames, index 0 diving right, 1 diving left. */
   dive: [HTMLCanvasElement, HTMLCanvasElement];
 }

@@ -42,7 +42,7 @@ export const ROTATIONS: ReadonlyArray<ReadonlyArray<readonly Cell[]>> = DEFS.map
 });
 
 /** Kick offsets tried in order on rotation; dy -1 lifts off the floor. */
-export const KICKS: ReadonlyArray<Cell> = [
+const KICKS: ReadonlyArray<Cell> = [
   [0, 0],
   [-1, 0],
   [1, 0],

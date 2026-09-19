@@ -18,11 +18,13 @@ import {
   setupHiDpiCanvas,
   shadeColor,
   createGameAudio,
-  wireChannelButton,
+  wireSoundToggles,
   createToaster,
   createEffects,
   formatClock,
-  hash01 as hash
+  hash01 as hash,
+  mountCabinet,
+  listenUntilSwap
 } from '../engine';
 import { CASCADE_MUSIC, BASE_TEMPO } from './music';
 import { WELL_W, WELL_H } from './well';
@@ -91,19 +93,9 @@ const MAX_TEMPO = 240;
 type Phase = 'idle' | 'play' | 'over';
 
 export function initCascadeGame(): void {
-  const root = document.getElementById('cascade-root');
-  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvasEl) return;
-  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
-  // re-entry on a root this module has already wired.
-  if (root.dataset.gameWired) return;
-  const canvas: HTMLCanvasElement = canvasEl;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const ctx: CanvasRenderingContext2D = context;
-  root.dataset.gameWired = 'true';
-
-  const el = (id: string) => document.getElementById(id) as HTMLElement;
+  const mounted = mountCabinet('cascade-root');
+  if (!mounted) return;
+  const { root, canvas, ctx, el } = mounted;
   const startOverlay = el('start-overlay');
   const overOverlay = el('over-overlay');
   const startBtn = el('start-btn');
@@ -322,8 +314,7 @@ export function initCascadeGame(): void {
   recordEl.textContent = `${board().best()}`;
 
   const audio = createGameAudio(CASCADE_MUSIC);
-  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
-  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
+  wireSoundToggles(audio);
 
   const cellPx = (cx: number, cy: number) => ({
     x: WELL_X + cx * TILE,
@@ -535,18 +526,8 @@ export function initCascadeGame(): void {
     else if (e.key === 'ArrowRight') release(1);
     else if (e.key === 'ArrowDown') setSoftDrop(run, false);
   };
-  document.addEventListener('keydown', onKeydown);
-  document.addEventListener('keyup', onKeyup);
-  // Document-level listeners outlive a ClientRouter swap; each wiring retires
-  // its own handlers so re-inits don't stack keyboard handlers forever.
-  document.addEventListener(
-    'astro:before-swap',
-    () => {
-      document.removeEventListener('keydown', onKeydown);
-      document.removeEventListener('keyup', onKeyup);
-    },
-    { once: true }
-  );
+  listenUntilSwap(document, 'keydown', onKeydown);
+  listenUntilSwap(document, 'keyup', onKeyup);
 
   // Touch pads: hold-to-repeat for shift and soft drop, taps for the rest.
   // `tap` is the single-step action for keyboard/AT activation — those fire

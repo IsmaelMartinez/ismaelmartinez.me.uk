@@ -88,8 +88,8 @@ export const PRESS_TIME = 1.2;
  * gets the fixed, decent floor for the same reason its press coordination is
  * fixed: difficulty is the CPU's handicap, not a global dial.
  */
-export const HUMAN_PRESS_REACT = 0.16;
-export function pressReact(side: Side, difficulty: number): number {
+const HUMAN_PRESS_REACT = 0.16;
+function pressReact(side: Side, difficulty: number): number {
   return side === 0 ? HUMAN_PRESS_REACT : cpuLatency(difficulty);
 }
 
@@ -111,7 +111,7 @@ function transferring(m: MatchState, side: Side): boolean {
  * player's side is a fixed, decent 0.6; the CPU's rises with difficulty, which
  * is 6.8's "press coordination" channel and the strongest of the four.
  */
-export const HUMAN_BACKING = 1;
+const HUMAN_BACKING = 1;
 
 /**
  * The outfielder who should go for a loose ball. Whoever just kicked it is
@@ -418,7 +418,7 @@ function coverPoint(anchor: Point, ball: { x: number; y: number }, own: number):
   };
 }
 
-export type CarrierAction = 'shoot' | 'pass' | 'loft' | 'dribble';
+type CarrierAction = 'shoot' | 'pass' | 'loft' | 'dribble';
 
 export interface CarrierPlan {
   action: CarrierAction;

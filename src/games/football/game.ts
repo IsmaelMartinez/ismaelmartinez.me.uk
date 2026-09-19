@@ -19,7 +19,9 @@ import {
   loadScore,
   saveScore,
   seededRng,
-  wireChannelButton
+  wireSoundToggles,
+  mountCabinet,
+  listenUntilSwap
 } from '../engine';
 import { BASE_TEMPO, FOOTBALL_MUSIC } from './music';
 import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
@@ -109,18 +111,9 @@ const KONAMI_BUTTONS = 8;
 const UNLOCK_FLASH = 2.4;
 
 export function initFootballGame(): void {
-  const root = document.getElementById('football-root');
-  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvasEl) return;
-  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
-  // re-entry on a root this module has already wired.
-  if (root.dataset.gameWired) return;
-  const canvas: HTMLCanvasElement = canvasEl;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const ctx: CanvasRenderingContext2D = context;
-  root.dataset.gameWired = 'true';
-
+  const mounted = mountCabinet('football-root');
+  if (!mounted) return;
+  const { root, canvas, ctx } = mounted;
   const el = (id: string) => document.getElementById(id);
   const s = (key: string, fallback: string) => root.dataset[key] || fallback;
 
@@ -330,8 +323,7 @@ export function initFootballGame(): void {
    * hears. The score itself lives in `music.ts`, as every cabinet's does.
    */
   const audio = createGameAudio(FOOTBALL_MUSIC);
-  wireChannelButton(el('music-btn'), audio, 'music');
-  wireChannelButton(el('sfx-btn'), audio, 'sfx');
+  wireSoundToggles(audio);
 
   /* ---------------------------------------------------------------- */
   /* state                                                             */
@@ -517,18 +509,8 @@ export function initFootballGame(): void {
   const onKeyUp = (e: KeyboardEvent) => {
     keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
   };
-  window.addEventListener('keydown', onKeyDown, true);
-  window.addEventListener('keyup', onKeyUp, true);
-  // Window-level listeners outlive a ClientRouter swap; each wiring retires
-  // its own handlers so re-inits don't stack keyboard handlers forever.
-  document.addEventListener(
-    'astro:before-swap',
-    () => {
-      window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('keyup', onKeyUp, true);
-    },
-    { once: true }
-  );
+  listenUntilSwap(window, 'keydown', onKeyDown, true);
+  listenUntilSwap(window, 'keyup', onKeyUp, true);
 
   /**
    * The cabinet's own Konami code, live on the team-select screen only.

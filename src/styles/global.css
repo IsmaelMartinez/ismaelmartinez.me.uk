@@ -394,66 +394,6 @@ html.theme-switching::view-transition-new(root) {
   }
 }
 
-/* Arcade games: the canvas play area and its overlays are always dark — the
-   canvas draws its own dark artwork and overlays sit on a hardcoded dark scrim.
-   Pin overlay/HUD text to the dark palette so it stays readable regardless of
-   the site theme. Without this, the themed text variables flip to dark in light
-   mode and produce unreadable dark-on-dark overlay text. */
-.game-area,
-.game-overlay {
-  --color-text: #e5e5e5;
-  --color-text-muted: #a3a3a3;
-  --color-border: #404040;
-  --color-bg-secondary: #1a1a1a;
-  /* Set the concrete color too, not just the variable: overlay text that has no
-     explicit color (e.g. Microcity/Pixel Park instructions) otherwise inherits
-     body's already-resolved color, which is dark in light mode. */
-  color: var(--color-text);
-}
-
-/* Shared audio toggles (music / effects) in each arcade game's header. */
-.sound-btn {
-  padding: var(--space-xs) var(--space-sm);
-  font-size: 1.1rem;
-  line-height: 1;
-  /* Comfortable tap target on phones (was 44x30 — too short to press) */
-  min-width: 44px;
-  min-height: 44px;
-  justify-content: center;
-}
-
-/* A muted channel dims and strikes through its glyph so an unchanged icon
-   (e.g. the music note) still reads clearly as off. */
-.sound-btn.muted {
-  opacity: 0.45;
-  text-decoration: line-through;
-}
-
-/* On phones the fixed-aspect canvas is short — too short to fit an overlay's
-   instructions and buttons, so the buttons (e.g. Tank Duel's "2 Players") got
-   clipped behind the frame. Give the play area extra height, but only while a
-   start/result overlay is actually visible (detected via :has + the inline
-   display style the games toggle), so normal gameplay keeps its aspect ratio.
-   The overlay itself also scrolls (overflow-y: auto on .game-overlay) as a
-   final safety net for very small screens. */
-@media (max-width: 600px) {
-  .game-area:has(.game-overlay:not([style*="none"])) {
-    min-height: 30rem;
-  }
-
-  /* Compact the overlay so its instructions and buttons fit the smaller frame.
-     The descendant selectors are deliberately specific enough to win over
-     Astro's per-component scoped rules. */
-  .game-area .game-overlay .overlay-content {
-    padding: var(--space-md);
-  }
-
-  .game-area .game-overlay .play-icon {
-    font-size: 2.5rem;
-    margin-bottom: var(--space-sm);
-  }
-}
-
 /* Print Stylesheet */
 @media print {
   :root {

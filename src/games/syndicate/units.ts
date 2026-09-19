@@ -25,7 +25,7 @@ export const WEAPONS: Record<WeaponId, Weapon> = {
 };
 
 export type UnitKind = 'agent' | 'civilian' | 'guard' | 'enemy' | 'target' | 'vip';
-export type Faction = 'player' | 'hostile' | 'neutral';
+type Faction = 'player' | 'hostile' | 'neutral';
 
 export interface Unit {
   id: number;
@@ -60,7 +60,7 @@ export interface Unit {
   alive: boolean;
 }
 
-export const UNIT_HP: Record<UnitKind, number> = {
+const UNIT_HP: Record<UnitKind, number> = {
   agent: 100,
   civilian: 25,
   guard: 60,

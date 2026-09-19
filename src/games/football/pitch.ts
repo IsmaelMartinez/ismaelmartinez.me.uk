@@ -40,7 +40,7 @@ export const GOAL_RIGHT = CENTRE_X + GOAL_HALF;
 export const VIEW_W = 248;
 export const VIEW_H = 224;
 /** Terrace the camera may show beyond the touchline. */
-export const CAMERA_MARGIN = 16;
+const CAMERA_MARGIN = 16;
 
 /** Side 0 is always the human; side 1 is always the CPU. */
 export type Side = 0 | 1;

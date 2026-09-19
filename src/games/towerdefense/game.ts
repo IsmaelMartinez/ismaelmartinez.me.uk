@@ -27,12 +27,14 @@ import {
   shadeColor,
   chebyshev,
   createGameAudio,
-  wireChannelButton,
+  wireSoundToggles,
   createToaster,
   createEffects,
   seededRng,
   type IsoView,
-  hash01 as hash
+  hash01 as hash,
+  mountCabinet,
+  createConfirmPrompt
 } from '../engine';
 import { TOWERDEFENSE_MUSIC } from './music';
 import { GRID_W, GRID_H, createTdMap, routePosition, type TdMap } from './path';
@@ -118,19 +120,9 @@ const SHOT_LIFE = 0.14;
 type Phase = 'idle' | 'build' | 'wave' | 'confirm' | 'over';
 
 export function initTowerDefenseGame(): void {
-  const root = document.getElementById('towerdefense-root');
-  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvasEl) return;
-  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
-  // re-entry on a root this module has already wired.
-  if (root.dataset.gameWired) return;
-  const canvas: HTMLCanvasElement = canvasEl;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const ctx: CanvasRenderingContext2D = context;
-  root.dataset.gameWired = 'true';
-
-  const el = (id: string) => document.getElementById(id) as HTMLElement;
+  const mounted = mountCabinet('towerdefense-root');
+  if (!mounted) return;
+  const { root, canvas, ctx, el } = mounted;
   const startOverlay = el('start-overlay');
   const overOverlay = el('over-overlay');
   const startBtn = el('start-btn');
@@ -371,8 +363,7 @@ export function initTowerDefenseGame(): void {
   recordEl.textContent = `${board.best()}`;
 
   const audio = createGameAudio(TOWERDEFENSE_MUSIC);
-  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
-  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
+  wireSoundToggles(audio);
 
   function addFloater(tx: number, ty: number, text: string, color: string) {
     const p = isoProject(VIEW, tx, ty);
@@ -413,61 +404,32 @@ export function initTowerDefenseGame(): void {
     bannerTimer = 0;
     keepFlash = 0;
     board.beginRun();
-    standDownOverlay.style.display = 'none';
+    standDownPrompt.dismiss();
     phase = 'build';
     audio.start();
-    refreshToolbar();
   }
 
   /**
-   * Opens the stand-down prompt over a live run. Focus moves to Cancel rather
-   * than Confirm so the keyboard's own default answer — the one Enter reaches
-   * — is the one that keeps the run.
+   * The stand-down prompt. Outside the build lull it would post a score with
+   * marchers still on the field, so it opens from 'build' alone; the engine
+   * owns the overlay, the focus moves and the Escape/Tab trap (see the
+   * aria-modal note in towerdefense.astro).
    */
-  function openStandDownConfirm() {
-    if (phase !== 'build') return;
-    phase = 'confirm';
-    standDownOverlay.style.display = 'flex';
-    document.addEventListener('keydown', onConfirmKeydown);
-    standDownCancelBtn.focus();
-  }
-
-  /** Dismisses the prompt and hands the run back, focus included. */
-  function closeStandDownConfirm() {
-    if (phase !== 'confirm') return;
-    phase = 'build';
-    standDownOverlay.style.display = 'none';
-    document.removeEventListener('keydown', onConfirmKeydown);
-    standDownBtn.focus();
-  }
-
-  /**
-   * Escape is the expected way out of a prompt, and the Tab cycle keeps a
-   * keyboard user among the two answers while it is open. A courtesy, not a
-   * claim: the prompt covers only the battlefield, so the toolbar and the site
-   * chrome behind it stay pointer-reachable and the markup declares no
-   * `aria-modal` (see the note in towerdefense.astro).
-   *
-   * Bound on `document`, because focus can leave `#towerdefense-root` entirely
-   * while the prompt is open — a click on the tower tools, the header or the
-   * page background does it — and a root-scoped listener never sees the keys
-   * that follow. Both close paths lift it; a swap that tears the page out from
-   * under an open prompt is caught by the `astro:before-swap` retirement wired
-   * below.
-   */
-  function onConfirmKeydown(e: KeyboardEvent) {
-    if (phase !== 'confirm') return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeStandDownConfirm();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    e.preventDefault();
-    // Two answers, so a Tab in either direction is the same toggle between
-    // them; from anywhere else it re-enters the dialog at the safe answer.
-    (document.activeElement === standDownCancelBtn ? standDownConfirmBtn : standDownCancelBtn).focus();
-  }
+  const standDownPrompt = createConfirmPrompt({
+    overlay: standDownOverlay,
+    opener: standDownBtn,
+    confirm: standDownConfirmBtn,
+    cancel: standDownCancelBtn,
+    canOpen: () => phase === 'build',
+    isOpen: () => phase === 'confirm',
+    onOpen: () => {
+      phase = 'confirm';
+    },
+    onCancel: () => {
+      phase = 'build';
+    },
+    onConfirm: () => endRun('standdown')
+  });
 
   function launchWave() {
     phase = 'wave';
@@ -491,12 +453,11 @@ export function initTowerDefenseGame(): void {
   function endRun(reason: 'breach' | 'standdown') {
     phase = 'over';
     selectedTower = null;
-    // Confirming leaves the prompt without going through
-    // closeStandDownConfirm, so both the overlay and the key trap are torn
-    // down here as well. The button's disabled state needs no such care:
-    // `refreshHud` owns it off the phase, which is already 'over'.
-    standDownOverlay.style.display = 'none';
-    document.removeEventListener('keydown', onConfirmKeydown);
+    // Confirming leaves the prompt without going through its cancel path, so
+    // the overlay and the key trap are torn down here too. The button's
+    // disabled state needs no such care: `refreshHud` owns it off the phase,
+    // which is already 'over'.
+    standDownPrompt.dismiss();
     const stoodDown = reason === 'standdown';
     audio.playSfx(stoodDown ? 'score' : 'gameover');
     audio.stop();
@@ -1687,24 +1648,6 @@ export function initTowerDefenseGame(): void {
     if (phase === 'build') launchWave();
   });
 
-  // Guarded on the phase as well as the disabled attribute: a stand-down
-  // outside the build lull would post a score with marchers still on the field.
-  standDownBtn.addEventListener('click', openStandDownConfirm);
-  standDownCancelBtn.addEventListener('click', closeStandDownConfirm);
-  standDownConfirmBtn.addEventListener('click', () => {
-    if (phase !== 'confirm') return;
-    endRun('standdown');
-  });
-  // The trap lives on the document, which outlives a ClientRouter swap even
-  // though this page's DOM does not. Both close paths lift it, but a swap over
-  // an open prompt is neither, so it retires here like every other listener in
-  // the engine that reaches past the game root.
-  const onSwap = () => {
-    document.removeEventListener('keydown', onConfirmKeydown);
-    document.removeEventListener('astro:before-swap', onSwap);
-  };
-  document.addEventListener('astro:before-swap', onSwap);
-
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';
     startRun();
@@ -1715,15 +1658,6 @@ export function initTowerDefenseGame(): void {
     board.hide();
     startRun();
   });
-
-  function refreshToolbar() {
-    toolButtons.forEach(button => {
-      const kind = button.dataset.kind as TowerKind;
-      const costEl = button.querySelector<HTMLElement>('.tool-cost');
-      if (costEl) costEl.textContent = `${TOWERS[kind].cost}`;
-    });
-  }
-  refreshToolbar();
 
   createGameLoop(update, render).start();
 }

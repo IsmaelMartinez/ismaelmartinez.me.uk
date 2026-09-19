@@ -39,7 +39,7 @@ export type PolicyName =
   | 'nearCamper';
 
 /** Quantise a vector to the eight directions a keyboard can express. */
-export function quantise8(x: number, y: number): { x: number; y: number } {
+function quantise8(x: number, y: number): { x: number; y: number } {
   const len = Math.hypot(x, y);
   if (len < 0.001) return { x: 0, y: 0 };
   const qx = Math.abs(x) / len > 0.383 ? Math.sign(x) : 0;
@@ -53,7 +53,7 @@ export function passive(): Policy {
 }
 
 /** Runs the ball at the goal and nothing else. The anti-dribbling control. */
-export function dribbler(): Policy {
+function dribbler(): Policy {
   return (m: MatchState) => {
     const p = m.players[0][m.controlled];
     const target = m.owner && m.owner.side === 0 ? goalPoint(m) : { x: m.ball.x, y: m.ball.y };
@@ -106,7 +106,7 @@ export function masher(
 }
 
 /** The masher reacts as fast as the `competent` player and no faster. */
-export const MASH_REACTION = 0.17;
+const MASH_REACTION = 0.17;
 
 /**
  * Which post a camper strikes at from his spot.
@@ -438,7 +438,7 @@ function clampHold(period: number, hold: number): number {
 }
 
 /** How many ticks of held A a full `CHARGE_TIME` needs. */
-export const FULL_CHARGE_TICKS = 33;
+const FULL_CHARGE_TICKS = 33;
 
 /**
  * Every mash cadence the suite sweeps, as `[period, hold]` in ticks.

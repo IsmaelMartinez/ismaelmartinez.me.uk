@@ -44,7 +44,7 @@ const liveConfig = {
           <p class="live-status" data-live-status hidden></p>
           <HealthTable repos={health.repos} t={t} />
           <p class="attribution">{t('health.poweredBy')} <a href="https://ismaelmartinez.github.io/repo-butler/" target="_blank" rel="noopener noreferrer">Repo Butler</a></p>
-          <script type="application/json" id="health-live-config" set:html={JSON.stringify(liveConfig)} />
+          <script is:inline type="application/json" id="health-live-config" set:html={JSON.stringify(liveConfig)} />
           <script>import '../../scripts/health-live.ts';</script>
         </>
       ) : (

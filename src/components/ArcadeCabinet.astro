@@ -35,10 +35,8 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
   {newBadge && <span class="new-ribbon">{newBadge}</span>}
   {estYear && <span class="est-plaque">EST. {estYear}</span>}
 
-  <div class="cabinet-top">
-    <div class="cabinet-marquee">
-      <span class="marquee-text">{title}</span>
-    </div>
+  <div class="cabinet-marquee">
+    <span class="marquee-text">{title}</span>
   </div>
 
   <div class="cabinet-screen">
@@ -172,11 +170,8 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
     transform: rotate(-4deg);
   }
 
-  .cabinet-top {
-    margin-bottom: 8px;
-  }
-
   .cabinet-marquee {
+    margin-bottom: 8px;
     background: linear-gradient(180deg, var(--cabinet-color) 0%, color-mix(in srgb, var(--cabinet-color) 70%, black) 100%);
     padding: 8px 12px;
     border-radius: 8px 8px 4px 4px;

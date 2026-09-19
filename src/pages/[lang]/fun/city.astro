@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import ToastArea from '../../../components/ToastArea.astro';
@@ -220,36 +221,8 @@ const tools = [
     padding: var(--space-2xl) 0;
   }
 
-  .back-link {
-    display: inline-block;
-    margin-bottom: var(--space-xl);
-    color: var(--color-text-muted);
-    transition: color 0.2s ease;
-  }
-
-  .back-link:hover {
-    color: var(--color-accent);
-  }
-
   .game-container {
     max-width: 820px;
-    margin: 0 auto;
-  }
-
-  .game-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-lg);
-    flex-wrap: wrap;
-    gap: var(--space-md);
-  }
-
-  .game-header h1 {
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
   }
 
   .city-emoji {
@@ -261,27 +234,7 @@ const tools = [
     50% { filter: brightness(1.35); }
   }
 
-  .scores {
-    display: flex;
-    gap: var(--space-lg);
-    flex-wrap: wrap;
-  }
-
-  .score-item {
-    text-align: center;
-  }
-
-  .score-label {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
   .score-value {
-    font-size: 1.35rem;
-    font-weight: 700;
     color: #38bdf8;
   }
 
@@ -315,17 +268,7 @@ const tools = [
     color: var(--color-accent);
   }
 
-  .game-area {
-    position: relative;
-    background: var(--color-bg-secondary);
-    border-radius: 1rem;
-    overflow: hidden;
-    border: 2px solid var(--color-border);
-  }
-
   .canvas-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
     perspective: 1200px;
   }
 
@@ -345,32 +288,8 @@ const tools = [
     }
   }
 
-  .game-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    overflow-y: auto;
-    padding: var(--space-md);
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(4px);
-  }
-
   .overlay-content {
-    text-align: center;
-    margin: auto;
-    padding: var(--space-xl);
     max-width: 520px;
-  }
-
-  .play-icon {
-    font-size: 4rem;
-    display: block;
-    margin-bottom: var(--space-lg);
   }
 
   .overlay-content h2 {
@@ -395,15 +314,6 @@ const tools = [
 
   .overlay-content p {
     margin-bottom: var(--space-lg);
-  }
-
-  .final-stats {
-    font-size: 1.1rem;
-  }
-
-  .btn-large {
-    padding: var(--space-md) var(--space-2xl);
-    font-size: 1.1rem;
   }
 
   .controls {
@@ -569,11 +479,6 @@ const tools = [
   }
 
   @media (max-width: 600px) {
-    .game-header {
-      justify-content: center;
-      text-align: center;
-    }
-
     .game-header h1 {
       width: 100%;
       justify-content: center;

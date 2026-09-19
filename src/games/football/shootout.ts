@@ -17,8 +17,8 @@ export const REGULATION_KICKS = 5;
 /** Seconds the defender has to pick a zone and commit. */
 export const DIVE_WINDOW = 1.2;
 /** Seconds the taker has before the kick goes at whatever is selected. */
-export const AIM_WINDOW = 2.2;
-export const RESULT_HOLD = 1.0;
+const AIM_WINDOW = 2.2;
+const RESULT_HOLD = 1.0;
 
 /**
  * Save probabilities by how many zones the keeper missed by.
@@ -37,12 +37,12 @@ export const SAVE_FAR = 0.05;
 /** A kick under this power is weak enough that an adjacent keeper still gets it. */
 export const WEAK_POWER = 0.3;
 /** Blasting at the very edge of the frame sometimes misses it entirely. */
-export const EDGE_MISS = 0.08;
+const EDGE_MISS = 0.08;
 
-export type ShootoutPhase = 'idle' | 'aim' | 'strike' | 'result' | 'next' | 'over';
+type ShootoutPhase = 'idle' | 'aim' | 'strike' | 'result' | 'next' | 'over';
 export type KickResult = 'scored' | 'saved' | 'missed';
 
-export interface ShootoutKick {
+interface ShootoutKick {
   /** The side taking, 0 = human. */
   side: Side;
   zone: number;
@@ -56,7 +56,7 @@ export interface ShootoutInput {
   a: boolean;
 }
 
-export const SHOOTOUT_NEUTRAL: ShootoutInput = { x: 0, y: 0, a: false };
+const SHOOTOUT_NEUTRAL: ShootoutInput = { x: 0, y: 0, a: false };
 
 export interface ShootoutState {
   phase: ShootoutPhase;

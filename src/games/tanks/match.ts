@@ -74,14 +74,14 @@ export interface Shot {
 }
 
 /** A detonation, alive for EXPLOSION_TIME. A turn cannot end while one runs. */
-export interface Blast {
+interface Blast {
   x: number;
   y: number;
   t: number;
   radius: number;
 }
 
-export type Phase = 'idle' | 'aim' | 'cpu-think' | 'fly' | 'round-over';
+type Phase = 'idle' | 'aim' | 'cpu-think' | 'fly' | 'round-over';
 
 /** A points award to one player, in the order the ledger paid it. */
 export interface Award {
@@ -229,7 +229,7 @@ function startTurn(m: MatchState): void {
   m.on({ type: 'turn' });
 }
 
-export function barrelTip(tank: Tank): { x: number; y: number } {
+function barrelTip(tank: Tank): { x: number; y: number } {
   const rad = (tank.angle * Math.PI) / 180;
   return {
     x: tank.x + Math.cos(rad) * BARREL_LEN,

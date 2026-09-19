@@ -243,7 +243,7 @@ export function isWalkable(tile: TileType): boolean {
 }
 
 /** The largest building footprint side length; the search bound for annex→anchor recovery. */
-export const MAX_FOOTPRINT = 2;
+const MAX_FOOTPRINT = 2;
 
 /**
  * The tile indices of a `size`×`size` building footprint anchored at its

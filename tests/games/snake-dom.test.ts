@@ -12,44 +12,14 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initSnakeGame } from '../../src/games/snake';
-
-/**
- * A no-op 2D context, as in city-dom.test.ts: jsdom implements no canvas
- * backend and the render loop only has to not throw.
- */
-function stubContext(): CanvasRenderingContext2D {
-  const gradient = { addColorStop: () => {} };
-  const own: Record<string, unknown> = {};
-  return new Proxy(own, {
-    get(target, prop) {
-      if (prop in target) return target[prop as string];
-      if (prop === 'measureText') return () => ({ width: 8 });
-      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') return () => gradient;
-      return () => undefined;
-    },
-    set(target, prop, value) {
-      target[prop as string] = value;
-      return true;
-    }
-  }) as unknown as CanvasRenderingContext2D;
-}
-
-/** In-memory localStorage, as in scoreboard-dom.test.ts (Node's own global shadows jsdom's). */
-function installLocalStorage(): void {
-  const store: Record<string, string> = {};
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      for (const k of Object.keys(store)) delete store[k];
-    }
-  });
-}
+import {
+  createFrameDriver,
+  installCanvasContext,
+  installJsdomShims,
+  installLocalStorage,
+  mountHtml,
+  pressKey
+} from './dom-helpers';
 
 /** The runtime skeleton of src/pages/[lang]/fun/snake.astro. */
 const PAGE_HTML = `
@@ -67,56 +37,24 @@ const PAGE_HTML = `
     </div>
   </div>`;
 
-function press(key: string): KeyboardEvent {
-  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
-  document.dispatchEvent(event);
-  return event;
-}
+const press = (key: string) => pressKey(document, key);
 
 const GAME_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'];
 
-let frameCallback: FrameRequestCallback | null = null;
-let clock = 0;
-
-/** Runs the game loop forward over `seconds` of wall time, 250ms per frame (its own cap). */
-function advance(seconds: number): void {
-  const frames = Math.ceil((seconds * 1000) / 250);
-  for (let i = 0; i < frames; i++) {
-    const cb = frameCallback;
-    if (!cb) throw new Error('game loop is not running');
-    clock += 250;
-    cb(clock);
-  }
-}
+const frames = createFrameDriver();
+const { advance } = frames;
 
 const gameOverShown = () =>
   document.getElementById('game-over-overlay')!.style.display !== 'none';
 
 beforeEach(() => {
   installLocalStorage();
-  vi.stubGlobal('matchMedia', () => ({
-    matches: false,
-    media: '',
-    addEventListener: () => {},
-    removeEventListener: () => {}
-  }));
-  HTMLCanvasElement.prototype.getContext = (() =>
-    stubContext()) as unknown as HTMLCanvasElement['getContext'];
-  frameCallback = null;
-  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    frameCallback = cb;
-    return 1;
-  });
-  vi.stubGlobal('cancelAnimationFrame', () => {
-    frameCallback = null;
-  });
-  const parsed = new DOMParser().parseFromString(PAGE_HTML, 'text/html');
-  document.body.replaceChildren(...parsed.body.children);
+  installJsdomShims();
+  installCanvasContext();
+  frames.install();
+  mountHtml(PAGE_HTML);
   initSnakeGame();
-  // The loop seeds its own `last` from performance.now(); starting the
-  // hand-driven clock behind that reading would make the first frame's delta
-  // hugely negative and no simulation step would ever run (see city-dom).
-  clock = performance.now();
+  frames.syncClock();
 });
 
 afterEach(() => {

@@ -151,9 +151,6 @@ const ADDRESS_WINDOW = 60 * 60;
 const GAME_LIMIT = 300;
 const GAME_WINDOW = 24 * 60 * 60;
 
-/** Headroom over the daily cap, so pruning never evicts a countable entry. */
-const MAX_RECENT = 400;
-
 const WRITE_ATTEMPTS = 3;
 
 /**
@@ -394,7 +391,7 @@ async function record(
 
     // Everything older than the longest window is dead weight, so one prune
     // serves both counts below and keeps the blob a bounded size.
-    const live = board.recent.filter(r => r.t > now - GAME_WINDOW).slice(0, MAX_RECENT);
+    const live = board.recent.filter(r => r.t > now - GAME_WINDOW);
 
     // Per address per game per hour: `recent` lives in this game's blob and
     // sees no other board's traffic. See the note at the top of the file.
@@ -409,8 +406,9 @@ async function record(
     const entry: BoardEntry = { i: initials, s: score, t: now, n: nonce };
     const next: StoredBoard = {
       top: mergeTop(board.top, entry),
-      // Newest first, so pruning is a plain slice off the tail.
-      recent: [{ h: hash, t: now, n: nonce }, ...live].slice(0, MAX_RECENT)
+      // Newest first. The daily cap above is the bound: a write only happens
+      // under GAME_LIMIT live entries, so this never grows past it.
+      recent: [{ h: hash, t: now, n: nonce }, ...live]
     };
 
     try {

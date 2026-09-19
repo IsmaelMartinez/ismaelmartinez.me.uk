@@ -1,4 +1,9 @@
 export { createGameLoop } from './loop';
+export { mountCabinet } from './mount';
+export type { Cabinet } from './mount';
+export { createConfirmPrompt } from './confirm';
+export type { ConfirmPrompt, ConfirmPromptOptions } from './confirm';
+export { listenUntilSwap } from './listen';
 export { setupHiDpiCanvas, createStaticLayer, hash01, blink } from './canvas';
 export type { HiDpiCanvas, StaticLayer } from './canvas';
 export type { GameLoop } from './loop';
@@ -10,7 +15,7 @@ export type { Scoreboard, ScoreboardOptions, RunRecordBank } from './scoreboard'
 export { createGameAudio, loadMusicMuted, loadSfxMuted } from './audio';
 export type { GameAudio, GameAudioOptions, Note, SfxName, Track, EchoOptions } from './audio';
 export { pitch, p, REST } from './pitch';
-export { wireChannelButton } from './soundButton';
+export { wireChannelButton, wireSoundToggles } from './soundButton';
 export { createToaster } from './toast';
 export type { Toaster, ToasterOptions } from './toast';
 export { createEffects } from './effects';

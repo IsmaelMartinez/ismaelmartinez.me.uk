@@ -17,7 +17,8 @@ import {
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
-  wireChannelButton
+  wireSoundToggles,
+  mountCabinet
 } from '../engine';
 import { LEMMINGS_MUSIC } from './music';
 import { TerrainBitmap, AIR, BRIDGE, STEEL } from './bitmap';
@@ -107,17 +108,9 @@ function drawHills(c: CanvasRenderingContext2D, w: number, h: number, baseY: num
 }
 
 export function initLemmingsGame(): void {
-  const root = document.getElementById('lemmings-root');
-  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvasEl) return;
-  if (root.dataset.gameWired) return;
-  const canvas: HTMLCanvasElement = canvasEl;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const ctx: CanvasRenderingContext2D = context;
-  root.dataset.gameWired = 'true';
-
-  const el = (id: string) => document.getElementById(id) as HTMLElement;
+  const mounted = mountCabinet('lemmings-root');
+  if (!mounted) return;
+  const { root, canvas, ctx, el } = mounted;
   const startOverlay = el('start-overlay');
   const resultOverlay = el('result-overlay');
   const levelSelectOverlay = el('level-select-overlay');
@@ -268,8 +261,7 @@ export function initLemmingsGame(): void {
   const board = initScoreboard(document.getElementById('highscores'));
 
   const audio = createGameAudio(LEMMINGS_MUSIC);
-  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
-  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
+  wireSoundToggles(audio);
 
   // --- Mutable game state ---
   let levelIndex = 0;
@@ -452,7 +444,7 @@ export function initLemmingsGame(): void {
     });
   }
 
-  function spawnParticles(x: number, y: number, color: string, n = 10) {
+  function spawnParticles(x: number, y: number, color: string, n: number) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 20 + Math.random() * 60;

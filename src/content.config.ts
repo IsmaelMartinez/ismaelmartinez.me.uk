@@ -1,4 +1,5 @@
-import { defineCollection, z } from 'astro:content';
+import { defineCollection } from 'astro:content';
+import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
 
 const articlesCollection = defineCollection({
@@ -8,7 +9,7 @@ const articlesCollection = defineCollection({
     description: z.string(),
     publishedDate: z.date(),
     updatedDate: z.date().optional(),
-    originalUrl: z.string().url().optional(),
+    originalUrl: z.url().optional(),
     originalPlatform: z.enum(['medium', 'devto', 'self']).optional(),
     heroImage: z.string().optional(),
     tags: z.array(z.string()).default([]),

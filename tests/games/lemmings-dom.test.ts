@@ -27,6 +27,15 @@ import { LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
 import { STUCK_TICKS } from '../../src/games/lemmings/stall';
 import { levelBonuses } from '../../src/games/lemmings/score';
 import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
+import {
+  createFrameDriver,
+  flush,
+  hsPanelHtml,
+  installCanvasContext,
+  installJsdomShims,
+  installLocalStorage,
+  mountHtml
+} from './dom-helpers';
 
 // The fixture now carries a real high-score panel, so the board these tests
 // mount is the real scoreboard rather than the no-op one a missing panel
@@ -34,10 +43,9 @@ import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
 // which run reaches the board, not what the server does with it. (The module's
 // own `canSubmit` gate is private to it, so stubbing the two exports replaces
 // that decision wholesale rather than configuring it.)
-vi.mock('../../src/games/engine/globalScores', () => ({
-  fetchGlobal: vi.fn(async () => null),
-  submitGlobal: vi.fn(async () => ({ status: 'failed' }))
-}));
+vi.mock('../../src/games/engine/globalScores', async () =>
+  (await import('./dom-helpers')).mockGlobalScores()
+);
 
 const SKILLS = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
 
@@ -88,19 +96,7 @@ const GAME_HTML = `
         <li id="bonus-quota-row" hidden><span id="bonus-quota-val"></span></li>
       </ul>
       <span id="result-score-val">0</span>
-      <div class="hs-panel" id="highscores" data-hs-game="lemmings" hidden
-           data-t-world-loading="Loading world board"
-           data-t-world-unavailable="World board unavailable"
-           data-t-world-rank="World rank #{rank}"
-           data-t-score-not-saved="Score not saved. Try again later">
-        <form class="hs-entry" hidden>
-          <input class="hs-input" type="text" maxlength="3" />
-          <button type="submit" class="hs-ok">OK</button>
-        </form>
-        <ol class="hs-list"></ol>
-        <p class="hs-empty" hidden></p>
-        <p class="hs-note" hidden></p>
-      </div>
+      ${hsPanelHtml('lemmings')}
       <button id="next-btn" data-play-again="Play Again" data-next-level="Next Level"></button>
       <button id="retry-btn"></button>
       <button id="end-run-btn" style="display: none;"></button>
@@ -117,87 +113,27 @@ const GAME_HTML = `
   </div>`;
 
 /**
- * A 2D context that swallows every call. The gradient and ImageData factories
- * return the shapes the game actually reads back (`addColorStop`, `.data`);
- * everything else is a no-op, which is all the drawing needs to be for the
- * simulation to run.
- */
-function stubContext(): CanvasRenderingContext2D {
-  const gradient = { addColorStop: () => {} };
-  return new Proxy(
-    {},
-    {
-      get: (_target, prop) => {
-        if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
-          return () => gradient;
-        }
-        if (prop === 'createImageData') {
-          return (w: number, h: number) => ({
-            data: new Uint8ClampedArray(w * h * 4),
-            width: w,
-            height: h
-          });
-        }
-        if (prop === 'measureText') return () => ({ width: 0 });
-        return () => {};
-      },
-      set: () => true
-    }
-  ) as unknown as CanvasRenderingContext2D;
-}
-
-/** Minimal in-memory localStorage, as in scoreboard-dom.test.ts (Node's shadows jsdom's). */
-function installLocalStorage(): void {
-  const store: Record<string, string> = {};
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      for (const k of Object.keys(store)) delete store[k];
-    }
-  });
-}
-
-/**
- * Drives `createGameLoop`'s requestAnimationFrame by hand. Each frame advances
- * the clock by the loop's own 250ms frame cap, which is exactly 15 fixed steps
- * (250 / (1000/60)) with nothing left in the accumulator — so a frame is always
- * 15 simulation ticks and the tick counts below are exact.
+ * Each hand-driven frame advances the clock by the loop's own 250ms frame cap,
+ * which is exactly 15 fixed steps (250 / (1000/60)) with nothing left in the
+ * accumulator — so a frame is always 15 simulation ticks and the tick counts
+ * below are exact.
  */
 const TICKS_PER_FRAME = 15;
 
-let pendingFrame: FrameRequestCallback | null = null;
-let clock = 0;
-let realGetContext: typeof HTMLCanvasElement.prototype.getContext;
-
-function step(frames = 1): void {
-  for (let i = 0; i < frames; i++) {
-    clock += 250;
-    const cb = pendingFrame;
-    pendingFrame = null;
-    cb?.(clock);
-  }
-}
+const frames = createFrameDriver();
+const { step } = frames;
+let restoreContext: () => void;
 
 /** Mounts the page, unlocks every level, and starts the given 0-based level. */
 function startLevel(index: number): void {
-  const parsed = new DOMParser().parseFromString(GAME_HTML, 'text/html');
-  document.body.replaceChildren(...parsed.body.children);
+  // The canvas has no layout in jsdom; give it one so pointer taps map 1:1
+  // onto level coordinates through the hi-DPI helper's toLogical.
+  mountHtml(GAME_HTML, { canvasSize: [LEVEL_W, LEVEL_H] });
   localStorage.setItem('critter-cleared-levels', String(LEVELS.length));
   initLemmingsGame();
   // After init, so the clock starts at or after the loop's own `last`: every
   // frame's delta is then at least the 250ms cap and lands exactly 15 ticks.
-  clock = performance.now();
-  // The canvas has no layout in jsdom; give it one so pointer taps map 1:1
-  // onto level coordinates through the hi-DPI helper's toLogical.
-  const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-  canvas.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, width: LEVEL_W, height: LEVEL_H }) as DOMRect;
+  frames.syncClock();
   (document.getElementById('level-select-btn') as HTMLButtonElement).click();
   const cell = document.getElementById('level-grid')!.children[index] as HTMLButtonElement;
   expect(cell.disabled).toBe(false);
@@ -259,28 +195,15 @@ beforeEach(() => {
   vi.mocked(fetchGlobal).mockResolvedValue(null);
   vi.mocked(submitGlobal).mockClear();
   vi.mocked(submitGlobal).mockResolvedValue({ status: 'failed' });
-  realGetContext = HTMLCanvasElement.prototype.getContext;
-  HTMLCanvasElement.prototype.getContext = stubContext as unknown as typeof realGetContext;
-  pendingFrame = null;
-  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    pendingFrame = cb;
-    return 1;
-  });
-  vi.stubGlobal('cancelAnimationFrame', () => {
-    pendingFrame = null;
-  });
+  restoreContext = installCanvasContext();
+  frames.install();
   // jsdom has no matchMedia; the hi-DPI helper watches one to catch a monitor
   // change. A query that already matches keeps it from re-arming.
-  vi.stubGlobal('matchMedia', (media: string) => ({
-    media,
-    matches: true,
-    addEventListener: () => {},
-    removeEventListener: () => {}
-  }));
+  installJsdomShims({ matches: true });
 });
 
 afterEach(() => {
-  HTMLCanvasElement.prototype.getContext = realGetContext;
+  restoreContext();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
 });
@@ -578,7 +501,6 @@ describe('game loop — no level is ever unescapable', () => {
  * absence of one while the run is still going.
  */
 describe('ending a run from a mid-run clear (#261)', () => {
-  const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
   const endRunBtn = () => document.getElementById('end-run-btn') as HTMLButtonElement;
   const nextBtn = () => document.getElementById('next-btn') as HTMLButtonElement;
 

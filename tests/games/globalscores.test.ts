@@ -86,12 +86,12 @@ describe('fetchGlobal', () => {
     expect(boards).toEqual({ snake: [{ initials: 'ISM', score: 300 }] });
   });
 
-  it('never throws, whatever the response shape', async () => {
+  it('reads a body that is not an object as an unavailable board', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve(undefined)
     }));
-    await expect(fetchGlobal()).resolves.not.toThrow();
+    await expect(fetchGlobal()).resolves.toBeNull();
   });
 });
 

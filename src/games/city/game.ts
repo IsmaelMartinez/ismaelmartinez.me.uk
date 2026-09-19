@@ -999,7 +999,7 @@ export function initCityGame(): void {
   }
 
   /** Street door on the south-west face of a box, at fraction `t` along it. */
-  function drawDoor(x0: number, y0: number, x1: number, y1: number, t: number, leaf: string) {
+  function drawDoor(x0: number, x1: number, y1: number, t: number, leaf: string) {
     const w = isoProject(VIEW, x0, y1);
     const s = isoProject(VIEW, x1, y1);
     const dx = w.x + (s.x - w.x) * t;
@@ -1106,7 +1106,7 @@ export function initCityGame(): void {
     if (v.gable) drawGableRoof(x0, y0, x1, y1, 6, 4, p.roof);
     else drawPyramidCap(x0, y0, x1, y1, 6, 4, p.roof);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 6);
-    drawDoor(x0, y0, x1, y1, v.doorT, shadeColor(p.roof, 0.8));
+    drawDoor(x0, x1, y1, v.doorT, shadeColor(p.roof, 0.8));
     if (v.chimney) drawChimney(vx + 0.38, vy + 0.34, 8);
   }
 
@@ -1126,7 +1126,7 @@ export function initCityGame(): void {
     if (v.gable) drawGableRoof(mx0, my0, mx1, my1, 10, 4, p.roof);
     else drawPyramidCap(mx0, my0, mx1, my1, 10, 4, p.roof);
     drawWindows(mx0, my0, mx1, my1, i, 2, 0, 10);
-    drawDoor(mx0, my0, mx1, my1, 0.5, shadeColor(p.roof, 0.8));
+    drawDoor(mx0, mx1, my1, 0.5, shadeColor(p.roof, 0.8));
     if (v.chimney) drawChimney(vx + 0.3, vy + 0.28, 12);
 
     // Touches the main block's east wall (mx1) without overlapping its
@@ -1150,7 +1150,7 @@ export function initCityGame(): void {
     drawBox(x0, y0, x1, y1, 0, 20, v.wall);
     drawWindows(x0, y0, x1, y1, i, 4, 0, 20);
     drawLedges(x0, y0, x1, y1, 4, 0, 20, 'rgba(226, 232, 240, 0.55)');
-    drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
+    drawDoor(x0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
     drawBox(vx + 0.2, vy + 0.2, vx + 0.34, vy + 0.34, 20, 22, ROOFTOP_UNIT);
     drawBox(vx + 0.55, vy + 0.6, vx + 0.72, vy + 0.75, 20, 21.5, ROOFTOP_UNIT);
     if (v.acBox) drawBox(vx + 0.62, vy + 0.24, vx + 0.74, vy + 0.36, 20, 21.8, ROOFTOP_UNIT);
@@ -1174,7 +1174,7 @@ export function initCityGame(): void {
     drawBox(x0, y0, x1, y1, 0, 24, v.wall);
     drawWindows(x0, y0, x1, y1, i, 5, 0, 24);
     drawLedges(x0, y0, x1, y1, 5, 0, 24, 'rgba(226, 232, 240, 0.55)');
-    drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
+    drawDoor(x0, x1, y1, 0.5, shadeColor(p.wall, 0.5));
     const tx0 = vx + 0.3, ty0 = vy + 0.3, tx1 = vx + 0.7, ty1 = vy + 0.7;
     drawBox(tx0, ty0, tx1, ty1, 24, 29, v.wallTop);
     drawBox(vx + 0.42, vy + 0.42, vx + 0.58, vy + 0.58, 29, 30.5, ROOFTOP_UNIT);
@@ -1243,7 +1243,7 @@ export function initCityGame(): void {
     const x0 = vx + 0.15, y0 = vy + 0.15, x1 = vx + 0.85, y1 = vy + 0.85;
     drawBox(x0, y0, x1, y1, 0, 12, p.wall);
     drawWindows(x0, y0, x1, y1, i, 2, 0, 12);
-    drawDoor(x0, y0, x1, y1, 0.5, shadeColor(p.roof, 1.3));
+    drawDoor(x0, x1, y1, 0.5, shadeColor(p.roof, 1.3));
     drawBox(vx + 0.3, vy + 0.58, vx + 0.7, vy + 0.78, 12, 16, varietyFor(i, 'com:2', com2Variety).sign);
   }
 
@@ -1296,7 +1296,7 @@ export function initCityGame(): void {
           lenFrac: 0.5 + hash01(i, salt + k + 3) * 0.5
         }));
 
-  function drawRust(x0: number, y0: number, x1: number, y1: number, rolls: RustRolls, zTop: number) {
+  function drawRust(x0: number, x1: number, y1: number, rolls: RustRolls, zTop: number) {
     if (!rolls) return;
     const w = isoProject(VIEW, x0, y1);
     const s = isoProject(VIEW, x1, y1);
@@ -1317,7 +1317,7 @@ export function initCityGame(): void {
     const x0 = vx + 0.1, y0 = vy + 0.25, x1 = vx + 0.9, y1 = vy + 0.85;
     drawBox(x0, y0, x1, y1, 0, 5, p.wall);
     drawWindows(x0, y0, x1, y1, i, 1, 0, 5);
-    drawRust(x0, y0, x1, y1, varietyFor(i, 'ind:1', ind1Variety).rust, 5);
+    drawRust(x0, x1, y1, varietyFor(i, 'ind:1', ind1Variety).rust, 5);
     drawBox(vx + 0.28, vy + 0.34, vx + 0.37, vy + 0.43, 5, 8, p.roof);
     drawBox(vx + 0.55, vy + 0.55, vx + 0.64, vy + 0.64, 5, 7.5, p.roof);
   }
@@ -1346,7 +1346,7 @@ export function initCityGame(): void {
     const bandY = isoProject(VIEW, vx + 0.78, vy + 0.38);
     ctx.fillStyle = v.band;
     ctx.fillRect(bandY.x - 4.4, bandY.y - 9.5, 8.8, 1.6);
-    drawRust(sx0, sy0, sx1, sy1, v.rust, 7);
+    drawRust(sx0, sx1, sy1, v.rust, 7);
 
     const lox0 = vx + 0.6, loy0 = vy + 0.62, lox1 = vx + 0.94, loy1 = vy + 0.92;
     drawBox(lox0, loy0, lox1, loy1, 0, 3, p.roof);
@@ -1372,7 +1372,7 @@ export function initCityGame(): void {
     drawBox(bx0, by0, bx1, by1, 0, 13, '#7d8a94');
     drawWindows(bx0, by0, bx1, by1, i, 1, 0, 13, 3);
 
-    drawRust(hx0, hy0, hx1, hy1, v.rust, 9);
+    drawRust(hx0, hx1, hy1, v.rust, 9);
     drawStack(vx + 0.74 + v.stackJitter, vy + 0.3, 13, 11, 5, p.roof);
   }
 
@@ -1394,7 +1394,7 @@ export function initCityGame(): void {
     drawBox(bx0, by0, bx1, by1, 0, 18, '#7d8a94');
     drawWindows(bx0, by0, bx1, by1, i, 2, 0, 18, 3);
 
-    drawRust(hx0, hy0, hx1, hy1, v.rust, 12);
+    drawRust(hx0, hx1, hy1, v.rust, 12);
     drawStack(vx + 0.7 + v.jitter, vy + 0.28, 18, v.stackH, 5, p.roof);
     drawStack(vx + 0.84 + v.jitter, vy + 0.28, 18, 10, 4.5, p.roof);
   }
@@ -1548,7 +1548,7 @@ export function initCityGame(): void {
         } else if (tile.type === 'school') {
           drawBlock(ctx, VIEW, vx, vy, 14, '#b9813e');
           drawWindows(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, i, 2, 0, 14);
-          drawDoor(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, 0.5, '#5a3a20');
+          drawDoor(vx + 0.08, vx + 0.92, vy + 0.92, 0.5, '#5a3a20');
           drawRoofRidge(vx, vy, 14, '#8a5f2c');
           // Flagpole on the ridge.
           drawMast(top.x, top.y - 20, top.y - 27);
@@ -1590,7 +1590,7 @@ export function initCityGame(): void {
         } else if (tile.type === 'police') {
           drawBlock(ctx, VIEW, vx, vy, 14, '#3f5a8f');
           drawWindows(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, i, 2, 0, 14);
-          drawDoor(vx + 0.08, vy + 0.08, vx + 0.92, vy + 0.92, 0.5, '#26365c');
+          drawDoor(vx + 0.08, vx + 0.92, vy + 0.92, 0.5, '#26365c');
           drawRoofRidge(vx, vy, 14, '#2f4670');
           // Rooftop beacon pulsing on the shared blink cadence, phased by tile.
           ctx.fillStyle = blink(clock, i) ? '#7dd3fc' : '#1e3a5f';

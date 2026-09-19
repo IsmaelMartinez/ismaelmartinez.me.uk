@@ -15,7 +15,7 @@
 import { createMatch, tickMatch, type MatchState } from '../../src/games/football/match';
 import { teamByCode, type Team } from '../../src/games/football/teams';
 import { competent, expert, type Policy } from './football-policies';
-import { lcg } from './football-shot-harness';
+import { seededRandom } from './seeded-random';
 import { meanT } from './paired-stats';
 
 export const DT = 1 / 60;
@@ -42,7 +42,7 @@ export function playMatch(
   teams: [Team, Team] = [HOME, AWAY],
   knockout = false
 ): Played {
-  const m = createMatch({ rng: lcg(seed), difficulty, teams, knockout });
+  const m = createMatch({ rng: seededRandom(seed), difficulty, teams, knockout });
   let ticks = 0;
   while (m.phase !== 'over' && ticks < TICK_CAP) {
     tickMatch(m, DT, policy(m, DT));

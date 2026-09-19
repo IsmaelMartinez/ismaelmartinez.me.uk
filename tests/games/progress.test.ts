@@ -8,24 +8,7 @@ import {
 } from '../../src/games/engine/progress';
 import { bestKey } from '../../src/games/engine/highscores';
 import { CABINETS } from '../../src/data/arcadeCabinets';
-
-/** Minimal in-memory localStorage stand-in (the suite runs under node by default). */
-function installLocalStorage(): Record<string, string> {
-  const store: Record<string, string> = {};
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      for (const k of Object.keys(store)) delete store[k];
-    }
-  });
-  return store;
-}
+import { installLocalStorage } from './dom-helpers';
 
 const chain: readonly string[] = ['first', 'second', 'third', 'fourth'];
 const done = (...ids: string[]) => new Set(ids);

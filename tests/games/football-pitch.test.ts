@@ -29,6 +29,7 @@ import {
   inSixYardBox,
   outOfPlay
 } from '../../src/games/football/pitch';
+import { seededRandom } from './seeded-random';
 
 const DT = 1 / 60;
 
@@ -171,11 +172,7 @@ describe('cameraFor', () => {
 
   it('never lets the view leave the world, whatever the ball does', () => {
     let cam = start;
-    let rnd = 12345;
-    const next = () => {
-      rnd = (rnd * 1664525 + 1013904223) >>> 0;
-      return rnd / 4294967296;
-    };
+    const next = seededRandom(12345);
     for (let i = 0; i < 3000; i++) {
       cam = cameraFor(
         cam,

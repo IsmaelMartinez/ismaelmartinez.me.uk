@@ -4,6 +4,7 @@ import TableOfContents from '../components/TableOfContents.astro';
 import ArticleCard from '../components/ArticleCard.astro';
 import { useTranslations, getLocalizedPath } from '../i18n/translations';
 import { connectAnchorPath } from '../data/links';
+import { toJsonLd } from '../data/person';
 import { getCollection } from 'astro:content';
 
 interface Props {
@@ -83,7 +84,7 @@ const relatedArticles = scoredArticles
 ---
 
 <Layout title={title} description={description} lang={lang} ogType="article" publishedDate={publishedDate} tags={tags} canonical={originalUrl} ogImage={heroImage}>
-  <script slot="head" type="application/ld+json" set:html={JSON.stringify(articleJsonLd).replace(/</g, '\\u003c')} />
+  <script is:inline slot="head" type="application/ld+json" set:html={toJsonLd(articleJsonLd)} />
 
   <div id="reading-progress" class="reading-progress" aria-hidden="true"></div>
 

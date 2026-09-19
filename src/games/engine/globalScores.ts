@@ -50,7 +50,6 @@ function isWireEntry(value: unknown): value is WireEntry {
     typeof value === 'object' &&
     value !== null &&
     typeof (value as WireEntry).i === 'string' &&
-    typeof (value as WireEntry).s === 'number' &&
     Number.isFinite((value as WireEntry).s)
   );
 }

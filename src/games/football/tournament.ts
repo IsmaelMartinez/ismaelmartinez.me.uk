@@ -35,7 +35,7 @@ export const SCORE_PENALTY_WIN = 500;
  */
 export const SCORE_MATCH_PLAYED = 100;
 
-export type RunStage = 'group' | 'semi' | 'final' | 'over';
+type RunStage = 'group' | 'semi' | 'final' | 'over';
 
 export interface TableRow {
   code: string;
@@ -51,7 +51,7 @@ export interface TableRow {
   tiebreak: number;
 }
 
-export interface Fixture {
+interface Fixture {
   home: string;
   away: string;
 }

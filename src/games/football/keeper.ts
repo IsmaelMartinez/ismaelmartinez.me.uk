@@ -81,7 +81,7 @@ export const KEEPER_WALK = 120;
 export const KEEPER_DIVE = 45;
 
 /** Seconds over which a dive reaches full extension. */
-export const DIVE_TIME = 0.28;
+const DIVE_TIME = 0.28;
 
 /**
  * The longest window a dive can travel for. A dive is a single committed act,
@@ -91,7 +91,7 @@ export const DIVE_TIME = 0.28;
  * close-range placement. Capping the window is what keeps 7.3's "falls with
  * distance" true at the post as well as through the middle.
  */
-export const DIVE_WINDOW = 0.45;
+const DIVE_WINDOW = 0.45;
 
 /** Standing reach, and the extra a full-stretch dive adds. */
 export const REACH_BASE = 26;
@@ -112,7 +112,7 @@ export const REACH_DIVE = 10;
  * beats.
  */
 export const REACH_BODY = 12;
-export const REACT_TIME = 0.16;
+const REACT_TIME = 0.16;
 
 /**
  * He stands this far off his line, and comes this far further out *as the ball
@@ -133,7 +133,7 @@ export const KEEPER_LINE = 8;
  * measured better than one from forty-five, because he stopped following the
  * ball out exactly where the shooter still had room to go round him.
  */
-export const KEEPER_ADVANCE = 26;
+const KEEPER_ADVANCE = 26;
 /**
  * The frame he keeps inside: his own posts, widened by the allowance he has to
  * leave his goal by at all.
@@ -164,7 +164,7 @@ export function postFrame(allowance: number): number {
   return GOAL_HALF + Math.max(0, allowance);
 }
 /** How far behind the ball he always stays; he narrows angles, never dives past it. */
-export const KEEPER_STANDOFF = 8;
+const KEEPER_STANDOFF = 8;
 /**
  * Over what depth his advance fades back to his line. It is a whole half of
  * the pitch rather than the width of the box, and that is what keeps 7.3's
@@ -256,7 +256,7 @@ const SKILL_FLOOR = 0.6;
 const SKILL_SPAN = 0.89;
 
 /** Ground friction, shared with match.ts so flight times agree. */
-export const BALL_FRICTION = 0.55;
+const BALL_FRICTION = 0.55;
 
 /**
  * Keeper skill 0..1 from the team's Keeper rating and the match difficulty.
@@ -701,7 +701,7 @@ export function errorFraction(skill: number, speed: number): number {
 }
 
 /** Uniform signed noise in [-1, 1] from the injected RNG. */
-export function randSigned(rng: () => number): number {
+function randSigned(rng: () => number): number {
   return rng() * 2 - 1;
 }
 

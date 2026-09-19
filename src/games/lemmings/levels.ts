@@ -41,7 +41,7 @@ export const EXIT_HALF_W = 8;
 export const EXIT_H = 22;
 export const HATCH_W = 20;
 
-export type Shape =
+type Shape =
   /** Axis-aligned block; `material: 'steel'` makes it indestructible. */
   | { kind: 'rect'; x: number; y: number; w: number; h: number; material?: 'earth' | 'steel' }
   /** Right triangle; `high` says which side reaches full height `h`. */
@@ -115,7 +115,7 @@ function paintShape(bmp: TerrainBitmap, shape: Shape): void {
 }
 
 /** Pick-one blasts a level grants when it does not author its own count. */
-export const DEFAULT_BOMBER_STOCK = 2;
+const DEFAULT_BOMBER_STOCK = 2;
 
 /**
  * The hand a level actually deals: its authored skills, plus the universal

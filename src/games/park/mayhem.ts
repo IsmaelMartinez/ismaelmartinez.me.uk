@@ -28,7 +28,7 @@ export interface RideBreakdown {
 /** How long a broken ride stays roped off before the mechanic fixes it. */
 export const BREAKDOWN_SECONDS = 14;
 /** Per-ride chance per second that it breaks, at full intensity. */
-export const BREAKDOWN_CHANCE_PER_RIDE = 0.003;
+const BREAKDOWN_CHANCE_PER_RIDE = 0.003;
 
 /** The buildings that can break down: the ones guests ride for fun or thrills. */
 export function isRide(tile: TileType): boolean {
@@ -70,7 +70,7 @@ export interface Surge {
 
 export const SURGE_SECONDS = 25;
 /** Chance per day tick that a surge arrives, at full intensity. */
-export const SURGE_CHANCE = 0.5;
+const SURGE_CHANCE = 0.5;
 
 /**
  * Rolls the daily crowd surge — a coach party flooding the gates. Bigger,

@@ -52,7 +52,7 @@ import {
 } from '../../src/games/football/pitch';
 import { teamByCode } from '../../src/games/football/teams';
 
-export const DT = 1 / 60;
+const DT = 1 / 60;
 
 export type ShotOutcome = 'goal' | 'save' | 'off' | 'post';
 

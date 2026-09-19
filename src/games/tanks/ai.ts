@@ -27,7 +27,7 @@ export const DIFFICULTY_BASE: Record<Difficulty, number> = {
 };
 
 /** Per-decided-round tightening, so a best-of-5 escalates as it wears on. */
-export const DIFFICULTY_RAMP = 0.06;
+const DIFFICULTY_RAMP = 0.06;
 
 /**
  * Effective aim accuracy for the CPU: the tier's base plus a ramp for every

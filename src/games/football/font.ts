@@ -22,7 +22,7 @@
 export const GLYPH_W = 5;
 export const GLYPH_H = 7;
 /** Gap between glyphs, in unscaled font pixels. */
-export const TRACKING = 1;
+const TRACKING = 1;
 /** Drawn in place of any character with no glyph. */
 export const FALLBACK = '?';
 

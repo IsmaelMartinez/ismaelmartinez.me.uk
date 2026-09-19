@@ -21,7 +21,7 @@ export const NEED_KEYS: NeedKey[] = ['fun', 'hunger', 'thirst', 'bladder', 'thri
  * stall, so a park without one yet shouldn't tank happiness the way an
  * un-built toilet or food stall would.
  */
-export const NEED_DECAY: Record<NeedKey, number> = {
+const NEED_DECAY: Record<NeedKey, number> = {
   fun: 3,
   hunger: 1.6,
   thirst: 2,

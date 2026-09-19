@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import { translations, locales, defaultLang } from '../i18n/translations';
+import { toJsonLd } from '../data/person';
 
 // Static hosting serves this one file for every unmatched path, so the locale
 // cannot be resolved at build time. The strings for all three ship with the
@@ -14,9 +15,9 @@ const notFoundCopy = Object.fromEntries(
 );
 const fallback = notFoundCopy[defaultLang];
 
-// Escape < the same way toJsonLd does, so a translation can never break out of
+// Escaped so a translation can never break out of
 // the <script> tag it is embedded in.
-const escapedCopy = JSON.stringify(notFoundCopy).replace(/</g, '\\u003c');
+const escapedCopy = toJsonLd(notFoundCopy);
 ---
 
 <!doctype html>

@@ -22,7 +22,6 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@eslint/js": "^10.0.1",
     "eslint": "^10.10.0",
     "eslint-plugin-astro": "^3.1.0",
     "jsdom": "^30.0.1",

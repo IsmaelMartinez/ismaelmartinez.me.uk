@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'astro/zod';
 
 const ComputedSchema = z.object({
   tier: z.enum(['gold', 'silver', 'bronze', 'none']),

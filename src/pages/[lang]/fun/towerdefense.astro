@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import ToastArea from '../../../components/ToastArea.astro';
@@ -10,7 +11,8 @@ import {
   TOWER_KINDS,
   createTower,
   towerDps,
-  towerRange
+  towerRange,
+  type TowerKind
 } from '../../../games/towerdefense/towers';
 
 export function getStaticPaths() {
@@ -27,11 +29,18 @@ const t = useTranslations(lang);
 // builds a line that never recovers. These are level-1 figures, which is what
 // the button is offering to sell. Deriving them here is also what stops the UI
 // drifting from the table: the old markup had `70`, `110` and `90` hand-typed.
+// Typed by kind so a fourth tower fails the build here rather than at a
+// runtime lookup; the tool bar and the data-t-tower-* strings below both read it.
+const towerNames: Record<TowerKind, string> = {
+  bolt: t('fun.towerdefense.towerBolt'),
+  blast: t('fun.towerdefense.towerBlast'),
+  frost: t('fun.towerdefense.towerFrost'),
+};
 const tools = TOWER_KINDS.map(kind => {
   const fresh = createTower(kind, 0);
   return {
     kind,
-    name: t(`fun.towerdefense.tower${kind[0].toUpperCase()}${kind.slice(1)}` as never),
+    name: towerNames[kind],
     cost: TOWERS[kind].cost,
     dps: Math.round(towerDps(fresh)),
     range: towerRange(fresh),
@@ -64,9 +73,9 @@ const tools = TOWER_KINDS.map(kind => {
         data-t-stood-down-desc={t('fun.towerdefense.stoodDownDesc')}
         data-t-max-level={t('fun.towerdefense.maxLevel')}
         data-t-level={t('fun.towerdefense.level')}
-        data-t-tower-bolt={t('fun.towerdefense.towerBolt')}
-        data-t-tower-blast={t('fun.towerdefense.towerBlast')}
-        data-t-tower-frost={t('fun.towerdefense.towerFrost')}
+        data-t-tower-bolt={towerNames.bolt}
+        data-t-tower-blast={towerNames.blast}
+        data-t-tower-frost={towerNames.frost}
       >
         <div class="game-header">
           <h1><span class="td-emoji">🏰</span> {t('fun.towerdefense.title')}</h1>
@@ -247,37 +256,13 @@ const tools = TOWER_KINDS.map(kind => {
     padding: var(--space-2xl) 0;
   }
 
-  .back-link {
-    display: inline-block;
-    margin-bottom: var(--space-xl);
-    color: var(--color-text-muted);
-    transition: color 0.2s ease;
-  }
-
-  .back-link:hover {
-    color: var(--color-accent);
-  }
-
   .game-container {
     max-width: 880px;
-    margin: 0 auto;
   }
 
   .game-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     gap: var(--space-lg);
-    flex-wrap: wrap;
     margin-bottom: var(--space-sm);
-  }
-
-  .game-header h1 {
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin: 0;
   }
 
   .td-emoji {
@@ -289,27 +274,7 @@ const tools = TOWER_KINDS.map(kind => {
     50% { transform: rotate(-6deg); }
   }
 
-  .scores {
-    display: flex;
-    gap: var(--space-lg);
-    flex-wrap: wrap;
-  }
-
-  .score-item {
-    text-align: center;
-  }
-
-  .score-label {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
   .score-value {
-    font-size: 1.35rem;
-    font-weight: 700;
     color: #f59e0b;
   }
 
@@ -331,19 +296,6 @@ const tools = TOWER_KINDS.map(kind => {
     font-variant-numeric: tabular-nums;
   }
 
-  .game-area {
-    position: relative;
-    background: var(--color-bg-secondary);
-    border-radius: 1rem;
-    overflow: hidden;
-    border: 2px solid var(--color-border);
-  }
-
-  .canvas-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
   #game-canvas {
     display: block;
     width: 100%;
@@ -359,25 +311,10 @@ const tools = TOWER_KINDS.map(kind => {
   }
 
   .game-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    overflow-y: auto;
-    padding: var(--space-md);
-    background: rgba(0, 0, 0, 0.82);
-    backdrop-filter: blur(4px);
     z-index: 2;
   }
 
   .overlay-content {
-    text-align: center;
-    margin: auto;
-    padding: var(--space-xl);
     max-width: 560px;
   }
 
@@ -412,13 +349,7 @@ const tools = TOWER_KINDS.map(kind => {
   }
 
   .play-icon {
-    font-size: 4rem;
-    display: block;
     margin-bottom: var(--space-md);
-  }
-
-  .final-stats {
-    font-size: 1.1rem;
   }
 
   .final-stats strong {
@@ -598,19 +529,7 @@ const tools = TOWER_KINDS.map(kind => {
     cursor: default;
   }
 
-  .hint {
-    margin-top: var(--space-sm);
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-align: center;
-  }
-
   @media (max-width: 600px) {
-    .game-header {
-      justify-content: center;
-      text-align: center;
-    }
-
     .scores {
       justify-content: center;
       gap: var(--space-md);

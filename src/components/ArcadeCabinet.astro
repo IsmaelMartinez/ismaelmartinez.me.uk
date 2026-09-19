@@ -35,10 +35,8 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
   {newBadge && <span class="new-ribbon">{newBadge}</span>}
   {estYear && <span class="est-plaque">EST. {estYear}</span>}
 
-  <div class="cabinet-top">
-    <div class="cabinet-marquee">
-      <span class="marquee-text">{title}</span>
-    </div>
+  <div class="cabinet-marquee">
+    <span class="marquee-text">{title}</span>
   </div>
 
   <div class="cabinet-screen">
@@ -127,11 +125,11 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
   }
 
   .arcade-cabinet:hover .blink {
-    animation: blink 0.5s step-end infinite;
+    animation: cabinet-blink 0.5s step-end infinite;
   }
 
   .arcade-cabinet:hover .screen-icon {
-    animation: bounce 0.5s ease infinite;
+    animation: cabinet-bounce 0.5s ease infinite;
   }
 
   .new-ribbon {
@@ -172,11 +170,8 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
     transform: rotate(-4deg);
   }
 
-  .cabinet-top {
-    margin-bottom: 8px;
-  }
-
   .cabinet-marquee {
+    margin-bottom: 8px;
     background: linear-gradient(180deg, var(--cabinet-color) 0%, color-mix(in srgb, var(--cabinet-color) 70%, black) 100%);
     padding: 8px 12px;
     border-radius: 8px 8px 4px 4px;
@@ -273,11 +268,13 @@ const { id, title, tagline, genre, players, href, color, icon, bestLabel, newBad
     letter-spacing: 1px;
   }
 
-  @keyframes blink {
+  /* Keyframe names are not scoped by Astro, so these are prefixed to stay
+     clear of the floor's `blink` and the layout's `bounce`. */
+  @keyframes cabinet-blink {
     50% { opacity: 0; }
   }
 
-  @keyframes bounce {
+  @keyframes cabinet-bounce {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-5px); }
   }

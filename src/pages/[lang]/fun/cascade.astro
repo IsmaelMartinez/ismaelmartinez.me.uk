@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import ToastArea from '../../../components/ToastArea.astro';
@@ -148,37 +149,13 @@ const t = useTranslations(lang);
     padding: var(--space-2xl) 0;
   }
 
-  .back-link {
-    display: inline-block;
-    margin-bottom: var(--space-xl);
-    color: var(--color-text-muted);
-    transition: color 0.2s ease;
-  }
-
-  .back-link:hover {
-    color: var(--color-accent);
-  }
-
   .game-container {
     max-width: 560px;
-    margin: 0 auto;
   }
 
   .game-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     gap: var(--space-lg);
-    flex-wrap: wrap;
     margin-bottom: var(--space-sm);
-  }
-
-  .game-header h1 {
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin: 0;
   }
 
   .cascade-emoji {
@@ -190,27 +167,7 @@ const t = useTranslations(lang);
     50% { transform: translateY(-4px); }
   }
 
-  .scores {
-    display: flex;
-    gap: var(--space-lg);
-    flex-wrap: wrap;
-  }
-
-  .score-item {
-    text-align: center;
-  }
-
-  .score-label {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
   .score-value {
-    font-size: 1.35rem;
-    font-weight: 700;
     color: #a855f7;
   }
 
@@ -268,14 +225,6 @@ const t = useTranslations(lang);
     margin: var(--space-md) auto 0;
   }
 
-  .game-area {
-    position: relative;
-    background: var(--color-bg-secondary);
-    border-radius: 1rem;
-    overflow: hidden;
-    border: 2px solid var(--color-border);
-  }
-
   #game-canvas {
     display: block;
     width: 100%;
@@ -285,25 +234,10 @@ const t = useTranslations(lang);
   }
 
   .game-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    overflow-y: auto;
-    padding: var(--space-md);
-    background: rgba(0, 0, 0, 0.82);
-    backdrop-filter: blur(4px);
     z-index: 2;
   }
 
   .overlay-content {
-    text-align: center;
-    margin: auto;
-    padding: var(--space-xl);
     max-width: 460px;
   }
 
@@ -323,13 +257,7 @@ const t = useTranslations(lang);
   }
 
   .play-icon {
-    font-size: 4rem;
-    display: block;
     margin-bottom: var(--space-md);
-  }
-
-  .final-stats {
-    font-size: 1.1rem;
   }
 
   .final-stats strong {
@@ -372,19 +300,7 @@ const t = useTranslations(lang);
     border-color: rgba(168, 85, 247, 0.5);
   }
 
-  .hint {
-    margin-top: var(--space-sm);
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-align: center;
-  }
-
   @media (max-width: 600px) {
-    .game-header {
-      justify-content: center;
-      text-align: center;
-    }
-
     .scores {
       justify-content: center;
       gap: var(--space-md);

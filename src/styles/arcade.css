@@ -1,0 +1,193 @@
+/* The chrome every arcade cabinet page shares: the back link, the header with
+   its score readouts, the framed play area, the start/result overlay and the
+   controls strip. Imported by each page under src/pages/[lang]/fun/ (not by
+   the layout, so the rest of the site never loads it). Every rule here was
+   pasted into six or more cabinet pages before this file existed, and the
+   copies had drifted in ways nobody chose (an overlay scrim of 0.8 on five
+   pages and 0.82 on three). A page's own scoped rule outranks anything here
+   (Astro scopes to a class-plus-attribute selector), so a cabinet that wants
+   a different accent colour or a wider frame keeps just that property in its
+   own <style>. Two kinds of rule deliberately stay on the pages: anything a
+   page also targets with a scoped compound selector of equal or higher
+   specificity (`.score-value.money` against a page's own `.score-value`
+   colour, `.overlay-content .instructions` against `.overlay-content p`,
+   the phone `.controls` stacking against a page's own `.controls`), which a
+   global rule would lose to, and phone rules only some cabinets carry. */
+
+.back-link {
+  display: inline-block;
+  margin-bottom: var(--space-xl);
+  color: var(--color-text-muted);
+  transition: color 0.2s ease;
+}
+
+.back-link:hover {
+  color: var(--color-accent);
+}
+
+.game-container {
+  margin: 0 auto;
+}
+
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.game-header h1 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 1.75rem;
+}
+
+.scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.score-item {
+  text-align: center;
+}
+
+.score-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.score-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.game-area {
+  position: relative;
+  background: var(--color-bg-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+/* The canvas play area and its overlays are always dark: the canvas draws its
+   own dark artwork and overlays sit on a hardcoded dark scrim. Pin overlay and
+   HUD text to the dark palette so it stays readable regardless of the site
+   theme; without this the themed text variables flip in light mode and give
+   unreadable dark-on-dark overlay text. The concrete color is set too, not
+   just the variable: overlay text with no explicit color otherwise inherits
+   body's already-resolved color, which is dark in light mode. */
+.game-area,
+.game-overlay {
+  --color-text: #e5e5e5;
+  --color-text-muted: #a3a3a3;
+  --color-border: #404040;
+  --color-bg-secondary: #1a1a1a;
+  color: var(--color-text);
+}
+
+.canvas-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.game-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: var(--space-md);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}
+
+.overlay-content {
+  margin: auto;
+  padding: var(--space-xl);
+  text-align: center;
+}
+
+.play-icon {
+  display: block;
+  font-size: 4rem;
+  margin-bottom: var(--space-lg);
+}
+
+/* Doubled up with .btn so it outranks global.css's .btn padding and font-size
+   whatever order the two stylesheets are linked in. */
+.btn.btn-large {
+  padding: var(--space-md) var(--space-2xl);
+  font-size: 1.1rem;
+}
+
+.final-stats {
+  font-size: 1.1rem;
+}
+
+.hint {
+  margin-top: var(--space-sm);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* Shared audio toggles (music / effects) in each cabinet's header. Doubled
+   up with .btn for the same reason as .btn-large above. */
+.btn.sound-btn {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 1.1rem;
+  line-height: 1;
+  /* Comfortable tap target on phones (was 44x30, too short to press). */
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+/* A muted channel dims and strikes through its glyph so an unchanged icon
+   (e.g. the music note) still reads clearly as off. */
+.btn.sound-btn.muted {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+@media (max-width: 600px) {
+  .game-header {
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* On phones the fixed-aspect canvas is short, too short to fit an overlay's
+     instructions and buttons, so the buttons (e.g. Tank Duel's "2 Players")
+     got clipped behind the frame. Give the play area extra height, but only
+     while a start/result overlay is actually visible (detected via :has + the
+     inline display style the games toggle), so normal gameplay keeps its
+     aspect ratio. The overlay itself also scrolls (overflow-y: auto above) as
+     a final safety net for very small screens. */
+  .game-area:has(.game-overlay:not([style*="none"])) {
+    min-height: 30rem;
+  }
+
+  /* Compact the overlay so its instructions and buttons fit the smaller frame.
+     The descendant selectors are deliberately specific enough to win over a
+     page's scoped rules. */
+  .game-area .game-overlay .overlay-content {
+    padding: var(--space-md);
+  }
+
+  .game-area .game-overlay .play-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-sm);
+  }
+}

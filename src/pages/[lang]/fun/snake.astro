@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
@@ -94,36 +95,8 @@ const t = useTranslations(lang);
     padding: var(--space-2xl) 0;
   }
 
-  .back-link {
-    display: inline-block;
-    margin-bottom: var(--space-xl);
-    color: var(--color-text-muted);
-    transition: color 0.2s ease;
-  }
-
-  .back-link:hover {
-    color: var(--color-accent);
-  }
-
   .game-container {
     max-width: 450px;
-    margin: 0 auto;
-  }
-
-  .game-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-lg);
-    flex-wrap: wrap;
-    gap: var(--space-md);
-  }
-
-  .game-header h1 {
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
   }
 
   .snake-emoji {
@@ -135,35 +108,12 @@ const t = useTranslations(lang);
     50% { transform: rotate(5deg); }
   }
 
-  .scores {
-    display: flex;
-    gap: var(--space-lg);
-  }
-
-  .score-item {
-    text-align: center;
-  }
-
-  .score-label {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
   .score-value {
     font-size: 1.5rem;
-    font-weight: 700;
     color: #22c55e;
   }
 
   .game-area {
-    position: relative;
-    background: var(--color-bg-secondary);
-    border-radius: 1rem;
-    overflow: hidden;
-    border: 2px solid var(--color-border);
     touch-action: none;
   }
 
@@ -174,31 +124,7 @@ const t = useTranslations(lang);
     aspect-ratio: 1;
   }
 
-  .game-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    overflow-y: auto;
-    padding: var(--space-md);
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(4px);
-  }
-
-  .overlay-content {
-    text-align: center;
-    margin: auto;
-    padding: var(--space-xl);
-  }
-
   .play-icon {
-    font-size: 4rem;
-    display: block;
-    margin-bottom: var(--space-lg);
     color: #22c55e;
   }
 
@@ -217,11 +143,6 @@ const t = useTranslations(lang);
   .final-score {
     font-size: 1.25rem;
     margin-bottom: var(--space-xl);
-  }
-
-  .btn-large {
-    padding: var(--space-md) var(--space-2xl);
-    font-size: 1.1rem;
   }
 
   .mobile-controls {
@@ -258,11 +179,6 @@ const t = useTranslations(lang);
   @media (max-width: 600px) {
     .mobile-controls {
       display: flex;
-    }
-
-    .game-header {
-      justify-content: center;
-      text-align: center;
     }
 
     .game-header h1 {

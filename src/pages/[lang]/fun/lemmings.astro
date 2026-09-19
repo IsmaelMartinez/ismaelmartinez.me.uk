@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
@@ -231,36 +232,8 @@ const hintAttrs = Object.fromEntries(
     padding: var(--space-2xl) 0;
   }
 
-  .back-link {
-    display: inline-block;
-    margin-bottom: var(--space-xl);
-    color: var(--color-text-muted);
-    transition: color 0.2s ease;
-  }
-
-  .back-link:hover {
-    color: var(--color-accent);
-  }
-
   .game-container {
     max-width: 720px;
-    margin: 0 auto;
-  }
-
-  .game-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-lg);
-    flex-wrap: wrap;
-    gap: var(--space-md);
-  }
-
-  .game-header h1 {
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
   }
 
   .critter-emoji {
@@ -273,28 +246,12 @@ const hintAttrs = Object.fromEntries(
     50% { transform: rotate(8deg); }
   }
 
-  .scores {
-    display: flex;
-    gap: var(--space-lg);
-    flex-wrap: wrap;
-  }
-
-  .score-item {
-    text-align: center;
-  }
-
   .score-label {
-    display: block;
     font-size: 0.7rem;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
   }
 
   .score-value {
     font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--color-accent);
   }
 
   .score-value.saved {
@@ -339,14 +296,6 @@ const hintAttrs = Object.fromEntries(
     box-shadow: 0 0 8px rgba(132, 204, 22, 0.6);
   }
 
-  .game-area {
-    position: relative;
-    background: var(--color-bg-secondary);
-    border-radius: 1rem;
-    overflow: hidden;
-    border: 2px solid var(--color-border);
-  }
-
   #game-canvas {
     display: block;
     width: 100%;
@@ -358,22 +307,7 @@ const hintAttrs = Object.fromEntries(
     cursor: pointer;
   }
 
-  .game-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    overflow-y: auto;
-    padding: var(--space-md);
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(4px);
-  }
-
   .overlay-content {
-    text-align: center;
-    margin: auto;
-    padding: var(--space-xl);
     max-width: 480px;
   }
 
@@ -440,11 +374,6 @@ const hintAttrs = Object.fromEntries(
     flex-wrap: wrap;
   }
 
-  .btn-large {
-    padding: var(--space-md) var(--space-2xl);
-    font-size: 1.1rem;
-  }
-
   .level-hint {
     margin-top: var(--space-md);
     padding: var(--space-sm) var(--space-md);
@@ -496,7 +425,8 @@ const hintAttrs = Object.fromEntries(
     margin-bottom: var(--space-xl);
   }
 
-  .level-cell {
+  /* The cells are built by game.ts, so they carry no scope attribute. */
+  .level-grid :global(.level-cell) {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -514,17 +444,17 @@ const hintAttrs = Object.fromEntries(
     transition: all 0.15s ease;
   }
 
-  .level-cell:hover:not(:disabled) {
+  .level-grid :global(.level-cell:hover:not(:disabled)) {
     border-color: #84cc16;
     background: rgba(132, 204, 22, 0.16);
   }
 
-  .level-cell:disabled {
+  .level-grid :global(.level-cell:disabled) {
     opacity: 0.45;
     cursor: not-allowed;
   }
 
-  .level-cell .level-lock {
+  .level-grid :global(.level-lock) {
     font-size: 0.85rem;
   }
 
@@ -631,11 +561,6 @@ const hintAttrs = Object.fromEntries(
   }
 
   @media (max-width: 600px) {
-    .game-header {
-      justify-content: center;
-      text-align: center;
-    }
-
     .game-header h1 {
       width: 100%;
       justify-content: center;
@@ -655,11 +580,6 @@ const hintAttrs = Object.fromEntries(
       width: 100%;
     }
 
-    .overlay-content {
-      padding: var(--space-md);
-    }
-
-    .play-icon,
     .round-emoji {
       font-size: 2.75rem;
       margin-bottom: var(--space-sm);

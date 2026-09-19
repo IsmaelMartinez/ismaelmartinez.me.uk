@@ -1,0 +1,1 @@
+function e(e,t,n,r){let i=e;i.addEventListener(t,n,r),document.addEventListener(`astro:before-swap`,()=>i.removeEventListener(t,n,r),{once:!0})}export{e as t};

@@ -4,14 +4,13 @@ import ArticleCard from '../../../components/ArticleCard.astro';
 import { useTranslations, locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
 import { getCollection } from 'astro:content';
+import { isPublished, inLocale, byNewest } from '../../../utils/articles';
 
 export async function getStaticPaths() {
-  const allArticles = await getCollection('articles', ({ data }) => {
-    return import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft;
-  });
+  const allArticles = await getCollection('articles', ({ data }) => isPublished(data));
 
   return locales.flatMap(lang => {
-    const localeArticles = allArticles.filter(a => a.id.startsWith(`${lang}/`));
+    const localeArticles = allArticles.filter(a => inLocale(a, lang));
     const tags = new Set<string>();
     for (const article of localeArticles) {
       for (const tag of article.data.tags) {
@@ -23,9 +22,7 @@ export async function getStaticPaths() {
       params: { lang, tag },
       props: {
         tag,
-        articles: localeArticles
-          .filter(a => a.data.tags.includes(tag))
-          .sort((a, b) => b.data.publishedDate.valueOf() - a.data.publishedDate.valueOf()),
+        articles: localeArticles.filter(a => a.data.tags.includes(tag)).sort(byNewest),
       },
     }));
   });
@@ -63,21 +60,6 @@ const { tag, articles } = Astro.props;
 </Layout>
 
 <style>
-  .page-header {
-    margin-bottom: var(--space-2xl);
-  }
-
-  .page-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: var(--space-md);
-  }
-
-  .page-description {
-    font-size: 1.125rem;
-    color: var(--color-text-muted);
-  }
-
   .articles-grid {
     display: grid;
     gap: var(--space-lg);

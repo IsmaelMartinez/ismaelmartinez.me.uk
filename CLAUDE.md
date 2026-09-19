@@ -20,7 +20,7 @@ This is a multilingual Astro static site with three supported locales: English (
 
 ### Internationalisation
 
-The i18n system centres on `src/i18n/translations.ts`, which exports the `useTranslations(lang)` function used throughout components. Every UI string is keyed in this file across all three locales. The `getLangFromUrl()` and `getLocalizedPath()` helpers handle routing between language versions.
+The i18n system centres on `src/i18n/translations.ts`, which exports the `useTranslations(lang)` function used throughout components. Every UI string is keyed in this file across all three locales. Pages read their locale from `Astro.params.lang`; `getLocalizedPath()` builds the link to the same path in another locale, and `localeMeta` maps the `cat` route segment to the `ca` tag wherever a browser, crawler or feed reader reads it.
 
 Pages are defined once under `src/pages/[lang]/…` as dynamic routes that use `getStaticPaths()` to emit `/en/`, `/es/`, and `/cat/` variants (see `docs/plans/2026-02-15-phase4-security-maintainability-design.md` for the deduplication rationale). The root `src/pages/index.astro` redirects to the default locale (`/en/`), and `src/pages/404.astro` is the shared 404.
 

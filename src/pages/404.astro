@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import { translations, locales, defaultLang } from '../i18n/translations';
+import { translations, languages, locales, defaultLang } from '../i18n/translations';
 
 // Static hosting serves this one file for every unmatched path, so the locale
 // cannot be resolved at build time. The strings for all three ship with the
@@ -36,9 +36,9 @@ const escapedCopy = JSON.stringify(notFoundCopy).replace(/</g, '\\u003c');
         <p class="error-message" data-error-message>{fallback.message}</p>
 
         <nav class="locale-links" aria-label="Choose a language">
-          <a href="/en/" class="btn btn-primary">English</a>
-          <a href="/es/" class="btn btn-outline">Español</a>
-          <a href="/cat/" class="btn btn-outline">Català</a>
+          {locales.map(locale => (
+            <a href={`/${locale}/`} class:list={['btn', locale === defaultLang ? 'btn-primary' : 'btn-outline']}>{languages[locale]}</a>
+          ))}
         </nav>
       </div>
     </main>

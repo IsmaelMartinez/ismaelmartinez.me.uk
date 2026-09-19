@@ -181,6 +181,23 @@ img {
   font-family: var(--font-serif);
 }
 
+/* The header every listing page opens with (about, projects, writing, tags, health). */
+.page-header {
+  margin-bottom: var(--space-2xl);
+}
+
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: var(--space-md);
+}
+
+.page-description {
+  font-size: 1.125rem;
+  color: var(--color-text-muted);
+  max-width: 600px;
+}
+
 /* Eyebrow / kicker label */
 .kicker {
   font-family: var(--font-sans);

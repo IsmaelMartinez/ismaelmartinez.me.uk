@@ -1,9 +1,10 @@
 ---
-import { useTranslations, getLocalizedPath } from '../i18n/translations';
+import { useTranslations, getLocalizedPath, type Locale } from '../i18n/translations';
 import { connectAnchorPath } from '../data/links';
+import { personJsonLd } from '../data/person';
 
 interface Props {
-  lang: 'en' | 'es' | 'cat';
+  lang: Locale;
 }
 
 const { lang } = Astro.props;
@@ -12,7 +13,7 @@ const t = useTranslations(lang);
 
 <section class="hero">
   <div class="container hero-content">
-    <p class="kicker hero-kicker">{t('hero.name')} · {t('hero.tagline')}</p>
+    <p class="kicker hero-kicker">{personJsonLd.name} · {t('hero.tagline')}</p>
     <h1 class="hero-headline">
       {t('hero.headline1')}<span class="hero-accent">{t('hero.headlineAccent')}</span>{t('hero.headline2')}
       <span class="hero-aside">{t('hero.headlineAside')}</span>

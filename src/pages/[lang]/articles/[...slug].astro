@@ -4,13 +4,14 @@ import ArticleLayout from '../../../layouts/ArticleLayout.astro';
 import { getReadingTime } from '../../../utils/reading-time';
 import { locales } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
+import { isPublished, inLocale } from '../../../utils/articles';
 
 export async function getStaticPaths() {
   const articles = await getCollection('articles');
 
   return locales.flatMap(lang =>
     articles
-      .filter(({ id, data }) => id.startsWith(`${lang}/`) && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft))
+      .filter(a => inLocale(a, lang) && isPublished(a.data))
       .map(article => ({
         params: { lang, slug: article.id.replace(`${lang}/`, '') },
         props: { article },

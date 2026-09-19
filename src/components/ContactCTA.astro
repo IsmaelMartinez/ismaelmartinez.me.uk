@@ -1,7 +1,7 @@
 ---
 import { useTranslations } from '../i18n/translations';
 import type { Locale } from '../i18n/translations';
-import { socialLinks } from '../data/links';
+import { linkedInUrl } from '../data/links';
 
 interface Props {
   lang: Locale;
@@ -9,7 +9,6 @@ interface Props {
 
 const { lang } = Astro.props;
 const t = useTranslations(lang);
-const linkedInUrl = socialLinks.find(link => link.name === 'LinkedIn')?.url ?? 'https://www.linkedin.com/in/ismaelmartinezramos';
 ---
 
 <section class="section cta-section">

@@ -2,10 +2,10 @@
 // The music and effects mute toggles shared by every arcade cabinet header.
 // The game's init() wires these by id (#music-btn / #sfx-btn) through
 // wireChannelButton, which reads the data-* attributes for glyph and aria text.
-import { useTranslations } from '../i18n/translations';
+import { useTranslations, type Locale } from '../i18n/translations';
 
 interface Props {
-  lang: 'en' | 'es' | 'cat';
+  lang: Locale;
 }
 
 const { lang } = Astro.props;

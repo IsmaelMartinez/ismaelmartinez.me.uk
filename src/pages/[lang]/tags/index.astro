@@ -1,8 +1,8 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import { useTranslations, getLocalizedPath, locales, localeMeta } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
-import { getCollection } from 'astro:content';
+import { getPublishedArticles } from '../../../utils/articles';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
@@ -11,9 +11,7 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
 
-const articles = await getCollection('articles', ({ id, data }) => {
-  return id.startsWith(`${lang}/`) && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !data.draft);
-});
+const articles = await getPublishedArticles(lang);
 
 const tagCounts = new Map<string, number>();
 for (const article of articles) {
@@ -22,7 +20,9 @@ for (const article of articles) {
   }
 }
 
-const sortedTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+// Most-used first; equal counts sort by name so the order does not depend on
+// which article the collection happened to list first.
+const sortedTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], localeMeta[lang].intl));
 ---
 
 <Layout title={t('tags.title')} description={t('tags.description')} lang={lang}>
@@ -46,22 +46,6 @@ const sortedTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
 </Layout>
 
 <style>
-  .page-header {
-    margin-bottom: var(--space-2xl);
-  }
-
-  .page-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: var(--space-md);
-  }
-
-  .page-description {
-    font-size: 1.125rem;
-    color: var(--color-text-muted);
-    max-width: 600px;
-  }
-
   .tags-grid {
     display: flex;
     flex-wrap: wrap;

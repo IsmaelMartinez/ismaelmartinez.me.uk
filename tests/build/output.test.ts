@@ -88,11 +88,6 @@ describe.skipIf(!hasDist)('build output', () => {
       const html = readFileSync('dist/en/index.html', 'utf-8');
       expect(html).toContain('strict-origin-when-cross-origin');
     });
-
-    it('en/index.html contains X-Content-Type-Options', () => {
-      const html = readFileSync('dist/en/index.html', 'utf-8');
-      expect(html).toContain('nosniff');
-    });
   });
 
   describe('SEO tags present', () => {

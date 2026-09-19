@@ -2,7 +2,8 @@
 import Layout from './Layout.astro';
 import TableOfContents from '../components/TableOfContents.astro';
 import ArticleCard from '../components/ArticleCard.astro';
-import { useTranslations, getLocalizedPath } from '../i18n/translations';
+import { useTranslations, getLocalizedPath, formatDate, type Locale } from '../i18n/translations';
+import { isPublished, inLocale } from '../utils/articles';
 import { connectAnchorPath } from '../data/links';
 import { toJsonLd } from '../data/person';
 import { getCollection } from 'astro:content';
@@ -16,7 +17,7 @@ interface Props {
   originalPlatform?: 'medium' | 'devto' | 'self';
   heroImage?: string;
   tags: string[];
-  lang: 'en' | 'es' | 'cat';
+  lang: Locale;
   slug: string;
   readingTime?: number;
 }
@@ -29,14 +30,6 @@ const allArticles = await getCollection('articles');
 const availableTranslations = allArticles
   .filter(article => article.id.split('/')[1] === slug.split('/')[1])
   .map(article => article.id.split('/')[0]);
-
-const formatDate = (date: Date) => {
-  return date.toLocaleDateString({ en: 'en-GB', es: 'es-ES', cat: 'ca-ES' }[lang], {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-};
 
 const platformLabels = {
   medium: 'Medium',
@@ -70,7 +63,7 @@ const articleJsonLd = {
 
 // Related articles: find articles sharing tags, fall back to most recent
 const sameLocaleArticles = allArticles
-  .filter(a => a.id.startsWith(`${lang}/`) && a.id !== slug && (import.meta.env.DEV || import.meta.env.VERCEL_ENV === 'preview' || !a.data.draft));
+  .filter(a => inLocale(a, lang) && a.id !== slug && isPublished(a.data));
 
 const scoredArticles = sameLocaleArticles.map(a => ({
   article: a,
@@ -92,10 +85,10 @@ const relatedArticles = scoredArticles
     <div class="container">
       <header class="article-header">
         <div class="article-meta">
-          <time datetime={publishedDate.toISOString()}>{formatDate(publishedDate)}</time>
+          <time datetime={publishedDate.toISOString()}>{formatDate(publishedDate, lang, 'long')}</time>
           {updatedDate && (
             <span class="updated">
-              · {t('article.updated')} {formatDate(updatedDate)}
+              · {t('article.updated')} {formatDate(updatedDate, lang, 'long')}
             </span>
           )}
           {readingTime && (

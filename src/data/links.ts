@@ -32,6 +32,8 @@ export const feedLink: Omit<SocialLink, 'url'> = {
   }
 };
 
+export const linkedInUrl = 'https://www.linkedin.com/in/ismaelmartinezramos';
+
 export const socialLinks: SocialLink[] = [
   {
     name: 'GitHub',
@@ -46,7 +48,7 @@ export const socialLinks: SocialLink[] = [
   },
   {
     name: 'LinkedIn',
-    url: 'https://www.linkedin.com/in/ismaelmartinezramos',
+    url: linkedInUrl,
     icon: '💼',
     group: 'connect',
     description: {

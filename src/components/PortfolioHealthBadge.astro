@@ -1,11 +1,11 @@
 ---
 import type { PortfolioHealth } from '../data/health';
 import { getLocalizedPath } from '../i18n/translations';
-import type { TranslationKey } from '../i18n/translations';
+import type { TranslationKey, Locale } from '../i18n/translations';
 
 interface Props {
   health: PortfolioHealth;
-  lang: 'en' | 'es' | 'cat';
+  lang: Locale;
   t: (key: TranslationKey) => string;
   /** Render as a plain span instead of a link, for pages that already carry their own /health anchor. */
   linked?: boolean;

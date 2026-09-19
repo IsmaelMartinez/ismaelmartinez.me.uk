@@ -1,5 +1,5 @@
 ---
-import { getLocalizedPath } from '../i18n/translations';
+import { getLocalizedPath, formatDate, type Locale } from '../i18n/translations';
 
 interface Props {
   title: string;
@@ -8,19 +8,11 @@ interface Props {
   slug: string;
   heroImage?: string;
   tags: string[];
-  lang: 'en' | 'es' | 'cat';
+  lang: Locale;
   originalPlatform?: 'medium' | 'devto' | 'self';
 }
 
 const { title, description, publishedDate, slug, heroImage, tags, lang, originalPlatform } = Astro.props;
-
-const formatDate = (date: Date) => {
-  return date.toLocaleDateString(lang === 'cat' ? 'ca-ES' : lang === 'es' ? 'es-ES' : 'en-GB', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
-};
 
 const platformIcon = {
   medium: '✍️',
@@ -35,7 +27,7 @@ const platformIcon = {
       <img src={heroImage} alt="" class="article-card-thumbnail" loading="lazy" />
     )}
     <div class="article-card-header">
-      <time datetime={publishedDate.toISOString()}>{formatDate(publishedDate)}</time>
+      <time datetime={publishedDate.toISOString()}>{formatDate(publishedDate, lang, 'short')}</time>
       {originalPlatform && (
         <span class="platform-badge" title={originalPlatform}>
           {platformIcon[originalPlatform]}

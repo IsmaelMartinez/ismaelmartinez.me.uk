@@ -11,7 +11,7 @@ export const START_MONEY = 200;
 export const START_LIVES = 20;
 /** Score per wave held without a leak. */
 export const WAVE_BASE = 100;
-export const INTEREST_RATE = 0.1;
+const INTEREST_RATE = 0.1;
 export const INTEREST_CAP = 60;
 
 export interface Economy {

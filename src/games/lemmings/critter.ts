@@ -20,7 +20,7 @@
 
 export type Skill = 'blocker' | 'digger' | 'basher' | 'builder' | 'floater' | 'bomber';
 
-export type CritterState =
+type CritterState =
   | 'walker'
   | 'faller'
   | 'blocker'
@@ -77,22 +77,22 @@ export interface CritterWorld {
 // --- Tunable constants (exported for tests and level tuning) ---
 export const CRITTER_H = 9; // body height in px, for blocker footprint & drawing
 export const MAX_CLIMB = 4; // slope a walker steps up in one move
-export const FALL_SPEED = 3; // px/tick a plain faller drops
-export const FLOAT_SPEED = 1; // px/tick a floater drifts
+const FALL_SPEED = 3; // px/tick a plain faller drops
+const FLOAT_SPEED = 1; // px/tick a floater drifts
 export const SPLAT_DIST = 60; // fall px beyond which a landing is fatal
 
 export const DIG_INTERVAL = 4; // ticks between digger slabs
-export const DIG_WIDTH = 8;
+const DIG_WIDTH = 8;
 export const BASH_INTERVAL = 3; // ticks between basher slabs
-export const BASH_WIDTH = 4;
+const BASH_WIDTH = 4;
 export const BUILD_INTERVAL = 6; // ticks between builder treads
 export const BUILD_BRICKS = 12;
-export const BRICK_WIDTH = 6;
+const BRICK_WIDTH = 6;
 // A basher assigned this far short of a wall still walks into it and connects. The
 // guard below is `stall > BASH_PATIENCE`, so one more step than this is taken before
 // the basher reverts to a walker, which makes the corridor the player has to click
 // inside BASH_PATIENCE + 1 px wide (6 gave a 7px window, barely 117ms of walking).
-export const BASH_PATIENCE = 12; // stalled steps a basher tolerates before giving up
+const BASH_PATIENCE = 12; // stalled steps a basher tolerates before giving up
 export const BOMBER_FUSE = 150; // ticks (2.5s @ 60Hz) from lighting the fuse to the blast
 
 export function createCritter(id: number, x: number, y: number, dir: 1 | -1 = 1): Critter {

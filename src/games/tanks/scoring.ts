@@ -16,7 +16,7 @@
 export type TankMode = 'cpu' | '2p';
 
 /** Points per hp of damage landed on the opponent. */
-export const DAMAGE_POINTS = 1;
+const DAMAGE_POINTS = 1;
 /** Bonus for detonating a shell on the enemy tank itself. */
 export const DIRECT_HIT_POINTS = 25;
 /** Bonus for taking a round. */

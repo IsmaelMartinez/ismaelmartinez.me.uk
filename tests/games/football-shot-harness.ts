@@ -53,7 +53,7 @@ import {
 import { teamByCode } from '../../src/games/football/teams';
 import { seededRandom } from './seeded-random';
 
-export const DT = 1 / 60;
+const DT = 1 / 60;
 
 export type ShotOutcome = 'goal' | 'save' | 'off' | 'post';
 

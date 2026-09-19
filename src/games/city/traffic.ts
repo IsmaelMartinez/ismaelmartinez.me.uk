@@ -47,7 +47,7 @@ export interface Car {
   color: string;
 }
 
-export const CAR_COLORS = ['#f8fafc', '#fbbf24', '#f87171', '#60a5fa', '#a3e635'];
+const CAR_COLORS = ['#f8fafc', '#fbbf24', '#f87171', '#60a5fa', '#a3e635'];
 
 /** How many cars a city of this size should show. */
 export function targetCarCount(population: number): number {

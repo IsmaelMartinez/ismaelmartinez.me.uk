@@ -198,7 +198,7 @@ export const KIT_CLASH = 70;
  * stays. Green is the colour this rule is about — a lighter bottle green sits
  * in the thirties and a side wearing it is invisible.
  */
-export const GRASS_CLASH = 50;
+const GRASS_CLASH = 50;
 
 function channels(hex: string): [number, number, number] {
   return [
@@ -283,7 +283,7 @@ export function fixtureKits(home: Team, away: Team): [Kit, Kit] {
 
 /** How many teams enter a run, and how many sit in each group. */
 export const GROUP_SIZE = 4;
-export const RUN_TEAMS = GROUP_SIZE * 2;
+const RUN_TEAMS = GROUP_SIZE * 2;
 
 export function teamByCode(code: string): Team {
   const team = ALL_TEAMS.find(t => t.code === code);
@@ -297,7 +297,7 @@ export function teamStrength(team: Team): number {
 }
 
 /** Fisher-Yates over a copy, drawing from the injected RNG. */
-export function shuffle<T>(items: readonly T[], rng: () => number): T[] {
+function shuffle<T>(items: readonly T[], rng: () => number): T[] {
   const out = items.slice();
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));

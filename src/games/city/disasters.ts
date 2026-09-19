@@ -20,8 +20,8 @@ export interface Fire {
 
 export const BURN_TICKS = 5;
 export const BURN_TICKS_COVERED = 3;
-export const SPREAD_CHANCE = 0.22;
-export const SPREAD_CHANCE_COVERED = 0.08;
+const SPREAD_CHANCE = 0.22;
+const SPREAD_CHANCE_COVERED = 0.08;
 /**
  * Chance per tick that a firehouse in range actually puts a covered fire out —
  * the tile survives instead of burning down. This is the fire crews doing real
@@ -50,7 +50,7 @@ export function isFlammable(tile: CityTile): boolean {
  * Ignition risk weight of a single tile: industry is three times as
  * fire-prone as anything else, and fire-station coverage halves the risk.
  */
-export function ignitionWeight(tile: CityTile, covered: boolean): number {
+function ignitionWeight(tile: CityTile, covered: boolean): number {
   if (!isFlammable(tile)) return 0;
   const base = tile.type === 'ind' ? 3 : 1;
   return covered ? base * 0.5 : base;
@@ -182,7 +182,7 @@ export interface Tornado {
 
 export const TORNADO_TICKS = 26;
 /** Chance per growth tick that a tornado touches down, at full intensity. */
-export const TORNADO_CHANCE = 0.012;
+const TORNADO_CHANCE = 0.012;
 
 export function tornadoChance(intensity: number): number {
   return TORNADO_CHANCE * intensity;
@@ -275,10 +275,10 @@ export function stepTornado(
 // --- Earthquake ---
 
 /** Chance per month of an earthquake, at full intensity. */
-export const QUAKE_CHANCE = 0.06;
+const QUAKE_CHANCE = 0.06;
 export const QUAKE_RADIUS = 4;
 /** Fires the shaking starts among the damage. */
-export const QUAKE_IGNITE_CHANCE = 0.2;
+const QUAKE_IGNITE_CHANCE = 0.2;
 
 export function quakeChance(intensity: number): number {
   return QUAKE_CHANCE * intensity;
@@ -335,7 +335,7 @@ export const CITY_EVENTS: CityEvent[] = [
   { id: 'boom', emoji: '📈', money: 150, demand: { com: 25 }, months: 2 }
 ];
 
-export const EVENT_CHANCE = 0.3;
+const EVENT_CHANCE = 0.3;
 /** Young cities get a grace period before politics kicks in. */
 export const EVENT_GRACE_MONTHS = 4;
 

@@ -35,9 +35,9 @@ export const MAX_LOCK_RESETS = 15;
 /** Seconds each chain link's rows stay lit before the landslide. */
 export const CLEAR_TIME = 0.32;
 /** Seconds per one-row drop while the landslide settles between chain links. */
-export const SETTLE_STEP_TIME = 0.045;
+const SETTLE_STEP_TIME = 0.045;
 /** Seconds per row while soft-dropping — much faster than any level's gravity. */
-export const SOFT_DROP_INTERVAL = 0.04;
+const SOFT_DROP_INTERVAL = 0.04;
 export const LINES_PER_LEVEL = 10;
 
 const LINE_POINTS = [0, 100, 300, 500, 800];
@@ -54,7 +54,7 @@ export function clearPoints(rowCount: number, level: number, chain: number): num
   return base * level * chain;
 }
 
-export type RunPhase = 'falling' | 'clearing' | 'settling' | 'over';
+type RunPhase = 'falling' | 'clearing' | 'settling' | 'over';
 
 export type RunEvent =
   | { type: 'lock' }

@@ -19,10 +19,10 @@ import {
 } from './units';
 
 /** How far hostiles can spot an armed player unit, in tiles. */
-export const SIGHT_RANGE = 7;
+const SIGHT_RANGE = 7;
 /** Adrenaline: squad speed multiplier and weapon cooldown multiplier. */
-export const BOOST_SPEED = 1.6;
-export const BOOST_FIRE = 0.6;
+const BOOST_SPEED = 1.6;
+const BOOST_FIRE = 0.6;
 /**
  * How close a persuaded mind settles behind its nearest agent, in tiles. It
  * stops here and never closes further, so this is a floor on where a
@@ -57,7 +57,7 @@ export const EXTRACTION_RADIUS = 1.5;
  */
 export const ESCORT_FOLLOW_DISTANCE = 1.2;
 
-export interface Shot {
+interface Shot {
   fx: number;
   fy: number;
   tx: number;
@@ -67,7 +67,7 @@ export interface Shot {
   life: number;
 }
 
-export interface Pickup {
+interface Pickup {
   x: number;
   y: number;
   weapon: WeaponId;

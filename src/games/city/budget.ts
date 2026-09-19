@@ -8,8 +8,8 @@
 import type { CityTile, CityTileType } from './tiles';
 import type { CityStats } from './simulation';
 
-export const TAX_PER_RESIDENT = 1.5;
-export const TAX_PER_JOB = 1;
+const TAX_PER_RESIDENT = 1.5;
+const TAX_PER_JOB = 1;
 /**
  * Running cost for every resident + job serviced *beyond the free allowance*
  * and below the dense threshold — a growing city's rate. Kept under the tax
@@ -52,7 +52,7 @@ export const SERVICE_DENSE_THRESHOLD = 1000;
  * and bankrupted a competent build on 4 seeds in 10, because a city that
  * cannot afford to zone stops growing and then cannot afford its own upkeep.
  */
-export const SERVICE_COST_PER_CAPITA_DENSE = (TAX_PER_RESIDENT + TAX_PER_JOB) / 2;
+const SERVICE_COST_PER_CAPITA_DENSE = (TAX_PER_RESIDENT + TAX_PER_JOB) / 2;
 
 const UPKEEP: Partial<Record<CityTileType, number>> = {
   road: 1,

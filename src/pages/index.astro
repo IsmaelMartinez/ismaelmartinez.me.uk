@@ -1,5 +1,10 @@
 ---
-// Root page - redirect to English version
+// Astro's i18n routing (`prefixDefaultLocale` + `redirectToDefaultLocale` in
+// astro.config.mjs) emits its own `/` -> `/en/` redirect page at build time and
+// refuses to build without a root index file to hang it on, so this file must
+// exist. Its body is never shipped: the build warns that route `/` conflicts
+// with a higher-priority route and drops it. It is kept as a plain meta-refresh
+// fallback so switching the redirect option off still leaves `/` reaching `/en/`.
 ---
 
 <html lang="en">

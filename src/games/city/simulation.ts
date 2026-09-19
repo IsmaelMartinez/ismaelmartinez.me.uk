@@ -8,18 +8,18 @@ import { clamp } from '../engine/math';
 import { CITY_W, CITY_H, MAX_LEVEL, DENSE_LEVEL, isZone, isRoad, type CityTile, type ZoneType } from './tiles';
 
 export const POWER_RADIUS = 7;
-export const SCHOOL_RADIUS = 6;
-export const FIRE_RADIUS = 6;
+const SCHOOL_RADIUS = 6;
+const FIRE_RADIUS = 6;
 export const POLICE_RADIUS = 6;
 /** A developed district past this population starts to feel crime if it has no
  *  police station in reach. Below it, the early game is left alone — the same
  *  late-game-only philosophy as the per-capita service bill. */
 export const CRIME_ONSET_POP = 250;
 /** Per-tick chance an exposed developed zone loses a level to crime. */
-export const CRIME_DECAY_CHANCE = 0.05;
+const CRIME_DECAY_CHANCE = 0.05;
 export const RESIDENTS_PER_LEVEL = 8;
-export const COM_JOBS_PER_LEVEL = 6;
-export const IND_JOBS_PER_LEVEL = 8;
+const COM_JOBS_PER_LEVEL = 6;
+const IND_JOBS_PER_LEVEL = 8;
 /**
  * Population at which zones may densify past MAX_LEVEL to DENSE_LEVEL. Sits
  * midway up the milestone ladder (between the 250 and 500 rungs) so the

@@ -23,7 +23,7 @@ export interface ScoreEntry {
 /** Rows on the published board. `qualifies` measures against this. */
 export const MAX_ENTRIES = 10;
 export const INITIALS_LENGTH = 3;
-export const DEFAULT_INITIALS = 'AAA';
+const DEFAULT_INITIALS = 'AAA';
 
 const BEST_PREFIX = 'arcade-best-';
 const INITIALS_KEY = 'arcade-initials';

@@ -84,17 +84,17 @@ import {
   type CarrierPlan
 } from './ai';
 
-export { HUMAN_SPEED, DRIBBLE_FACTOR, OFFBALL_FACTOR, SHOOT_RANGE, cpuSpeed, cpuTackleBase } from './ai';
+export { HUMAN_SPEED, DRIBBLE_FACTOR, OFFBALL_FACTOR, SHOOT_RANGE, cpuSpeed } from './ai';
 
 /** Real seconds per half; the displayed clock compresses this to 45'. */
 export const HALF_SECONDS = 30;
 /** Game minutes per real second of play. */
-export const MINUTES_PER_SECOND = 1.5;
+const MINUTES_PER_SECOND = 1.5;
 export const FULL_TIME_MINUTES = 90;
 
-export const KICKOFF_FREEZE = 0.6;
-export const GOAL_PAUSE = 1.2;
-export const HALF_TIME_PAUSE = 1.0;
+const KICKOFF_FREEZE = 0.6;
+const GOAL_PAUSE = 1.2;
+const HALF_TIME_PAUSE = 1.0;
 
 /** Seconds A must be held for a full-power shot. */
 export const CHARGE_TIME = 0.55;
@@ -105,7 +105,7 @@ const AIR_FRICTION = 0.06;
 const BOUNCE_Z = 0.5;
 const BOUNCE_H = 0.8;
 
-export const CAPTURE_R = 10;
+const CAPTURE_R = 10;
 /**
  * How near an opponent has to be to cut out a pass that is on its way to a
  * teammate — tighter than `CAPTURE_R`, because a firm ball played into a man
@@ -118,22 +118,22 @@ export const CAPTURE_R = 10;
  * played through it. Passing is the main thing a good player does that a
  * button-masher does not, so it has to pay.
  */
-export const PASS_INTERCEPT_R = 4;
+const PASS_INTERCEPT_R = 4;
 /**
  * How near the ball the *intended receiver* of a ground pass has to be to take
  * it in. Wider than `CAPTURE_R`, because a man a ball has been played to is
  * running onto it and expecting it, and narrower than a stride, because he
  * still has to be there.
  */
-export const RECEIVE_R = 16;
-export const CONTROL_MAX = 330;
+const RECEIVE_R = 16;
+const CONTROL_MAX = 330;
 /**
  * A keeper gathers loose balls up to this pace and no faster. Anything quicker
  * has to go through the save roll on his plane — letting him simply trap a
  * struck shot at capture range is precisely the deterministic absorber the
  * rewrite exists to remove.
  */
-export const KEEPER_TRAP_MAX = 200;
+const KEEPER_TRAP_MAX = 200;
 /**
  * A struck ball has to pass closer than a rolling one to be blocked: nobody
  * reacts to a 450 px/s shot from the same distance they trap a loose ball.
@@ -146,11 +146,11 @@ export const KEEPER_TRAP_MAX = 200;
  * number is `CAPTURE_R`, which is 10. It is still tighter than trapping a
  * loose ball, which is the part that has to stay true.
  */
-export const BLOCK_R = 9;
+const BLOCK_R = 9;
 export const TACKLE_R = 15;
 export const DRIBBLE_OFFSET = 8;
-export const KICK_GRACE = 0.35;
-export const WIN_GRACE = 0.5;
+const KICK_GRACE = 0.35;
+const WIN_GRACE = 0.5;
 
 /**
  * Shot placement. Full stick asks for the ball this far off centre — a ball's
@@ -168,7 +168,7 @@ export const WIN_GRACE = 0.5;
  * (0.271 against 0.403 from the six-yard box) and 7.3's aim monotonicity
  * failed at the one place it most needs to hold.
  */
-export const AIM_SPAN = GOAL_HALF - 7;
+const AIM_SPAN = GOAL_HALF - 7;
 /**
  * Shot pace. Steeper in the charge than the specification's 300 + 150 x power:
  * the charge is the one thing a player spends real time on before striking —
@@ -255,7 +255,7 @@ const SPREAD_CHARGE = 5;
 const SPREAD_RANGE_DIV = 34;
 const SPREAD_RUSH = 0.45;
 /** A defender this close is in the way of the swing. */
-export const STRIKE_PRESSURE_R = 30;
+const STRIKE_PRESSURE_R = 30;
 /**
  * What spoils a strike, and by how much. Every term is something a player can
  * do something about: back off the pressure, slow down, get the run and the
@@ -362,18 +362,18 @@ const SKY_LIFT_MAX = 260;
  * him half a second of the chase for his own rebound. There are no fouls in
  * this game, so position is the only price a bad decision can be charged.
  */
-export const STRIKE_RECOVER_MIN = 0.2;
-export const STRIKE_RECOVER_MAX = 0.65;
-export const STRIKE_SLOW = 0.5;
+const STRIKE_RECOVER_MIN = 0.2;
+const STRIKE_RECOVER_MAX = 0.65;
+const STRIKE_SLOW = 0.5;
 /** A blind clearance: shorter than a pass and steered only roughly. */
 const CLEAR_SPEED_BASE = 235;
 const CLEAR_SPEED_CHARGE = 110;
 const CLEAR_SCATTER = 0.75;
 
-export const SLIDE_TIME = 0.35;
-export const SLIDE_SPEED = 26 / SLIDE_TIME;
-export const SLIDE_COOLDOWN = 0.45;
-export const SLIDE_DOWN = 0.8;
+const SLIDE_TIME = 0.35;
+const SLIDE_SPEED = 26 / SLIDE_TIME;
+const SLIDE_COOLDOWN = 0.45;
+const SLIDE_DOWN = 0.8;
 /**
  * How hard a won challenge knocks the ball back through the tackle, and how
  * long the man who lost it is off balance for. Both exist so that a won slide
@@ -427,7 +427,7 @@ export const AIR_STRIKE_R = CAPTURE_R + 6;
  */
 export const CROSS_STRIKE_R = CAPTURE_R + 20;
 /** Lift on a lofted pass or cross; see `loftedPass` for why it is this low. */
-export const LOFT_LIFT = 150;
+const LOFT_LIFT = 150;
 /**
  * A delivered cross is aimed to pass through heading height *over* its target
  * rather than to land on him, so it is aimed this far beyond the man and timed
@@ -483,12 +483,12 @@ export interface BallState {
   vz: number;
 }
 
-export interface Owner {
+interface Owner {
   side: Side;
   idx: number;
 }
 
-export interface KeeperRuntime {
+interface KeeperRuntime {
   /** Delayed copy of the ball's lateral coordinate. */
   trackX: number;
   dive: KeeperDive | null;
@@ -508,7 +508,7 @@ export interface KeeperRuntime {
   contested: boolean;
 }
 
-export type MatchPhase = 'kickoff' | 'play' | 'goal' | 'restart' | 'halfTime' | 'over';
+type MatchPhase = 'kickoff' | 'play' | 'goal' | 'restart' | 'halfTime' | 'over';
 
 export interface GoalRecord {
   side: Side;
@@ -548,7 +548,7 @@ export interface MatchInput {
 
 export const NEUTRAL_INPUT: MatchInput = { x: 0, y: 0, a: false, b: false, c: false };
 
-export interface MatchStats {
+interface MatchStats {
   shots: [number, number];
   onTarget: [number, number];
   saves: [number, number];
@@ -709,7 +709,7 @@ function formation(side: Side, swapped: boolean): PlayerState[] {
  * held goals-against flat across the whole run. Side 0's keeper is therefore
  * fixed at a middling profile and only his team's Keeper rating moves him.
  */
-export const HUMAN_KEEPER_PROFILE = 0.3;
+const HUMAN_KEEPER_PROFILE = 0.3;
 
 function freshKeeper(team: Team, side: Side, difficulty: number): KeeperRuntime {
   return {
@@ -1122,7 +1122,7 @@ function clearUpfield(m: MatchState, side: Side, power: number, aim: number): vo
  * already a deliberate departure from the original's purely directional
  * passing; this is the same departure, done properly.
  */
-export function passAssist(
+function passAssist(
   m: MatchState,
   side: Side,
   idx: number,

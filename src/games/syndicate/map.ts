@@ -11,7 +11,7 @@
 export const MAP_W = 26;
 export const MAP_H = 26;
 
-export type TileKind = 'road' | 'pavement' | 'plaza' | 'building';
+type TileKind = 'road' | 'pavement' | 'plaza' | 'building';
 
 export interface MapTile {
   kind: TileKind;

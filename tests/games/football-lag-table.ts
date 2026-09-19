@@ -99,11 +99,11 @@ export const LAG_BANDS: Array<{ label: string; lags: number[] }> = [
   { label: 'stale     (>= 30)   ', lags: [30, -30, 45, -45, 60, -60] }
 ];
 export const CONVERGED = 0;
-export const DRIFTING = 1;
+const DRIFTING = 1;
 export const STALE = 3;
 
 /** One (aim, lag) cell of a band, which is what a band pools. */
-export interface LagSubCell {
+interface LagSubCell {
   aim: number;
   lag: number;
   rate: number;

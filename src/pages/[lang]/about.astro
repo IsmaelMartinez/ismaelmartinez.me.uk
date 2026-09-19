@@ -30,7 +30,7 @@ const aboutJsonLd = {
 ---
 
 <Layout title={t('about.title')} description={t('about.description')} lang={lang}>
-  <script slot="head" type="application/ld+json" set:html={toJsonLd(aboutJsonLd)} />
+  <script is:inline slot="head" type="application/ld+json" set:html={toJsonLd(aboutJsonLd)} />
 
   <section class="section">
     <div class="container">

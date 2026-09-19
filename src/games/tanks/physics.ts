@@ -7,7 +7,7 @@
 import { surfaceYAt } from './terrain';
 
 export const GRAVITY = 240; // px/s²
-export const POWER_TO_SPEED = 5.5; // px/s per power point (power range 10–100)
+const POWER_TO_SPEED = 5.5; // px/s per power point (power range 10–100)
 
 export interface Projectile {
   x: number;
@@ -80,7 +80,7 @@ export function simulateShot(
   return null;
 }
 
-export const FALL_GRAVITY = 600; // px/s² for tanks dropping into craters
+const FALL_GRAVITY = 600; // px/s² for tanks dropping into craters
 
 export interface FallBody {
   /** Vertical position (canvas y, grows downwards). */

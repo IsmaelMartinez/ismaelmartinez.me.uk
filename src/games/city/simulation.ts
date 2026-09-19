@@ -145,8 +145,8 @@ export function hasNatureNearby(tiles: CityTile[], i: number, radius = 3): boole
   );
 }
 
-export function hasSchoolNearby(tiles: CityTile[], i: number, radius = SCHOOL_RADIUS): boolean {
-  return tiles.some((tile, j) => tile.type === 'school' && chebyshev(i, j, CITY_W) <= radius);
+export function hasSchoolNearby(tiles: CityTile[], i: number): boolean {
+  return tiles.some((tile, j) => tile.type === 'school' && chebyshev(i, j, CITY_W) <= SCHOOL_RADIUS);
 }
 
 /**

@@ -14,11 +14,13 @@ import {
   initScoreboard,
   setupHiDpiCanvas,
   createGameAudio,
-  wireChannelButton,
+  wireSoundToggles,
   createEffects,
   createToaster,
   shadeColor,
-  clamp
+  clamp,
+  mountCabinet,
+  listenUntilSwap
 } from '../engine';
 import { TANKS_MUSIC } from './music';
 import { markDone } from '../engine/progress';
@@ -53,21 +55,9 @@ const AWARD_COLOR = '#fbbf24';
 const TANK_COLORS = ['#38bdf8', '#f87171'];
 
 export function initTanksGame(): void {
-  const root = document.getElementById('tanks-root');
-  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvasEl) return;
-  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
-  // re-entry on a root this module has already wired.
-  if (root.dataset.gameWired) return;
-  const canvas: HTMLCanvasElement = canvasEl;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const ctx: CanvasRenderingContext2D = context;
-  // Stamped only once wiring is certain to proceed — a root marked wired on
-  // a failed getContext would block the after-swap retry for good.
-  root.dataset.gameWired = 'true';
-
-  const el = (id: string) => document.getElementById(id) as HTMLElement;
+  const mounted = mountCabinet('tanks-root');
+  if (!mounted) return;
+  const { root, canvas, ctx, el } = mounted;
   const startOverlay = el('start-overlay');
   const roundOverlay = el('round-overlay');
   const roundEmoji = el('round-emoji');
@@ -275,8 +265,7 @@ export function initTanksGame(): void {
   const board = initScoreboard(document.getElementById('highscores'));
 
   const audio = createGameAudio(TANKS_MUSIC);
-  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
-  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
+  wireSoundToggles(audio);
 
   const playerName = (i: number) =>
     i === 1 && match.mode === 'cpu' ? strings.cpu : i === 1 ? strings.player2 : strings.player1;
@@ -951,14 +940,7 @@ export function initTanksGame(): void {
     }
     syncControls();
   };
-  document.addEventListener('keydown', onKeydown);
-  // Document-level listeners outlive a ClientRouter swap; each wiring retires
-  // its own handler so re-inits don't stack keyboard handlers forever.
-  document.addEventListener(
-    'astro:before-swap',
-    () => document.removeEventListener('keydown', onKeydown),
-    { once: true }
-  );
+  listenUntilSwap(document, 'keydown', onKeydown);
 
   const isDifficulty = (v: string | undefined): v is Difficulty =>
     v === 'rookie' || v === 'gunner' || v === 'veteran';

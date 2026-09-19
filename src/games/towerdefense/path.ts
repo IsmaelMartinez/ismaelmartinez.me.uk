@@ -47,7 +47,8 @@ export interface TdMap {
 }
 
 /** Expands the authored waypoints into a contiguous tile route. */
-export function buildRoute(waypoints: Array<[number, number]> = WAYPOINTS): number[] {
+export function buildRoute(): number[] {
+  const waypoints = WAYPOINTS;
   const route: number[] = [idx(waypoints[0][0], waypoints[0][1])];
   for (let w = 1; w < waypoints.length; w++) {
     let [x, y] = waypoints[w - 1];

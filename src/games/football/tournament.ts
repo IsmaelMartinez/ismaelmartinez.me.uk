@@ -403,6 +403,4 @@ export function playerTeam(run: RunState): Team {
   return teamByCode(run.playerCode);
 }
 
-/** The group the player is in is always A; index 1 is the other one. */
-export const PLAYER_GROUP = 0;
 export { GROUP_SIZE };

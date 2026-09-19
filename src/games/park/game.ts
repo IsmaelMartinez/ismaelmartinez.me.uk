@@ -26,11 +26,12 @@ import {
   rotatePoint,
   createViewRotator,
   createGameAudio,
-  wireChannelButton,
+  wireSoundToggles,
   createToaster,
   createEffects,
   type IsoView,
-  type Rotation
+  type Rotation,
+  mountCabinet
 } from '../engine';
 import { PARK_MUSIC } from './music';
 import {
@@ -332,21 +333,9 @@ interface Guest {
 type Phase = 'idle' | 'play' | 'over';
 
 export function initParkGame(): void {
-  const root = document.getElementById('park-root');
-  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvasEl) return;
-  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
-  // re-entry on a root this module has already wired.
-  if (root.dataset.gameWired) return;
-  const canvas: HTMLCanvasElement = canvasEl;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const ctx: CanvasRenderingContext2D = context;
-  // Stamped only once wiring is certain to proceed — a root marked wired on
-  // a failed getContext would block the after-swap retry for good.
-  root.dataset.gameWired = 'true';
-
-  const el = (id: string) => document.getElementById(id) as HTMLElement;
+  const mounted = mountCabinet('park-root');
+  if (!mounted) return;
+  const { root, canvas, ctx, el } = mounted;
   const startOverlay = el('start-overlay');
   const overOverlay = el('over-overlay');
   const startBtn = el('start-btn');
@@ -395,8 +384,7 @@ export function initParkGame(): void {
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
   const audio = createGameAudio(PARK_MUSIC);
-  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
-  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
+  wireSoundToggles(audio);
 
   const makeView = (rot: Rotation): IsoView => ({
     halfW: HALF_W,

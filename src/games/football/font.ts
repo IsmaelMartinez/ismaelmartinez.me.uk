@@ -165,11 +165,6 @@ export function textWidth(text: string, scale = 1): number {
   return (n * (GLYPH_W + TRACKING) - TRACKING) * scale;
 }
 
-/** Pixel height of one line at `scale`. */
-export function textHeight(scale = 1): number {
-  return GLYPH_H * scale;
-}
-
 export interface TextOptions {
   /** Integer pixel size of one font pixel. */
   scale?: number;

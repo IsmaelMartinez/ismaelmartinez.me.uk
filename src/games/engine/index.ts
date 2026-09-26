@@ -12,8 +12,18 @@ export { clamp, seededRng } from './math';
 export { formatClock } from './clock';
 export { initScoreboard, createRunRecord } from './scoreboard';
 export type { Scoreboard, ScoreboardOptions, RunRecordBank } from './scoreboard';
-export { createGameAudio, loadMusicMuted, loadSfxMuted } from './audio';
-export type { GameAudio, GameAudioOptions, Note, SfxName, Track, EchoOptions } from './audio';
+export { createGameAudio, loadMusicMuted, loadSfxMuted, renderScore } from './audio';
+export type {
+  GameAudio,
+  GameAudioOptions,
+  Note,
+  SfxName,
+  Track,
+  EchoOptions,
+  DrumName,
+  PulseWave,
+  Wave
+} from './audio';
 export { pitch, p, REST } from './pitch';
 export { wireChannelButton, wireSoundToggles } from './soundButton';
 export { createToaster } from './toast';

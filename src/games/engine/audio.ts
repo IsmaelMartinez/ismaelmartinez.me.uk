@@ -13,8 +13,17 @@
  *
  * Music and sound effects mute independently, each under its own global
  * localStorage key, so a preference set in one cabinet carries to the rest.
+ *
+ * Beyond the four stock oscillator shapes the synth has three NES pulse duties,
+ * three drums built from one shared noise buffer, per-note delayed vibrato and
+ * slides. All of it is opt-in per track or per note: a score that uses none of
+ * it builds exactly the graph it built before these existed, which
+ * `tests/games/audio-graph.test.ts` checks call for call. The scheduler that
+ * plays a score live is the same one `renderScore` runs into an
+ * `OfflineAudioContext`, so a render is what the page would have played.
  */
 import { loadScore, saveScore } from './storage';
+import { seededRng } from './math';
 
 const MUSIC_MUTED_KEY = 'arcade-music-muted';
 const SFX_MUTED_KEY = 'arcade-sfx-muted';
@@ -38,14 +47,49 @@ export interface Note {
    * are exponential and cannot legally reach it — write a rest as `freq: 0`.
    */
   gain?: number;
+  /**
+   * Plays this drum instead of a pitched tone; `freq` is ignored, so write it
+   * as `REST`. A percussion track is an ordinary track whose sounding notes all
+   * carry one, which keeps it under the same equal-length loop rule as every
+   * other voice. The hit has its own fixed length whatever `beats` says; the
+   * beats only place the next one. The track's `volume` and the note's `gain`
+   * apply, its wave, envelope, octave, detune and vibrato do not.
+   */
+  drum?: DrumName;
+  /**
+   * Starts the note at this frequency (Hz, transposed by the track's
+   * `octaveShift` like `freq`) and glides up or down into `freq` over the
+   * first 60 ms of the note (`SLIDE_TIME`, or half a shorter note): a scoop
+   * into the pitch.
+   */
+  slideFrom?: number;
+  /**
+   * Glides over the last 60 ms (`SLIDE_TIME`) of the note into the next note of the
+   * line (wrapping at the loop), portamento into the next pitch. Ignored when
+   * the next note is a rest or a drum.
+   */
+  slideNext?: boolean;
 }
+
+/** The three drum instruments a percussion track can play. */
+export type DrumName = 'kick' | 'snare' | 'hat';
+
+/**
+ * NES pulse duties, the 2A03's 12.5%, 25% and 50% cycles. 75% is left out
+ * because it sounds identical to 25%. 'pulse50' is band-limited from the same
+ * series as the others, so it is close to, not the same as, 'square'.
+ */
+export type PulseWave = 'pulse12' | 'pulse25' | 'pulse50';
+
+/** A voice's timbre: a stock oscillator shape or a pulse duty. */
+export type Wave = OscillatorType | PulseWave;
 
 /** One simultaneous voice of the music. */
 export interface Track {
   /** This voice's looping line. */
   melody: Note[];
-  /** Oscillator type. Defaults to 'square'. */
-  wave?: OscillatorType;
+  /** Oscillator type or pulse duty. Defaults to 'square'. */
+  wave?: Wave;
   /** Relative mix level 0–1 within the music bus. Defaults to 1. */
   volume?: number;
   /**
@@ -57,6 +101,13 @@ export interface Track {
   octaveShift?: number;
   /** When > 0, a second voice detuned by this many cents is layered for warmth. */
   detune?: number;
+  /**
+   * Delayed vibrato depth in cents (about 8 is a singer's, not a siren). The
+   * note starts dead straight, the wobble begins `VIBRATO_DELAY` after onset
+   * and reaches this depth by `VIBRATO_FULL`, which is also the shortest note
+   * that gets any: on anything shorter it would never be heard. Defaults to 0.
+   */
+  vibrato?: number;
 }
 
 /** Feedback-delay send applied to the whole music mix. */
@@ -147,6 +198,7 @@ export function loadSfxMuted(): boolean {
 }
 
 type AudioCtor = typeof AudioContext;
+type OfflineCtor = typeof OfflineAudioContext;
 
 function getAudioContextCtor(): AudioCtor | null {
   if (typeof window === 'undefined') return null;
@@ -157,6 +209,15 @@ function getAudioContextCtor(): AudioCtor | null {
   return w.AudioContext || w.webkitAudioContext || null;
 }
 
+function getOfflineContextCtor(): OfflineCtor | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as {
+    OfflineAudioContext?: OfflineCtor;
+    webkitOfflineAudioContext?: OfflineCtor;
+  };
+  return w.OfflineAudioContext || w.webkitOfflineAudioContext || null;
+}
+
 /**
  * Tempo ceiling. Beyond this, note durations get so short that
  * scheduleAhead's ~100ms lookahead loop has to schedule thousands of notes
@@ -164,8 +225,96 @@ function getAudioContextCtor(): AudioCtor | null {
  */
 const MAX_BPM = 1000;
 
+/** Master music volume when a score does not set one. */
+const DEFAULT_VOLUME = 0.14;
+
 /** Peak gain of a single voice before its relative `volume` scaling. */
 const VOICE_PEAK = 0.8;
+
+/** How long a `slideFrom` scoop or a `slideNext` glide takes, in seconds. */
+const SLIDE_TIME = 0.06;
+
+/** Vibrato LFO rate in Hz. */
+const VIBRATO_RATE = 5.5;
+/** Seconds after onset that a note starts to waver. */
+const VIBRATO_DELAY = 0.15;
+/** Seconds after onset that the waver reaches its full depth. */
+const VIBRATO_FULL = 0.4;
+
+/** Harmonics summed into each pulse duty's `PeriodicWave`. */
+const PULSE_HARMONICS = 64;
+
+const PULSE_DUTY: Record<PulseWave, number> = { pulse12: 0.125, pulse25: 0.25, pulse50: 0.5 };
+
+/** Length of the shared white-noise buffer, in seconds. */
+const NOISE_SECONDS = 1;
+
+/**
+ * Seed for the noise buffer. Fixed so that two renders of a score with drums
+ * are sample-identical, which is what lets a jukebox comparison mean anything.
+ */
+const NOISE_SEED = 0x2a03;
+
+/**
+ * Every drum is a fixed-length hit whose level decays from the note's peak to
+ * silence over `decay` seconds. `level` balances the three against each other
+ * so a score can write them all at gain 1 and get a sensible kit.
+ */
+const DRUMS: Record<DrumName, { decay: number; level: number }> = {
+  kick: { decay: 0.15, level: 1 },
+  snare: { decay: 0.15, level: 0.7 },
+  hat: { decay: 0.04, level: 0.35 }
+};
+
+/**
+ * Per-context caches. A `PeriodicWave` or an `AudioBuffer` belongs to the
+ * context that made it, and both are worth making once rather than per note,
+ * so they are keyed on the context and go when it does.
+ */
+const noiseBuffers = new WeakMap<BaseAudioContext, AudioBuffer>();
+const pulseWaves = new WeakMap<BaseAudioContext, Map<PulseWave, PeriodicWave>>();
+
+function isPulse(wave: Wave): wave is PulseWave {
+  return wave in PULSE_DUTY;
+}
+
+/**
+ * The context's pulse wave at `duty`, built on first use from the pulse
+ * train's Fourier series: cosine terms (2 / n pi) sin(n pi d), no sine terms.
+ */
+function pulseWave(ctx: BaseAudioContext, wave: PulseWave): PeriodicWave {
+  let cache = pulseWaves.get(ctx);
+  if (!cache) {
+    cache = new Map();
+    pulseWaves.set(ctx, cache);
+  }
+  let built = cache.get(wave);
+  if (!built) {
+    const d = PULSE_DUTY[wave];
+    const real = new Float32Array(PULSE_HARMONICS + 1);
+    const imag = new Float32Array(PULSE_HARMONICS + 1);
+    for (let n = 1; n <= PULSE_HARMONICS; n++) {
+      real[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * d);
+    }
+    built = ctx.createPeriodicWave(real, imag);
+    cache.set(wave, built);
+  }
+  return built;
+}
+
+/** The context's one second of seeded white noise, built on first use. */
+function noiseBuffer(ctx: BaseAudioContext): AudioBuffer {
+  let buffer = noiseBuffers.get(ctx);
+  if (!buffer) {
+    const length = Math.ceil(ctx.sampleRate * NOISE_SECONDS);
+    buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    const rng = seededRng(NOISE_SEED);
+    for (let i = 0; i < length; i++) data[i] = rng() * 2 - 1;
+    noiseBuffers.set(ctx, buffer);
+  }
+  return buffer;
+}
 
 /**
  * Clamps a note's optional level into the legal attenuation range. The floor is
@@ -177,13 +326,25 @@ function noteGain(gain: number | undefined): number {
   return Math.min(Math.max(gain, 0.05), 1);
 }
 
+/**
+ * Seconds per beat for a requested tempo. A 0/NaN/Infinity tempo would give
+ * the scheduler zero-length notes and a non-terminating lookahead loop, so
+ * anything not finite and positive falls back to 120, and anything above
+ * MAX_BPM is capped.
+ */
+function beatSeconds(bpm: number | undefined): number {
+  const requested = bpm ?? 120;
+  return 60 / (Number.isFinite(requested) && requested > 0 ? Math.min(requested, MAX_BPM) : 120);
+}
+
 interface NormTrack {
   melody: Note[];
-  wave: OscillatorType;
+  wave: Wave;
   volume: number;
   envelope: 'pluck' | 'pad';
   octaveShift: number;
   detune: number;
+  vibrato: number;
 }
 
 /** Fills in per-track defaults. */
@@ -194,23 +355,288 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
     volume: t.volume ?? 1,
     envelope: t.envelope ?? 'pluck',
     octaveShift: t.octaveShift ?? 0,
-    detune: t.detune ?? 0
+    detune: t.detune ?? 0,
+    vibrato: t.vibrato ?? 0
   }));
+}
+
+/** The optional pitch movement of one tone. */
+interface ToneMotion {
+  /** Frequency the tone starts at and glides from into its own. */
+  slideFrom?: number;
+  /** Frequency the tone glides into over its tail. */
+  slideTo?: number;
+  /** Vibrato depth in cents. */
+  vibrato?: number;
+}
+
+/**
+ * Schedules one enveloped tone. The order and values of the graph calls for a
+ * tone with no `motion` are the ones the engine has always made; the motion
+ * adds calls after them and never changes them.
+ */
+function playTone(
+  ctx: BaseAudioContext,
+  freq: number,
+  start: number,
+  duration: number,
+  type: Wave,
+  peak: number,
+  destination: AudioNode,
+  envelope: 'pluck' | 'pad' = 'pluck',
+  detune = 0,
+  motion: ToneMotion = {}
+): void {
+  if (freq <= 0) return;
+  const gain = ctx.createGain();
+  // A pad swells slowly then decays across the whole note, a soft sustained
+  // bed; a pluck has a short attack then an exponential decay, the chiptune
+  // envelope. Either attack is capped to a fraction of the note so a very
+  // short note never schedules the decay ramp before the attack peak (which
+  // glitches Web Audio).
+  const attack = envelope === 'pad' ? Math.min(duration * 0.4, 0.25) : Math.min(0.01, duration * 0.5);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(peak, start + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  gain.connect(destination);
+  const slide = Math.min(SLIDE_TIME, duration / 2);
+  const slideFrom = motion.slideFrom ?? 0;
+  const scoop = slideFrom > 0;
+  // One LFO per note, shared by the twin so the two waver together. It feeds
+  // `detune`, which is in cents, so the depth gain is the depth in cents.
+  let depth: GainNode | null = null;
+  const vibrato = motion.vibrato ?? 0;
+  if (vibrato > 0 && duration >= VIBRATO_FULL) {
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(VIBRATO_RATE, start);
+    depth = ctx.createGain();
+    depth.gain.setValueAtTime(0, start);
+    depth.gain.setValueAtTime(0, start + VIBRATO_DELAY);
+    depth.gain.linearRampToValueAtTime(vibrato, start + VIBRATO_FULL);
+    lfo.connect(depth);
+    lfo.start(start);
+    lfo.stop(start + duration + 0.02);
+  }
+  const spawn = (cents: number): void => {
+    const osc = ctx.createOscillator();
+    if (isPulse(type)) osc.setPeriodicWave(pulseWave(ctx, type));
+    else osc.type = type;
+    osc.frequency.setValueAtTime(scoop ? slideFrom : freq, start);
+    if (cents) osc.detune.setValueAtTime(cents, start);
+    osc.connect(gain);
+    osc.start(start);
+    osc.stop(start + duration + 0.02);
+    if (scoop) osc.frequency.exponentialRampToValueAtTime(freq, start + slide);
+    if (motion.slideTo !== undefined && motion.slideTo > 0) {
+      osc.frequency.setValueAtTime(freq, start + duration - slide);
+      osc.frequency.exponentialRampToValueAtTime(motion.slideTo, start + duration);
+    }
+    if (depth) depth.connect(osc.detune);
+  };
+  spawn(0);
+  // A slightly detuned twin thickens the voice into a warm chorus.
+  if (detune > 0) spawn(detune);
+}
+
+/** A burst of the shared noise through a filter, decaying to silence. */
+function noiseHit(
+  ctx: BaseAudioContext,
+  start: number,
+  decay: number,
+  peak: number,
+  filterType: BiquadFilterType,
+  cutoff: number,
+  destination: AudioNode
+): void {
+  const source = ctx.createBufferSource();
+  source.buffer = noiseBuffer(ctx);
+  const filter = ctx.createBiquadFilter();
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(cutoff, start);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(peak, start);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + decay);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(destination);
+  source.start(start);
+  source.stop(start + decay + 0.02);
+}
+
+/** A triangle whose level (and, for the kick, pitch) falls away at once. */
+function toneHit(
+  ctx: BaseAudioContext,
+  start: number,
+  decay: number,
+  peak: number,
+  from: number,
+  to: number,
+  destination: AudioNode
+): void {
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(from, start);
+  if (to !== from) osc.frequency.exponentialRampToValueAtTime(to, start + 0.06);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(peak, start);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + decay);
+  osc.connect(gain);
+  gain.connect(destination);
+  osc.start(start);
+  osc.stop(start + decay + 0.02);
+}
+
+/**
+ * The three drums. The kick is a triangle dropping from 150 to 45 Hz in 60 ms,
+ * the NES's own trick for a kick on a channel with no noise in it; the snare
+ * is band-passed noise over a short 200 Hz triangle body; the hat is noise
+ * high-passed at 7 kHz.
+ */
+function playDrum(ctx: BaseAudioContext, name: DrumName, start: number, peak: number, destination: AudioNode): void {
+  const { decay, level } = DRUMS[name];
+  const p = peak * level;
+  switch (name) {
+    case 'kick':
+      toneHit(ctx, start, decay, p, 150, 45, destination);
+      break;
+    case 'snare':
+      noiseHit(ctx, start, decay, p, 'bandpass', 1500, destination);
+      toneHit(ctx, start, 0.08, p * 0.6, 200, 200, destination);
+      break;
+    case 'hat':
+      noiseHit(ctx, start, decay, p, 'highpass', 7000, destination);
+      break;
+  }
+}
+
+/** A voice's place in its line: when its next note starts and which it is. */
+interface Cursor {
+  next: number;
+  idx: number;
+}
+
+/**
+ * Schedules every track's notes that start before `horizon` onto `bus`,
+ * advancing each cursor past them. This is the whole of the scheduler: the
+ * live engine calls it every 25 ms with a horizon ~100 ms ahead, and
+ * `renderScore` calls it once with the horizon at the end of the render.
+ * `silent` advances the cursors without making any nodes (the music mute).
+ */
+function scheduleWindow(
+  ctx: BaseAudioContext,
+  bus: AudioNode,
+  tracks: NormTrack[],
+  cursors: Cursor[],
+  horizon: number,
+  secondsPerBeat: number,
+  silent: boolean
+): void {
+  for (let t = 0; t < tracks.length; t++) {
+    const track = tracks[t];
+    if (track.melody.length === 0) continue;
+    const v = cursors[t];
+    while (v.next < horizon) {
+      const note = track.melody[v.idx];
+      const dur = note.beats * secondsPerBeat;
+      // A non-positive beat length would never advance the cursor past the
+      // horizon, spinning this loop forever; skip the note but still step the
+      // cursor by a beat so a bad authoring value can't freeze the tab.
+      if (dur <= 0) {
+        v.next += secondsPerBeat;
+        v.idx = (v.idx + 1) % track.melody.length;
+        continue;
+      }
+      // When muted, keep each cursor advancing but skip oscillator creation so
+      // we don't burn CPU synthesising silent tones; timing stays in sync on unmute.
+      if (!silent) {
+        const peak = VOICE_PEAK * track.volume * noteGain(note.gain);
+        if (note.drum) {
+          playDrum(ctx, note.drum, v.next, peak, bus);
+        } else {
+          // Pads play their full length so they sustain and connect; plucks trim
+          // to leave the terse gap that reads as chiptune.
+          const playDur = track.envelope === 'pad' ? dur : dur * 0.9;
+          const shift = (f: number | undefined): number | undefined =>
+            f !== undefined && f > 0 ? f * Math.pow(2, track.octaveShift) : f;
+          const freq = note.freq > 0 ? note.freq * Math.pow(2, track.octaveShift) : note.freq;
+          const following = track.melody[(v.idx + 1) % track.melody.length];
+          const motion: ToneMotion = {
+            vibrato: track.vibrato,
+            slideFrom: shift(note.slideFrom),
+            slideTo: note.slideNext && !following.drum ? shift(following.freq) : undefined
+          };
+          playTone(ctx, freq, v.next, playDur, track.wave, peak, bus, track.envelope, track.detune, motion);
+        }
+      }
+      v.next += dur;
+      v.idx = (v.idx + 1) % track.melody.length;
+    }
+  }
+}
+
+/**
+ * The music graph: `master` carries the volume and feeds the destination;
+ * `bus` is the dry sum of every voice and the echo send's input.
+ */
+function buildMusicGraph(
+  ctx: BaseAudioContext,
+  volume: number,
+  echo: EchoOptions | undefined
+): { master: GainNode; bus: GainNode } {
+  const master = ctx.createGain();
+  master.gain.value = volume;
+  master.connect(ctx.destination);
+  const bus = ctx.createGain();
+  bus.gain.value = 1;
+  bus.connect(master);
+  if (echo) {
+    // Dry stays on bus → master; a delay line with feedback taps the bus and
+    // mixes a wet copy back in under the dry signal.
+    const time = Math.min(Math.max(echo.time, 0.001), 0.95);
+    const delay = ctx.createDelay(1);
+    delay.delayTime.value = time;
+    const feedback = ctx.createGain();
+    feedback.gain.value = Math.min(Math.max(echo.feedback, 0), 0.9);
+    const wet = ctx.createGain();
+    wet.gain.value = Math.max(echo.mix, 0);
+    bus.connect(delay);
+    delay.connect(feedback);
+    feedback.connect(delay);
+    delay.connect(wet);
+    wet.connect(master);
+  }
+  return { master, bus };
+}
+
+/**
+ * Renders the first `seconds` of a score, from the top, into a mono
+ * `AudioBuffer` through an `OfflineAudioContext`, using the same graph and the
+ * same scheduler the live engine plays it with. For development tools (the
+ * jukebox) that need to hear or compare a score without a game around it.
+ * Resolves to null where there is no `OfflineAudioContext` (SSR, Node) or the
+ * length is not a positive finite number of seconds.
+ */
+export async function renderScore(
+  options: GameAudioOptions,
+  seconds: number,
+  sampleRate = 44100
+): Promise<AudioBuffer | null> {
+  const Ctor = getOfflineContextCtor();
+  if (!Ctor || !Number.isFinite(seconds) || seconds <= 0) return null;
+  const ctx = new Ctor(1, Math.ceil(seconds * sampleRate), sampleRate);
+  const { bus } = buildMusicGraph(ctx, options.volume ?? DEFAULT_VOLUME, options.echo);
+  const tracks = normalizeTracks(options);
+  const cursors = tracks.map(() => ({ next: 0, idx: 0 }));
+  scheduleWindow(ctx, bus, tracks, cursors, seconds, beatSeconds(options.tempo), false);
+  return ctx.startRendering();
 }
 
 export function createGameAudio(options: GameAudioOptions): GameAudio {
   migrateLegacyMute();
 
-  const volume = options.volume ?? 0.14;
-  // Same finite-positive-bounded rule as setTempo: a 0/NaN/Infinity tempo
-  // would give scheduleAhead zero-length notes and a non-terminating
-  // lookahead loop.
-  const requestedTempo = options.tempo ?? 120;
-  let secondsPerBeat =
-    60 /
-    (Number.isFinite(requestedTempo) && requestedTempo > 0
-      ? Math.min(requestedTempo, MAX_BPM)
-      : 120);
+  const volume = options.volume ?? DEFAULT_VOLUME;
+  let secondsPerBeat = beatSeconds(options.tempo);
 
   const tracks = normalizeTracks(options);
 
@@ -225,7 +651,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   let musicBus: GainNode | null = null;
   // One scheduling cursor per track: they advance independently on their own
   // note lengths so a slow bass and a busy lead stay locked to the same clock.
-  const voice = tracks.map(() => ({ next: 0, idx: 0 }));
+  const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0 }));
   let scheduler: ReturnType<typeof setInterval> | null = null;
 
   /** Lazily create the AudioContext + music graph on first gesture. Returns null if unsupported. */
@@ -238,28 +664,9 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     if (!Ctor) return null;
     try {
       ctx = new Ctor();
-      musicMaster = ctx.createGain();
-      musicMaster.gain.value = volume;
-      musicMaster.connect(ctx.destination);
-      musicBus = ctx.createGain();
-      musicBus.gain.value = 1;
-      musicBus.connect(musicMaster);
-      if (options.echo) {
-        // Dry stays on musicBus → musicMaster; a delay line with feedback taps
-        // the bus and mixes a wet copy back in under the dry signal.
-        const time = Math.min(Math.max(options.echo.time, 0.001), 0.95);
-        const delay = ctx.createDelay(1);
-        delay.delayTime.value = time;
-        const feedback = ctx.createGain();
-        feedback.gain.value = Math.min(Math.max(options.echo.feedback, 0), 0.9);
-        const wet = ctx.createGain();
-        wet.gain.value = Math.max(options.echo.mix, 0);
-        musicBus.connect(delay);
-        delay.connect(feedback);
-        feedback.connect(delay);
-        delay.connect(wet);
-        wet.connect(musicMaster);
-      }
+      const graph = buildMusicGraph(ctx, volume, options.echo);
+      musicMaster = graph.master;
+      musicBus = graph.bus;
     } catch {
       ctx = null;
       musicMaster = null;
@@ -268,83 +675,10 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     return ctx;
   }
 
-  function playTone(
-    freq: number,
-    start: number,
-    duration: number,
-    type: OscillatorType,
-    peak: number,
-    destination: AudioNode,
-    envelope: 'pluck' | 'pad' = 'pluck',
-    detune = 0
-  ): void {
-    if (!ctx || freq <= 0) return;
-    const gain = ctx.createGain();
-    // A pad swells slowly then decays across the whole note, a soft sustained
-    // bed; a pluck has a short attack then an exponential decay, the chiptune
-    // envelope. Either attack is capped to a fraction of the note so a very
-    // short note never schedules the decay ramp before the attack peak (which
-    // glitches Web Audio).
-    const attack = envelope === 'pad' ? Math.min(duration * 0.4, 0.25) : Math.min(0.01, duration * 0.5);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(peak, start + attack);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    gain.connect(destination);
-    const spawn = (cents: number): void => {
-      const osc = ctx!.createOscillator();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, start);
-      if (cents) osc.detune.setValueAtTime(cents, start);
-      osc.connect(gain);
-      osc.start(start);
-      osc.stop(start + duration + 0.02);
-    };
-    spawn(0);
-    // A slightly detuned twin thickens the voice into a warm chorus.
-    if (detune > 0) spawn(detune);
-  }
-
   function scheduleAhead(): void {
     if (!ctx || !musicBus || tracks.length === 0) return;
-    const horizon = ctx.currentTime + 0.1;
     // Schedule every track's notes due within the next ~100ms window.
-    for (let t = 0; t < tracks.length; t++) {
-      const track = tracks[t];
-      if (track.melody.length === 0) continue;
-      const v = voice[t];
-      while (v.next < horizon) {
-        const note = track.melody[v.idx];
-        const dur = note.beats * secondsPerBeat;
-        // A non-positive beat length would never advance the cursor past the
-        // horizon, spinning this loop forever; skip the note but still step the
-        // cursor by a beat so a bad authoring value can't freeze the tab.
-        if (dur <= 0) {
-          v.next += secondsPerBeat;
-          v.idx = (v.idx + 1) % track.melody.length;
-          continue;
-        }
-        // When muted, keep each cursor advancing but skip oscillator creation so
-        // we don't burn CPU synthesising silent tones; timing stays in sync on unmute.
-        if (!musicMuted) {
-          // Pads play their full length so they sustain and connect; plucks trim
-          // to leave the terse gap that reads as chiptune.
-          const playDur = track.envelope === 'pad' ? dur : dur * 0.9;
-          const freq = note.freq > 0 ? note.freq * Math.pow(2, track.octaveShift) : note.freq;
-          playTone(
-            freq,
-            v.next,
-            playDur,
-            track.wave,
-            VOICE_PEAK * track.volume * noteGain(note.gain),
-            musicBus,
-            track.envelope,
-            track.detune
-          );
-        }
-        v.next += dur;
-        v.idx = (v.idx + 1) % track.melody.length;
-      }
-    }
+    scheduleWindow(ctx, musicBus, tracks, voice, ctx.currentTime + 0.1, secondsPerBeat, musicMuted);
   }
 
   /** Puts every voice back at the top of its line, together. */
@@ -446,27 +780,27 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
 
     switch (name) {
       case 'blip':
-        playTone(660, now, 0.08, 'square', 0.5, out);
+        playTone(context, 660, now, 0.08, 'square', 0.5, out);
         break;
       case 'score':
-        playTone(784, now, 0.09, 'square', 0.5, out);
-        playTone(1047, now + 0.08, 0.1, 'square', 0.5, out);
+        playTone(context, 784, now, 0.09, 'square', 0.5, out);
+        playTone(context, 1047, now + 0.08, 0.1, 'square', 0.5, out);
         break;
       case 'hit':
-        playTone(180, now, 0.14, 'sawtooth', 0.6, out);
-        playTone(110, now + 0.04, 0.16, 'sawtooth', 0.5, out);
+        playTone(context, 180, now, 0.14, 'sawtooth', 0.6, out);
+        playTone(context, 110, now + 0.04, 0.16, 'sawtooth', 0.5, out);
         break;
       case 'explosion': {
         // Detuned descending tones approximate a noisy boom without buffers.
         for (let i = 0; i < 4; i++) {
-          playTone(220 - i * 40, now + i * 0.03, 0.2, 'sawtooth', 0.45, out);
+          playTone(context, 220 - i * 40, now + i * 0.03, 0.2, 'sawtooth', 0.45, out);
         }
         break;
       }
       case 'gameover':
-        playTone(440, now, 0.18, 'triangle', 0.5, out);
-        playTone(330, now + 0.16, 0.18, 'triangle', 0.5, out);
-        playTone(220, now + 0.32, 0.3, 'triangle', 0.5, out);
+        playTone(context, 440, now, 0.18, 'triangle', 0.5, out);
+        playTone(context, 330, now + 0.16, 0.18, 'triangle', 0.5, out);
+        playTone(context, 220, now + 0.32, 0.3, 'triangle', 0.5, out);
         break;
       case 'rescue': {
         // A bright ascending bell arpeggio — the "critter reached home" twinkle.
@@ -475,7 +809,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         const bells = [880, 1108.73, 1318.51, 1760];
         for (let i = 0; i < bells.length; i++) {
           const last = i === bells.length - 1;
-          playTone(bells[i], now + i * 0.06, last ? 0.2 : 0.1, 'triangle', 0.5, out);
+          playTone(context, bells[i], now + i * 0.06, last ? 0.2 : 0.1, 'triangle', 0.5, out);
         }
         break;
       }

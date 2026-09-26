@@ -11,40 +11,11 @@
  * PR, not a `-u`.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createGameAudio, type GameAudioOptions, type SfxName } from '../../src/games/engine/audio';
+import { createGameAudio, type SfxName } from '../../src/games/engine/audio';
 import { TANKS_MUSIC } from '../../src/games/tanks/music';
 import { CASCADE_MUSIC } from '../../src/games/cascade/music';
 import { installLocalStorage } from './dom-helpers';
-import { installRecordingContext, makeRecordingContext } from './audio-graph';
-
-const TICK_MS = 25;
-
-interface Cue {
-  at: number;
-  run: (audio: ReturnType<typeof createGameAudio>) => void;
-}
-
-/**
- * Plays `options` for `seconds` of fake time in the engine's own 25 ms
- * scheduler ticks, firing each cue once the clock passes it, and returns the
- * graph log.
- */
-function drive(options: GameAudioOptions, seconds: number, cues: Cue[] = []): string {
-  const ctx = makeRecordingContext();
-  installRecordingContext(ctx);
-  const audio = createGameAudio(options);
-  audio.start();
-  const pending = [...cues].sort((a, b) => a.at - b.at);
-  const ticks = Math.round((seconds * 1000) / TICK_MS);
-  for (let i = 1; i <= ticks; i++) {
-    ctx.currentTime = (i * TICK_MS) / 1000;
-    while (pending.length && pending[0].at <= ctx.currentTime) pending.shift()!.run(audio);
-    vi.advanceTimersByTime(TICK_MS);
-  }
-  audio.dispose();
-  vi.advanceTimersByTime(2000);
-  return ctx.log.join('\n') + '\n';
-}
+import { drive } from './audio-graph';
 
 const EVERY_SFX: SfxName[] = ['blip', 'score', 'hit', 'explosion', 'gameover', 'rescue'];
 

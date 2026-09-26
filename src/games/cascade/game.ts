@@ -26,7 +26,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { CASCADE_MUSIC, BASE_TEMPO, MAX_TEMPO } from './music';
+import { CASCADE_MUSIC, BASE_TEMPO, MAX_TEMPO, DANGER_TEMPO_LIFT, DRUMS_FROM_LEVEL } from './music';
 import { WELL_W, WELL_H } from './well';
 import { cellsOf, ROTATIONS, type PieceId } from './piece';
 import {
@@ -335,8 +335,20 @@ export function initCascadeGame(): void {
     recordEl.textContent = `${best}`;
   }
 
+  /**
+   * The level's tempo, lifted while the stack is in danger or a countdown is
+   * in its final stretch. The danger variant has no tempo of its own, so the
+   * lift rides on whatever the ramp has reached.
+   */
   function applyTempo() {
-    audio.setTempo(Math.min(MAX_TEMPO, BASE_TEMPO + (run.level - 1) * TEMPO_PER_LEVEL));
+    const ramp = Math.min(MAX_TEMPO, BASE_TEMPO + (run.level - 1) * TEMPO_PER_LEVEL);
+    const lifted = run.danger || run.finalStretch;
+    audio.setTempo(lifted ? Math.round(ramp * DANGER_TEMPO_LIFT) : ramp);
+  }
+
+  /** The drum layer: in from the milestone level, or for a countdown's final stretch. */
+  function applyDrums(fadeSeconds?: number) {
+    audio.setLayer('drums', run.level >= DRUMS_FROM_LEVEL || run.finalStretch, fadeSeconds);
   }
 
   function startRun() {
@@ -353,6 +365,9 @@ export function initCascadeGame(): void {
     dasDir = 0;
     phase = 'play';
     applyTempo();
+    // Layers keep their state across stop() and start(), so a run that ended
+    // with the drums in must take them out again before the new one begins.
+    applyDrums(0);
     audio.start();
   }
 
@@ -407,6 +422,8 @@ export function initCascadeGame(): void {
         bannerText = strings.levelUp.replace('{n}', String(event.level));
         bannerTimer = 1.6;
         applyTempo();
+        applyDrums();
+        audio.playStinger('levelUp');
         // A flourish of sparks around the well rim.
         for (let n = 0; n < 26; n++) {
           const along = Math.random();
@@ -419,6 +436,14 @@ export function initCascadeGame(): void {
             { speed: 55, life: 0.8, glow: true }
           );
         }
+      } else if (event.type === 'danger') {
+        // The authored danger variant comes in (or goes) at the next bar line.
+        audio.setDanger(event.on);
+        applyTempo();
+      } else if (event.type === 'finalStretch') {
+        audio.playStinger('hurry');
+        applyTempo();
+        applyDrums();
       } else if (event.type === 'topOut') {
         endRun('topOut');
       } else if (event.type === 'timeUp') {

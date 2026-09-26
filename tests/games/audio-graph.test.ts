@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createGameAudio, type SfxName } from '../../src/games/engine/audio';
 import { TANKS_MUSIC } from '../../src/games/tanks/music';
-import { CASCADE_MUSIC } from '../../src/games/cascade/music';
+import { CASCADE_ROUND13_MUSIC } from './cascade-round13-score';
 import { installLocalStorage } from './dom-helpers';
 import { drive } from './audio-graph';
 
@@ -41,9 +41,9 @@ describe('graph calls for scores that use no new engine fields', () => {
     await expect(log).toMatchFileSnapshot('./__snapshots__/audio-graph/tanks.txt');
   });
 
-  it('Cascade: the per-level tempo ramp from its base tempo to the ceiling', async () => {
+  it('Cascade (its round 13 score): the per-level tempo ramp from its base tempo to the ceiling', async () => {
     const log = drive(
-      CASCADE_MUSIC,
+      CASCADE_ROUND13_MUSIC,
       16,
       Array.from({ length: 13 }, (_, i) => ({
         at: 1 + i,

@@ -1732,8 +1732,14 @@ export function initCityGame(): void {
 
   speedButtons.forEach(btn => {
     btn.addEventListener('click', () => {
+      const wasPaused = speedMult === 0;
       speedMult = parseInt(btn.dataset.speed || '1', 10);
       speedButtons.forEach(b => b.classList.toggle('active', b === btn));
+      // The pause speed (0) is the sim's own pause button, so it silences the
+      // music the same way the confirm prompts stopping play do not need to:
+      // this one has no overlay, just the speed reading zero.
+      if (speedMult === 0 && !wasPaused) audio.stop();
+      else if (speedMult !== 0 && wasPaused) audio.start();
     });
   });
 

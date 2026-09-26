@@ -523,6 +523,8 @@ export function initSnakeGame(): void {
     if (gameKeys.has(e.key)) e.preventDefault();
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
       paused = !paused;
+      if (paused) audio.stop();
+      else audio.start();
       return;
     }
     if (paused) return;

@@ -330,6 +330,10 @@ export function initFootballGame(): void {
 
   let screen: Screen = 'title';
   let paused = false;
+  // Tracks whether the match's own music is meant to be sounding right now,
+  // independent of `paused`, so togglePause's unpause only resumes what was
+  // actually playing (the shootout stops the anthem and must stay stopped).
+  let musicPlaying = false;
   let clock = 0;
   let run: RunState | null = null;
   let match: MatchState | null = null;
@@ -647,8 +651,12 @@ export function initFootballGame(): void {
   function togglePause(): void {
     if (screen !== 'match' && screen !== 'shootout') return;
     paused = !paused;
+    // Pausing always silences, but unpausing must only bring back music that
+    // was actually playing: the shootout stops the anthem on purpose, and
+    // unpausing there used to restart it underneath the tension it was
+    // silenced for.
     if (paused) audio.stop();
-    else audio.start();
+    else if (musicPlaying) audio.start();
   }
 
   /* ---------------------------------------------------------------- */
@@ -695,12 +703,14 @@ export function initFootballGame(): void {
     paused = false;
     audio.setTempo(stageTempo(run));
     audio.start();
+    musicPlaying = true;
   }
 
   /** Fold the finished match into the run and move to the full-time screen. */
   function settleMatch(wonOnPenalties: boolean): void {
     if (!run || !match) return;
     audio.stop();
+    musicPlaying = false;
     recordPlayerMatch(run, {
       goalsFor: match.score[0],
       goalsAgainst: match.score[1],
@@ -830,7 +840,10 @@ export function initFootballGame(): void {
    * the middle comes free with the match's own `goal` phase.
    */
   function celebrate(side: 0 | 1, m: MatchState): void {
-    audio.playSfx(side === 0 ? 'rescue' : 'hit');
+    // Attract mode drives goals through this same function so the demo looks
+    // exactly like a real match; only the sound is muted, matching the demo
+    // earning no score below.
+    if (!demo) audio.playSfx(side === 0 ? 'rescue' : 'hit');
     const kit = m.teams[side];
     const goalY = attackGoalY(side, m.swapped);
     const mouthX = CENTRE_X - renderer.camera.x;
@@ -880,20 +893,20 @@ export function initFootballGame(): void {
           break;
         }
         case 'save':
-          audio.playSfx('blip');
+          if (!demo) audio.playSfx('blip');
           break;
         case 'post':
-          audio.playSfx('blip');
+          if (!demo) audio.playSfx('blip');
           break;
         case 'shot':
-          if (!event.onTarget) audio.playSfx('hit');
+          if (!demo && !event.onTarget) audio.playSfx('hit');
           break;
         case 'kickoff':
           renderer.resetCamera(m);
           break;
         case 'halfTime':
         case 'end':
-          audio.playSfx('blip');
+          if (!demo) audio.playSfx('blip');
           break;
         default:
       }
@@ -954,6 +967,7 @@ export function initFootballGame(): void {
           shootout = createShootout({ difficulty: difficultyFor(run) });
           screen = 'shootout';
           audio.stop();
+          musicPlaying = false;
         } else {
           settleMatch(false);
         }

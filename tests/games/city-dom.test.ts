@@ -32,6 +32,30 @@ vi.mock('../../src/games/engine/globalScores', async () =>
   (await import('./dom-helpers')).mockGlobalScores()
 );
 
+/**
+ * Mocked so the speed-zero pause suite below (issue #368) can observe
+ * `start` / `stop` without a real AudioContext. Harmless to every other test
+ * in this file: none of them assert on sound.
+ */
+const mockAudio = {
+  start: vi.fn(),
+  stop: vi.fn(),
+  toggleMusicMute: vi.fn(() => false),
+  isMusicMuted: vi.fn(() => false),
+  setMusicMuted: vi.fn(),
+  toggleSfxMute: vi.fn(() => false),
+  isSfxMuted: vi.fn(() => false),
+  setSfxMuted: vi.fn(),
+  playSfx: vi.fn(),
+  setTempo: vi.fn(),
+  dispose: vi.fn()
+};
+
+vi.mock('../../src/games/engine/audio', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();
+  return { ...actual, createGameAudio: vi.fn(() => mockAudio) };
+});
+
 // Mirrors the projection constants in src/games/city/game.ts, which are
 // module-private. Tile picking below goes through the engine's own isoProject
 // rather than re-deriving the isometric maths.
@@ -246,6 +270,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  mockAudio.start.mockClear();
+  mockAudio.stop.mockClear();
 });
 
 describe('Microcity retire control', () => {
@@ -612,5 +638,19 @@ describe('Microcity retire confirmation', () => {
 
     expect(pressKey(navLink(), 'Tab').defaultPrevented).toBe(false);
     expect(pressKey(navLink(), 'Escape').defaultPrevented).toBe(false);
+  });
+});
+
+describe('Microcity speed-zero pause leaves the music running (#368)', () => {
+  it('stops the music at speed 0 and resumes it when play speed is picked again', () => {
+    foundCity();
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
+    expect(mockAudio.start).toHaveBeenCalledTimes(2);
   });
 });

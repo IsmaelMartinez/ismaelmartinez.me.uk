@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createGameAudio, renderScore, scoreSeconds, type GameAudioOptions, type Note } from '../../src/games/engine/audio';
-import { SNAKE_MUSIC } from '../../src/games/snake/music';
+import { SNAKE_ROUND13_MUSIC } from './snake-round13-score';
 import { installLocalStorage } from './dom-helpers';
 import { drive, expectTimes, makeRecordingContext, onsets, timesOf, type Cue } from './audio-graph';
 
@@ -128,7 +128,7 @@ describe('sections in order', () => {
       seen.map(s => s.start),
       [0.05, 1.05, 3.05]
     );
-    expect(createGameAudio(SNAKE_MUSIC).section()).toBeNull();
+    expect(createGameAudio(SNAKE_ROUND13_MUSIC).section()).toBeNull();
   });
 
   it('throws on an order naming a section the score does not have', () => {
@@ -248,8 +248,8 @@ describe('scoreSeconds', () => {
   });
 
   it('reads a score without a form as one pass of its loop', () => {
-    expect(scoreSeconds(SNAKE_MUSIC).pass).toBeCloseTo((32 * 60) / 134, 9);
-    expect(scoreSeconds(SNAKE_MUSIC)).toMatchObject({ intro: 0, rest: 0, restEvery: 0 });
+    expect(scoreSeconds(SNAKE_ROUND13_MUSIC).pass).toBeCloseTo((32 * 60) / 134, 9);
+    expect(scoreSeconds(SNAKE_ROUND13_MUSIC)).toMatchObject({ intro: 0, rest: 0, restEvery: 0 });
   });
 });
 

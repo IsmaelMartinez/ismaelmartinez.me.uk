@@ -32,6 +32,41 @@ vi.mock('../../src/games/engine/globalScores', async () =>
   (await import('./dom-helpers')).mockGlobalScores()
 );
 
+/**
+ * Mocked so the music suite at the end of this file can observe the score's
+ * start, stop, pause, layers and stingers without a real AudioContext.
+ * Harmless to every other test in this file: none of them assert on sound.
+ *
+ * Built inside `vi.hoisted` because the mock factory below runs when
+ * `initCityGame`'s own import of the engine's audio module is resolved,
+ * which happens before this file's own bindings exist (see
+ * `tests/api/scores.test.ts`'s `blob` for the same reasoning).
+ */
+const mockAudio = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  toggleMusicMute: vi.fn(() => false),
+  isMusicMuted: vi.fn(() => false),
+  setMusicMuted: vi.fn(),
+  toggleSfxMute: vi.fn(() => false),
+  isSfxMuted: vi.fn(() => false),
+  setSfxMuted: vi.fn(),
+  playSfx: vi.fn(),
+  setTempo: vi.fn(),
+  section: vi.fn(() => null),
+  setLayer: vi.fn(),
+  setSection: vi.fn(() => true),
+  setDanger: vi.fn(),
+  playStinger: vi.fn<(name: string) => boolean>(() => true),
+  setPaused: vi.fn(),
+  dispose: vi.fn()
+}));
+
+vi.mock('../../src/games/engine/audio', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();
+  return { ...actual, createGameAudio: vi.fn(() => mockAudio) };
+});
+
 // Mirrors the projection constants in src/games/city/game.ts, which are
 // module-private. Tile picking below goes through the engine's own isoProject
 // rather than re-deriving the isometric maths.
@@ -86,6 +121,8 @@ const PAGE_HTML = `
     <div class="toolbar">
       <button class="tool-btn active" data-tool="road"></button>
       <button class="tool-btn" data-tool="res"></button>
+      <button class="tool-btn" data-tool="com"></button>
+      <button class="tool-btn" data-tool="ind"></button>
       <button class="tool-btn" data-tool="power"></button>
       <button class="tool-btn" data-tool="park"></button>
       <button class="tool-btn" data-tool="bulldoze"></button>
@@ -246,6 +283,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  mockAudio.start.mockClear();
+  mockAudio.stop.mockClear();
 });
 
 describe('Microcity retire control', () => {
@@ -612,5 +651,136 @@ describe('Microcity retire confirmation', () => {
 
     expect(pressKey(navLink(), 'Tab').defaultPrevented).toBe(false);
     expect(pressKey(navLink(), 'Escape').defaultPrevented).toBe(false);
+  });
+});
+
+/**
+ * The score answers the city (#378): its arrangement follows the population
+ * through `musicTier`, disasters and the grace month land stingers, and every
+ * way a live run is held still muffles the music with `setPaused` instead of
+ * stopping it, which would start the pass over on resume.
+ */
+describe('Microcity music', () => {
+  /** The last `setLayer` call for a voice, as `[voice, on, fade]`. */
+  const lastLayer = (voice: string) => mockAudio.setLayer.mock.calls.filter(c => c[0] === voice).at(-1);
+  const stingers = (name: string) => mockAudio.playStinger.mock.calls.filter(c => c[0] === name).length;
+  const lastPause = () => mockAudio.setPaused.mock.calls.at(-1)?.[0];
+  const speed = (value: string) =>
+    document.querySelector<HTMLButtonElement>(`.speed-btn[data-speed="${value}"]`)!.click();
+  const population = () => Number(document.getElementById('population')!.textContent);
+
+  /**
+   * A town in the making: a power plant, a fifteen-tile street along y=8, a
+   * home on every tile above it, and five shops and four works below it for
+   * the jobs that let the homes fill. The first growth ticks take it past
+   * 120, the second milestone, and the grants it earns on the way keep it
+   * solvent.
+   */
+  function foundTown(): void {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    document.getElementById('start-btn')!.click();
+    vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    buildAt('power', 12, 5);
+    for (let x = 5; x <= 19; x++) buildAt('road', x, 8);
+    for (let x = 5; x <= 19; x++) buildAt('res', x, 7);
+    for (let x = 5; x <= 9; x++) buildAt('com', x, 9);
+    for (let x = 10; x <= 13; x++) buildAt('ind', x, 9);
+  }
+
+  it('opens every city on the village arrangement, before the music starts', () => {
+    foundCity();
+    expect(lastLayer('lead')).toEqual(['lead', true, 0]);
+    expect(lastLayer('pad')).toEqual(['pad', true, 0]);
+    expect(lastLayer('bass')).toEqual(['bass', false, 0]);
+    expect(lastLayer('horn')).toEqual(['horn', false, 0]);
+    // Set ahead of `start()`, so the first bar is already the village's.
+    const firstLayer = Math.min(...mockAudio.setLayer.mock.invocationCallOrder);
+    expect(firstLayer).toBeLessThan(mockAudio.start.mock.invocationCallOrder[0]);
+  });
+
+  it('brings the bass in as the city becomes a town, and takes it out when the town is torn down', () => {
+    foundTown();
+    expect(lastLayer('bass')).toEqual(['bass', false, 0]);
+
+    advance(2);
+    expect(population()).toBeGreaterThanOrEqual(120);
+    expect(lastLayer('bass')).toEqual(['bass', true, 3]);
+    // The town keeps the bell: the horn is the metropolis's.
+    expect(lastLayer('lead')?.[1]).toBe(true);
+    expect(lastLayer('horn')?.[1]).toBe(false);
+
+    for (let x = 5; x <= 12; x++) buildAt('bulldoze', x, 7);
+    advance(0.25); // the population readout is painted by the loop, not the click
+    expect(population()).toBeLessThan(96);
+    expect(lastLayer('bass')).toEqual(['bass', false, 3]);
+  });
+
+  it('muffles the music at the pause speed and lifts it again, without stopping the score', () => {
+    foundCity();
+    speed('0');
+    expect(lastPause()).toBe(true);
+    speed('3');
+    expect(lastPause()).toBe(false);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('muffles the music while the retire prompt is open', () => {
+    foundCity();
+    retireBtn().click();
+    expect(lastPause()).toBe(true);
+    cancelBtn().click();
+    expect(lastPause()).toBe(false);
+
+    // Paused at speed 0 behind the prompt, cancelling it leaves the run paused.
+    retireBtn().click();
+    speed('0');
+    cancelBtn().click();
+    expect(lastPause()).toBe(true);
+    speed('1');
+    expect(lastPause()).toBe(false);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The speed toolbar sits beside the canvas rather than inside `.game-area`,
+   * so neither the start overlay nor the game-over overlay covers it and a
+   * click there always reaches the handler, whatever `phase` is. Outside a
+   * live run the phase owns the music, so a click must not muffle it.
+   */
+  it('leaves the music alone when the speed toolbar is clicked outside a live run', () => {
+    speed('0');
+    expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
+
+    foundCity();
+    retire();
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(lastPause()).toBe(false);
+    speed('0');
+    expect(lastPause()).toBe(false);
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the slide into the red with a stinger, once, on the grace month', () => {
+    foundCity();
+    overspend();
+    advance(27);
+    expect(toasted(LOW_FUNDS)).toBe(true);
+    expect(stingers('red')).toBe(0);
+
+    advance(20);
+    expect(toasted(IN_THE_RED)).toBe(true);
+    expect(stingers('red')).toBe(1);
+  });
+
+  it('marks a fire breaking out with a stinger', () => {
+    foundCity();
+    expect(stingers('fire')).toBe(0);
+    // Under the two homes' ignition chance (0.0008).
+    vi.spyOn(Math, 'random').mockReturnValue(0.0001);
+    advance(1.3);
+    // The fixture sets no `data-t-fire-alert`, so this is the module's default.
+    expect(toasted('Fire has broken out!')).toBe(true);
+    expect(stingers('fire')).toBe(1);
   });
 });

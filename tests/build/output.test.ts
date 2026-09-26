@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import {
   TOWERS,
   TOWER_KINDS,
@@ -129,5 +129,27 @@ describe.skipIf(!hasDist)('build output', () => {
         expect(html).toContain('role="alertdialog"');
       });
     }
+  });
+
+  // The arcade jukebox (#367) is a dev tool: astro.config.mjs injects its route
+  // only under `astro dev`. If that guard is ever lost, the page would ship to
+  // the public site and be listed in the sitemap; either turns this red.
+  describe('the dev-only jukebox stays out of the build', () => {
+    it('emits no jukebox page at the root or under any locale', () => {
+      expect(existsSync('dist/dev/jukebox/index.html')).toBe(false);
+      for (const locale of locales) {
+        expect(existsSync(`dist/${locale}/dev/jukebox/index.html`)).toBe(false);
+      }
+      const paths = readdirSync('dist', { recursive: true, encoding: 'utf-8' });
+      expect(paths.filter(path => path.includes('jukebox'))).toEqual([]);
+    });
+
+    it('lists no jukebox URL in the sitemap', () => {
+      const sitemaps = readdirSync('dist').filter(f => /^sitemap.*\.xml$/.test(f));
+      expect(sitemaps.length).toBeGreaterThan(0);
+      for (const file of sitemaps) {
+        expect(readFileSync(`dist/${file}`, 'utf-8'), file).not.toContain('jukebox');
+      }
+    });
   });
 });

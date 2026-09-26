@@ -178,9 +178,25 @@ export interface ScoreForm {
    * `sections` (looping, with no rest) and optionally its own tempo, clamped
    * like any other. `setDanger(true)` switches to it at the next bar line and
    * `setDanger(false)` comes back, at the next bar line, to the section that
-   * would have followed the one danger interrupted.
+   * would have followed the one danger interrupted. It is the scene named
+   * `danger`, which `setDanger` drives, so a form writes one or the other.
    */
-  danger?: { order: string[]; tempo?: number };
+  danger?: FormScene;
+  /**
+   * Scenes: orders of `sections` that loop on their own for as long as a game
+   * state lasts, a menu theme, a shootout bed, a final, instead of running on
+   * into the next part of `order`. `setScene(name)` moves to one at the next
+   * bar line and `setScene(null)` comes back to `order` where it left off.
+   * A scene loops with no rest, and plays at its own tempo if it has one.
+   */
+  scenes?: Record<string, FormScene>;
+}
+
+/** An order of a form's sections that loops by itself; see `ScoreForm.scenes`. */
+export interface FormScene {
+  order: string[];
+  /** Beats per minute while the scene plays, clamped like any other; left out, the score's. */
+  tempo?: number;
 }
 
 export interface GameAudioOptions {
@@ -227,6 +243,13 @@ export interface MusicProfile {
    * rescore that cleared them all goes red; the rescore removes it.
    */
   gatePending?: string;
+  /**
+   * A profile for each of the form's `scenes`, since each one is what a player
+   * hears on repeat while it holds; the top-level fields then measure `order`.
+   * Every scene needs one, and `danger` none (it is a short variant, not a
+   * loop a player lives in).
+   */
+  scenes?: Record<string, Pick<MusicProfile, 'session' | 'fastestTempo'>>;
 }
 
 export type SfxName = 'blip'| 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';
@@ -256,9 +279,10 @@ export interface GameAudio {
   /**
    * Where a score with a `form` is: the section playing or about to (the intro
    * reads as `intro`) and the audio-clock time its first notes start at, which
-   * is the section boundary. Null for a score without a form.
+   * is the section boundary, and the scene it belongs to (null for `order`,
+   * `danger` in the danger variant). Null for a score without a form.
    */
-  section(): { name: string; start: number; danger: boolean } | null;
+  section(): { name: string; start: number; danger: boolean; scene: string | null } | null;
   /**
    * Fades a voice, by `Track.name` or index, in or out over `fadeSeconds`
    * (default 0.5; 0 is a cut). A score that names a voice, starts one muted or
@@ -268,8 +292,17 @@ export interface GameAudio {
    */
   setLayer(track: number | string, on: boolean, fadeSeconds?: number): void;
   /**
+   * Moves a playing score with a form into the scene `name` from its top, or
+   * with null back to `order` where the score left it, at the next bar line or
+   * the section's own end if that comes first. The scene then loops until the
+   * next call. Asking for the scene already playing cancels any move still
+   * waiting for its bar line. False when there is no such scene or the music
+   * is not playing.
+   */
+  setScene(name: string | null): boolean;
+  /**
    * Jumps a playing score with a form to the first `name` in the order in force
-   * (the danger order while in danger), at the next bar line or the section's
+   * (the scene's order while in a scene), at the next bar line or the section's
    * own end if that comes first; every voice moves together and a note that
    * would cross the bar line is shortened to it, its envelope intact. False
    * when there is no such section or the music is not playing.
@@ -277,7 +310,8 @@ export interface GameAudio {
   setSection(name: string): boolean;
   /**
    * Switches a playing score to its `form.danger` variant, or back, at the next
-   * bar line. No-op without one. `start()` always begins outside danger, and
+   * bar line; `setScene('danger')` and a return to the scene danger was entered
+   * from. No-op without one. `start()` always begins outside danger, and
    * `setTempo` while in a danger variant with its own tempo only sets the
    * tempo the score returns to.
    */
@@ -681,9 +715,12 @@ interface NormForm {
   restAfter: number;
   restBeats: number;
   beatsPerBar: number;
-  /** The danger variant's order and its seconds per beat (null keeps the score's). */
-  danger: { order: Part[]; spb: number | null } | null;
+  /** Each scene's order and its seconds per beat (null keeps the score's); `danger` among them. */
+  scenes: Map<string, { order: Part[]; spb: number | null }>;
 }
+
+/** The scene `form.danger` becomes and `setDanger` drives. */
+const DANGER = 'danger';
 
 /**
  * Where a score with a form is. The scheduler advances it, and only `start()`
@@ -695,15 +732,15 @@ interface FormPosition {
   step: number;
   pass: number;
   start: number;
-  /** Whether `step` indexes the danger order rather than the order. */
-  danger: boolean;
+  /** The scene whose order `step` indexes, or null for the form's `order`. */
+  scene: string | null;
 }
 
-/** A requested move (`setSection`, `setDanger`) and the bar line it lands on. */
+/** A requested move (`setSection`, `setScene`, `setDanger`) and the bar line it lands on. */
 interface Jump {
   step: number;
   pass: number;
-  danger: boolean;
+  scene: string | null;
   cut: number;
 }
 
@@ -713,8 +750,10 @@ interface FormState {
   pos: FormPosition;
   /** A jump waiting for its bar line, or null. */
   pending: Jump | null;
-  /** Where the order picks up again when danger is released. */
+  /** Where the order picks up again when the score comes back from a scene. */
   resume: { step: number; pass: number } | null;
+  /** The scene danger was entered from, which releasing it returns to. */
+  beforeDanger: string | null;
 }
 
 /** The beats a line lasts as the scheduler plays it: a non-positive length still steps one beat. */
@@ -743,7 +782,19 @@ function normalizeForm(options: GameAudioOptions): NormForm | null {
       return fit(name, lines);
     });
   const order = resolve(form.order);
-  const dangerOrder = form.danger ? resolve(form.danger.order) : [];
+  if (form.danger && form.scenes && Object.hasOwn(form.scenes, DANGER)) {
+    throw new Error('score form: "danger" is written both as form.danger and as a scene');
+  }
+  const scenes = new Map<string, { order: Part[]; spb: number | null }>();
+  const written: Record<string, FormScene> = { ...form.scenes, ...(form.danger && { [DANGER]: form.danger }) };
+  for (const [name, scene] of Object.entries(written)) {
+    const parts = resolve(scene.order);
+    // A scene with no notes would loop without moving the clock; it is left
+    // out, so asking for it is refused rather than hanging the scheduler.
+    if (parts.some(part => partBeats(part) > 0)) {
+      scenes.set(name, { order: parts, spb: scene.tempo === undefined ? null : beatSeconds(scene.tempo) });
+    }
+  }
   const bar = form.beatsPerBar ?? 4;
   const intro = form.intro ? fit('intro', form.intro) : null;
   const after = Math.floor(form.rest?.after ?? 0);
@@ -757,44 +808,41 @@ function normalizeForm(options: GameAudioOptions): NormForm | null {
     restAfter: resting ? after : 0,
     restBeats: resting ? beats : 0,
     beatsPerBar: Number.isFinite(bar) && bar > 0 ? bar : 4,
-    danger:
-      form.danger && dangerOrder.some(part => partBeats(part) > 0)
-        ? { order: dangerOrder, spb: form.danger.tempo === undefined ? null : beatSeconds(form.danger.tempo) }
-        : null
+    scenes
   };
 }
 
 /** The top of a form: the intro if it has one, else the first section. */
 function formTop(form: NormForm, at: number): FormPosition {
-  return { step: form.intro ? -1 : 0, pass: 0, start: at, danger: false };
+  return { step: form.intro ? -1 : 0, pass: 0, start: at, scene: null };
 }
 
-function orderOf(form: NormForm, danger: boolean): Part[] {
-  return danger && form.danger ? form.danger.order : form.order;
+function orderOf(form: NormForm, scene: string | null): Part[] {
+  return (scene !== null && form.scenes.get(scene)?.order) || form.order;
 }
 
-function partAt(form: NormForm, pos: { step: number; danger: boolean }): Part {
-  return pos.step < 0 ? (form.intro as Part) : orderOf(form, pos.danger)[pos.step];
+function partAt(form: NormForm, pos: { step: number; scene: string | null }): Part {
+  return pos.step < 0 ? (form.intro as Part) : orderOf(form, pos.scene)[pos.step];
 }
 
-/** Seconds per beat where the form is: the danger variant's own tempo, if it has one, else the score's. */
-function formBeatSeconds(form: NormForm, danger: boolean, spb: number): number {
-  return danger && form.danger?.spb ? form.danger.spb : spb;
+/** Seconds per beat where the form is: the scene's own tempo, if it has one, else the score's. */
+function formBeatSeconds(form: NormForm, scene: string | null, spb: number): number {
+  return (scene !== null && form.scenes.get(scene)?.spb) || spb;
 }
 
 /**
  * What follows the current part, and whether a rest comes first: the one place
  * the form's next move is decided. A pending jump takes the place of the
- * order's next step; the danger order loops without rests.
+ * order's next step; a scene loops its own order without rests.
  */
-function nextStep(state: FormState): { step: number; pass: number; danger: boolean; rest: boolean } {
+function nextStep(state: FormState): { step: number; pass: number; scene: string | null; rest: boolean } {
   const { form, pos, pending } = state;
-  if (pending) return { step: pending.step, pass: pending.pass, danger: pending.danger, rest: false };
-  const order = orderOf(form, pos.danger);
-  if (pos.step + 1 < order.length) return { step: pos.step + 1, pass: pos.pass, danger: pos.danger, rest: false };
-  if (pos.danger) return { step: 0, pass: pos.pass, danger: true, rest: false };
+  if (pending) return { step: pending.step, pass: pending.pass, scene: pending.scene, rest: false };
+  const order = orderOf(form, pos.scene);
+  if (pos.step + 1 < order.length) return { step: pos.step + 1, pass: pos.pass, scene: pos.scene, rest: false };
+  if (pos.scene !== null) return { step: 0, pass: pos.pass, scene: pos.scene, rest: false };
   const pass = pos.pass + 1;
-  return { step: 0, pass, danger: false, rest: form.restAfter > 0 && pass % form.restAfter === 0 };
+  return { step: 0, pass, scene: null, rest: form.restAfter > 0 && pass % form.restAfter === 0 };
 }
 
 /**
@@ -809,7 +857,7 @@ function nextBarLine(state: FormState, cursors: Cursor[], spb: number): number {
   if (!lead || lead.next <= state.pos.start) return state.pos.start;
   const bar = state.form.beatsPerBar;
   const beats = Math.ceil(lead.beat / bar - 1e-9) * bar - lead.beat;
-  return lead.next + Math.max(0, beats) * formBeatSeconds(state.form, state.pos.danger, spb);
+  return lead.next + Math.max(0, beats) * formBeatSeconds(state.form, state.pos.scene, spb);
 }
 
 /**
@@ -918,7 +966,7 @@ function scheduleForm(
   if (form.order.length === 0 || tracks.length === 0) return;
   for (;;) {
     const lines = partAt(form, pos).lines;
-    const spb = formBeatSeconds(form, pos.danger, secondsPerBeat);
+    const spb = formBeatSeconds(form, pos.scene, secondsPerBeat);
     const cut = state.pending ? state.pending.cut : Infinity;
     let playing = false;
     for (let t = 0; t < tracks.length; t++) {
@@ -955,17 +1003,19 @@ function scheduleForm(
     const end = Math.max(...cursors.map(v => v.next));
     if (end >= horizon) return;
     const after = nextStep(state);
-    // Danger remembers where the order would have gone next, which is where
-    // releasing it comes back to.
-    if (after.danger && !pos.danger) {
+    // Leaving the order for a scene remembers where the order would have gone
+    // next, which is where coming back picks up; danger also remembers the
+    // scene it interrupted, which is where releasing it goes.
+    if (after.scene !== null && pos.scene === null) {
       const resume = nextStep({ ...state, pending: null });
       state.resume = { step: resume.step, pass: resume.pass };
     }
-    if (!after.danger) state.resume = null;
+    if (after.scene === DANGER && pos.scene !== DANGER) state.beforeDanger = pos.scene;
+    if (after.scene === null) state.resume = null;
     state.pending = null;
     pos.step = after.step;
     pos.pass = after.pass;
-    pos.danger = after.danger;
+    pos.scene = after.scene;
     pos.start = end + (after.rest ? form.restBeats * spb : 0);
     for (const v of cursors) {
       v.next = pos.start;
@@ -1083,9 +1133,11 @@ function trackIndex(tracks: NormTrack[], track: number | string): number {
 export interface RenderState {
   /** Each named or indexed voice on or off; the rest start as their score says. */
   layers?: Record<string, boolean>;
-  /** Starts in the form's danger variant, at its tempo. */
+  /** Starts in the form's danger variant, at its tempo; the same as `scene: 'danger'`. */
   danger?: boolean;
-  /** Starts at the first of this section in the order (or danger order), skipping the intro. */
+  /** Starts in this scene, at its tempo, skipping the intro; takes precedence over `danger`. */
+  scene?: string;
+  /** Starts at the first of this section in the order (or the scene's order), skipping the intro. */
   section?: string;
 }
 
@@ -1117,7 +1169,7 @@ export async function renderScore(
   const tracks = normalizeTracks(options);
   const cursors = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
   const form = normalizeForm(options);
-  const state: FormState | null = form && { form, pos: formTop(form, 0), pending: null, resume: null };
+  const state: FormState | null = form && { form, pos: formTop(form, 0), pending: null, resume: null, beforeDanger: null };
   let buses: AudioNode[] = tracks.map(() => bus);
   const layers = from.layers ?? {};
   if (wantsLayers(options) || Object.keys(layers).length > 0) {
@@ -1129,11 +1181,12 @@ export async function renderScore(
     buses = buildLayers(ctx, bus, tracks, t => picked.get(t) ?? !tracks[t].startsMuted).gains;
   }
   if (state) {
-    state.pos.danger = !!from.danger && !!state.form.danger;
-    if (state.pos.danger || from.section !== undefined) {
-      const step = from.section === undefined ? 0 : orderOf(state.form, state.pos.danger).findIndex(p => p.name === from.section);
+    const scene = from.scene ?? (from.danger ? DANGER : undefined);
+    state.pos.scene = scene !== undefined && state.form.scenes.has(scene) ? scene : null;
+    if (state.pos.scene !== null || from.section !== undefined) {
+      const step = from.section === undefined ? 0 : orderOf(state.form, state.pos.scene).findIndex(p => p.name === from.section);
       if (step >= 0) state.pos.step = step;
-      else if (state.pos.danger) state.pos.step = 0;
+      else if (state.pos.scene !== null) state.pos.step = 0;
     }
   }
   scheduleWindow(ctx, buses, tracks, cursors, seconds, beatSeconds(options.tempo), false, state);
@@ -1221,7 +1274,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
   // A score with a form also carries where in the form it is; null without one.
   const formPlan = normalizeForm(options);
-  const form: FormState | null = formPlan && { form: formPlan, pos: formTop(formPlan, 0), pending: null, resume: null };
+  const form: FormState | null = formPlan && { form: formPlan, pos: formTop(formPlan, 0), pending: null, resume: null, beforeDanger: null };
   let scheduler: ReturnType<typeof setInterval> | null = null;
   // Where each voice's notes go: the bus, until layers exist, then its own gain.
   let buses: AudioNode[] = [];
@@ -1306,9 +1359,25 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   }
 
   /** Queues a move of the form for the next bar line. */
-  function requestJump(step: number, pass: number, danger: boolean): void {
+  function requestJump(step: number, pass: number, scene: string | null): void {
     if (!form) return;
-    form.pending = { step, pass, danger, cut: nextBarLine(form, voice, secondsPerBeat) };
+    form.pending = { step, pass, scene, cut: nextBarLine(form, voice, secondsPerBeat) };
+  }
+
+  /** The scene the form is in, or heading to once a waiting jump lands. */
+  function headingScene(state: FormState): string | null {
+    return state.pending ? state.pending.scene : state.pos.scene;
+  }
+
+  /** Moves to a scene's top, or with null back to where the order left off; see `setScene`. */
+  function moveToScene(state: FormState, name: string | null): void {
+    // Changing its mind before the move has landed just stays where it is.
+    if (name === state.pos.scene) {
+      state.pending = null;
+      return;
+    }
+    if (name === null) requestJump(state.resume?.step ?? 0, state.resume?.pass ?? state.pos.pass, null);
+    else requestJump(0, state.pos.pass, name);
   }
 
   /**
@@ -1329,6 +1398,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         form.pos = formTop(form.form, t0);
         form.pending = null;
         form.resume = null;
+        form.beforeDanger = null;
       } else {
         form.pos.start = t0;
         // Nothing of the part has been played again yet, so a waiting jump
@@ -1552,9 +1622,9 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       const updated = 60 / Math.min(bpm, MAX_BPM);
       const ratio = updated / secondsPerBeat;
       secondsPerBeat = updated;
-      // A danger variant with its own tempo keeps it: this is then only the
-      // tempo the score comes back to, and nothing sounding moves.
-      if (form?.pos.danger && form.form.danger?.spb) return;
+      // A scene with its own tempo keeps it: this is then only the tempo the
+      // score comes back to, and nothing sounding moves.
+      if (form?.pos.scene != null && form.form.scenes.get(form.pos.scene)?.spb) return;
       // Each cursor holds the end of the last note already handed to the audio
       // graph, in seconds worked out at the *old* tempo. Left alone, a voice
       // whose notes are long stays on old-tempo timing for the whole of its
@@ -1581,7 +1651,12 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     },
     section() {
       if (!form) return null;
-      return { name: partAt(form.form, form.pos)?.name ?? '', start: form.pos.start, danger: form.pos.danger };
+      return {
+        name: partAt(form.form, form.pos)?.name ?? '',
+        start: form.pos.start,
+        danger: form.pos.scene === DANGER,
+        scene: form.pos.scene
+      };
     },
     setLayer(track: number | string, on: boolean, fadeSeconds = LAYER_FADE) {
       const t = trackIndex(tracks, track);
@@ -1599,25 +1674,31 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       if (Number.isFinite(fadeSeconds) && fadeSeconds > 0) g.setTargetAtTime(on ? 1 : 0, now, fadeSeconds / 4);
       else g.setValueAtTime(on ? 1 : 0, now);
     },
+    setScene(name: string | null) {
+      if (!form || !running || !ctx) return false;
+      if (name !== null && !form.form.scenes.has(name)) return false;
+      if (name !== headingScene(form)) moveToScene(form, name);
+      return true;
+    },
     setSection(name: string) {
       if (!form || !running || !ctx) return false;
-      const danger = form.pending ? form.pending.danger : form.pos.danger;
-      const step = orderOf(form.form, danger).findIndex(p => p.name === name);
+      const scene = headingScene(form);
+      const step = orderOf(form.form, scene).findIndex(p => p.name === name);
       if (step < 0) return false;
-      requestJump(step, form.pending ? form.pending.pass : form.pos.pass, danger);
+      requestJump(step, form.pending ? form.pending.pass : form.pos.pass, scene);
       return true;
     },
     setDanger(on: boolean) {
-      if (!form || !form.form.danger || !running || !ctx) return;
-      const heading = form.pending ? form.pending.danger : form.pos.danger;
-      if (on === heading) return;
-      // Changing its mind before the switch has landed just stays where it is.
-      if (on === form.pos.danger) {
-        form.pending = null;
+      if (!form || !form.form.scenes.has(DANGER) || !running || !ctx) return;
+      const heading = headingScene(form);
+      if (on === (heading === DANGER)) return;
+      if (on) {
+        moveToScene(form, DANGER);
         return;
       }
-      if (on) requestJump(0, form.pos.pass, true);
-      else requestJump(form.resume?.step ?? 0, form.resume?.pass ?? form.pos.pass, false);
+      // Released before it landed, the score stays in the scene it is in;
+      // released in danger, it goes back to the scene danger interrupted.
+      moveToScene(form, form.pos.scene === DANGER ? form.beforeDanger : form.pos.scene);
     },
     playStinger(name: string) {
       const lines = stingers.get(name);
@@ -1626,7 +1707,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       if (!duck) return false;
       const now = ctx.currentTime;
       const at = now + 0.05;
-      const spb = form ? formBeatSeconds(form.form, form.pos.danger, secondsPerBeat) : secondsPerBeat;
+      const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
       let end = at;
       lines.forEach((line, t) => {
         let time = at;

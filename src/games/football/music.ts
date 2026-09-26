@@ -16,8 +16,9 @@
  * bed sits on an A pedal under Bb and G minor, the dominant held and never
  * resolved, and hands back to its top on A over E, the cadential six-four.
  *
- * Form. One `form` holds four scenes, each a group of sections, and the game
- * moves between them with `setSection` and `setDanger` (see `SCENES`):
+ * Form. One `form` holds four scenes, each a group of sections: the menu is
+ * the form's `order`, where the music starts, and the other three are the
+ * form's `scenes`, which the game moves between with `setScene` (see `SCENES`):
  *
  * - menu, 18 bars (title-a, title-b, title-turn): the title and team-select
  *   theme, also heard on the full-time, tables, bracket and end screens. No
@@ -25,25 +26,21 @@
  * - match, 32 bars (match-a, match-b, match-a2, match-c, match-turn): the
  *   anthem. A call and answer, a chorus through bVII and bVI, the call again
  *   with an altered answer, and a bridge in B minor that walks up to the turn.
- * - final, 32 bars, the danger order (final-a, final-b, match-b, final-c): a
+ * - final, 32 bars (final-a, final-b, match-b, final-c): a
  *   separately written final theme after Nintendo World Cup's, with a driving
  *   octave bass and its own drum pattern, at `FINAL_TEMPO`. It borrows the
  *   chorus rather than the call, so it is recognisably the same tournament.
  * - shootout, 13 bars (shootout, shootout-turn): a tension bed over a
  *   heartbeat, the lead in long held notes and repeated-note figures.
  *
- * Each scene's last section is a single-bar turn, and every turn reaches the
- * scene's top through V (the match, the menu, the final) or the six-four (the
- * shootout), never V to I. The game holds a scene by asking for its first
- * section while the turn plays, so it loops instead of running on into the next
- * scene; a single bar is what lets that request land on the turn's own end.
+ * Each scene loops on its own for as long as the game holds it, so every
+ * scene's last bar hands back to its own top, through V (the match, the menu,
+ * the final) or the six-four (the shootout), never V to I.
  *
- * Length. One pass of the whole order is 63 bars: 114.5 s at `BASE_TEMPO`, 99.5
- * s at `FINAL_TEMPO`. The part a player actually hears on repeat is shorter,
- * and it is sized on its own: the match is 58.2 s at 132 (group) and 53.7 s at
- * 143 (semi), the final 50.5 s at 152, the menu 32.7 s at 132 and the shootout
- * 20.5 s at 152. `tests/games/football-music.test.ts` holds each scene to the
- * gates on its own.
+ * Length. Each scene is what a player hears on repeat, so each is sized on its
+ * own: the match is 58.2 s at 132 (group) and 53.7 s at 143 (semi), the final
+ * 50.5 s at 152, the menu 32.7 s at 132 and the shootout 20.5 s at 152.
+ * `MUSIC_PROFILE` gives each its floor and `music.test.ts` gates every one.
  *
  * Session and load. A run is a whole tournament, three group matches, a semi
  * and a final of about 65 to 90 s each plus the screens between them and up to
@@ -55,8 +52,8 @@
  * Adaptive hooks, all wired in `game.ts` from events the match already raises:
  * the drums are a `startsMuted` layer that the kick-off brings in and half-time
  * and full time take out, the stage ramp winds the tempo (132, 143, then the
- * final's own 152), the final switches to the danger order, the shootout jumps
- * to its bed, the static screens jump to the menu theme, and `STINGERS` mark
+ * final's own 152), the final switches to its own theme, the shootout moves
+ * to its bed, the static screens go back to the menu theme, and `STINGERS` mark
  * the kick-off, a goal for, a goal against, half-time and the final whistle.
  * Pause muffles the music with `setPaused`, and attract mode keeps it off.
  *
@@ -81,34 +78,39 @@ export const BASE_TEMPO = 132;
 
 /**
  * The final's tempo, the fastest `stageTempo()` winds the score to and the
- * danger order's own. It lives here with `BASE_TEMPO` because ADR 003 sizes a
+ * final scene's own. It lives here with `BASE_TEMPO` because ADR 003 sizes a
  * ramping loop at its fastest tempo, so this is the number the score is
  * measured against.
  */
 export const FINAL_TEMPO = 152;
 
-/** A run is a whole tournament, so the loop is held to the long-session floor at the final's tempo. */
+/**
+ * The menu is the form's `order`, heard between matches at the base tempo, so
+ * it is held to the standard floor. A run is a whole tournament, so the match
+ * and the final are held to the long floor, and the shootout, a minute at
+ * most, to the minimal one; all three at the final's tempo, the fastest any
+ * of them reaches.
+ */
 export const MUSIC_PROFILE: MusicProfile = {
-  session: 'long',
-  fastestTempo: FINAL_TEMPO
+  session: 'standard',
+  fastestTempo: BASE_TEMPO,
+  scenes: {
+    match: { session: 'long', fastestTempo: FINAL_TEMPO },
+    final: { session: 'long', fastestTempo: FINAL_TEMPO },
+    shootout: { session: 'minimal', fastestTempo: FINAL_TEMPO }
+  }
 };
 
-/** The scenes the game moves the score between. The final is the danger order, not a group of `order`. */
-export type Scene = 'menu' | 'match' | 'shootout';
+/** The scenes the game moves the score between: the menu is the form's `order`, the rest its `scenes`. */
+export type Scene = 'menu' | 'match' | 'final' | 'shootout';
 
-/**
- * Each scene's sections in `order`, first to last. The last one is the scene's
- * one-bar turn: while it plays the game asks for the first, which is how a
- * scene loops on its own inside the one order.
- */
+/** Each scene's sections, first to last; each loops on its own while the game holds it. */
 export const SCENES: Record<Scene, readonly string[]> = {
   menu: ['title-a', 'title-b', 'title-turn'],
   match: ['match-a', 'match-b', 'match-a2', 'match-c', 'match-turn'],
+  final: ['final-a', 'final-b', 'match-b', 'final-c'],
   shootout: ['shootout', 'shootout-turn']
 };
-
-/** The final's order, looping on its own while the final is played. */
-export const FINAL_ORDER: readonly string[] = ['final-a', 'final-b', 'match-b', 'final-c'];
 
 /* ------------------------------------------------------------------ */
 /* note helpers                                                         */
@@ -417,7 +419,7 @@ const MATCH_TURN: Note[][] = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* final: the danger order                                              */
+/* final: its own scene                                                 */
 
 // final-a: the call rewritten over bVII: D C G D | Bb C D A
 const FINAL_A: Note[][] = [
@@ -632,10 +634,13 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
       shootout: SHOOTOUT,
       'shootout-turn': SHOOTOUT_TURN
     },
-    // The menu first, since that is where the music starts; the order only
-    // runs on from one scene into the next if the game misses a turn.
-    order: [...SCENES.menu, ...SCENES.match, ...SCENES.shootout],
-    danger: { order: [...FINAL_ORDER], tempo: FINAL_TEMPO }
+    // The menu is where the music starts, and where every screen between matches goes back to.
+    order: [...SCENES.menu],
+    scenes: {
+      match: { order: [...SCENES.match] },
+      final: { order: [...SCENES.final], tempo: FINAL_TEMPO },
+      shootout: { order: [...SCENES.shootout] }
+    }
   },
   stingers: STINGERS
 };

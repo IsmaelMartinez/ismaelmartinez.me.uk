@@ -47,9 +47,9 @@
  * same line on a sustained, vibrato 25% pulse an octave down. A tier is left
  * only when the population falls a fifth below its floor, so a fire that
  * takes a block does not flap the arrangement. The tiers are layers rather
- * than `setSection` jumps because a form's order runs on into its next
- * section: a jump cannot hold a section, and re-jumping every pass would never
- * finish a pass, which is what counts the rests. Disasters get stingers
+ * than scenes because a tier is the same tune with more instruments, so it
+ * grows under the tune without moving it, and because a scene loops without
+ * the form's rest, which is what spares a long city constant music. Disasters get stingers
  * (`fire` when a fire breaks out, `disaster` for a tornado or a quake, `red` when
  * the books go into the grace month) over the ducked score, and the sim's
  * pause speed and the Retire prompt muffle it with `setPaused` rather than

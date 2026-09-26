@@ -45,8 +45,9 @@ const mockAudio = vi.hoisted(() => ({
   setSfxMuted: vi.fn(),
   playSfx: vi.fn(),
   setTempo: vi.fn(),
-  section: vi.fn((): { name: string; start: number; danger: boolean } | null => null),
+  section: vi.fn((): { name: string; start: number; danger: boolean; scene: string | null } | null => null),
   setLayer: vi.fn(),
+  setScene: vi.fn(() => true),
   setSection: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
@@ -140,31 +141,25 @@ describe("CALCIO '90 menu theme", () => {
 
     tapCanvas(); // title -> select
     expect(mockAudio.start).toHaveBeenCalledTimes(1);
-    expect(mockAudio.setSection).toHaveBeenLastCalledWith('title-a');
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith(null);
     expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO);
   });
 
-  it('loops the menu by asking for its top while the one-bar turn plays, once per turn', () => {
+  it('leaves the looping to the engine rather than steering it every frame (#398)', () => {
     tapCanvas(); // title -> select, the menu theme starts
-    mockAudio.setSection.mockClear();
-
-    // Still inside the scene: nothing to do.
-    mockAudio.section.mockImplementation(() => ({ name: 'title-b', start: 10, danger: false }));
-    frames.advance(0.5);
+    mockAudio.setScene.mockClear();
+    // Even on the scene's last bar, which the game used to catch and re-request.
+    mockAudio.section.mockImplementation(() => ({ name: 'title-turn', start: 20, danger: false, scene: null }));
+    frames.advance(2);
+    expect(mockAudio.setScene).not.toHaveBeenCalled();
     expect(mockAudio.setSection).not.toHaveBeenCalled();
-
-    // The turn: ask for the top once, however many frames it plays for.
-    mockAudio.section.mockImplementation(() => ({ name: 'title-turn', start: 20, danger: false }));
-    frames.advance(0.5);
-    expect(mockAudio.setSection).toHaveBeenCalledTimes(1);
-    expect(mockAudio.setSection).toHaveBeenCalledWith('title-a');
   });
 });
 
 describe("CALCIO '90 match music", () => {
   it('holds the drums back until the kick-off, then brings them in with its stinger', () => {
     startAMatch();
-    expect(mockAudio.setSection).toHaveBeenLastCalledWith('match-a');
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith('match');
     expect(mockAudio.setLayer).not.toHaveBeenCalledWith('drums', true);
     expect(stingers()).not.toContain('kick-off');
 
@@ -202,18 +197,18 @@ describe("CALCIO '90 match music", () => {
 
   it('blows the final whistle and goes back to the menu theme at full time', () => {
     startAMatch();
-    mockAudio.setSection.mockClear();
+    mockAudio.setScene.mockClear();
     nextTickRaises({ type: 'end', winner: 0, pendingShootout: false }, m => {
       m.phase = 'over';
       m.winner = 0;
     });
     expect(stingers()).toContain('full-time');
-    expect(mockAudio.setSection).toHaveBeenLastCalledWith('title-a');
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith(null);
     expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO);
     expect(mockAudio.stop).not.toHaveBeenCalled();
   });
 
-  it('plays the final on its own theme, the danger order at the final tempo', () => {
+  it('plays the final on its own theme, at the final tempo', () => {
     const realCreateRun = tournamentModule.createRun;
     vi.spyOn(tournamentModule, 'createRun').mockImplementation((rng, code) => {
       const run = realCreateRun(rng, code);
@@ -221,13 +216,13 @@ describe("CALCIO '90 match music", () => {
       return run;
     });
     startAMatch();
-    expect(mockAudio.setDanger).toHaveBeenLastCalledWith(true);
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith('final');
     expect(mockAudio.setTempo).toHaveBeenLastCalledWith(FINAL_TEMPO);
   });
 
   it('keeps the group match off the final theme', () => {
     startAMatch();
-    expect(mockAudio.setDanger).not.toHaveBeenCalledWith(true);
+    expect(mockAudio.setScene).not.toHaveBeenCalledWith('final');
   });
 });
 
@@ -235,7 +230,7 @@ describe("CALCIO '90 shootout", () => {
   it('moves to the tension bed with the drums in, rather than stopping the music', () => {
     startAMatch();
     endLevelWithShootout();
-    expect(mockAudio.setSection).toHaveBeenLastCalledWith('shootout');
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith('shootout');
     expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', true);
     expect(mockAudio.stop).not.toHaveBeenCalled();
   });

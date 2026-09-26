@@ -4,10 +4,11 @@
  * Lemmings rotated short arrangements of public-domain tunes as levels were
  * beaten, so getting further was rewarded with something new to hear, and
  * this cabinet does the same with its four acts (`ACT_STARTS` in levels.ts).
- * Each act is its own `GameAudioOptions`, played by its own audio instance:
- * the engine takes one score per `createGameAudio`, and a form's order always
- * runs on into its next section, so four acts sharing one form would play into
- * each other. `game.ts` swaps the instance when play crosses into a new act and
+ * Each act is its own `GameAudioOptions`, played by its own audio instance,
+ * rather than a scene of one form: the acts differ in tempo, key (which the
+ * `tonic` carries into the effects), lead wave, stingers and danger variant,
+ * and a scene shares all of those with the score it belongs to. `game.ts`
+ * swaps the instance when play crosses into a new act and
  * otherwise leaves it running, so a retry or the next level of the same act
  * carries on where the music is, after Celeste, instead of starting bar 1 again.
  *

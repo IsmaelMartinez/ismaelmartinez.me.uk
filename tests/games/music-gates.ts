@@ -199,6 +199,15 @@ export function seamArrivals(music: GameAudioOptions): number[] {
     });
 }
 
+/**
+ * The score with one of its form's scenes as the loop: what a player hears
+ * while the game holds that scene, for the gates to read like any other pass.
+ */
+export function sceneScore(music: GameAudioOptions, scene: string): GameAudioOptions {
+  const form = music.form!;
+  return { ...music, form: { sections: form.sections, beatsPerBar: form.beatsPerBar, order: [...form.scenes![scene].order] } };
+}
+
 /** Every gate a score fails, by name; an empty list is a score that clears round 2's floor. */
 export function failedGates(music: GameAudioOptions, profile: MusicProfile): string[] {
   const failed: string[] = [];

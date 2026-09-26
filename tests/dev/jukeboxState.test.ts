@@ -8,6 +8,7 @@ import {
   renderFileName,
   renderParts,
   renderState,
+  sceneNames,
   sectionNames
 } from '../../src/dev/jukeboxState';
 
@@ -38,6 +39,7 @@ describe('the jukebox adaptive controls', () => {
   it('starts each voice as its score says, outside danger, from the top', () => {
     expect(defaultControls(ADAPTIVE)).toEqual({
       layers: [true, true, false],
+      scene: '',
       danger: false,
       section: ''
     });
@@ -62,7 +64,7 @@ describe('the jukebox adaptive controls', () => {
   });
 
   it('turns the controls into the RenderState a whole-score render takes', () => {
-    const control = { layers: [true, false, true], danger: true, section: 'b' };
+    const control = { layers: [true, false, true], scene: '', danger: true, section: 'b' };
     expect(renderState(ADAPTIVE, control)).toEqual({
       layers: { '0': true, '1': false, '2': true },
       danger: true,
@@ -73,7 +75,7 @@ describe('the jukebox adaptive controls', () => {
   });
 
   it('renders each sounding voice alone, with its own line from every passage of the form', () => {
-    const control = { layers: [true, false, true], danger: true, section: 'b' };
+    const control = { layers: [true, false, true], scene: '', danger: true, section: 'b' };
     const { parts, from } = renderParts(ADAPTIVE, control);
     expect(from).toEqual({ danger: true, section: 'b' });
     expect(parts.map(p => p.tracks.map(t => t.name))).toEqual([['lead'], ['drums']]);
@@ -101,7 +103,7 @@ describe('the jukebox adaptive controls', () => {
   });
 
   it('renders nothing when every voice is off', () => {
-    expect(renderParts(PLAIN, { layers: [false, false], danger: false, section: '' }).parts).toEqual([]);
+    expect(renderParts(PLAIN, { layers: [false, false], scene: '', danger: false, section: '' }).parts).toEqual([]);
   });
 
   it('names the file after the state it was rendered in', () => {
@@ -109,6 +111,7 @@ describe('the jukebox adaptive controls', () => {
     expect(
       renderFileName('cascade', ADAPTIVE, {
         layers: [true, false, true],
+        scene: '',
         danger: true,
         section: 'b'
       })
@@ -116,9 +119,36 @@ describe('the jukebox adaptive controls', () => {
     expect(
       renderFileName('snake', PLAIN, {
         layers: [false, true],
+        scene: '',
         danger: true,
         section: ''
       })
     ).toBe('snake-without-0.wav');
+  });
+
+  describe('on a form with scenes', () => {
+    const SCENED: GameAudioOptions = {
+      tempo: 120,
+      tracks: [{}],
+      form: {
+        sections: { menu: [[n(4, 1)]], match: [[n(4, 2)]], turn: [[n(4, 3)]] },
+        order: ['menu'],
+        scenes: { match: { order: ['match', 'turn'], tempo: 150 } }
+      }
+    };
+
+    it('offers each scene, and the sections only a scene plays', () => {
+      expect(sceneNames(SCENED)).toEqual(['match']);
+      expect(sceneNames(ADAPTIVE)).toEqual([]);
+      expect(sectionNames(SCENED)).toEqual(['menu', 'match', 'turn']);
+    });
+
+    it('renders from the chosen scene and names the file after it', () => {
+      const control = { ...defaultControls(SCENED), scene: 'match', section: 'turn' };
+      expect(renderState(SCENED, control)).toEqual({ scene: 'match', section: 'turn' });
+      expect(renderFileName('football', SCENED, control)).toBe('football-scene-match-from-turn.wav');
+      // A scene the form does not write is never asked for.
+      expect(renderState(SCENED, { ...control, scene: 'nope', section: '' })).toEqual({});
+    });
   });
 });

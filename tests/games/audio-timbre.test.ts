@@ -279,10 +279,24 @@ describe('renderScore', () => {
     expect(renderedNotes).toEqual(notes(live));
   });
 
-  it('refuses a length that is not a positive number of seconds', async () => {
+  it('refuses a length or a sample rate it cannot render at', async () => {
     vi.stubGlobal('window', { OfflineAudioContext: class {} });
     await expect(renderScore(SNAKE_MUSIC, 0)).resolves.toBeNull();
     await expect(renderScore(SNAKE_MUSIC, NaN)).resolves.toBeNull();
     await expect(renderScore(SNAKE_MUSIC, Infinity)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_MUSIC, 1, 0)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_MUSIC, 1, NaN)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_MUSIC, 1, Infinity)).resolves.toBeNull();
+  });
+
+  it('resolves to null when the browser rejects the rate, rather than throwing', async () => {
+    vi.stubGlobal('window', {
+      OfflineAudioContext: class {
+        constructor() {
+          throw new RangeError('unsupported sample rate');
+        }
+      }
+    });
+    await expect(renderScore(SNAKE_MUSIC, 1, 1000)).resolves.toBeNull();
   });
 });

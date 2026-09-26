@@ -614,8 +614,8 @@ function buildMusicGraph(
  * `AudioBuffer` through an `OfflineAudioContext`, using the same graph and the
  * same scheduler the live engine plays it with. For development tools (the
  * jukebox) that need to hear or compare a score without a game around it.
- * Resolves to null where there is no `OfflineAudioContext` (SSR, Node) or the
- * length is not a positive finite number of seconds.
+ * Resolves to null where there is no `OfflineAudioContext` (SSR, Node), or
+ * the length or sample rate is not one it can render at.
  */
 export async function renderScore(
   options: GameAudioOptions,
@@ -624,7 +624,14 @@ export async function renderScore(
 ): Promise<AudioBuffer | null> {
   const Ctor = getOfflineContextCtor();
   if (!Ctor || !Number.isFinite(seconds) || seconds <= 0) return null;
-  const ctx = new Ctor(1, Math.ceil(seconds * sampleRate), sampleRate);
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) return null;
+  let ctx: OfflineAudioContext;
+  try {
+    ctx = new Ctor(1, Math.ceil(seconds * sampleRate), sampleRate);
+  } catch {
+    // A rate the browser does not support is a RangeError from the constructor.
+    return null;
+  }
   const { bus } = buildMusicGraph(ctx, options.volume ?? DEFAULT_VOLUME, options.echo);
   const tracks = normalizeTracks(options);
   const cursors = tracks.map(() => ({ next: 0, idx: 0 }));

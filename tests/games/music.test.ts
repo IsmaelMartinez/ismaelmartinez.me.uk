@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { pitch, p } from '../../src/games/engine/pitch';
-import type { GameAudioOptions } from '../../src/games/engine/audio';
+import { scoreSeconds, type GameAudioOptions, type Note } from '../../src/games/engine/audio';
 import { SNAKE_MUSIC } from '../../src/games/snake/music';
 import { CASCADE_MUSIC, BASE_TEMPO } from '../../src/games/cascade/music';
 import {
@@ -72,6 +72,42 @@ function trackBeats(melody: { beats: number }[]): number {
   return melody.reduce((sum, n) => sum + n.beats, 0);
 }
 
+/**
+ * The blocks a score is built from, each one line per track: a score without
+ * a form is one block, its tracks' melodies, and one with a form is its intro
+ * and each of its sections. Every invariant on lines is checked per block.
+ */
+function blocks(music: GameAudioOptions): { label: string; lines: Note[][] }[] {
+  if (!music.form) return [{ label: 'loop', lines: music.tracks.map(t => t.melody ?? []) }];
+  const { intro, sections } = music.form;
+  return [
+    ...(intro ? [{ label: 'intro', lines: intro }] : []),
+    ...Object.entries(sections).map(([label, lines]) => ({ label, lines }))
+  ];
+}
+
+/**
+ * The blocks whose lines do not all last the same number of beats, or that do
+ * not give every track a line. The voices share a clock, so inside a block
+ * unequal lengths do not drift and recover, they slide; a form re-aligns its
+ * voices at each section boundary, but a short line still leaves a hole at
+ * the end of its section.
+ */
+function unequalBlocks(music: GameAudioOptions): string[] {
+  return blocks(music)
+    .filter(({ lines }) => {
+      if (lines.length !== music.tracks.length) return true;
+      const first = trackBeats(lines[0]);
+      return lines.some(line => Math.abs(trackBeats(line) - first) > 1e-6);
+    })
+    .map(b => b.label);
+}
+
+/** One pass of a score's loop in beats, intro and rests left out. At 60 bpm a beat is a second. */
+function passBeats(music: GameAudioOptions): number {
+  return scoreSeconds(music, 60).pass;
+}
+
 describe('pitch', () => {
   it('anchors on A4 = 440 Hz and doubles every octave', () => {
     expect(pitch('A4')).toBe(440);
@@ -123,20 +159,17 @@ describe('the arcade scores', () => {
     }
   });
 
-  it.each(DISCOVERED)('$name loops every voice at the same length', ({ music }) => {
+  it.each(DISCOVERED)('$name loops every voice at the same length, in every section', ({ music }) => {
     // The voices advance on independent cursors, so unequal lengths do not
     // desynchronise gradually — they slide permanently. A lead of 25 beats over
     // a bass of 24 puts the tune's downbeat on a different bass note every time
     // round, which sounds like a mistake long before anyone can name it.
-    const lengths = music.tracks.map(t => trackBeats(t.melody));
-    for (const length of lengths) {
-      expect(length).toBeCloseTo(lengths[0], 6);
-    }
+    expect(unequalBlocks(music)).toEqual([]);
   });
 
   it.each(DISCOVERED)('$name is at least twice the length it was', ({ name, music }) => {
     const { beats, wasBeats } = EXPECTED[name];
-    expect(trackBeats(music.tracks[0].melody)).toBeCloseTo(beats, 6);
+    expect(passBeats(music)).toBeCloseTo(beats, 6);
     expect(beats).toBeGreaterThanOrEqual(wasBeats * 2);
   });
 
@@ -147,9 +180,9 @@ describe('the arcade scores', () => {
   });
 
   it.each(DISCOVERED)('$name has no note the scheduler would have to skip', ({ music }) => {
-    for (const track of music.tracks) {
-      expect(track.melody.length).toBeGreaterThan(0);
-      for (const note of track.melody) {
+    for (const line of blocks(music).flatMap(b => b.lines)) {
+      expect(line.length).toBeGreaterThan(0);
+      for (const note of line) {
         // A non-positive length is the one authoring value the engine has to
         // defend itself against (it would never advance the lookahead cursor).
         expect(note.beats).toBeGreaterThan(0);
@@ -162,8 +195,8 @@ describe('the arcade scores', () => {
   it.each(DISCOVERED)('$name writes per-note levels as attenuation only', ({ music }) => {
     // The engine clamps, so an out-of-range value is inaudible rather than
     // broken — which is exactly why it is worth catching here instead.
-    for (const track of music.tracks) {
-      for (const note of track.melody) {
+    for (const line of blocks(music).flatMap(b => b.lines)) {
+      for (const note of line) {
         if (note.gain === undefined) continue;
         // Both bounds are the engine's, not arbitrary: it clamps to 0.05-1, so
         // a gain outside that range is silently moved rather than rejected.
@@ -171,6 +204,40 @@ describe('the arcade scores', () => {
         expect(note.gain).toBeLessThanOrEqual(1);
       }
     }
+  });
+
+  it('checks each section and the intro of a form on its own, not only the whole score', () => {
+    // No cabinet has a form yet, so the per-score cases above cannot show that
+    // the check reaches inside one. These synthetic scores do.
+    const n = (beats: number): Note => ({ freq: 440, beats });
+    const tracks = [{}, {}];
+    const good: GameAudioOptions = {
+      tracks,
+      form: {
+        intro: [[n(1), n(1)], [n(2)]],
+        sections: { a: [[n(4)], [n(2), n(2)]], b: [[n(3)], [n(1), n(2)]] },
+        order: ['a', 'b', 'a']
+      }
+    };
+    expect(unequalBlocks(good)).toEqual([]);
+    // Each voice totals 7 beats over a and b together, so only a per-section
+    // check can see that b is a beat short in the lead and a beat long in the bass.
+    const sliding: GameAudioOptions = {
+      tracks,
+      form: { sections: { a: [[n(4)], [n(3)]], b: [[n(3)], [n(4)]] }, order: ['a', 'b'] }
+    };
+    expect(unequalBlocks(sliding)).toEqual(['a', 'b']);
+    const shortIntro: GameAudioOptions = { tracks, form: { ...good.form!, intro: [[n(2)], [n(1)]] } };
+    expect(unequalBlocks(shortIntro)).toEqual(['intro']);
+    const missingVoice: GameAudioOptions = { tracks, form: { sections: { a: [[n(4)]] }, order: ['a'] } };
+    expect(unequalBlocks(missingVoice)).toEqual(['a']);
+  });
+
+  it.each(DISCOVERED)('$name resolves to a pass of the loop, so a form names only sections it has', ({ music }) => {
+    // The engine throws on an unknown name, which in a cabinet would be a dead
+    // music start; resolving every score's length here is what catches it first.
+    expect(() => scoreSeconds(music)).not.toThrow();
+    expect(scoreSeconds(music).pass).toBeGreaterThan(0);
   });
 
   it('gives Cascade a base tempo its per-level ramp can wind up from', () => {

@@ -18,6 +18,15 @@
  *   node scripts/render-music.js main            # explicit label
  *   node scripts/render-music.js main cascade tanks   # only these cabinets
  *
+ * Optional flags render from an adaptive state instead of the score as
+ * written, through the same controls the page shows (#371). A score without
+ * the feature a flag asks for is skipped, and the file is named after the
+ * state the way the page names its downloads, e.g. cascade-danger-from-b.wav:
+ *
+ *   --danger                 start in the form's danger variant
+ *   --section=<name>         start at this section of the order
+ *   --layer=<voice>=on|off   switch a voice, by name or index (repeatable)
+ *
  * To compare a branch with main, run it once on each checkout (restarting the
  * dev server in between) and play music-renders/main/<cabinet>.wav against
  * music-renders/<branch>/<cabinet>.wav; `cmp` says whether they differ at all.
@@ -30,8 +39,8 @@
  */
 import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { basename, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
@@ -49,8 +58,22 @@ function defaultLabel() {
 }
 
 // A branch name like feat/x would otherwise become a nested directory.
-const LABEL = (process.argv[2] || defaultLabel()).replace(/[^\w.-]/g, '-');
-const ONLY = process.argv.slice(3);
+const FLAGS = process.argv.slice(2).filter(a => a.startsWith('--'));
+const ARGS = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const LABEL = (ARGS[0] || defaultLabel()).replace(/[^\w.-]/g, '-');
+const ONLY = ARGS.slice(1);
+
+const STATE = { danger: false, section: '', layers: [] };
+for (const flag of FLAGS) {
+  const [key, ...rest] = flag.slice(2).split('=');
+  const value = rest.join('=');
+  if (key === 'danger' && !value) STATE.danger = true;
+  else if (key === 'section' && value) STATE.section = value;
+  else if (key === 'layer' && /^.+=(on|off)$/.test(value)) {
+    const at = value.lastIndexOf('=');
+    STATE.layers.push({ voice: value.slice(0, at), on: value.slice(at + 1) === 'on' });
+  } else throw new Error(`unknown flag ${flag} (have --danger, --section=<name>, --layer=<voice>=on|off)`);
+}
 const OUT = join(REPO, 'music-renders', LABEL);
 mkdirSync(OUT, { recursive: true });
 
@@ -67,31 +90,65 @@ try {
   const unknown = ONLY.filter(n => !names.includes(n));
   if (unknown.length) throw new Error(`no such score: ${unknown.join(', ')} (have ${names.join(', ')})`);
 
-  async function render(name, file) {
+  /**
+   * Sets a card's controls to the requested state, or says what it lacks.
+   * Returns null when the card is ready.
+   */
+  async function applyState(card) {
+    if (STATE.danger) {
+      const box = card.locator('[data-danger]');
+      if (!(await box.count())) return 'no danger variant';
+      await box.check();
+    }
+    if (STATE.section) {
+      const picker = card.locator('[data-section]');
+      if (!(await picker.count())) return 'no form';
+      const names = await picker.locator('option').evaluateAll(opts => opts.map(o => o.value));
+      if (!names.includes(STATE.section)) return `no section ${STATE.section}`;
+      await picker.selectOption(STATE.section);
+    }
+    for (const { voice, on } of STATE.layers) {
+      const box = card.locator(`[data-layer="${voice}"]`);
+      if (!(await box.count())) return `no voice toggle ${voice}`;
+      await box.setChecked(on);
+    }
+    return null;
+  }
+
+  async function render(name, dir) {
     const card = page.locator(`[data-score="${name}"]`);
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: 300_000 }),
       card.locator('[data-render]').click()
     ]);
+    const file = join(dir, download.suggestedFilename());
     await download.saveAs(file);
-    return readFileSync(file);
+    return file;
   }
 
   console.log(`rendering ${targets.length} score(s) to ${OUT}`);
+  const rendered = [];
   for (const name of targets) {
-    const file = join(OUT, `${name}.wav`);
-    const bytes = await render(name, file);
-    console.log(`  ${name}.wav  ${bytes.length} bytes`);
+    const missing = await applyState(page.locator(`[data-score="${name}"]`));
+    if (missing) {
+      console.log(`  ${name}: skipped, ${missing}`);
+      continue;
+    }
+    const file = await render(name, OUT);
+    rendered.push({ name, file });
+    console.log(`  ${basename(file)}  ${readFileSync(file).length} bytes`);
   }
+  if (!rendered.length) throw new Error('no score has the state asked for');
 
-  const probe = targets[0];
-  const again = join(tmpdir(), `render-music-${process.pid}-${probe}.wav`);
-  const second = await render(probe, again);
-  rmSync(again);
-  if (second.equals(readFileSync(join(OUT, `${probe}.wav`)))) {
-    console.log(`determinism: ${probe} rendered twice, byte-identical`);
+  const probe = rendered[0];
+  const scratch = mkdtempSync(join(tmpdir(), 'render-music-'));
+  const again = await render(probe.name, scratch);
+  const second = readFileSync(again);
+  rmSync(scratch, { recursive: true });
+  if (second.equals(readFileSync(probe.file))) {
+    console.log(`determinism: ${probe.name} rendered twice, byte-identical`);
   } else {
-    console.error(`determinism: ${probe} rendered twice and the bytes differ`);
+    console.error(`determinism: ${probe.name} rendered twice and the bytes differ`);
     failed = true;
   }
 } finally {

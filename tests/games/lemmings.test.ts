@@ -22,6 +22,7 @@ import {
   atExit,
   levelHatches,
   levelStock,
+  actOf,
   LEVELS,
   LEVEL_W,
   LEVEL_H
@@ -509,6 +510,21 @@ describe('levels', () => {
     expect(tiers[23 - 1]).toBeGreaterThan(earlyMax);
     expect(tiers[24 - 1]).toBeGreaterThan(earlyMax);
     expect(tiers[25 - 1]).toBeGreaterThan(earlyMax);
+  });
+
+  it('puts every level in the act this table names, which picks its score', () => {
+    // actOf decides which act's music plays (game.ts), so it must agree with
+    // the acts the difficulty arc above is pinned to, level for level.
+    const acts = [
+      [1, 2, 3, 4, 5, 6],
+      [7, 8, 9, 10, 11, 12, 13],
+      [14, 15, 16, 17, 18, 19],
+      [20, 21, 22, 23, 24, 25]
+    ];
+    expect(acts.flat()).toHaveLength(LEVELS.length);
+    acts.forEach((levels, act) => {
+      for (const level of levels) expect(actOf(level - 1), `level ${level}`).toBe(act);
+    });
   });
 
   it('never ships the same level twice', () => {

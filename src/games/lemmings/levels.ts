@@ -162,6 +162,20 @@ export function atExit(c: Critter, def: LevelDef): boolean {
   );
 }
 
+/**
+ * The 0-based index of each act's first level, from the header above: Act II
+ * opens on level 7, Act III on 14 (Double Trouble, 13, closes Act II) and
+ * Act IV on 20. Each act has its own score (see music.ts).
+ */
+export const ACT_STARTS: readonly number[] = [0, 6, 13, 19];
+
+/** The 0-based act a 0-based level index belongs to. */
+export function actOf(levelIndex: number): number {
+  let act = 0;
+  while (act + 1 < ACT_STARTS.length && levelIndex >= ACT_STARTS[act + 1]) act++;
+  return act;
+}
+
 export const LEVELS: LevelDef[] = [
   // 1 — First Steps: a flat stroll, so the player meets spawn → exit.
   {

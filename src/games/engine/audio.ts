@@ -199,6 +199,13 @@ export interface GameAudioOptions {
    * `tracks`, played in those tracks' instruments at the tempo in force.
    */
   stingers?: Record<string, Note[][]>;
+  /**
+   * The score's key centre in Hz, authored as `p('A3')` (the octave does not
+   * matter). When set, the pitched effects are drawn from its tonic and fifth,
+   * which sit in the key whether it is major or minor; left out, they keep the
+   * fixed pitches they have always had.
+   */
+  tonic?: number;
 }
 
 /**
@@ -1132,6 +1139,65 @@ export async function renderScore(
   return ctx.startRendering();
 }
 
+/**
+ * Effects level, as a multiple of the score's loudest voice at its peak.
+ *
+ * Effects used to go out at a fixed 0.6, which with tone peaks of 0.5 to 0.6
+ * put a single `hit` about 12 dB over Line Hold's lead. The level is tied to
+ * the score rather than lowered to a new constant because the cabinets' music
+ * masters differ: the loudest voice runs from 0.068 (Critter Rescue) to 0.112
+ * (Snake), so one fixed level that clears the 6 dB ceiling on the quietest
+ * score would sit 4.3 dB lower against the loudest. It is read from the
+ * options and not from the live master gain, so muting the music leaves the
+ * effects exactly where they were. At 3, a tone peaking at 0.6 lands at 1.8x
+ * the lead, +5.1 dB.
+ */
+const SFX_OVER_MUSIC = 3;
+
+/**
+ * Shortest gap, in seconds of audio time, between two plays of one effect.
+ * Line Hold fires `hit` six or seven times a second in its late waves, and two
+ * copies of one effect started together add in phase, +6 dB on their own. The
+ * default only stops same-frame duplicates.
+ */
+const SFX_MIN_INTERVAL: Partial<Record<SfxName, number>> = { hit: 0.12, blip: 0.12 };
+const SFX_DEFAULT_INTERVAL = 0.05;
+
+/** Effects that mark an event rather than an action, and duck the music under them. */
+const DUCKING_SFX: ReadonlySet<SfxName> = new Set(['explosion', 'gameover', 'rescue', 'score']);
+/** Duck depth (about -5 dB) and how long it is held before the music comes back. */
+const DUCK_GAIN = 0.56;
+const DUCK_HOLD_MS = 200;
+
+/**
+ * Each pitched effect's fixed pitches, and the same line written as semitones
+ * above the tonic, used when the score names one. Only the tonic, fifth and
+ * their octaves are used, since a third would have to know the mode. The
+ * explosion is left out on purpose: it is a detuned cluster standing in for
+ * noise, not a line.
+ */
+const SFX_PITCH: Partial<Record<SfxName, { hz: number[]; semis: number[] }>> = {
+  blip: { hz: [660], semis: [7] },
+  score: { hz: [784, 1047], semis: [7, 12] },
+  hit: { hz: [180, 110], semis: [7, 0] },
+  gameover: { hz: [440, 330, 220], semis: [12, 7, 0] },
+  rescue: { hz: [880, 1108.73, 1318.51, 1760], semis: [-5, 0, 7, 12] }
+};
+
+/**
+ * An effect's pitches: the fixed ones, or the in-key line moved by whole
+ * octaves so its first note lands nearest the fixed first note. The whole line
+ * moves by one octave count, which keeps its contour and its register.
+ */
+function sfxPitches(name: SfxName, tonic: number | undefined): number[] {
+  const line = SFX_PITCH[name];
+  if (!line) return [];
+  if (tonic === undefined || !Number.isFinite(tonic) || tonic <= 0) return line.hz;
+  const first = tonic * Math.pow(2, line.semis[0] / 12);
+  const octaves = Math.round(Math.log2(line.hz[0] / first));
+  return line.semis.map(s => tonic * Math.pow(2, s / 12 + octaves));
+}
+
 export function createGameAudio(options: GameAudioOptions): GameAudio {
   migrateLegacyMute();
 
@@ -1339,15 +1405,47 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     return sfxMuted;
   }
 
+  // The loudest voice at its peak, the reference the effects are set against.
+  // A score with no voices is treated as one voice at full track volume, so
+  // its effects are not silenced along with it.
+  const loudestTrack = tracks.reduce((m, t) => Math.max(m, t.volume), 0) || 1;
+  const sfxLevel = SFX_OVER_MUSIC * VOICE_PEAK * volume * loudestTrack;
+  const lastSfx: Partial<Record<SfxName, number>> = {};
+  let duckTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Pulls the music master down under an effect and lifts it back after
+   * DUCK_HOLD_MS. The lift is a timer rather than a ramp scheduled now for
+   * later: a future automation event outranks one written in the meantime,
+   * so a pre-scheduled lift would undo a mute or a stop() issued during the
+   * duck. The timer re-checks both before it lifts.
+   */
+  function duckMusic(): void {
+    if (!ctx || !musicMaster || !running || musicMuted) return;
+    musicMaster.gain.setTargetAtTime(volume * DUCK_GAIN, ctx.currentTime, 0.01);
+    if (duckTimer !== null) clearTimeout(duckTimer);
+    duckTimer = setTimeout(() => {
+      duckTimer = null;
+      if (ctx && musicMaster && running && !musicMuted) {
+        musicMaster.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
+      }
+    }, DUCK_HOLD_MS);
+  }
+
   function playSfx(name: SfxName): void {
     if (sfxMuted) return;
     const context = ensureContext();
     if (!context) return;
     if (context.state === 'suspended') void context.resume();
     const now = context.currentTime;
+    const lastPlayed = lastSfx[name];
+    if (lastPlayed !== undefined && now - lastPlayed < (SFX_MIN_INTERVAL[name] ?? SFX_DEFAULT_INTERVAL)) return;
+    lastSfx[name] = now;
+    if (DUCKING_SFX.has(name)) duckMusic();
+    const hz = sfxPitches(name, options.tonic);
     // Each sfx routes through its own gain so it ignores the music master mix.
     const out = context.createGain();
-    out.gain.value = 0.6;
+    out.gain.value = sfxLevel;
     out.connect(context.destination);
     // Some browsers don't GC gain nodes wired to destination once their sources
     // stop, so release it shortly after the longest sfx finishes.
@@ -1361,15 +1459,15 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
 
     switch (name) {
       case 'blip':
-        playTone(context, 660, now, 0.08, 'square', 0.5, out);
+        playTone(context, hz[0], now, 0.08, 'square', 0.5, out);
         break;
       case 'score':
-        playTone(context, 784, now, 0.09, 'square', 0.5, out);
-        playTone(context, 1047, now + 0.08, 0.1, 'square', 0.5, out);
+        playTone(context, hz[0], now, 0.09, 'square', 0.5, out);
+        playTone(context, hz[1], now + 0.08, 0.1, 'square', 0.5, out);
         break;
       case 'hit':
-        playTone(context, 180, now, 0.14, 'sawtooth', 0.6, out);
-        playTone(context, 110, now + 0.04, 0.16, 'sawtooth', 0.5, out);
+        playTone(context, hz[0], now, 0.14, 'sawtooth', 0.6, out);
+        playTone(context, hz[1], now + 0.04, 0.16, 'sawtooth', 0.5, out);
         break;
       case 'explosion': {
         // Detuned descending tones approximate a noisy boom without buffers.
@@ -1379,18 +1477,17 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         break;
       }
       case 'gameover':
-        playTone(context, 440, now, 0.18, 'triangle', 0.5, out);
-        playTone(context, 330, now + 0.16, 0.18, 'triangle', 0.5, out);
-        playTone(context, 220, now + 0.32, 0.3, 'triangle', 0.5, out);
+        playTone(context, hz[0], now, 0.18, 'triangle', 0.5, out);
+        playTone(context, hz[1], now + 0.16, 0.18, 'triangle', 0.5, out);
+        playTone(context, hz[2], now + 0.32, 0.3, 'triangle', 0.5, out);
         break;
       case 'rescue': {
         // A bright ascending bell arpeggio — the "critter reached home" twinkle.
         // Deliberately a soft triangle voice and a rising four-note run so it is
         // unmistakably distinct from the terser square 'score' blip and the rest.
-        const bells = [880, 1108.73, 1318.51, 1760];
-        for (let i = 0; i < bells.length; i++) {
-          const last = i === bells.length - 1;
-          playTone(context, bells[i], now + i * 0.06, last ? 0.2 : 0.1, 'triangle', 0.5, out);
+        for (let i = 0; i < hz.length; i++) {
+          const last = i === hz.length - 1;
+          playTone(context, hz[i], now + i * 0.06, last ? 0.2 : 0.1, 'triangle', 0.5, out);
         }
         break;
       }

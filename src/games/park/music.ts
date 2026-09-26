@@ -12,7 +12,17 @@
  * the arcade. It is kept in step with the rest so a revival is a page rename
  * and nothing else.
  */
-import { p, type GameAudioOptions } from '../engine';
+import { p, type GameAudioOptions, type MusicProfile } from '../engine';
+
+/**
+ * Parked and unrouted, so it has no measured session. Held to the standard
+ * floor rather than exempted, so a revival (#381) brings a score that meets
+ * the live floor's default bar.
+ */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'standard',
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const PARK_MUSIC: GameAudioOptions = {
   tempo: 156,

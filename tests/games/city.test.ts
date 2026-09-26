@@ -94,6 +94,7 @@ import {
   type Tornado
 } from '../../src/games/city/disasters';
 import { seededRandom } from './seeded-random';
+import { musicTier, TIER_FLOORS, TIER_LAYERS, CITY_MUSIC } from '../../src/games/city/music';
 
 describe('engine grid2d', () => {
   it('respects grid edges for neighbours', () => {
@@ -1350,5 +1351,55 @@ describe('city solvency', () => {
     // slide, not per run, so the next slide gets its own grace month.
     expect(solvency(200, 40, true)).toBe('ok');
     expect(solvency(90, -100, true)).toBe('lowFunds');
+  });
+});
+
+describe('Microcity music tiers (#378)', () => {
+  it('reads the village, the town and the metropolis off the milestone ladder', () => {
+    expect(TIER_FLOORS).toEqual([0, POP_MILESTONES[1], POP_MILESTONES[METROPOLIS_INDEX]]);
+    expect(TIER_FLOORS).toEqual([0, 120, 1000]);
+  });
+
+  it('climbs a tier the moment its floor is reached, several at once if it must', () => {
+    expect(musicTier(0, 0)).toBe(0);
+    expect(musicTier(119, 0)).toBe(0);
+    expect(musicTier(120, 0)).toBe(1);
+    expect(musicTier(999, 1)).toBe(1);
+    expect(musicTier(1000, 1)).toBe(2);
+    expect(musicTier(1500, 0)).toBe(2);
+  });
+
+  it('falls back only a fifth below the floor, so a city at a threshold does not flap', () => {
+    // A town that loses a block to a fire is still a town.
+    expect(musicTier(110, 1)).toBe(1);
+    expect(musicTier(96, 1)).toBe(1);
+    expect(musicTier(95, 1)).toBe(0);
+    expect(musicTier(850, 2)).toBe(2);
+    expect(musicTier(799, 2)).toBe(1);
+    // A metropolis razed to a hamlet drops all the way.
+    expect(musicTier(10, 2)).toBe(0);
+  });
+
+  it('grows the arrangement tier by tier from voices the score has', () => {
+    const names = CITY_MUSIC.tracks.map(t => t.name);
+    for (const layers of TIER_LAYERS) expect(Object.keys(layers).sort()).toEqual([...names].sort());
+    // Every tier has the pad, and exactly one voice carries the tune.
+    for (const layers of TIER_LAYERS) {
+      expect(layers.pad).toBe(true);
+      expect(Number(layers.lead) + Number(layers.horn)).toBe(1);
+    }
+    // The bass enters with the town and stays; the horn is the metropolis's alone.
+    expect(TIER_LAYERS.map(l => l.bass)).toEqual([false, true, true]);
+    expect(TIER_LAYERS.map(l => l.horn)).toEqual([false, false, true]);
+    // The score starts silent exactly where the village is.
+    for (const track of CITY_MUSIC.tracks) {
+      expect(Boolean(track.startsMuted)).toBe(!TIER_LAYERS[0][track.name as keyof (typeof TIER_LAYERS)[0]]);
+    }
+  });
+
+  it('writes the metropolis horn as the lead line itself, one motif in two voices', () => {
+    const lead = CITY_MUSIC.tracks.findIndex(t => t.name === 'lead');
+    const horn = CITY_MUSIC.tracks.findIndex(t => t.name === 'horn');
+    for (const lines of Object.values(CITY_MUSIC.form!.sections)) expect(lines[horn]).toBe(lines[lead]);
   });
 });

@@ -32,3 +32,6 @@ npm-debug.log*
 /before/
 /after/
 /shots/
+
+# Arcade jukebox renders (scripts/render-music.js)
+/music-renders/

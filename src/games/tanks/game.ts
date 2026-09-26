@@ -22,7 +22,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { TANKS_MUSIC } from './music';
+import { TANKS_MUSIC, STINGER_SECONDS } from './music';
 import { markDone } from '../engine/progress';
 import type { ArenaType } from './terrain';
 import { submitsToBoard, type TankMode } from './scoring';
@@ -42,6 +42,7 @@ import {
   TANK_H,
   BARREL_LEN,
   EXPLOSION_TIME,
+  WINS_PER_MATCH,
   type Award,
   type MatchEvent,
   type Shot,
@@ -267,6 +268,42 @@ export function initTanksGame(): void {
   const audio = createGameAudio(TANKS_MUSIC);
   wireSoundToggles(audio);
 
+  // The round-over overlay's hush: the round's stinger plays over the ducked
+  // bed, then the bed is muffled behind the overlay until the next round. The
+  // muffle waits for the stinger, because the pause filter sits after the
+  // whole music mix and would muffle the stinger too.
+  let hush: ReturnType<typeof setTimeout> | null = null;
+
+  function roundCue(winner: number | null) {
+    // Against the CPU a round is won or lost from the player's seat; in two
+    // player one person's win is the other's loss, so it is neutral, as is a
+    // mutual destruction in either mode.
+    const cue = winner === null || match.mode === '2p' ? 'round' : winner === 0 ? 'roundWon' : 'roundLost';
+    audio.playStinger(cue);
+    hush = setTimeout(() => {
+      hush = null;
+      audio.setPaused(true);
+    }, STINGER_SECONDS * 1000);
+  }
+
+  function liftHush() {
+    if (hush !== null) clearTimeout(hush);
+    hush = null;
+    audio.setPaused(false);
+  }
+
+  /**
+   * Match point is this cabinet's Sudden Death (see music.ts): with either
+   * side one round from the match, the score switches to its danger order and
+   * the drums, withheld until now, fade in with it. Read at every round start,
+   * so a new match (both tallies back at zero) takes both away again.
+   */
+  function syncMatchPoint() {
+    const matchPoint = match.wins.some(w => w === WINS_PER_MATCH - 1);
+    audio.setDanger(matchPoint);
+    audio.setLayer('drums', matchPoint);
+  }
+
   const playerName = (i: number) =>
     i === 1 && match.mode === 'cpu' ? strings.cpu : i === 1 ? strings.player2 : strings.player1;
 
@@ -405,6 +442,8 @@ export function initTanksGame(): void {
   function handleEvent(event: MatchEvent) {
     switch (event.type) {
       case 'roundStart':
+        liftHush();
+        syncMatchPoint();
         scene.rebuild();
         fx.clear();
         smoke = [];
@@ -451,9 +490,15 @@ export function initTanksGame(): void {
     if (winner !== null) {
       (winner === 0 ? p1Wins : p2Wins).textContent = match.wins[winner].toString();
     }
+    // A trophy is for someone in this room. Only the CPU taking a vs-CPU
+    // match keeps the loss sting; every other finish, including a 2P match
+    // decided either way, is a win for whoever is watching it end.
+    const cpuTookMatch = matchOver && match.mode === 'cpu' && winner === 1;
     if (matchOver) {
-      audio.playSfx('gameover');
+      audio.playSfx(cpuTookMatch ? 'gameover' : 'score');
       audio.stop();
+    } else {
+      roundCue(winner);
     }
     // In the order the ledger paid them: the round bonus, then the surviving
     // armour a finished match folds in.
@@ -466,9 +511,6 @@ export function initTanksGame(): void {
     // ever plays two-player (the score argument is a sentinel — markDone only
     // needs it above zero).
     if (matchOver && match.mode === '2p') markDone('tanks', 1);
-    // A trophy is for someone in this room. When the CPU takes the match it
-    // used to raise one too, which read as congratulating the player on losing.
-    const cpuTookMatch = matchOver && match.mode === 'cpu' && winner === 1;
     roundEmoji.textContent = matchOver
       ? cpuTookMatch
         ? '🤖'

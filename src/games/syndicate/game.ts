@@ -327,7 +327,9 @@ export function initSyndicateGame(): void {
 
   function endCampaign(victory: boolean) {
     phase = 'over';
-    audio.playSfx('gameover');
+    // Victory is a win chime, not the loss sting; only running out of agents
+    // or cash plays the latter.
+    audio.playSfx(victory ? 'score' : 'gameover');
     audio.stop();
     bankTakings();
     overIcon.textContent = victory ? '🏆' : '☠️';

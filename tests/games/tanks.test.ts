@@ -41,6 +41,13 @@ import {
 } from '../../src/games/tanks/match';
 import { seededRandom } from './seeded-random';
 import { meanT } from './paired-stats';
+import {
+  TANKS_MUSIC,
+  STINGER_BEATS,
+  SUDDEN_DEATH_TEMPO
+} from '../../src/games/tanks/music';
+import { scoreSeconds } from '../../src/games/engine/audio';
+import { PASS_FLOOR_SECONDS } from './music-gates';
 
 describe('terrain', () => {
   it('generates one height per column within bounds', () => {
@@ -872,5 +879,37 @@ describe('headless playthrough (seeded, deterministic)', () => {
     expect(b.score).toBe(a.score);
     expect(b.ticks).toBe(a.ticks);
     expect([c.score, c.ticks]).not.toEqual([a.score, a.ticks]);
+  });
+});
+
+/**
+ * The score facts `game.ts` leans on (#379). The round-over muffle waits
+ * `STINGER_SECONDS`, so every stinger must be that long in every voice; the
+ * drums are a layer for match point, so the bed must carry none of its own;
+ * and Sudden Death can last a round or two, so its own order is held to the
+ * same floor as the bed, at its own tempo.
+ */
+describe('Tank Duel score', () => {
+  const beats = (line: { beats: number }[]) => line.reduce((sum, note) => sum + note.beats, 0);
+  const form = TANKS_MUSIC.form!;
+  const drums = TANKS_MUSIC.tracks.findIndex(t => t.name === 'drums');
+
+  it('makes every stinger STINGER_BEATS long in every voice', () => {
+    const lengths = Object.values(TANKS_MUSIC.stingers!).flatMap(lines => lines.map(beats));
+    expect(lengths).toHaveLength(Object.keys(TANKS_MUSIC.stingers!).length * TANKS_MUSIC.tracks.length);
+    expect(new Set(lengths)).toEqual(new Set([STINGER_BEATS]));
+  });
+
+  it('keeps percussion out of the bed and brings it in only with Sudden Death', () => {
+    const hits = (section: string) => form.sections[section][drums].filter(note => note.drum).length;
+    expect(TANKS_MUSIC.tracks[drums].startsMuted).toBe(true);
+    expect(form.order.map(hits)).toEqual(form.order.map(() => 0));
+    for (const section of form.danger!.order) expect(hits(section)).toBeGreaterThan(0);
+  });
+
+  it('lasts at least the standard floor per pass of Sudden Death, at its own tempo', () => {
+    const danger = { ...TANKS_MUSIC, form: { ...form, order: form.danger!.order } };
+    expect(form.danger!.tempo).toBe(SUDDEN_DEATH_TEMPO);
+    expect(scoreSeconds(danger, SUDDEN_DEATH_TEMPO).pass).toBeGreaterThanOrEqual(PASS_FLOOR_SECONDS.standard);
   });
 });

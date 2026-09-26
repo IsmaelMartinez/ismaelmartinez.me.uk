@@ -26,6 +26,7 @@ import { initLemmingsGame } from '../../src/games/lemmings/game';
 import { LEVELS, LEVEL_W, LEVEL_H } from '../../src/games/lemmings/levels';
 import { STUCK_TICKS } from '../../src/games/lemmings/stall';
 import { levelBonuses } from '../../src/games/lemmings/score';
+import { ACT_MUSIC } from '../../src/games/lemmings/music';
 import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
 import {
   createFrameDriver,
@@ -46,6 +47,44 @@ import {
 vi.mock('../../src/games/engine/globalScores', async () =>
   (await import('./dom-helpers')).mockGlobalScores()
 );
+
+/**
+ * Every audio instance the game makes, with the score it was made for, so the
+ * music tests can see which act is playing and what was asked of it. Built in
+ * `vi.hoisted` because the mock factory below runs before this file's own
+ * bindings exist (the same reasoning as `tanks-dom.test.ts`'s `mockAudio`).
+ */
+const madeAudio = vi.hoisted(() => [] as { options: unknown; audio: Record<string, ReturnType<typeof vi.fn>> }[]);
+
+vi.mock('../../src/games/engine/audio', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();
+  return {
+    ...actual,
+    createGameAudio: vi.fn((options: unknown) => {
+      const audio = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        toggleMusicMute: vi.fn(() => false),
+        isMusicMuted: vi.fn(() => false),
+        setMusicMuted: vi.fn(),
+        toggleSfxMute: vi.fn(() => false),
+        isSfxMuted: vi.fn(() => false),
+        setSfxMuted: vi.fn(),
+        playSfx: vi.fn(),
+        setTempo: vi.fn(),
+        section: vi.fn(() => null),
+        setLayer: vi.fn(),
+        setSection: vi.fn(() => false),
+        setDanger: vi.fn(),
+        playStinger: vi.fn(() => true),
+        setPaused: vi.fn(),
+        dispose: vi.fn()
+      };
+      madeAudio.push({ options, audio });
+      return audio;
+    })
+  };
+});
 
 const SKILLS = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
 
@@ -191,6 +230,7 @@ function runUntilStuck(maxTicks: number): number | null {
 }
 
 beforeEach(() => {
+  madeAudio.length = 0;
   installLocalStorage();
   vi.mocked(fetchGlobal).mockResolvedValue(null);
   vi.mocked(submitGlobal).mockClear();
@@ -553,5 +593,79 @@ describe('ending a run from a mid-run clear (#261)', () => {
     await flush();
     expect(submitGlobal).not.toHaveBeenCalled();
     expect(num('level-num')).toBe(2);
+  });
+});
+
+describe('the music follows the acts', () => {
+  const nextBtn = () => document.getElementById('next-btn') as HTMLButtonElement;
+  const retryBtn = () => document.getElementById('retry-btn') as HTMLButtonElement;
+  /** The instance playing now: the last one made. */
+  const playing = () => madeAudio[madeAudio.length - 1];
+  const dangerCalls = (a: (typeof madeAudio)[number]) => a.audio.setDanger.mock.calls.map(([on]) => on as boolean);
+
+  it("plays the level's act score, and carries it on into the next level of the act", () => {
+    startLevel(0);
+    expect(playing().options).toBe(ACT_MUSIC[0]);
+    const act1 = playing();
+    expect(act1.audio.start).toHaveBeenCalled();
+
+    expect(runUntilResult(6000)).not.toBeNull();
+    expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
+    // Level 1 kills nobody, so it pays the perfect bonus and gets that stinger.
+    expect((document.getElementById('bonus-perfect-row') as HTMLElement).hidden).toBe(false);
+    expect(act1.audio.playStinger).toHaveBeenCalledWith('perfect');
+    expect(act1.audio.playStinger).not.toHaveBeenCalledWith('cleared');
+
+    nextBtn().click();
+    expect(num('level-num')).toBe(2);
+    // Same act, same score, never stopped: bar 1 is not played again.
+    expect(madeAudio).toHaveLength(1);
+    expect(act1.audio.stop).not.toHaveBeenCalled();
+    expect(act1.audio.dispose).not.toHaveBeenCalled();
+  });
+
+  it("rotates to the next act's tune when play crosses into it", () => {
+    // Level 13 (Double Trouble) closes Act II and clears untouched.
+    startLevel(12);
+    const act2 = playing();
+    expect(act2.options).toBe(ACT_MUSIC[1]);
+    expect(runUntilResult(6000)).not.toBeNull();
+    expect(document.getElementById('result-title')!.textContent).toBe('Level Complete!');
+
+    nextBtn().click();
+    expect(num('level-num')).toBe(14);
+    const act3 = playing();
+    expect(act3.options).toBe(ACT_MUSIC[2]);
+    expect(act2.audio.dispose).toHaveBeenCalled();
+    expect(act3.audio.start).toHaveBeenCalled();
+  });
+
+  it("turns to danger for a timed level's last ten seconds, and a retry keeps its place", () => {
+    const level = LEVELS[13];
+    expect(level.timeLimit).toBe(2700);
+    startLevel(13);
+    const act3 = playing();
+    expect(act3.options).toBe(ACT_MUSIC[2]);
+
+    // Up to 615 ticks left: not yet.
+    step((level.timeLimit! - 600) / TICKS_PER_FRAME - 1);
+    expect(dangerCalls(act3)).not.toContain(true);
+    // 600 left, the moment the clock turns red.
+    step();
+    expect(dangerCalls(act3).at(-1)).toBe(true);
+
+    expect(runUntilResult(900)).not.toBeNull();
+    expect(document.getElementById('result-title')!.textContent).toBe('Time Up!');
+    // A lost level releases danger and muffles the music under the result.
+    expect(dangerCalls(act3).at(-1)).toBe(false);
+    expect(act3.audio.setPaused).toHaveBeenLastCalledWith(true);
+    expect(act3.audio.playStinger).not.toHaveBeenCalled();
+
+    retryBtn().click();
+    // The retry lifts the muffle on the same score rather than starting a new one.
+    expect(madeAudio.at(-1)).toBe(act3);
+    expect(act3.audio.setPaused).toHaveBeenLastCalledWith(false);
+    expect(act3.audio.stop).not.toHaveBeenCalled();
+    expect(act3.audio.dispose).not.toHaveBeenCalled();
   });
 });

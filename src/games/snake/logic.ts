@@ -16,9 +16,14 @@ export const BONUS_EVERY = 5;
 /** …and stays on the board for this many snake steps. */
 export const BONUS_TICKS = 30;
 
+/** Seconds between steps at the start of a run. */
+export const START_STEP = 0.16;
+/** The floor `stepInterval` tightens to, reached at the 23rd apple. */
+export const FASTEST_STEP = 0.07;
+
 /** Seconds between steps: starts leisurely, tightens as you eat. */
 export function stepInterval(foodsEaten: number): number {
-  return Math.max(0.07, 0.16 - foodsEaten * 0.004);
+  return Math.max(FASTEST_STEP, START_STEP - foodsEaten * 0.004);
 }
 
 /** Flat board index of a cell (index = y * COLS + x). */

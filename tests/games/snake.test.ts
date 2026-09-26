@@ -18,6 +18,7 @@ import {
   type StepEvent,
   type Vec
 } from '../../src/games/snake/logic';
+import { BASE_TEMPO, MAX_TEMPO, tempoForStep } from '../../src/games/snake/music';
 import { bfsFrom } from '../../src/games/engine/pathfind';
 import { seededRandom } from './seeded-random';
 import { meanT } from './paired-stats';
@@ -365,6 +366,20 @@ describe('pacing', () => {
   it('speeds up with food but never below the floor', () => {
     expect(stepInterval(0)).toBeGreaterThan(stepInterval(10));
     expect(stepInterval(1000)).toBe(0.07);
+  });
+
+  it('winds the music up with the snake, from the base tempo to the cap and no further (#380)', () => {
+    const tempos = Array.from({ length: 31 }, (_, eaten) => tempoForStep(stepInterval(eaten)));
+    expect(tempos[0]).toBe(BASE_TEMPO);
+    // Every apple before the step floor quickens the music, by the same amount.
+    for (let eaten = 1; eaten <= 22; eaten++) {
+      expect(tempos[eaten] - tempos[eaten - 1]).toBeCloseTo((MAX_TEMPO - BASE_TEMPO) * (0.004 / 0.09), 9);
+    }
+    // The 23rd apple takes the snake to its floor and the music to its cap, where both stay.
+    expect(tempos[23]).toBeCloseTo(MAX_TEMPO, 9);
+    expect(tempos.slice(23).every(t => t === MAX_TEMPO)).toBe(true);
+    expect(tempoForStep(0.01)).toBe(MAX_TEMPO);
+    expect(tempoForStep(1)).toBe(BASE_TEMPO);
   });
 });
 

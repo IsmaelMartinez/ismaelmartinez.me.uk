@@ -34,6 +34,57 @@ vi.mock('../../src/games/engine/globalScores', async () =>
   (await import('./dom-helpers')).mockGlobalScores()
 );
 
+/**
+ * The score's adaptive hooks (#374) are observed through a mocked
+ * `createGameAudio`, built in `vi.hoisted` because the factory runs when the
+ * game's own import of the engine resolves (see tanks-dom.test.ts). None of
+ * the other tests here listen to it, and in jsdom there is no AudioContext
+ * for the real engine to play into anyway.
+ */
+const mockAudio = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  toggleMusicMute: vi.fn(() => false),
+  isMusicMuted: vi.fn(() => false),
+  setMusicMuted: vi.fn(),
+  toggleSfxMute: vi.fn(() => false),
+  isSfxMuted: vi.fn(() => false),
+  setSfxMuted: vi.fn(),
+  playSfx: vi.fn(),
+  setTempo: vi.fn(),
+  section: vi.fn(() => null),
+  setLayer: vi.fn(),
+  setSection: vi.fn(() => true),
+  setDanger: vi.fn(),
+  playStinger: vi.fn(() => true),
+  setPaused: vi.fn(),
+  dispose: vi.fn()
+}));
+
+vi.mock('../../src/games/engine/audio', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();
+  return { ...actual, createGameAudio: vi.fn(() => mockAudio) };
+});
+
+/**
+ * Lets one test keep the keep standing through every leak, so an unguarded
+ * run can walk all the way to the finale without anyone having to build a
+ * defence good enough to hold eighteen waves in jsdom. Off by default, which
+ * leaves `leak` exactly as the game has it for every other test.
+ */
+const keepStands = vi.hoisted(() => ({ on: false }));
+
+vi.mock('../../src/games/towerdefense/economy', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/games/towerdefense/economy')>();
+  return {
+    ...actual,
+    leak: (eco: Parameters<typeof actual.leak>[0], cost: number) => {
+      const lives = actual.leak(eco, cost);
+      return keepStands.on ? Math.max(lives, 1) : lives;
+    }
+  };
+});
+
 // Mirrors the projection constants in src/games/towerdefense/game.ts, which are
 // module-private. Tile picking below re-derives the isometric centre the same
 // way isoProject does, so a click lands on the tile a player would have hit.
@@ -197,6 +248,7 @@ function holdFirstWave(): void {
 beforeEach(() => {
   installLocalStorage();
   vi.clearAllMocks();
+  keepStands.on = false;
   vi.mocked(fetchGlobal).mockResolvedValue(null);
   vi.mocked(submitGlobal).mockResolvedValue({ status: 'ok', rank: 1, table: [] });
   installJsdomShims();
@@ -471,5 +523,91 @@ describe('Line Hold stand-down confirmation', () => {
 
     expect(pressKey(navLink(), 'Tab').defaultPrevented).toBe(false);
     expect(pressKey(navLink(), 'Escape').defaultPrevented).toBe(false);
+  });
+});
+
+/**
+ * The score plays the defence (#374): the lead and the march are a layer that
+ * comes in when a wave launches and goes when it ends, a horn stinger marks
+ * the launch, the finale switches to the horde, and the stand-down prompt
+ * muffles the music instead of stopping it. Everything here is driven by the
+ * game's own buttons and clock, never by calling the audio directly.
+ */
+describe('Line Hold music', () => {
+  /** The last `on` each named layer was set to. */
+  const layerState = (name: string): boolean | undefined =>
+    mockAudio.setLayer.mock.calls.filter(([track]) => track === name).at(-1)?.[1];
+
+  it('starts a run on the build bed alone', () => {
+    startRun();
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+    expect(layerState('lead')).toBe(false);
+    expect(layerState('drums')).toBe(false);
+    expect(mockAudio.playStinger).not.toHaveBeenCalled();
+  });
+
+  it('brings the wave layer in with a horn call when a wave launches', () => {
+    startRun();
+    waveBtn().click();
+    expect(layerState('lead')).toBe(true);
+    expect(layerState('drums')).toBe(true);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('launch');
+    // Wave 1 is nowhere near the finale.
+    expect(mockAudio.setDanger).not.toHaveBeenCalledWith(true);
+  });
+
+  it('launches with the layer too when the build countdown runs out on its own', () => {
+    startRun();
+    advanceUntil(() => mockAudio.playStinger.mock.calls.length > 0, 20);
+    expect(layerState('lead')).toBe(true);
+    expect(layerState('drums')).toBe(true);
+  });
+
+  it('takes the wave layer out again once the wave is held', () => {
+    holdFirstWave();
+    expect(num('lives')).toBe(20);
+    expect(layerState('lead')).toBe(false);
+    expect(layerState('drums')).toBe(false);
+  });
+
+  it('muffles the music while the stand-down prompt holds the run, and clears it on cancel', () => {
+    holdFirstWave();
+    standDownBtn().click();
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(true);
+    // Muffled, not stopped: stopping and starting would restart the pass.
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    cancelBtn().click();
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
+  });
+
+  it('clears the pause when the prompt ends the run, so the next run is not muffled', () => {
+    holdFirstWave();
+    standDown();
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('marches the finale and every wave after it to the horde, and releases it between waves', () => {
+    keepStands.on = true;
+    startRun();
+    const dangerCalls = (on: boolean) => mockAudio.setDanger.mock.calls.filter(([was]) => was === on).length;
+    /** The launches (1-based) that switched the horde on. */
+    const hordeLaunches: number[] = [];
+    let launches = 0;
+    let dangerSeen = 0;
+    advanceUntil(() => {
+      if (!waveBtn().disabled) waveBtn().click();
+      launches = mockAudio.playStinger.mock.calls.length;
+      if (dangerCalls(true) > dangerSeen) {
+        dangerSeen = dangerCalls(true);
+        hordeLaunches.push(launches);
+      }
+      return launches === 20;
+    }, 3000);
+    // Waves 1 to 17 are the march; 18, the finale, and the endless waves
+    // after it are the horde.
+    expect(hordeLaunches).toEqual([18, 19, 20]);
+    // Every wave that ended, 18 and 19 among them, handed its lull back to the bed.
+    expect(dangerCalls(false)).toBe(19);
   });
 });

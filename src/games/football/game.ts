@@ -23,7 +23,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { BASE_TEMPO, FOOTBALL_MUSIC } from './music';
+import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC, SCENES, type Scene } from './music';
 import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
 import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
 import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
@@ -313,14 +313,14 @@ export function initFootballGame(): void {
   });
 
   /**
-   * One arrangement, wound up stage by stage with `setTempo`.
+   * One score, moved between its scenes rather than stopped and started.
    *
-   * The specification asks for three separate match tracks. `createGameAudio`
-   * fixes its voices at construction and owns an AudioContext, so three of them
-   * would mean three contexts and a mute toggle that has to be re-wired every
-   * time the stage changes; the anthem stays and the knockout rounds lean on
-   * the tempo, which is the part of "the run has an arc" a player actually
-   * hears. The score itself lives in `music.ts`, as every cabinet's does.
+   * `createGameAudio` fixes its voices at construction and owns an
+   * AudioContext, so separate scores for the menus, the match and the shootout
+   * would mean separate contexts and a mute toggle re-wired on every screen.
+   * Instead `music.ts` writes each scene as a group of sections in one form,
+   * and `playScene` jumps between them at the next bar line; the final is the
+   * form's danger order, and the knockout rounds also lean on the tempo.
    */
   const audio = createGameAudio(FOOTBALL_MUSIC);
   wireSoundToggles(audio);
@@ -330,6 +330,18 @@ export function initFootballGame(): void {
 
   let screen: Screen = 'title';
   let paused = false;
+  /**
+   * Whether the score is running. It starts on the first press of start, the
+   * first gesture the page gets, and stops only for attract mode, which a
+   * cabinet demoing itself to an empty room plays in silence.
+   */
+  let musicOn = false;
+  /** Set once a player has pressed start, after which the title screen has its theme too. */
+  let musicUnlocked = false;
+  /** The scene the score should be holding: the final is the danger order, the rest are `SCENES`. */
+  let scene: Scene | 'final' = 'menu';
+  /** The start time of the section `holdScene` last asked to loop from, so it asks once per section. */
+  let heldAt = -1;
   let clock = 0;
   let run: RunState | null = null;
   let match: MatchState | null = null;
@@ -647,8 +659,45 @@ export function initFootballGame(): void {
   function togglePause(): void {
     if (screen !== 'match' && screen !== 'shootout') return;
     paused = !paused;
-    if (paused) audio.stop();
-    else audio.start();
+    // The score keeps its place behind a low-pass, so unpausing neither
+    // restarts the pass nor brings back a scene the game has moved on from.
+    audio.setPaused(paused);
+  }
+
+  /**
+   * Moves the score to a scene, starting it first if nothing is playing yet
+   * (from the top, which is the menu theme). The jump lands on the next bar
+   * line; a scene already playing is left where it is. The menus play at the
+   * score's own tempo and the match and the shootout at the stage's.
+   */
+  function playScene(next: Scene | 'final', tempo = BASE_TEMPO): void {
+    scene = next;
+    if (!musicOn) {
+      audio.start();
+      musicOn = true;
+    }
+    audio.setTempo(tempo);
+    audio.setDanger(next === 'final');
+    if (next === 'final') return;
+    const at = audio.section();
+    if (!at || at.danger || !SCENES[next].includes(at.name)) audio.setSection(SCENES[next][0]);
+  }
+
+  /**
+   * Keeps the scene looping inside the one order: while a scene's one-bar turn
+   * plays, ask for its first section, which lands on the turn's own end. A
+   * section from another scene (a turn missed while the tab was asleep) is
+   * brought back the same way, a bar late. The final needs none of this, since
+   * the danger order loops on its own.
+   */
+  function holdScene(): void {
+    if (!musicOn || scene === 'final') return;
+    const at = audio.section();
+    if (!at || at.danger || at.start === heldAt) return;
+    const group = SCENES[scene];
+    if (at.name !== group[group.length - 1] && group.includes(at.name)) return;
+    heldAt = at.start;
+    audio.setSection(group[0]);
   }
 
   /* ---------------------------------------------------------------- */
@@ -674,7 +723,7 @@ export function initFootballGame(): void {
    * sliding behind them.
    */
   function stageTempo(state: RunState): number {
-    if (state.stage === 'final') return 152;
+    if (state.stage === 'final') return FINAL_TEMPO;
     if (state.stage === 'semi') return 143;
     return BASE_TEMPO;
   }
@@ -693,14 +742,17 @@ export function initFootballGame(): void {
     renderer.resetCamera(match);
     screen = 'match';
     paused = false;
-    audio.setTempo(stageTempo(run));
-    audio.start();
+    audio.setPaused(false);
+    // The drums wait for the kick-off; the final has its own theme.
+    audio.setLayer('drums', false);
+    playScene(run.stage === 'final' ? 'final' : 'match', stageTempo(run));
   }
 
   /** Fold the finished match into the run and move to the full-time screen. */
   function settleMatch(wonOnPenalties: boolean): void {
     if (!run || !match) return;
-    audio.stop();
+    audio.setLayer('drums', false);
+    playScene('menu');
     recordPlayerMatch(run, {
       goalsFor: match.score[0],
       goalsAgainst: match.score[1],
@@ -744,6 +796,10 @@ export function initFootballGame(): void {
     renderer.resetCamera(demo);
     screen = 'attract';
     idle = 0;
+    if (musicOn) {
+      audio.stop();
+      musicOn = false;
+    }
   }
 
   /** Drop the demo on the floor. Any input at all does this. */
@@ -752,6 +808,15 @@ export function initFootballGame(): void {
     fx.clear();
     screen = 'title';
     idle = 0;
+    // The title screen has its theme once someone has pressed start; before
+    // that no gesture has unlocked the audio, so it stays as silent as the demo.
+    if (musicUnlocked) playScene('menu');
+  }
+
+  /** Press start: the first gesture, so the menu theme can begin. */
+  function startMenuMusic(): void {
+    musicUnlocked = true;
+    playScene('menu');
   }
 
   /** The one "yes" every static screen listens for. */
@@ -764,6 +829,7 @@ export function initFootballGame(): void {
         confirmYes = true;
         screen = 'select';
         audio.playSfx('blip');
+        startMenuMusic();
         return;
       case 'title':
         cursor = 0;
@@ -771,6 +837,7 @@ export function initFootballGame(): void {
         confirmYes = true;
         screen = 'select';
         audio.playSfx('blip');
+        startMenuMusic();
         return;
       case 'select':
         if (!confirming) {
@@ -809,6 +876,7 @@ export function initFootballGame(): void {
         run = null;
         match = null;
         screen = 'title';
+        playScene('menu');
         return;
       default:
     }
@@ -830,7 +898,13 @@ export function initFootballGame(): void {
    * the middle comes free with the match's own `goal` phase.
    */
   function celebrate(side: 0 | 1, m: MatchState): void {
-    audio.playSfx(side === 0 ? 'rescue' : 'hit');
+    // Attract mode drives goals through this same function so the demo looks
+    // exactly like a real match; only the sound is muted, matching the demo
+    // earning no score below.
+    // A stinger is music, so with the music muted the old effect stands in.
+    if (!demo && !audio.playStinger(side === 0 ? 'goal-for' : 'goal-against')) {
+      audio.playSfx(side === 0 ? 'rescue' : 'hit');
+    }
     const kit = m.teams[side];
     const goalY = attackGoalY(side, m.swapped);
     const mouthX = CENTRE_X - renderer.camera.x;
@@ -880,20 +954,28 @@ export function initFootballGame(): void {
           break;
         }
         case 'save':
-          audio.playSfx('blip');
+          if (!demo) audio.playSfx('blip');
           break;
         case 'post':
-          audio.playSfx('blip');
+          if (!demo) audio.playSfx('blip');
           break;
         case 'shot':
-          if (!event.onTarget) audio.playSfx('hit');
+          if (!demo && !event.onTarget) audio.playSfx('hit');
           break;
         case 'kickoff':
           renderer.resetCamera(m);
+          // The ball is live: the whistle, and the drums come in.
+          if (!demo) {
+            audio.playStinger('kick-off');
+            audio.setLayer('drums', true);
+          }
           break;
         case 'halfTime':
         case 'end':
-          audio.playSfx('blip');
+          if (!demo) {
+            audio.setLayer('drums', false);
+            if (!audio.playStinger(event.type === 'halfTime' ? 'half-time' : 'full-time')) audio.playSfx('blip');
+          }
           break;
         default:
       }
@@ -906,6 +988,9 @@ export function initFootballGame(): void {
   function update(dt: number): void {
     clock += dt;
     const input = readInput();
+
+    // Before the pause check: a paused match keeps its scene looping too.
+    holdScene();
 
     const pauseDown = keys.has('p') || keys.has('Escape');
     if (tapped.pause || (pauseDown && !prevPause.down)) togglePause();
@@ -953,7 +1038,8 @@ export function initFootballGame(): void {
         if (match.pendingShootout) {
           shootout = createShootout({ difficulty: difficultyFor(run) });
           screen = 'shootout';
-          audio.stop();
+          playScene('shootout', stageTempo(run));
+          audio.setLayer('drums', true);
         } else {
           settleMatch(false);
         }
@@ -967,6 +1053,9 @@ export function initFootballGame(): void {
         if (event.type === 'kick') {
           audio.playSfx(event.kick.result === 'scored' ? 'score' : 'blip');
         } else {
+          // The tie is settled: the same whistle that ends a match.
+          audio.setLayer('drums', false);
+          if (!audio.playStinger('full-time')) audio.playSfx('blip');
           settleMatch(event.winner === 0);
         }
       }

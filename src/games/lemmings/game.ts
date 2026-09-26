@@ -18,9 +18,10 @@ import {
   setupHiDpiCanvas,
   createGameAudio,
   wireSoundToggles,
-  mountCabinet
+  mountCabinet,
+  type GameAudio
 } from '../engine';
-import { LEMMINGS_MUSIC } from './music';
+import { ACT_MUSIC } from './music';
 import { TerrainBitmap, AIR, BRIDGE, STEEL } from './bitmap';
 import {
   createCritter,
@@ -43,6 +44,7 @@ import {
   HATCH_W,
   EXIT_H,
   EXIT_HALF_W,
+  actOf,
   type Hatch
 } from './levels';
 import { createStallWatch, levelEnding } from './stall';
@@ -53,6 +55,9 @@ import { newCombo, comboOnRescue, rescuePoints, levelBonuses } from './score';
 const SKILL_ORDER: Skill[] = ['blocker', 'digger', 'basher', 'builder', 'floater', 'bomber'];
 const PICK_RADIUS = 12; // px (level space) a tap may miss a critter by
 const NUKE_INTERVAL = 4; // ticks between successive detonations during a nuke
+// A timed level's last ten seconds: its clock flashes red and the music turns
+// to the act's danger variant.
+const CLOCK_URGENT_TICKS = 600;
 
 // Deliberately NOT engine/effects: these debris motes fade on a life*2 ramp
 // and step from 2px to 1px as they die, which the shared module's
@@ -260,7 +265,22 @@ export function initLemmingsGame(): void {
 
   const board = initScoreboard(document.getElementById('highscores'));
 
-  const audio = createGameAudio(LEMMINGS_MUSIC);
+  // Each act has its own score and its own audio instance: the engine takes
+  // one score per createGameAudio, and a form's order runs on into its next
+  // section, so four acts sharing one form would play into each other. Only
+  // the act in force exists, replaced when play crosses into another act
+  // (see playActMusic); the mute preferences are global storage, which each
+  // new instance reads when it is made.
+  let musicAct = 0;
+  let music = createGameAudio(ACT_MUSIC[musicAct]);
+  // Everything below, the header toggles included, talks to this forwarder,
+  // so it always reaches the act that is playing rather than the first one.
+  const audio = new Proxy({} as GameAudio, {
+    get: (_target, key) => {
+      const member = music[key as keyof GameAudio];
+      return typeof member === 'function' ? member.bind(music) : member;
+    }
+  });
   wireSoundToggles(audio);
 
   // --- Mutable game state ---
@@ -543,7 +563,6 @@ export function initLemmingsGame(): void {
     const atTick = concededAt ?? levelTicks;
     setStuckHint(false);
     syncToolbar();
-    audio.stop();
     const won = saved >= def.needed;
     const last = levelIndex === LEVELS.length - 1;
     const bonuses = levelBonuses({
@@ -602,6 +621,12 @@ export function initLemmingsGame(): void {
     endRunBtn.style.display = won && !victory ? 'inline-block' : 'none';
     resultOverlay.style.display = 'flex';
     audio.playSfx(won ? 'score' : 'gameover');
+    // The music is not stopped: a win lands its stinger over the running
+    // score, and a loss muffles it behind the result so a retry carries on
+    // from where it is rather than from bar 1.
+    audio.setDanger(false);
+    if (won) audio.playStinger(bonuses.perfect > 0 ? 'perfect' : 'cleared');
+    else audio.setPaused(true);
     // A run ends on the final victory or a failed quota; either way the run's
     // points face the table. Mid-run level clears keep the board out of the way.
     if (victory || !won) board.show(runScore);
@@ -611,6 +636,7 @@ export function initLemmingsGame(): void {
   function update() {
     if (phase !== 'playing') return;
     levelTicks++;
+    if (def.timeLimit !== undefined) audio.setDanger(def.timeLimit - levelTicks <= CLOCK_URGENT_TICKS);
 
     if (nuking) {
       nukeTimer++;
@@ -1037,8 +1063,8 @@ export function initLemmingsGame(): void {
     if (phase === 'playing' && def.timeLimit !== undefined) {
       const remaining = Math.max(0, def.timeLimit - levelTicks);
       const secs = Math.ceil(remaining / 60);
-      // Urgent from the moment the label first reads 10s (600 ticks) down.
-      const urgent = remaining <= 600;
+      // Urgent from the moment the label first reads 10s down.
+      const urgent = remaining <= CLOCK_URGENT_TICKS;
       ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
       const label = `⏱ ${secs}s`;
@@ -1086,8 +1112,27 @@ export function initLemmingsGame(): void {
     startOverlay.style.display = 'none';
     levelSelectOverlay.style.display = 'none';
     resultOverlay.style.display = 'none';
-    audio.start();
+    playActMusic(index);
     syncToolbar();
+  }
+
+  /**
+   * Plays the act's score for a level. Crossing into another act replaces the
+   * score with the next act's tune, from its top. Anything else, the next
+   * level of the same act or a retry, leaves the score where it is: `start()`
+   * does nothing to music already playing, and the pause a failed level put
+   * on it lifts.
+   */
+  function playActMusic(index: number) {
+    const act = actOf(index);
+    if (act !== musicAct) {
+      music.dispose();
+      musicAct = act;
+      music = createGameAudio(ACT_MUSIC[act]);
+    }
+    audio.setDanger(false);
+    audio.setPaused(false);
+    audio.start();
   }
 
   /** Starts a fresh run (points back to zero) at the given level. */

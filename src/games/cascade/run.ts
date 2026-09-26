@@ -14,6 +14,7 @@ import {
   clearRows,
   settleStep,
   resolveClears,
+  stackTop,
   WELL_W,
   type Well
 } from './well';
@@ -42,6 +43,26 @@ export const LINES_PER_LEVEL = 10;
 
 const LINE_POINTS = [0, 100, 300, 500, 800];
 
+/**
+ * The stack is in danger once its top reaches this row (16 of the well's 20
+ * rows filled), four rows under the spawn: the same line the danger glow is
+ * drawn from.
+ */
+export const DANGER_ENTER_ROW = 4;
+/**
+ * ...and out of it again only once the top is back down to this row. The gap
+ * is the hysteresis: a clear that drops the stack a row or two, and the next
+ * piece that puts it back, would otherwise flip the music every few seconds.
+ */
+export const DANGER_EXIT_ROW = 7;
+/** Seconds left on a countdown at which the run enters its final stretch. */
+export const FINAL_STRETCH = 20;
+
+/** Whether the stack is in danger, given whether it was and where its top now is. */
+export function dangerAfter(was: boolean, top: number): boolean {
+  return was ? top < DANGER_EXIT_ROW : top <= DANGER_ENTER_ROW;
+}
+
 /** Seconds per gravity row at a level; ramps ~15% per level, floored. */
 export function gravityInterval(level: number): number {
   return Math.max(0.07, 0.8 * Math.pow(0.85, level - 1));
@@ -61,7 +82,9 @@ export type RunEvent =
   | { type: 'clear'; rows: number[]; chain: number; points: number }
   | { type: 'levelUp'; level: number }
   | { type: 'topOut' }
-  | { type: 'timeUp' };
+  | { type: 'timeUp' }
+  | { type: 'danger'; on: boolean }
+  | { type: 'finalStretch' };
 
 export interface CascadeRun {
   well: Well;
@@ -98,6 +121,10 @@ export interface CascadeRun {
   timeLimit: number;
   /** Seconds left on the deadline; meaningless while `timeLimit` is 0. */
   timeLeft: number;
+  /** Whether the stack is in danger (see `dangerAfter`); a `danger` event marks each change. */
+  danger: boolean;
+  /** Whether a countdown has reached its last `FINAL_STRETCH` seconds; marked once by `finalStretch`. */
+  finalStretch: boolean;
   drawPiece: () => PieceId;
 }
 
@@ -123,6 +150,8 @@ export function createRun(random: () => number, timeLimit = 0): CascadeRun {
     settleTimer: 0,
     timeLimit,
     timeLeft: timeLimit,
+    danger: false,
+    finalStretch: false,
     drawPiece
   };
 }
@@ -219,10 +248,28 @@ function lockNow(run: CascadeRun, events: RunEvent[]): void {
   else spawnNext(run, events);
 }
 
+/**
+ * Re-reads the stack height after anything that can move it, and marks a
+ * change of danger with an event. A run that has ended leaves it alone.
+ */
+function watchDanger(run: CascadeRun, events: RunEvent[]): void {
+  if (run.phase === 'over') return;
+  const next = dangerAfter(run.danger, stackTop(run.well));
+  if (next === run.danger) return;
+  run.danger = next;
+  events.push({ type: 'danger', on: next });
+}
+
 /** Advance the run by dt seconds; returns the events that fired. */
 export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
   const events: RunEvent[] = [];
-  if (run.phase === 'over') return events;
+  advance(run, dt, events);
+  watchDanger(run, events);
+  return events;
+}
+
+function advance(run: CascadeRun, dt: number, events: RunEvent[]): void {
+  if (run.phase === 'over') return;
 
   // The deadline is wall time, so it burns through the clear flash and the
   // landslide too: a long cascade is worth points, never extra seconds.
@@ -232,7 +279,11 @@ export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
       run.timeLeft = 0;
       run.phase = 'over';
       events.push({ type: 'timeUp' });
-      return events;
+      return;
+    }
+    if (!run.finalStretch && run.timeLeft <= FINAL_STRETCH) {
+      run.finalStretch = true;
+      events.push({ type: 'finalStretch' });
     }
   }
 
@@ -240,21 +291,21 @@ export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
     // The cleared rows are lit; once the flash elapses they vanish and the
     // stack above is left hanging, ready to settle.
     run.clearTimer -= dt;
-    if (run.clearTimer > 0) return events;
+    if (run.clearTimer > 0) return;
     clearRows(run.well, run.clearingRows);
     run.clearingRows = [];
     run.phase = 'settling';
     // Carry the flash's overshoot (clearTimer is now ≤ 0) into the first
     // settle so a long frame doesn't lose time at the phase boundary.
     run.settleTimer = SETTLE_STEP_TIME + run.clearTimer;
-    return events;
+    return;
   }
 
   if (run.phase === 'settling') {
     // The landslide falls one row per tick; a row completed mid-fall re-lights
     // as the next chain link (this is what carries a cascade past ×2).
     run.settleTimer -= dt;
-    if (run.settleTimer > 0) return events;
+    if (run.settleTimer > 0) return;
     run.settleTimer = SETTLE_STEP_TIME;
     const moved = settleStep(run.well);
     const rows = fullRows(run.well);
@@ -263,14 +314,14 @@ export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
     } else if (!moved) {
       spawnNext(run, events);
     }
-    return events;
+    return;
   }
 
   if (grounded(run)) {
     run.gravityTimer = 0;
     run.lockTimer -= dt;
     if (run.lockTimer <= 0) lockNow(run, events);
-    return events;
+    return;
   }
 
   const interval = run.softDrop
@@ -298,7 +349,6 @@ export function tickRun(run: CascadeRun, dt: number): RunEvent[] {
       break;
     }
   }
-  return events;
 }
 
 /** Shared tail for shift/rotate: a grounded nudge re-arms the lock timer. */
@@ -332,5 +382,6 @@ export function hardDrop(run: CascadeRun): RunEvent[] {
   if (run.phase !== 'falling' || !run.piece) return events;
   run.piece = ghostPiece(run);
   lockNow(run, events);
+  watchDanger(run, events);
   return events;
 }

@@ -18,7 +18,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { SNAKE_MUSIC } from './music';
+import { BASE_TEMPO, SNAKE_MUSIC, tempoForStep } from './music';
 import {
   COLS,
   ROWS,
@@ -163,6 +163,9 @@ export function initSnakeGame(): void {
     // Snake ignores bank()'s newRecord (no record toast here), but the
     // per-run baseline still has to reset for its stash gate to work.
     board.beginRun();
+    // The last run left the music wound up to wherever its snake got to.
+    audio.setTempo(BASE_TEMPO);
+    audio.setPaused(false);
     audio.start();
   }
 
@@ -181,14 +184,20 @@ export function initSnakeGame(): void {
     const foodBefore = state.food;
     const arenaBefore = state.arena;
     const wallsBefore = state.walls.size;
+    const eatenBefore = state.foodsEaten;
     const event = step(state);
+    // The music follows the snake: every apple tightens the step, and the
+    // tempo tightens with it, up to the score's cap.
+    if (state.foodsEaten !== eatenBefore) audio.setTempo(tempoForStep(stepInterval(state.foodsEaten)));
     const head = state.snake[0];
     // Walls grow both when a rung arrives and, later, as claimed cells are
     // vacated — either way the bake is stale and has to be redrawn.
     if (state.walls.size !== wallsBefore) boardLayer.rebuild();
     if (state.arena !== arenaBefore) {
       syncArena();
-      audio.playSfx('score');
+      // A rung only arrives on an apple, so the eat effect below already marks
+      // it for a player with the music off; the stinger is the music's answer.
+      audio.playStinger('walls');
       addFloater(WIDTH / 2, HEIGHT / 2, arenaAdvanceText, '#7dd3fc');
       burst(WIDTH / 2, HEIGHT / 2, '#7dd3fc', 22);
     }
@@ -523,6 +532,7 @@ export function initSnakeGame(): void {
     if (gameKeys.has(e.key)) e.preventDefault();
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
       paused = !paused;
+      audio.setPaused(paused);
       return;
     }
     if (paused) return;

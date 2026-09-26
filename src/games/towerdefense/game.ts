@@ -365,6 +365,16 @@ export function initTowerDefenseGame(): void {
   const audio = createGameAudio(TOWERDEFENSE_MUSIC);
   wireSoundToggles(audio);
 
+  /**
+   * The score's wave layer (see music.ts): the lead and the march come in
+   * when marchers are on the field and leave for the build lull. `fade` 0 is
+   * for putting the layer back at a run's start, where nothing is sounding.
+   */
+  function waveLayer(on: boolean, fade?: number) {
+    audio.setLayer('lead', on, fade);
+    audio.setLayer('drums', on, fade);
+  }
+
   function addFloater(tx: number, ty: number, text: string, color: string) {
     const p = isoProject(VIEW, tx, ty);
     fx.floater(p.x, p.y - 24, text, color);
@@ -406,6 +416,9 @@ export function initTowerDefenseGame(): void {
     board.beginRun();
     standDownPrompt.dismiss();
     phase = 'build';
+    // A run starts in the build lull, so on the bed alone, whatever the last
+    // run ended on.
+    waveLayer(false, 0);
     audio.start();
   }
 
@@ -424,9 +437,11 @@ export function initTowerDefenseGame(): void {
     isOpen: () => phase === 'confirm',
     onOpen: () => {
       phase = 'confirm';
+      audio.setPaused(true);
     },
     onCancel: () => {
       phase = 'build';
+      audio.setPaused(false);
     },
     onConfirm: () => endRun('standdown')
   });
@@ -438,6 +453,10 @@ export function initTowerDefenseGame(): void {
     bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
     bannerTimer = 1.8;
     showToast(`⚔️ ${bannerText}`);
+    waveLayer(true);
+    audio.playStinger('launch');
+    // The finale and every endless wave after it march to the horde.
+    if (waveIdx >= AUTHORED_WAVES - 1) audio.setDanger(true);
   }
 
   /**
@@ -460,6 +479,8 @@ export function initTowerDefenseGame(): void {
     standDownPrompt.dismiss();
     const stoodDown = reason === 'standdown';
     audio.playSfx(stoodDown ? 'score' : 'gameover');
+    // A stand-down confirms from the paused prompt; the next run starts clear.
+    audio.setPaused(false);
     audio.stop();
     bankScore();
     // Clearing the whole authored campaign earns the trophy screen for how far
@@ -492,6 +513,9 @@ export function initTowerDefenseGame(): void {
     // wave still moves the run on and still pays its interest, but scores
     // nothing. The economy counts the leaks itself, behind `leak`.
     const { held, interest } = clearWave(eco);
+    // Held or leaked, the field is empty and the lull begins: back to the bed.
+    waveLayer(false);
+    audio.setDanger(false);
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
     bankScore();

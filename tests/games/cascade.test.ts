@@ -7,6 +7,7 @@ import {
   clearRows,
   settleStep,
   resolveClears,
+  stackTop,
   type Well
 } from '../../src/games/cascade/well';
 import {
@@ -36,6 +37,10 @@ import {
   rotate,
   setSoftDrop,
   hardDrop,
+  dangerAfter,
+  DANGER_ENTER_ROW,
+  DANGER_EXIT_ROW,
+  FINAL_STRETCH,
   type CascadeRun,
   type RunEvent
 } from '../../src/games/cascade/run';
@@ -855,5 +860,86 @@ describe('countdown mode', () => {
     expect(log.some(e => e.type === 'topOut')).toBe(true);
     expect(log.some(e => e.type === 'timeUp')).toBe(false);
     expect(run.timeLeft).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The two states the score follows (#375): the stack near the top of the well,
+ * which swaps in the danger variant, and a countdown's last twenty seconds.
+ * Both live in the run state machine so they can be played headlessly here;
+ * `cascade-dom.test.ts` checks that `game.ts` hands them to the music.
+ */
+describe('music cues: danger and the final stretch', () => {
+  const dangerEvents = (events: RunEvent[]) => events.filter(e => e.type === 'danger');
+
+  it('reads the stack height from the highest occupied row', () => {
+    const well = createWell();
+    expect(stackTop(well)).toBe(WELL_H);
+    fill(well, 9, WELL_H - 1);
+    expect(stackTop(well)).toBe(WELL_H - 1);
+    fill(well, 3, 7);
+    expect(stackTop(well)).toBe(7);
+  });
+
+  it('enters danger at the entry row and leaves only at the exit row', () => {
+    expect(DANGER_EXIT_ROW).toBeGreaterThan(DANGER_ENTER_ROW + 1);
+    // Out of danger, the band between the two rows is not enough to enter.
+    expect(dangerAfter(false, DANGER_ENTER_ROW + 1)).toBe(false);
+    expect(dangerAfter(false, DANGER_ENTER_ROW)).toBe(true);
+    // In danger, the same band is not enough to leave: that is the hysteresis.
+    expect(dangerAfter(true, DANGER_ENTER_ROW + 1)).toBe(true);
+    expect(dangerAfter(true, DANGER_EXIT_ROW - 1)).toBe(true);
+    expect(dangerAfter(true, DANGER_EXIT_ROW)).toBe(false);
+  });
+
+  it('marks each change of danger with one event as the stack rises and falls, never flapping in between', () => {
+    const run = createRun(seededRandom(4));
+    // Column 0 is clear of the spawning piece, so a single cell there sets the height.
+    const setTop = (row: number) => {
+      run.well.fill(0);
+      fill(run.well, 0, row);
+    };
+    setTop(DANGER_ENTER_ROW + 1);
+    expect(dangerEvents(tickRun(run, 0.001))).toEqual([]);
+    setTop(DANGER_ENTER_ROW);
+    expect(dangerEvents(tickRun(run, 0.001))).toEqual([{ type: 'danger', on: true }]);
+    expect(run.danger).toBe(true);
+    expect(dangerEvents(tickRun(run, 0.001))).toEqual([]);
+    for (let row = DANGER_ENTER_ROW + 1; row < DANGER_EXIT_ROW; row++) {
+      setTop(row);
+      expect(dangerEvents(tickRun(run, 0.001))).toEqual([]);
+    }
+    setTop(DANGER_EXIT_ROW);
+    expect(dangerEvents(tickRun(run, 0.001))).toEqual([{ type: 'danger', on: false }]);
+    expect(run.danger).toBe(false);
+  });
+
+  it("reports the danger a hard drop causes in the drop's own events", () => {
+    const run = createRun(seededRandom(6));
+    // Every row below the entry row is filled bar column 9, so no row
+    // completes and whatever lands on them reaches the entry row.
+    for (let y = DANGER_ENTER_ROW + 1; y < WELL_H; y++) {
+      for (let x = 0; x < WELL_W - 1; x++) fill(run.well, x, y);
+    }
+    expect(dangerEvents(tickRun(run, 0.001))).toEqual([]);
+    expect(dangerEvents(hardDrop(run))).toEqual([{ type: 'danger', on: true }]);
+  });
+
+  it("marks a countdown's final stretch once, and a marathon's never", () => {
+    const run = createRun(seededRandom(3), FINAL_STRETCH + 5);
+    const log: RunEvent[] = [];
+    for (let n = 0; n < 4; n++) log.push(...tickRun(run, 1));
+    expect(run.finalStretch).toBe(false);
+    log.push(...tickRun(run, 1));
+    expect(run.timeLeft).toBe(FINAL_STRETCH);
+    expect(run.finalStretch).toBe(true);
+    for (let n = 0; n < 40 && run.phase !== 'over'; n++) log.push(...tickRun(run, 1));
+    expect(log.filter(e => e.type === 'finalStretch')).toHaveLength(1);
+    expect(log.findIndex(e => e.type === 'finalStretch')).toBeLessThan(log.findIndex(e => e.type === 'timeUp'));
+
+    const marathon = createRun(seededRandom(3));
+    const quiet: RunEvent[] = [];
+    for (let n = 0; n < 200 && marathon.phase !== 'over'; n++) quiet.push(...tickRun(marathon, 1));
+    expect(quiet.some(e => e.type === 'finalStretch')).toBe(false);
   });
 });

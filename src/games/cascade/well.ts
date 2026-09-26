@@ -32,6 +32,14 @@ export function fullRows(well: Well): number[] {
   return rows;
 }
 
+/** Index of the highest row holding any cell, or WELL_H for an empty well. */
+export function stackTop(well: Well): number {
+  for (let i = 0; i < well.length; i++) {
+    if (well[i] !== 0) return Math.floor(i / WELL_W);
+  }
+  return WELL_H;
+}
+
 /** Empties the given rows in place (the collapse comes separately, so the
  * cleared rows can flash on screen before the landslide). */
 export function clearRows(well: Well, rows: number[]): void {

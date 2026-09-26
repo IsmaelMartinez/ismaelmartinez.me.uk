@@ -1,0 +1,417 @@
+---
+/**
+ * The arcade jukebox (#367): a development-only page for auditioning every
+ * cabinet's score by ear, and for rendering one to a WAV so a rescore can be
+ * compared side by side with the version before it (goal G1 of
+ * docs/plans/2026-09-26-arcade-music-round-2-plan.md).
+ *
+ * Served at /en/dev/jukebox by `npm run dev` only: the route is injected in
+ * astro.config.mjs when the command is `dev`, so the production build never
+ * compiles this file. It is a plain English-only dev tool, so it uses no site
+ * layout and must not import the translations module.
+ *
+ * scripts/render-music.js drives this page headlessly to render every score to
+ * music-renders/<label>/<cabinet>.wav; the `data-*` hooks below are its API.
+ */
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Arcade jukebox (dev)</title>
+  </head>
+  <body>
+    <h1>Arcade jukebox</h1>
+    <p>
+      Every score found in <code>src/games/*/music.ts</code>. Play runs the live engine; Render WAV
+      runs the same scheduler through an <code>OfflineAudioContext</code> and downloads 16-bit mono
+      PCM. The default length is two full loops at the tempo shown, plus the intro once for a score
+      that has one. The controls under a score are its adaptive ones, shown only where the score has
+      them; a render starts from the voices, danger and section they are set to.
+    </p>
+    <ul id="scores" data-jukebox></ul>
+
+    <template id="score-card">
+      <li class="card">
+        <h2 data-name></h2>
+        <p class="meta" data-meta></p>
+        <div class="row">
+          <button type="button" data-play>Play</button>
+          <label>Tempo (bpm) <input type="number" min="20" max="1000" step="1" data-tempo /></label>
+          <label>Loops <input type="number" min="0.5" max="20" step="0.5" value="2" data-loops /></label>
+          <span data-seconds></span>
+          <button type="button" data-render>Render WAV</button>
+          <span data-status></span>
+        </div>
+        <!--
+          The adaptive controls (#370's sections, #371's layers, danger,
+          stingers and pause), built by `mountExtraControls` in the script and
+          only for what this score has. Renders start from the state they show.
+        -->
+        <div class="row" data-extra-controls></div>
+      </li>
+    </template>
+
+    <script>
+      import { createGameAudio, renderScore } from '../games/engine/audio';
+      import type { GameAudio, GameAudioOptions } from '../games/engine/audio';
+      import { encodeWav } from './wav';
+      import {
+        defaultControls,
+        hasLayers,
+        introBeats,
+        loopBeats,
+        renderFileName,
+        renderParts,
+        sectionNames,
+        voiceLabel
+      } from './jukeboxState';
+      import type { ControlState } from './jukeboxState';
+
+      // The same glob and the same discovery rule as tests/games/music.test.ts,
+      // so a new cabinet appears here as soon as its music.ts exists: every
+      // export with a tracks array is a score, named after the cabinet, or
+      // `cabinet/EXPORT` when a module exports several (Critter Rescue's four
+      // acts). Eager, because every score is listed up front.
+      const MODULES = import.meta.glob('../games/*/music.ts', { eager: true }) as Record<
+        string,
+        Record<string, unknown>
+      >;
+
+      function isScore(value: unknown): value is GameAudioOptions {
+        return (
+          typeof value === 'object' &&
+          value !== null &&
+          Array.isArray((value as GameAudioOptions).tracks)
+        );
+      }
+
+      const SCORES: { name: string; music: GameAudioOptions }[] = Object.entries(MODULES)
+        .flatMap(([path, mod]) => {
+          const cabinet = path.split('/').at(-2) as string;
+          const scores = Object.entries(mod).filter(([, value]) => isScore(value));
+          return scores.map(([exported, music]) => ({
+            name: scores.length > 1 ? `${cabinet}/${exported}` : cabinet,
+            music: music as GameAudioOptions
+          }));
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const SAMPLE_RATE = 44100;
+      /** The engine's own fallback when a score sets no tempo. */
+      const DEFAULT_TEMPO = 120;
+
+      /** What a card's Play and Render WAV need from its adaptive controls. */
+      interface ExtraControls {
+        state(): ControlState;
+        /** Called right after `start()`: `start()` begins outside danger at the top, so the controls re-apply. */
+        started(): void;
+        stopped(): void;
+      }
+
+      /** How often the section readout refreshes while a score plays, in ms. */
+      const READOUT_MS = 250;
+
+      function checkbox(parent: HTMLElement, text: string, hook: string, checked: boolean): HTMLInputElement {
+        const label = document.createElement('label');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = checked;
+        box.setAttribute(hook, '');
+        label.append(box, ` ${text}`);
+        parent.append(label);
+        return box;
+      }
+
+      /**
+       * Builds a card's adaptive controls into its `data-extra-controls` row,
+       * each one only when the score has the feature: a toggle per voice for a
+       * score with named or initially silent voices, a section picker and a
+       * readout for a score with a form, a Danger toggle for a form with a
+       * danger variant, a button per stinger, and Pause for every score. The
+       * live controls act on the card's GameAudio; the render reads `state()`.
+       */
+      function mountExtraControls(
+        el: HTMLElement,
+        music: GameAudioOptions,
+        audio: () => GameAudio
+      ): ExtraControls {
+        const control = defaultControls(music);
+        let playing = false;
+
+        if (hasLayers(music)) {
+          const group = document.createElement('span');
+          group.setAttribute('data-voices', '');
+          group.textContent = 'Voices:';
+          music.tracks.forEach((track, t) => {
+            const box = checkbox(group, voiceLabel(track, t), 'data-layer', control.layers[t]);
+            box.dataset.layer = voiceLabel(track, t);
+            box.addEventListener('change', () => {
+              control.layers[t] = box.checked;
+              audio().setLayer(t, box.checked);
+            });
+          });
+          el.append(group);
+        }
+
+        const sections = sectionNames(music);
+        let readout: HTMLSpanElement | null = null;
+        if (sections.length) {
+          const label = document.createElement('label');
+          const picker = document.createElement('select');
+          picker.setAttribute('data-section', '');
+          picker.append(new Option('from the top', ''), ...sections.map(name => new Option(name, name)));
+          picker.addEventListener('change', () => {
+            control.section = picker.value;
+            if (playing && picker.value) audio().setSection(picker.value);
+          });
+          label.append('Section ', picker);
+          readout = document.createElement('span');
+          readout.setAttribute('data-section-now', '');
+          el.append(label, readout);
+        }
+
+        if (music.form?.danger) {
+          const box = checkbox(el, 'Danger', 'data-danger', false);
+          box.addEventListener('change', () => {
+            control.danger = box.checked;
+            if (playing) audio().setDanger(box.checked);
+          });
+        }
+
+        for (const name of Object.keys(music.stingers ?? {})) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = `Stinger: ${name}`;
+          button.dataset.stinger = name;
+          button.addEventListener('click', () => {
+            const played = audio().playStinger(name);
+            if (stingerNote) stingerNote.textContent = played ? '' : 'stingers play over running music: press Play first';
+          });
+          el.append(button);
+        }
+        const stingerNote = music.stingers ? document.createElement('span') : null;
+        if (stingerNote) {
+          stingerNote.setAttribute('data-stinger-note', '');
+          el.append(stingerNote);
+        }
+
+        const pause = checkbox(el, 'Pause', 'data-pause', false);
+        pause.addEventListener('change', () => audio().setPaused(pause.checked));
+
+        let timer: ReturnType<typeof setInterval> | null = null;
+        const showSection = () => {
+          if (!readout) return;
+          const now = playing ? audio().section() : null;
+          readout.textContent = now ? `now: ${now.name}${now.danger ? ' (danger)' : ''}` : 'now: stopped';
+        };
+        showSection();
+
+        return {
+          state: () => ({ ...control, layers: [...control.layers] }),
+          started() {
+            playing = true;
+            const a = audio();
+            if (control.danger) a.setDanger(true);
+            if (control.section) a.setSection(control.section);
+            if (readout && timer === null) timer = setInterval(showSection, READOUT_MS);
+            showSection();
+          },
+          stopped() {
+            playing = false;
+            if (timer !== null) clearInterval(timer);
+            timer = null;
+            showSection();
+          }
+        };
+      }
+
+      /**
+       * Renders a score one voice at a time and sums the voices here, in track
+       * order, rather than rendering the whole score in one pass.
+       *
+       * Chrome sums the connections into an audio node in an order that varies
+       * from run to run, and float addition is not associative, so any node
+       * fed by three or more sounding sources renders differently in its last
+       * bit each time. Measured on 2026-09-26 with plain oscillators into one
+       * gain: two inputs matched on 5 of 5 renders, three inputs differed on
+       * 2 of 5, four on 5 of 5; a whole-score `renderScore` of Cascade or Tank
+       * Duel differed on every pair, and enough samples straddle a 16-bit step
+       * that the WAVs differ too. One voice keeps the bus at two sounding
+       * inputs at most, so each part is repeatable, and the sum is exact in
+       * the fixed order below. Everything after the bus (echo, master volume)
+       * is linear, so the mix is the whole-score render up to that last bit.
+       *
+       * The card's adaptive controls apply per voice through `renderParts`: a
+       * voice switched off is left out of the sum, and every voice starts in
+       * the chosen danger variant and section, so the voices stay in step.
+       */
+      async function renderMix(
+        music: GameAudioOptions,
+        seconds: number,
+        control: ControlState
+      ): Promise<Float32Array | null> {
+        if (!(seconds > 0)) return null;
+        const { parts, from } = renderParts(music, control);
+        // With every voice off the render is silence, at the length a render would have.
+        let mix = parts.length ? null : new Float32Array(Math.ceil(seconds * SAMPLE_RATE));
+        for (const voice of parts) {
+          const part = await renderScore(voice, seconds, SAMPLE_RATE, from);
+          if (!part) return null;
+          const samples = part.getChannelData(0);
+          if (!mix) mix = new Float32Array(samples.length);
+          for (let i = 0; i < mix.length; i++) mix[i] += samples[i];
+        }
+        return mix;
+      }
+
+      let playing: { stop: () => void } | null = null;
+
+      const list = document.querySelector<HTMLUListElement>('[data-jukebox]')!;
+      const template = document.querySelector<HTMLTemplateElement>('#score-card')!;
+
+      for (const { name, music } of SCORES) {
+        const card = (template.content.cloneNode(true) as DocumentFragment)
+          .firstElementChild as HTMLLIElement;
+        card.dataset.score = name;
+        const q = <T extends Element>(sel: string) => card.querySelector<T>(sel)!;
+        const playBtn = q<HTMLButtonElement>('[data-play]');
+        const tempoIn = q<HTMLInputElement>('[data-tempo]');
+        const loopsIn = q<HTMLInputElement>('[data-loops]');
+        const secondsOut = q<HTMLSpanElement>('[data-seconds]');
+        const renderBtn = q<HTMLButtonElement>('[data-render]');
+        const status = q<HTMLSpanElement>('[data-status]');
+
+        const beats = loopBeats(music);
+        const intro = introBeats(music);
+        const baseTempo = music.tempo ?? DEFAULT_TEMPO;
+        q('[data-name]').textContent = name;
+        q('[data-meta]').textContent =
+          `${music.tracks.length} voices, ${beats} beats a loop${intro ? ` after ${intro} of intro` : ''}, ${baseTempo} bpm` +
+          (music.echo ? ', echo' : '') +
+          (music.form ? `, form ${music.form.order.join(' ')}` : '') +
+          (music.form?.danger ? `, danger ${music.form.danger.order.join(' ')}` : '');
+        tempoIn.value = String(baseTempo);
+
+        const tempo = () => {
+          const bpm = Number(tempoIn.value);
+          return Number.isFinite(bpm) && bpm > 0 ? bpm : baseTempo;
+        };
+        const seconds = () => ((Math.max(Number(loopsIn.value) || 0, 0) * beats + intro) * 60) / tempo();
+        const showSeconds = () => {
+          secondsOut.textContent = `= ${seconds().toFixed(1)} s`;
+        };
+        showSeconds();
+
+        let audio: GameAudio | null = null;
+        const getAudio = () => {
+          if (!audio) {
+            audio = createGameAudio(music);
+            // The mute flag is per origin, so this touches only the dev
+            // server's copy; a jukebox that obeyed a muted arcade would be silent.
+            audio.setMusicMuted(false);
+          }
+          return audio;
+        };
+        const extra = mountExtraControls(q<HTMLElement>('[data-extra-controls]'), music, getAudio);
+        const stop = () => {
+          audio?.stop();
+          extra.stopped();
+          playBtn.textContent = 'Play';
+          if (playing?.stop === stop) playing = null;
+        };
+
+        playBtn.addEventListener('click', () => {
+          if (playing?.stop === stop) {
+            stop();
+            return;
+          }
+          playing?.stop();
+          const a = getAudio();
+          a.setTempo(tempo());
+          a.start();
+          extra.started();
+          playBtn.textContent = 'Stop';
+          playing = { stop };
+        });
+
+        tempoIn.addEventListener('input', () => {
+          audio?.setTempo(tempo());
+          showSeconds();
+        });
+        loopsIn.addEventListener('input', showSeconds);
+
+        renderBtn.addEventListener('click', async () => {
+          const length = seconds();
+          renderBtn.disabled = true;
+          status.textContent = 'rendering...';
+          const control = extra.state();
+          const samples = await renderMix({ ...music, tempo: tempo() }, length, control);
+          renderBtn.disabled = false;
+          if (!samples) {
+            status.textContent = 'render failed (no OfflineAudioContext, or a zero length)';
+            return;
+          }
+          const wav = encodeWav(samples, SAMPLE_RATE);
+          const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = renderFileName(name, music, control);
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          status.textContent = `${length.toFixed(1)} s, ${wav.byteLength} bytes`;
+        });
+
+        list.append(card);
+      }
+      list.dataset.ready = String(SCORES.length);
+    </script>
+
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 60rem;
+        margin: 1rem auto;
+        /* Room for the dev toolbar, which floats over the last card. */
+        padding: 0 1rem 5rem;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+      }
+      .card {
+        border: 1px solid #8884;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        margin-bottom: 0.75rem;
+      }
+      h2 {
+        margin: 0.25rem 0;
+        font-size: 1.1rem;
+      }
+      .meta {
+        margin: 0 0 0.5rem;
+        opacity: 0.75;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        align-items: center;
+      }
+      input {
+        width: 5rem;
+      }
+      input[type='checkbox'] {
+        width: auto;
+      }
+      [data-voices] {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+    </style>
+  </body>
+</html>

@@ -59,12 +59,15 @@ function makeContext() {
       gain: param(),
       frequency: param(),
       detune: param(),
+      Q: param(),
       type: 'square',
+      buffer: null as unknown,
       target: null as unknown,
       connect: vi.fn((to: unknown) => {
         n.target = to;
       }),
       disconnect: vi.fn(),
+      setPeriodicWave: vi.fn(),
       start: vi.fn(),
       stop: vi.fn()
     };
@@ -72,6 +75,7 @@ function makeContext() {
   };
   const ctx = {
     currentTime: 0,
+    sampleRate: 44100,
     state: 'running',
     destination,
     resume: vi.fn(() => Promise.resolve()),
@@ -79,6 +83,11 @@ function makeContext() {
     close: vi.fn(() => Promise.resolve()),
     createGain: vi.fn(node),
     createOscillator: vi.fn(node),
+    // A score with pulse duties, drums or a pause filter builds these too.
+    createBiquadFilter: vi.fn(node),
+    createBufferSource: vi.fn(node),
+    createPeriodicWave: vi.fn(() => ({})),
+    createBuffer: vi.fn((_channels: number, length: number) => ({ getChannelData: () => new Float32Array(length) })),
     createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() }))
   };
   vi.stubGlobal('window', {

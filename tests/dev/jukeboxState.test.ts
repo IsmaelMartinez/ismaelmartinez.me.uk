@@ -6,6 +6,7 @@ import {
   introBeats,
   loopBeats,
   renderFileName,
+  renderLoop,
   renderParts,
   renderState,
   sceneNames,
@@ -149,6 +150,21 @@ describe('the jukebox adaptive controls', () => {
       expect(renderFileName('football', SCENED, control)).toBe('football-scene-match-from-turn.wav');
       // A scene the form does not write is never asked for.
       expect(renderState(SCENED, { ...control, scene: 'nope', section: '' })).toEqual({});
+    });
+
+    it('sizes a render to the scene it plays, at its tempo, without the intro', () => {
+      expect(renderLoop(SCENED, defaultControls(SCENED))).toEqual({ beats: 4, intro: 0, tempo: null });
+      expect(renderLoop(SCENED, { ...defaultControls(SCENED), scene: 'match' })).toEqual({ beats: 8, intro: 0, tempo: 150 });
+      expect(renderLoop(ADAPTIVE, { ...defaultControls(ADAPTIVE), danger: true })).toEqual({ beats: 4, intro: 0, tempo: 160 });
+      expect(renderLoop(ADAPTIVE, defaultControls(ADAPTIVE))).toEqual({ beats: 12, intro: 2, tempo: null });
+    });
+
+    it('lets danger win over a scene in the render, its length and its name, as it does live', () => {
+      const both: GameAudioOptions = { ...SCENED, form: { ...SCENED.form!, danger: { order: ['turn'], tempo: 170 } } };
+      const control = { ...defaultControls(both), scene: 'match', danger: true };
+      expect(renderState(both, control)).toEqual({ danger: true });
+      expect(renderFileName('football', both, control)).toBe('football-danger.wav');
+      expect(renderLoop(both, control)).toEqual({ beats: 4, intro: 0, tempo: 170 });
     });
   });
 });

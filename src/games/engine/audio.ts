@@ -1133,9 +1133,9 @@ function trackIndex(tracks: NormTrack[], track: number | string): number {
 export interface RenderState {
   /** Each named or indexed voice on or off; the rest start as their score says. */
   layers?: Record<string, boolean>;
-  /** Starts in the form's danger variant, at its tempo; the same as `scene: 'danger'`. */
+  /** Starts in the form's danger variant, at its tempo; the same as `scene: 'danger'`, and wins over `scene`. */
   danger?: boolean;
-  /** Starts in this scene, at its tempo, skipping the intro; takes precedence over `danger`. */
+  /** Starts in this scene, at its tempo, skipping the intro. */
   scene?: string;
   /** Starts at the first of this section in the order (or the scene's order), skipping the intro. */
   section?: string;
@@ -1181,7 +1181,8 @@ export async function renderScore(
     buses = buildLayers(ctx, bus, tracks, t => picked.get(t) ?? !tracks[t].startsMuted).gains;
   }
   if (state) {
-    const scene = from.scene ?? (from.danger ? DANGER : undefined);
+    // Danger wins, as it does live, where it lands after the scene it interrupts.
+    const scene = from.danger && state.form.scenes.has(DANGER) ? DANGER : from.scene;
     state.pos.scene = scene !== undefined && state.form.scenes.has(scene) ? scene : null;
     if (state.pos.scene !== null || from.section !== undefined) {
       const step = from.section === undefined ? 0 : orderOf(state.form, state.pos.scene).findIndex(p => p.name === from.section);

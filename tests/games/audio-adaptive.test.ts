@@ -480,9 +480,12 @@ describe('renderScore from a given state', () => {
     expectTimes(timesOf(log, 200).slice(0, 1), [8]);
   });
 
-  it('starts in a named scene at its tempo', async () => {
+  it('starts in a named scene at its tempo, and in danger when asked for both', async () => {
     const log = await render(SCENED, 2, { scene: 'shoot' });
     expectTimes(timesOf(log, 600), [0, 0.5, 1, 1.5]);
     expect(timesOf(log, 200)).toEqual([]);
+    const both = await render(SCENED, 2, { scene: 'shoot', danger: true });
+    expectTimes(timesOf(both, 900), [0, 0.5, 1, 1.5]);
+    expect(timesOf(both, 600)).toEqual([]);
   });
 });

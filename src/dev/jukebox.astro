@@ -63,6 +63,7 @@
         hasLayers,
         introBeats,
         loopBeats,
+        renderLoop,
         renderFileName,
         renderParts,
         sceneNames,
@@ -138,7 +139,8 @@
       function mountExtraControls(
         el: HTMLElement,
         music: GameAudioOptions,
-        audio: () => GameAudio
+        audio: () => GameAudio,
+        changed: () => void
       ): ExtraControls {
         const control = defaultControls(music);
         let playing = false;
@@ -167,6 +169,7 @@
           picker.addEventListener('change', () => {
             control.scene = picker.value;
             if (playing) audio().setScene(picker.value || null);
+            changed();
           });
           label.append('Scene ', picker);
           el.append(label);
@@ -194,6 +197,7 @@
           box.addEventListener('change', () => {
             control.danger = box.checked;
             if (playing) audio().setDanger(box.checked);
+            changed();
           });
         }
 
@@ -318,11 +322,15 @@
           const bpm = Number(tempoIn.value);
           return Number.isFinite(bpm) && bpm > 0 ? bpm : baseTempo;
         };
-        const seconds = () => ((Math.max(Number(loopsIn.value) || 0, 0) * beats + intro) * 60) / tempo();
+        // A render sizes itself to the loop it plays: a scene or the danger
+        // variant at its own tempo, without the intro it skips.
+        const seconds = () => {
+          const loop = renderLoop(music, extra.state());
+          return ((Math.max(Number(loopsIn.value) || 0, 0) * loop.beats + loop.intro) * 60) / (loop.tempo ?? tempo());
+        };
         const showSeconds = () => {
           secondsOut.textContent = `= ${seconds().toFixed(1)} s`;
         };
-        showSeconds();
 
         let audio: GameAudio | null = null;
         const getAudio = () => {
@@ -334,7 +342,8 @@
           }
           return audio;
         };
-        const extra = mountExtraControls(q<HTMLElement>('[data-extra-controls]'), music, getAudio);
+        const extra = mountExtraControls(q<HTMLElement>('[data-extra-controls]'), music, getAudio, () => showSeconds());
+        showSeconds();
         const stop = () => {
           audio?.stop();
           extra.stopped();

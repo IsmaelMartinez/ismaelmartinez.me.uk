@@ -25,8 +25,13 @@ import {
  * Mocked so the pause-audio suite below (issue #368) can observe `start` /
  * `stop` without a real AudioContext. Harmless to every other test in this
  * file: none of them assert on sound.
+ *
+ * Built inside `vi.hoisted` because the mock factory below runs when
+ * `initSnakeGame`'s own import of the engine's audio module is resolved,
+ * which happens before this file's own bindings exist (see
+ * `tests/api/scores.test.ts`'s `blob` for the same reasoning).
  */
-const mockAudio = {
+const mockAudio = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   toggleMusicMute: vi.fn(() => false),
@@ -38,7 +43,7 @@ const mockAudio = {
   playSfx: vi.fn(),
   setTempo: vi.fn(),
   dispose: vi.fn()
-};
+}));
 
 vi.mock('../../src/games/engine/audio', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();

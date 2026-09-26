@@ -1737,9 +1737,14 @@ export function initCityGame(): void {
       speedButtons.forEach(b => b.classList.toggle('active', b === btn));
       // The pause speed (0) is the sim's own pause button, so it silences the
       // music the same way the confirm prompts stopping play do not need to:
-      // this one has no overlay, just the speed reading zero.
-      if (speedMult === 0 && !wasPaused) audio.stop();
-      else if (speedMult !== 0 && wasPaused) audio.start();
+      // this one has no overlay, just the speed reading zero. Gated on the
+      // live phase because the speed toolbar sits outside `.game-area` and
+      // stays clickable over the idle and game-over screens, where `phase`
+      // already owns the music and a stray click must not fight it.
+      if (phase === 'play') {
+        if (speedMult === 0 && !wasPaused) audio.stop();
+        else if (speedMult !== 0 && wasPaused) audio.start();
+      }
     });
   });
 

@@ -36,8 +36,13 @@ vi.mock('../../src/games/engine/globalScores', async () =>
  * Mocked so the speed-zero pause suite below (issue #368) can observe
  * `start` / `stop` without a real AudioContext. Harmless to every other test
  * in this file: none of them assert on sound.
+ *
+ * Built inside `vi.hoisted` because the mock factory below runs when
+ * `initCityGame`'s own import of the engine's audio module is resolved,
+ * which happens before this file's own bindings exist (see
+ * `tests/api/scores.test.ts`'s `blob` for the same reasoning).
  */
-const mockAudio = {
+const mockAudio = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   toggleMusicMute: vi.fn(() => false),
@@ -49,7 +54,7 @@ const mockAudio = {
   playSfx: vi.fn(),
   setTempo: vi.fn(),
   dispose: vi.fn()
-};
+}));
 
 vi.mock('../../src/games/engine/audio', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();
@@ -652,5 +657,30 @@ describe('Microcity speed-zero pause leaves the music running (#368)', () => {
 
     document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
     expect(mockAudio.start).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The speed toolbar sits beside the canvas rather than inside
+   * `.game-area`, so neither the start overlay nor the game-over overlay
+   * covers it and a click there always reaches the handler, whatever `phase`
+   * is. The handler must not fight the phase's own ownership of the music:
+   * silence before a run starts, and whatever `gameOver()` already set after
+   * one ends.
+   */
+  it('leaves the music alone when the speed toolbar is clicked outside a live run', () => {
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.start).not.toHaveBeenCalled();
+
+    foundCity();
+    retire();
+    mockAudio.stop.mockClear();
+    mockAudio.start.mockClear();
+
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.start).not.toHaveBeenCalled();
   });
 });

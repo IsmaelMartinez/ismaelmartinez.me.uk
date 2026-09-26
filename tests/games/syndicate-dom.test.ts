@@ -26,7 +26,13 @@ import {
   mountHtml
 } from './dom-helpers';
 
-const mockAudio = {
+/**
+ * Built inside `vi.hoisted` because the mock factory below runs when
+ * `initSyndicateGame`'s own import of the engine's audio module is resolved,
+ * which happens before this file's own bindings exist (see
+ * `tests/api/scores.test.ts`'s `blob` for the same reasoning).
+ */
+const mockAudio = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   toggleMusicMute: vi.fn(() => false),
@@ -38,7 +44,7 @@ const mockAudio = {
   playSfx: vi.fn(),
   setTempo: vi.fn(),
   dispose: vi.fn()
-};
+}));
 
 vi.mock('../../src/games/engine/audio', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();

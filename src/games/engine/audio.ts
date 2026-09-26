@@ -9,7 +9,10 @@
  * Music is multi-voice: a game supplies parallel `tracks` (a lead, a bass, a
  * pad, an arpeggio…) that share one tempo, each advancing on its own note
  * lengths, with its own wave, envelope, octave and optional detuned twin for
- * warmth, and the whole mix can run through a feedback-delay echo send.
+ * warmth, and the whole mix can run through a feedback-delay echo send. A
+ * score can also carry a `form`, a once-only intro and named sections in a
+ * looping order with an optional rest between passes, whose voices cross each
+ * section boundary together.
  *
  * Music and sound effects mute independently, each under its own global
  * localStorage key, so a preference set in one cabinet carries to the rest.
@@ -65,8 +68,9 @@ export interface Note {
   slideFrom?: number;
   /**
    * Glides over the last 60 ms (`SLIDE_TIME`) of the note into the next note of the
-   * line (wrapping at the loop), portamento into the next pitch. Ignored when
-   * the next note is a rest or a drum.
+   * line (wrapping at the loop, or crossing into the voice's line in the next
+   * section), portamento into the next pitch. Ignored when the next note is a
+   * rest or a drum, or when a form's rest comes between them.
    */
   slideNext?: boolean;
 }
@@ -86,8 +90,11 @@ export type Wave = OscillatorType | PulseWave;
 
 /** One simultaneous voice of the music. */
 export interface Track {
-  /** This voice's looping line. */
-  melody: Note[];
+  /**
+   * This voice's looping line. A score with a `form` takes its lines from the
+   * form instead and leaves this out.
+   */
+  melody?: Note[];
   /** Oscillator type or pulse duty. Defaults to 'square'. */
   wave?: Wave;
   /** Relative mix level 0–1 within the music bus. Defaults to 1. */
@@ -120,9 +127,39 @@ export interface EchoOptions {
   mix: number;
 }
 
+/**
+ * A score's form: what plays in what order. Without one a score is a single
+ * block, every track looping its own `melody`. With one, each track keeps its
+ * instrument (wave, envelope, volume, octave, detune, vibrato) and the form
+ * supplies the lines, one per track in the order of `tracks`, all of a
+ * passage the same length in beats. Every voice crosses a section boundary at
+ * the same moment, so a passage cannot slide against the next one.
+ */
+export interface ScoreForm {
+  /** Played once from the top on every `start()`, before the first pass of `order`, and never by the loop. */
+  intro?: Note[][];
+  /** The score's passages by name, each one line per track. */
+  sections: Record<string, Note[][]>;
+  /**
+   * Section names in play order; the order loops. A name may appear more than
+   * once, which is how first- and second-time endings are written: `['a',
+   * 'a-first', 'a', 'a-second']`. A name with no section throws, as `pitch()`
+   * does on a bad note name, so `music.test.ts` catches it.
+   */
+  order: string[];
+  /**
+   * Silence between passes, for cabinets whose sessions run long: after every
+   * `after` passes of `order`, `beats` of nothing, then the order resumes. In
+   * beats so that it scales with the tempo like the music around it.
+   */
+  rest?: { after: number; beats: number };
+}
+
 export interface GameAudioOptions {
   /** Parallel voices; all share `tempo`. */
   tracks: Track[];
+  /** Optional intro, sections and rest; see `ScoreForm`. */
+  form?: ScoreForm;
   /** Tempo in beats per minute. Defaults to 120. */
   tempo?: number;
   /** Master music volume 0–1. Defaults to 0.14 (chiptune sits politely under play). */
@@ -154,6 +191,12 @@ export interface GameAudio {
    * Games whose pace ramps (Cascade's per-level speed-up) lean on this.
    */
   setTempo(bpm: number): void;
+  /**
+   * Where a score with a `form` is: the section playing or about to (the intro
+   * reads as `intro`) and the audio-clock time its first notes start at, which
+   * is the section boundary. Null for a score without a form.
+   */
+  section(): { name: string; start: number } | null;
   /**
    * Stop the music, drop the lifecycle listeners, and close the AudioContext.
    * Runs automatically when the page navigates away (the site uses Astro's
@@ -350,7 +393,7 @@ interface NormTrack {
 /** Fills in per-track defaults. */
 function normalizeTracks(options: GameAudioOptions): NormTrack[] {
   return options.tracks.map(t => ({
-    melody: t.melody,
+    melody: t.melody ?? [],
     wave: t.wave ?? 'square',
     volume: t.volume ?? 1,
     envelope: t.envelope ?? 'pluck',
@@ -516,12 +559,133 @@ interface Cursor {
   idx: number;
 }
 
+/** One passage of a form, a line per track. */
+interface Part {
+  name: string;
+  lines: Note[][];
+}
+
+/** A form with its names resolved and one line per track in every part. */
+interface NormForm {
+  intro: Part | null;
+  order: Part[];
+  /** Passes of `order` between rests; 0 for no rest. */
+  restAfter: number;
+  restBeats: number;
+}
+
+/**
+ * Where a score with a form is. The scheduler advances it, and only `start()`
+ * and an un-mute put it back. `step` is -1 for the intro, otherwise an index
+ * into the order; `pass` counts completed passes of the order; `start` is
+ * when the part's first notes play, the boundary every voice crosses together.
+ */
+interface FormPosition {
+  step: number;
+  pass: number;
+  start: number;
+}
+
+/** A score's form and where it has got to, for one performance of it. */
+interface FormState {
+  form: NormForm;
+  pos: FormPosition;
+}
+
+/** The beats a line lasts as the scheduler plays it: a non-positive length still steps one beat. */
+function lineBeats(line: Note[]): number {
+  return line.reduce((sum, n) => sum + (n.beats > 0 ? n.beats : 1), 0);
+}
+
+/** How long a part lasts: its longest line. */
+function partBeats(part: Part): number {
+  return Math.max(0, ...part.lines.map(lineBeats));
+}
+
+/** Resolves a score's form, or null for a score without one. */
+function normalizeForm(options: GameAudioOptions): NormForm | null {
+  const form = options.form;
+  if (!form) return null;
+  const voices = options.tracks.length;
+  const fit = (name: string, lines: Note[][]): Part => ({
+    name,
+    lines: Array.from({ length: voices }, (_, t) => lines[t] ?? [])
+  });
+  const order = form.order.map(name => {
+    const lines = Object.hasOwn(form.sections, name) ? form.sections[name] : undefined;
+    if (!lines) throw new Error(`score form: no section named "${name}"`);
+    return fit(name, lines);
+  });
+  const intro = form.intro ? fit('intro', form.intro) : null;
+  const after = Math.floor(form.rest?.after ?? 0);
+  const beats = form.rest?.beats ?? 0;
+  const resting = after >= 1 && Number.isFinite(beats) && beats > 0;
+  return {
+    intro: intro && partBeats(intro) > 0 ? intro : null,
+    // An order with no notes anywhere would advance forever without moving
+    // the clock, so it plays as silence instead.
+    order: order.some(part => partBeats(part) > 0) ? order : [],
+    restAfter: resting ? after : 0,
+    restBeats: resting ? beats : 0
+  };
+}
+
+/** The top of a form: the intro if it has one, else the first section. */
+function formTop(form: NormForm, at: number): FormPosition {
+  return { step: form.intro ? -1 : 0, pass: 0, start: at };
+}
+
+function partAt(form: NormForm, step: number): Part {
+  return step < 0 ? (form.intro as Part) : form.order[step];
+}
+
+/** What follows the current part, and whether a rest comes first: the one place the form's next move is decided. */
+function nextStep(form: NormForm, pos: FormPosition): { step: number; pass: number; rest: boolean } {
+  if (pos.step + 1 < form.order.length) return { step: pos.step + 1, pass: pos.pass, rest: false };
+  const pass = pos.pass + 1;
+  return { step: 0, pass, rest: form.restAfter > 0 && pass % form.restAfter === 0 };
+}
+
+/**
+ * Schedules one note of a line onto `bus`. `following` is the note the line
+ * goes on to, for a `slideNext`, or undefined when there is none to glide to.
+ */
+function playNote(
+  ctx: BaseAudioContext,
+  bus: AudioNode,
+  track: NormTrack,
+  note: Note,
+  following: Note | undefined,
+  at: number,
+  dur: number
+): void {
+  const peak = VOICE_PEAK * track.volume * noteGain(note.gain);
+  if (note.drum) {
+    playDrum(ctx, note.drum, at, peak, bus);
+    return;
+  }
+  // Pads play their full length so they sustain and connect; plucks trim
+  // to leave the terse gap that reads as chiptune.
+  const playDur = track.envelope === 'pad' ? dur : dur * 0.9;
+  const shift = (f: number | undefined): number | undefined =>
+    f !== undefined && f > 0 ? f * Math.pow(2, track.octaveShift) : f;
+  const freq = note.freq > 0 ? note.freq * Math.pow(2, track.octaveShift) : note.freq;
+  const motion: ToneMotion = {
+    vibrato: track.vibrato,
+    slideFrom: shift(note.slideFrom),
+    slideTo: note.slideNext && following && !following.drum ? shift(following.freq) : undefined
+  };
+  playTone(ctx, freq, at, playDur, track.wave, peak, bus, track.envelope, track.detune, motion);
+}
+
 /**
  * Schedules every track's notes that start before `horizon` onto `bus`,
  * advancing each cursor past them. This is the whole of the scheduler: the
  * live engine calls it every 25 ms with a horizon ~100 ms ahead, and
  * `renderScore` calls it once with the horizon at the end of the render.
  * `silent` advances the cursors without making any nodes (the music mute).
+ * A score with a form goes to `scheduleForm`; one without keeps every voice
+ * wrapping its own line, exactly as it always has.
  */
 function scheduleWindow(
   ctx: BaseAudioContext,
@@ -530,8 +694,13 @@ function scheduleWindow(
   cursors: Cursor[],
   horizon: number,
   secondsPerBeat: number,
-  silent: boolean
+  silent: boolean,
+  state: FormState | null
 ): void {
+  if (state) {
+    scheduleForm(ctx, bus, tracks, cursors, horizon, secondsPerBeat, silent, state);
+    return;
+  }
   for (let t = 0; t < tracks.length; t++) {
     const track = tracks[t];
     if (track.melody.length === 0) continue;
@@ -550,29 +719,99 @@ function scheduleWindow(
       // When muted, keep each cursor advancing but skip oscillator creation so
       // we don't burn CPU synthesising silent tones; timing stays in sync on unmute.
       if (!silent) {
-        const peak = VOICE_PEAK * track.volume * noteGain(note.gain);
-        if (note.drum) {
-          playDrum(ctx, note.drum, v.next, peak, bus);
-        } else {
-          // Pads play their full length so they sustain and connect; plucks trim
-          // to leave the terse gap that reads as chiptune.
-          const playDur = track.envelope === 'pad' ? dur : dur * 0.9;
-          const shift = (f: number | undefined): number | undefined =>
-            f !== undefined && f > 0 ? f * Math.pow(2, track.octaveShift) : f;
-          const freq = note.freq > 0 ? note.freq * Math.pow(2, track.octaveShift) : note.freq;
-          const following = track.melody[(v.idx + 1) % track.melody.length];
-          const motion: ToneMotion = {
-            vibrato: track.vibrato,
-            slideFrom: shift(note.slideFrom),
-            slideTo: note.slideNext && !following.drum ? shift(following.freq) : undefined
-          };
-          playTone(ctx, freq, v.next, playDur, track.wave, peak, bus, track.envelope, track.detune, motion);
-        }
+        playNote(ctx, bus, track, note, track.melody[(v.idx + 1) % track.melody.length], v.next, dur);
       }
       v.next += dur;
       v.idx = (v.idx + 1) % track.melody.length;
     }
   }
+}
+
+/**
+ * The form half of `scheduleWindow`. Each voice plays its line of the current
+ * part and then waits at its end; once every voice has finished, the form
+ * moves on and every cursor restarts at one shared boundary, the latest of
+ * their ends plus any rest. Snapping to one time is what keeps the voices
+ * together across boundaries, whatever rounding or tempo change came before.
+ */
+function scheduleForm(
+  ctx: BaseAudioContext,
+  bus: AudioNode,
+  tracks: NormTrack[],
+  cursors: Cursor[],
+  horizon: number,
+  secondsPerBeat: number,
+  silent: boolean,
+  { form, pos }: FormState
+): void {
+  if (form.order.length === 0 || tracks.length === 0) return;
+  for (;;) {
+    const lines = partAt(form, pos.step).lines;
+    let playing = false;
+    for (let t = 0; t < tracks.length; t++) {
+      const line = lines[t];
+      const v = cursors[t];
+      while (v.idx < line.length && v.next < horizon) {
+        const note = line[v.idx];
+        const dur = note.beats * secondsPerBeat;
+        // The same guard as above: a bad length still steps one beat.
+        if (dur <= 0) {
+          v.next += secondsPerBeat;
+          v.idx++;
+          continue;
+        }
+        if (!silent) {
+          let following: Note | undefined = line[v.idx + 1];
+          if (!following) {
+            const after = nextStep(form, pos);
+            following = after.rest ? undefined : partAt(form, after.step).lines[t][0];
+          }
+          playNote(ctx, bus, tracks[t], note, following, v.next, dur);
+        }
+        v.next += dur;
+        v.idx++;
+      }
+      if (v.idx < line.length) playing = true;
+    }
+    if (playing) return;
+    // The form moves on only once the boundary is inside the window, so until
+    // then it still names the part that is sounding.
+    const end = Math.max(...cursors.map(v => v.next));
+    if (end >= horizon) return;
+    const after = nextStep(form, pos);
+    pos.step = after.step;
+    pos.pass = after.pass;
+    pos.start = end + (after.rest ? form.restBeats * secondsPerBeat : 0);
+    for (const v of cursors) {
+      v.next = pos.start;
+      v.idx = 0;
+    }
+  }
+}
+
+/**
+ * How long a score lasts at `tempo` (its own when left out), in seconds: the
+ * once-only intro, one pass of the loop, and the rest that follows every
+ * `restEvery` passes (both 0 without one). A score without a form is one pass
+ * of its longest line. The intro and the rest are kept apart from the pass
+ * because neither is music the player hears over and over.
+ */
+export function scoreSeconds(
+  options: GameAudioOptions,
+  tempo = options.tempo
+): { intro: number; pass: number; rest: number; restEvery: number } {
+  const spb = beatSeconds(tempo);
+  const form = normalizeForm(options);
+  if (!form) {
+    const longest = Math.max(0, ...options.tracks.map(t => lineBeats(t.melody ?? [])));
+    return { intro: 0, pass: longest * spb, rest: 0, restEvery: 0 };
+  }
+  return {
+    intro: (form.intro ? partBeats(form.intro) : 0) * spb,
+    pass: form.order.reduce((sum, part) => sum + partBeats(part), 0) * spb,
+    rest: form.restBeats * spb,
+    restEvery: form.restAfter
+  };
 }
 
 /**
@@ -635,7 +874,9 @@ export async function renderScore(
   const { bus } = buildMusicGraph(ctx, options.volume ?? DEFAULT_VOLUME, options.echo);
   const tracks = normalizeTracks(options);
   const cursors = tracks.map(() => ({ next: 0, idx: 0 }));
-  scheduleWindow(ctx, bus, tracks, cursors, seconds, beatSeconds(options.tempo), false);
+  const form = normalizeForm(options);
+  const state = form && { form, pos: formTop(form, 0) };
+  scheduleWindow(ctx, bus, tracks, cursors, seconds, beatSeconds(options.tempo), false, state);
   return ctx.startRendering();
 }
 
@@ -659,6 +900,9 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   // One scheduling cursor per track: they advance independently on their own
   // note lengths so a slow bass and a busy lead stay locked to the same clock.
   const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0 }));
+  // A score with a form also carries where in the form it is; null without one.
+  const formPlan = normalizeForm(options);
+  const form: FormState | null = formPlan && { form: formPlan, pos: formTop(formPlan, 0) };
   let scheduler: ReturnType<typeof setInterval> | null = null;
 
   /** Lazily create the AudioContext + music graph on first gesture. Returns null if unsupported. */
@@ -685,16 +929,24 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   function scheduleAhead(): void {
     if (!ctx || !musicBus || tracks.length === 0) return;
     // Schedule every track's notes due within the next ~100ms window.
-    scheduleWindow(ctx, musicBus, tracks, voice, ctx.currentTime + 0.1, secondsPerBeat, musicMuted);
+    scheduleWindow(ctx, musicBus, tracks, voice, ctx.currentTime + 0.1, secondsPerBeat, musicMuted, form);
   }
 
-  /** Puts every voice back at the top of its line, together. */
-  function resetCursors(): void {
+  /**
+   * Puts every voice back at the top of its line, together. With a form,
+   * `fromTop` goes back to the intro (or the first section) and otherwise the
+   * section the form is in starts again.
+   */
+  function resetCursors(fromTop: boolean): void {
     if (!ctx) return;
     const t0 = ctx.currentTime + 0.05;
     for (const v of voice) {
       v.next = t0;
       v.idx = 0;
+    }
+    if (form) {
+      if (fromTop) form.pos = formTop(form.form, t0);
+      else form.pos.start = t0;
     }
   }
 
@@ -708,7 +960,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // Ramped rather than assigned, because stop() ducks this same gain and a
     // scheduled ramp outranks a later write to `.value`.
     musicMaster.gain.setTargetAtTime(musicMuted ? 0 : volume, context.currentTime, 0.02);
-    resetCursors();
+    resetCursors(true);
     scheduler = setInterval(scheduleAhead, 25);
     scheduleAhead();
   }
@@ -746,8 +998,9 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // sound comes back: the plucked voices return within the lookahead window
     // and a sustained one stays missing for up to its whole note, which makes
     // the mix reassemble itself in stages. Restarting every cursor together
-    // brings it back in one piece, from the top of the loop.
-    if (wasMuted && !value && running) resetCursors();
+    // brings it back in one piece, from the top of the loop, or with a form
+    // from the top of the section it had reached (a rest it was in ends early).
+    if (wasMuted && !value && running) resetCursors(false);
   }
 
   function toggleMusicMute(): boolean {
@@ -892,7 +1145,14 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         for (const v of voice) {
           if (v.next > now) v.next = now + (v.next - now) * ratio;
         }
+        // A boundary still ahead (a rest, or a section the voices have queued)
+        // moves with them, by the same arithmetic so it stays equal to theirs.
+        if (form && form.pos.start > now) form.pos.start = now + (form.pos.start - now) * ratio;
       }
+    },
+    section() {
+      if (!form) return null;
+      return { name: partAt(form.form, form.pos.step)?.name ?? '', start: form.pos.start };
     },
     dispose
   };

@@ -23,7 +23,7 @@
  * time round, and never came back. All three voices are 48 beats here, which
  * `tests/games/music.test.ts` now pins.
  */
-import { p, REST, type GameAudioOptions } from '../engine';
+import { p, REST, type GameAudioOptions, type MusicProfile } from '../engine';
 
 /**
  * The score's own tempo, the pace it was written at and the one the group
@@ -36,6 +36,20 @@ import { p, REST, type GameAudioOptions } from '../engine';
  * the sustained pad sliding behind the plucked ones.
  */
 export const BASE_TEMPO = 132;
+
+/**
+ * The final's tempo, the fastest `stageTempo()` winds the score to. It lives
+ * here with `BASE_TEMPO` because ADR 003 sizes a ramping loop at its fastest
+ * tempo, so this is the number the score is measured against.
+ */
+export const FINAL_TEMPO = 152;
+
+/** A run is a whole tournament, so the loop is held to the long-session floor at the final's tempo. */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'long',
+  fastestTempo: FINAL_TEMPO,
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const FOOTBALL_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,

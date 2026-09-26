@@ -26,7 +26,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { CASCADE_MUSIC, BASE_TEMPO } from './music';
+import { CASCADE_MUSIC, BASE_TEMPO, MAX_TEMPO } from './music';
 import { WELL_W, WELL_H } from './well';
 import { cellsOf, ROTATIONS, type PieceId } from './piece';
 import {
@@ -85,10 +85,10 @@ const PREVIEW_BOUNDS = ROTATIONS.map(states => {
 const DAS_DELAY = 0.17;
 const DAS_REPEAT = 0.05;
 
-// BASE_TEMPO is the score's own starting tempo and lives with it in music.ts;
-// these two are the ramp policy that winds it up as the level climbs.
+// BASE_TEMPO and the MAX_TEMPO ceiling belong to the score and live with it in
+// music.ts (the score is sized at the ceiling); this step is the ramp policy
+// that winds it up as the level climbs.
 const TEMPO_PER_LEVEL = 9;
-const MAX_TEMPO = 240;
 
 type Phase = 'idle' | 'play' | 'over';
 

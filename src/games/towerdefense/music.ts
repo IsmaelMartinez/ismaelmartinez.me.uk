@@ -12,7 +12,13 @@
  * genuinely wants to resolve — which is what makes those two bars read as
  * pressure rather than colour.
  */
-import { p, type GameAudioOptions } from '../engine';
+import { p, type GameAudioOptions, type MusicProfile } from '../engine';
+
+/** A run is eighteen waves, about thirteen minutes, under one score. */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'long',
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const TOWERDEFENSE_MUSIC: GameAudioOptions = {
   tempo: 136,

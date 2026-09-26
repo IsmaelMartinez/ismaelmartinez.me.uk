@@ -23,7 +23,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { BASE_TEMPO, FOOTBALL_MUSIC } from './music';
+import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC } from './music';
 import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
 import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
 import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
@@ -682,7 +682,7 @@ export function initFootballGame(): void {
    * sliding behind them.
    */
   function stageTempo(state: RunState): number {
-    if (state.stage === 'final') return 152;
+    if (state.stage === 'final') return FINAL_TEMPO;
     if (state.stage === 'semi') return 143;
     return BASE_TEMPO;
   }

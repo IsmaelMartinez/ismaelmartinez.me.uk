@@ -8,7 +8,13 @@
  * the lead rather than sitting on one note, because a folk tune wants
  * company, not a drone.
  */
-import { p, REST, type GameAudioOptions } from '../engine';
+import { p, REST, type GameAudioOptions, type MusicProfile } from '../engine';
+
+/** A run is up to twenty-five levels under one score. */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'long',
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const LEMMINGS_MUSIC: GameAudioOptions = {
   tempo: 136,

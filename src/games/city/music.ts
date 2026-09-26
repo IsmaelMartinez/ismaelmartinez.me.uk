@@ -12,7 +12,13 @@
  * of this cabinet, so bars mostly place three chord tones and then leave a beat
  * alone; only the middle four bars fill in, which is what makes them the peak.
  */
-import { p, REST, type GameAudioOptions } from '../engine';
+import { p, REST, type GameAudioOptions, type MusicProfile } from '../engine';
+
+/** A city is built over many minutes, the longest sessions in the arcade. */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'long',
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const CITY_MUSIC: GameAudioOptions = {
   tempo: 104,

@@ -8,7 +8,13 @@
  * A then a B answer) over a progression that actually travels — C Am F G, then
  * C Em F-G C — so the tune resolves rather than restarts.
  */
-import { p, REST, type GameAudioOptions } from '../engine';
+import { p, REST, type GameAudioOptions, type MusicProfile } from '../engine';
+
+/** Deliberately the minimal cabinet, and its runs are short. */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'minimal',
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const SNAKE_MUSIC: GameAudioOptions = {
   tempo: 134,

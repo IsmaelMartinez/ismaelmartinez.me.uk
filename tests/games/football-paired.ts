@@ -15,13 +15,13 @@
 import { createMatch, tickMatch, type MatchState } from '../../src/games/football/match';
 import { teamByCode, type Team } from '../../src/games/football/teams';
 import { competent, expert, type Policy } from './football-policies';
-import { lcg } from './football-shot-harness';
+import { seededRandom } from './seeded-random';
 import { meanT } from './paired-stats';
 
 export const DT = 1 / 60;
 
 /** A match cannot legitimately outlast this many ticks; a hang fails loudly. */
-export const TICK_CAP = 12000;
+const TICK_CAP = 12000;
 
 export const DIFFICULTIES = [0.25, 0.45, 0.65, 0.85] as const;
 
@@ -42,7 +42,7 @@ export function playMatch(
   teams: [Team, Team] = [HOME, AWAY],
   knockout = false
 ): Played {
-  const m = createMatch({ rng: lcg(seed), difficulty, teams, knockout });
+  const m = createMatch({ rng: seededRandom(seed), difficulty, teams, knockout });
   let ticks = 0;
   while (m.phase !== 'over' && ticks < TICK_CAP) {
     tickMatch(m, DT, policy(m, DT));
@@ -106,12 +106,12 @@ export interface Paired {
   tail: Tail;
 }
 
-export function points(m: MatchState): number {
+function points(m: MatchState): number {
   if (m.score[0] > m.score[1]) return 2;
   return m.score[0] === m.score[1] ? 1 : 0;
 }
 
-export function goalDiff(m: MatchState): number {
+function goalDiff(m: MatchState): number {
   return m.score[0] - m.score[1];
 }
 
@@ -130,7 +130,7 @@ export function goalDiff(m: MatchState): number {
  * string precisely so that two different policies cannot be given the same one:
  * the mapping from name to policy lives here, next to the cache it feeds.
  */
-export type ControlName = 'competent' | 'expert';
+type ControlName = 'competent' | 'expert';
 
 const CONTROLS: Record<ControlName, () => Policy> = { competent, expert };
 

@@ -7,6 +7,7 @@
 // the framebuffer has its own 5x7 bitmap font and cannot call useTranslations
 // at runtime, so the page hands the strings over at init.
 import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import ToastArea from '../../../components/ToastArea.astro';
@@ -135,37 +136,13 @@ const t = useTranslations(lang);
     padding: var(--space-2xl) 0;
   }
 
-  .back-link {
-    display: inline-block;
-    margin-bottom: var(--space-xl);
-    color: var(--color-text-muted);
-    transition: color 0.2s ease;
-  }
-
-  .back-link:hover {
-    color: var(--color-accent);
-  }
-
   .game-container {
     max-width: 720px;
-    margin: 0 auto;
   }
 
   .game-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     gap: var(--space-lg);
-    flex-wrap: wrap;
     margin-bottom: var(--space-xs);
-  }
-
-  .game-header h1 {
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin: 0;
   }
 
   .football-emoji {
@@ -187,11 +164,7 @@ const t = useTranslations(lang);
   }
 
   .game-area {
-    position: relative;
     background: #000;
-    border-radius: 1rem;
-    overflow: hidden;
-    border: 2px solid var(--color-border);
     /* The cabinet's own bezel: whatever the integer scale leaves over. */
     display: flex;
     justify-content: center;
@@ -233,7 +206,6 @@ const t = useTranslations(lang);
   .pause-btn:hover {
     border-color: #22c55e;
   }
-
 
   .pad {
     display: flex;
@@ -319,13 +291,6 @@ const t = useTranslations(lang);
     border-color: rgba(34, 197, 94, 0.6);
   }
 
-  .hint {
-    margin-top: var(--space-sm);
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-align: center;
-  }
-
   .instructions {
     margin: var(--space-md) auto 0;
     max-width: 60ch;
@@ -335,11 +300,6 @@ const t = useTranslations(lang);
   }
 
   @media (max-width: 600px) {
-    .game-header {
-      justify-content: center;
-      text-align: center;
-    }
-
     .tagline {
       text-align: center;
     }

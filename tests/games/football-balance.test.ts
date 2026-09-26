@@ -60,7 +60,7 @@ import {
 import { POLICIES, type PolicyName } from './football-policies';
 import { AWAY, DIFFICULTIES, DT, HOME, playMatch } from './football-paired';
 import { band, sweep, MATCHES } from './football-cells';
-import { lcg } from './football-shot-harness';
+import { seededRandom } from './seeded-random';
 
 /** Runs per policy for the run-level bands; each run is three to five matches. */
 const RUNS = 200;
@@ -385,7 +385,7 @@ describe('7.4 flow', () => {
       const races = 200;
       for (let i = 0; i < races; i++) {
         const policy = POLICIES.competent();
-        const m = createMatch({ rng: lcg(9001 + i * 7919), difficulty: d, teams: [HOME, AWAY] });
+        const m = createMatch({ rng: seededRandom(9001 + i * 7919), difficulty: d, teams: [HOME, AWAY] });
         // Drop a dead ball on the centre spot with both sides in their kickoff
         // shape and nobody in possession: a true 50-50 that only the speed
         // ledger and the chase can decide.
@@ -418,8 +418,8 @@ const STICK = [-0.8, -0.4, 0, 0.4, 0.8];
  * always dives".
  */
 function playShootout(seed: number, difficulty: number): ShootoutState {
-  const s = createShootout({ rng: lcg(seed), difficulty });
-  const pick = lcg(seed * 31 + 17);
+  const s = createShootout({ rng: seededRandom(seed), difficulty });
+  const pick = seededRandom(seed * 31 + 17);
   let seen = -1;
   let zone = 2;
   let guard = 0;
@@ -520,7 +520,7 @@ interface RunOutcome {
 }
 
 function playRun(name: PolicyName, seed: number): RunOutcome {
-  const rng = lcg(seed);
+  const rng = seededRandom(seed);
   const code = TEAMS[Math.floor(rng() * TEAMS.length)].code;
   const run = createRun(rng, code);
   let seconds = SCREEN_TEAM_SELECT;

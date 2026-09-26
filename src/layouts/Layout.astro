@@ -1,13 +1,13 @@
 ---
 import { ClientRouter } from 'astro:transitions';
-import { languages, useTranslations, getLocalizedPath } from '../i18n/translations';
+import { locales, localeMeta, useTranslations, getLocalizedPath, type Locale } from '../i18n/translations';
 import { connectAnchorPath } from '../data/links';
 import '../styles/global.css';
 
 interface Props {
   title: string;
   description?: string;
-  lang?: 'en' | 'es' | 'cat';
+  lang?: Locale;
   ogType?: 'website' | 'article';
   publishedDate?: Date;
   tags?: string[];
@@ -25,20 +25,19 @@ const currentPath = tagDetailMatch ? '/tags/' : rawPath;
 const canonicalUrl = customCanonical || new URL(Astro.url.pathname, Astro.site).href;
 const ogImageUrl = ogImage ? new URL(ogImage, Astro.site).href : new URL('/og-image.png', Astro.site).href;
 const fullTitle = `${title} | Ismael Martinez Ramos`;
-const locales = ['en', 'es', 'cat'] as const;
-const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 ---
 
 <!doctype html>
-<html lang={lang === 'cat' ? 'ca' : lang}>
+<html lang={localeMeta[lang].tag}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Security -->
-    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    {/* Only the referrer policy and the CSP work as meta tags; nosniff and
+        Permissions-Policy are response headers with no meta form, so they
+        live in vercel.json alone. */}
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
     <!-- connect-src must list Umami's collect host as well as its script host:
          script.js is served from cloud.umami.is but POSTs to
          gateway.umami.is/api/send. If Umami moves that endpoint again, every
@@ -58,7 +57,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImageUrl} />
     <meta property="og:site_name" content="Ismael Martinez Ramos" />
-    <meta property="og:locale" content={{ en: 'en_GB', es: 'es_ES', cat: 'ca_ES' }[lang]} />
+    <meta property="og:locale" content={localeMeta[lang].og} />
     {publishedDate && <meta property="article:published_time" content={publishedDate.toISOString()} />}
     {tags?.map(tag => <meta property="article:tag" content={tag} />)}
 
@@ -70,7 +69,7 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
     <!-- hreflang alternates -->
     {locales.map(locale => (
-      <link rel="alternate" hreflang={hreflangMap[locale]} href={new URL(getLocalizedPath(currentPath, locale), Astro.site).href} />
+      <link rel="alternate" hreflang={localeMeta[locale].tag} href={new URL(getLocalizedPath(currentPath, locale), Astro.site).href} />
     ))}
     <link rel="alternate" hreflang="x-default" href={new URL(getLocalizedPath(currentPath, 'en'), Astro.site).href} />
 
@@ -116,12 +115,12 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
 
         <div class="nav-actions">
           <div class="lang-switcher" role="navigation" aria-label={t('nav.languageSwitcher')}>
-            {Object.entries(languages).map(([code, _name]) => (
+            {locales.map(code => (
               <a
                 href={getLocalizedPath(currentPath, code)}
                 class:list={['lang-link', { active: lang === code }]}
                 aria-current={lang === code ? 'true' : undefined}
-                lang={hreflangMap[code]}
+                lang={localeMeta[code].tag}
               >
                 {code.toUpperCase()}
               </a>
@@ -545,12 +544,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
     transform: scaleX(1);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .nav-links a::after {
-      transition: none;
-    }
-  }
-
   .nav-actions {
     display: flex;
     align-items: center;
@@ -702,7 +695,6 @@ const hreflangMap: Record<string, string> = { en: 'en', es: 'es', cat: 'ca' };
   @media (max-width: 768px) {
     .nav-links {
       gap: var(--space-md);
-      font-size: 0.875rem;
     }
   }
 

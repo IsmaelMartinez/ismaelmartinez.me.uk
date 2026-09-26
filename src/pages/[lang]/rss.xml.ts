@@ -1,14 +1,14 @@
 import rss from '@astrojs/rss';
 import { getCollection } from 'astro:content';
 import type { APIContext } from 'astro';
-import { locales } from '../../i18n/translations';
+import { locales, localeMeta, type Locale } from '../../i18n/translations';
 
 export function getStaticPaths() {
   return locales.map(lang => ({ params: { lang } }));
 }
 
 export async function GET(context: APIContext) {
-  const lang = context.params.lang!;
+  const lang = context.params.lang as Locale;
   const articles = await getCollection('articles', ({ id, data }) => {
     return id.startsWith(`${lang}/`) && !data.draft;
   });
@@ -28,7 +28,6 @@ export async function GET(context: APIContext) {
       link: `/${lang}/articles/${article.id.replace(`${lang}/`, '')}/`,
       categories: article.data.tags,
     })),
-    // ISO 639-1 for the feed language; the Catalan route segment is `cat`.
-    customData: `<language>${lang === 'cat' ? 'ca' : lang}</language>`,
+    customData: `<language>${localeMeta[lang].tag}</language>`,
   });
 }

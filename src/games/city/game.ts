@@ -27,11 +27,13 @@ import {
   rotatePoint,
   createViewRotator,
   createGameAudio,
-  wireChannelButton,
+  wireSoundToggles,
   createToaster,
   createEffects,
   type IsoView,
-  type Rotation
+  type Rotation,
+  mountCabinet,
+  createConfirmPrompt
 } from '../engine';
 import { CITY_MUSIC } from './music';
 import {
@@ -154,21 +156,9 @@ const buildingHeight = (tile: CityTile): number => {
 type Phase = 'idle' | 'play' | 'confirm' | 'over';
 
 export function initCityGame(): void {
-  const root = document.getElementById('city-root');
-  const canvasEl = document.getElementById('game-canvas') as HTMLCanvasElement | null;
-  if (!root || !canvasEl) return;
-  // A ClientRouter swap brings a fresh, unwired root; the flag only blocks
-  // re-entry on a root this module has already wired.
-  if (root.dataset.gameWired) return;
-  const canvas: HTMLCanvasElement = canvasEl;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  const ctx: CanvasRenderingContext2D = context;
-  // Stamped only once wiring is certain to proceed — a root marked wired on
-  // a failed getContext would block the after-swap retry for good.
-  root.dataset.gameWired = 'true';
-
-  const el = (id: string) => document.getElementById(id) as HTMLElement;
+  const mounted = mountCabinet('city-root');
+  if (!mounted) return;
+  const { root, canvas, ctx, el } = mounted;
   const startOverlay = el('start-overlay');
   const overOverlay = el('over-overlay');
   const startBtn = el('start-btn');
@@ -242,8 +232,7 @@ export function initCityGame(): void {
   if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
 
   const audio = createGameAudio(CITY_MUSIC);
-  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
-  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
+  wireSoundToggles(audio);
 
   const makeView = (rot: Rotation): IsoView => ({
     halfW: HALF_W,
@@ -405,64 +394,33 @@ export function initCityGame(): void {
     refreshDerivedState();
     renderObjective();
     board.hide();
-    retireOverlay.style.display = 'none';
+    retirePrompt.dismiss();
     phase = 'play';
     retireBtn.disabled = false;
     audio.start();
   }
 
   /**
-   * Opens the retire prompt over a live run. Focus moves to Cancel rather than
-   * Confirm so the keyboard's own default answer — the one Enter reaches — is
-   * the one that keeps the city.
+   * The retire prompt. A retire outside a live run would post a stale (or
+   * empty) peak from the idle board, so it opens from 'play' alone; the
+   * engine owns the overlay, the focus moves and the Escape/Tab trap (see the
+   * aria-modal note in city.astro).
    */
-  function openRetireConfirm() {
-    if (phase !== 'play') return;
-    phase = 'confirm';
-    retireOverlay.style.display = 'flex';
-    document.addEventListener('keydown', onConfirmKeydown);
-    retireCancelBtn.focus();
-  }
-
-  /** Dismisses the prompt and hands the run back, focus included. */
-  function closeRetireConfirm() {
-    if (phase !== 'confirm') return;
-    phase = 'play';
-    retireOverlay.style.display = 'none';
-    document.removeEventListener('keydown', onConfirmKeydown);
-    retireBtn.focus();
-  }
-
-  /**
-   * Escape is the expected way out of a prompt, and the Tab cycle keeps a
-   * keyboard user among the two answers while it is open. A courtesy, not a
-   * claim: the prompt covers only the canvas, so the page behind it stays
-   * pointer-reachable and the markup declares no `aria-modal` (see the note in
-   * city.astro). Trapping the keys is still the kinder default, since Tabbing
-   * blind out of a visible dialog is how a keyboard user gets stranded.
-   *
-   * Bound on `document`, because the overlay covers the canvas and nothing
-   * else: a click on the toolbar, the site header or the page background puts
-   * focus outside `#city-root`, and a root-scoped listener never sees the keys
-   * that follow. The trap has to reach as far as focus can go, which is the
-   * whole document. It is attached only while the prompt is open and removed
-   * again when it closes, so no handler outlives the dialog it belongs to —
-   * and a swap that tears the page out from under an open prompt is caught by
-   * the `astro:before-swap` retirement wired below, as everywhere else here.
-   */
-  function onConfirmKeydown(e: KeyboardEvent) {
-    if (phase !== 'confirm') return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeRetireConfirm();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    e.preventDefault();
-    // Two answers, so a Tab in either direction is the same toggle between
-    // them; from anywhere else it re-enters the dialog at the safe answer.
-    (document.activeElement === retireCancelBtn ? retireConfirmBtn : retireCancelBtn).focus();
-  }
+  const retirePrompt = createConfirmPrompt({
+    overlay: retireOverlay,
+    opener: retireBtn,
+    confirm: retireConfirmBtn,
+    cancel: retireCancelBtn,
+    canOpen: () => phase === 'play',
+    isOpen: () => phase === 'confirm',
+    onOpen: () => {
+      phase = 'confirm';
+    },
+    onCancel: () => {
+      phase = 'play';
+    },
+    onConfirm: () => gameOver('retired')
+  });
 
   /**
    * The single terminal path. Bankruptcy is the involuntary way in; retiring
@@ -475,10 +433,9 @@ export function initCityGame(): void {
   function gameOver(reason: 'bankrupt' | 'retired') {
     phase = 'over';
     retireBtn.disabled = true;
-    retireOverlay.style.display = 'none';
-    // Confirming leaves the prompt without going through closeRetireConfirm,
-    // so the trap is lifted here too rather than only on cancel.
-    document.removeEventListener('keydown', onConfirmKeydown);
+    // Confirming leaves the prompt without going through its cancel path, so
+    // the overlay and the key trap are torn down here too.
+    retirePrompt.dismiss();
     audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
     audio.stop();
     const retired = reason === 'retired';
@@ -1793,23 +1750,6 @@ export function initCityGame(): void {
   document.getElementById('rotate-left')?.addEventListener('click', () => rotator.start(-1));
   document.getElementById('rotate-right')?.addEventListener('click', () => rotator.start(1));
 
-  // Guarded on the phase as well as the disabled attribute: a retire outside
-  // a live run would post a stale (or empty) peak from the idle board.
-  retireBtn.addEventListener('click', openRetireConfirm);
-  retireCancelBtn.addEventListener('click', closeRetireConfirm);
-  retireConfirmBtn.addEventListener('click', () => {
-    if (phase !== 'confirm') return;
-    gameOver('retired');
-  });
-  // The trap is bound on the document, which outlives a ClientRouter swap even
-  // though this page's DOM does not. Both close paths lift it, but a swap over
-  // an open prompt is neither, so it retires here like every other listener in
-  // the engine that reaches past the game root.
-  const onSwap = () => {
-    document.removeEventListener('keydown', onConfirmKeydown);
-    document.removeEventListener('astro:before-swap', onSwap);
-  };
-  document.addEventListener('astro:before-swap', onSwap);
 
   startBtn.addEventListener('click', () => {
     startOverlay.style.display = 'none';

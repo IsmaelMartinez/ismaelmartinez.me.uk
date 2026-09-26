@@ -2,7 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import TierPulse from '../../components/TierPulse.astro';
 import HealthTable from '../../components/HealthTable.astro';
-import { useTranslations, locales } from '../../i18n/translations';
+import { useTranslations, locales, localeMeta } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { fetchPortfolioHealth } from '../../data/health';
 
@@ -26,8 +26,7 @@ const liveConfig = {
   reposWord: t('health.pulse.repos'),
   naWord: t('health.table.na'),
   updatedWord: t('health.live.updated'),
-  // Map the internal 'cat' code to the BCP 47 tag 'ca' for browser locale APIs.
-  lang: lang === 'cat' ? 'ca' : lang,
+  lang: localeMeta[lang].tag,
 };
 ---
 
@@ -58,22 +57,6 @@ const liveConfig = {
 </Layout>
 
 <style>
-  .page-header {
-    margin-bottom: var(--space-2xl);
-  }
-
-  .page-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: var(--space-md);
-  }
-
-  .page-description {
-    font-size: 1.125rem;
-    color: var(--color-text-muted);
-    max-width: 600px;
-  }
-
   .attribution {
     margin-top: var(--space-xl);
     text-align: center;

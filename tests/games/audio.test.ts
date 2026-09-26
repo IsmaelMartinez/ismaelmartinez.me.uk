@@ -5,29 +5,12 @@ import {
   loadSfxMuted,
   type Note
 } from '../../src/games/engine/audio';
+import { installLocalStorage } from './dom-helpers';
 
 const MELODY: Note[] = [
   { freq: 440, beats: 1 },
   { freq: 0, beats: 1 }
 ];
-
-/** Minimal in-memory localStorage stand-in (the suite runs under node by default). */
-function installLocalStorage(): Record<string, string> {
-  const store: Record<string, string> = {};
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      for (const k of Object.keys(store)) delete store[k];
-    }
-  });
-  return store;
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();

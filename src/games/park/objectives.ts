@@ -7,7 +7,7 @@
  */
 
 /** Which live figure an objective is measured against. */
-export type ParkMetric = 'welcomed' | 'rating' | 'peak';
+type ParkMetric = 'welcomed' | 'rating' | 'peak';
 
 export interface ParkProgress {
   /** Lifetime guests admitted through the gate — the banked score. */

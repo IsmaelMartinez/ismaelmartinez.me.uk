@@ -9,7 +9,6 @@ import { gridNeighbours } from '../engine/grid2d';
 import { MAP_W, MAP_H, isWalkable, type MapTile } from './map';
 
 export type { BfsResult };
-export { buildPath };
 
 /** Distances/parents from `start` across walkable tiles; -1 = unreachable. */
 export function bfsFrom(tiles: MapTile[], start: number): BfsResult {

@@ -1,9 +1,10 @@
 ---
 import type { SocialLink } from '../data/links';
+import type { Locale } from '../i18n/translations';
 
 interface Props {
   link: SocialLink;
-  lang: 'en' | 'es' | 'cat';
+  lang: Locale;
 }
 
 const { link, lang } = Astro.props;

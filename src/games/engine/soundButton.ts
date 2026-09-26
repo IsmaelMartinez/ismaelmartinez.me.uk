@@ -34,14 +34,15 @@ export function wireChannelButton(
     else audio.toggleSfxMute();
   };
 
-  function render(): void {
-    if (!button) return;
+  // An arrow rather than a hoisted declaration, so the null check above still
+  // narrows `button` inside it.
+  const render = (): void => {
     const muted = isMuted();
     button.textContent = muted ? glyphOff : glyphOn;
     button.classList.toggle('muted', muted);
     button.setAttribute('aria-label', muted ? offLabel : onLabel);
     button.setAttribute('aria-pressed', String(!muted));
-  }
+  };
 
   button.addEventListener('click', () => {
     toggle();
@@ -49,4 +50,14 @@ export function wireChannelButton(
   });
 
   render();
+}
+
+/**
+ * Wires both toggles `SoundToggles.astro` renders, by the ids it gives them.
+ * The lookups are nullable on purpose: a cabinet page without the component
+ * simply has no toggles to wire.
+ */
+export function wireSoundToggles(audio: GameAudio): void {
+  wireChannelButton(document.getElementById('music-btn'), audio, 'music');
+  wireChannelButton(document.getElementById('sfx-btn'), audio, 'sfx');
 }

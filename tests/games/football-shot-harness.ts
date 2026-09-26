@@ -51,8 +51,9 @@ import {
   attackGoalY
 } from '../../src/games/football/pitch';
 import { teamByCode } from '../../src/games/football/teams';
+import { seededRandom } from './seeded-random';
 
-export const DT = 1 / 60;
+const DT = 1 / 60;
 
 export type ShotOutcome = 'goal' | 'save' | 'off' | 'post';
 
@@ -367,21 +368,11 @@ export function shootAt(opts: ShotOptions): ShotOutcome {
   return 'off';
 }
 
-
 /** Goal share over `n` seeded repeats of one cell. */
 export function goalRate(opts: Omit<ShotOptions, 'rng'>, seeds: number, seed0 = 0): number {
   let goals = 0;
   for (let i = 0; i < seeds; i++) {
-    if (shootAt({ ...opts, rng: lcg(seed0 + i * 7919 + 13) }) === 'goal') goals++;
+    if (shootAt({ ...opts, rng: seededRandom(seed0 + i * 7919 + 13) }) === 'goal') goals++;
   }
   return goals / seeds;
-}
-
-/** The repo's seeded LCG, inlined so the harness has no test-only import cycle. */
-export function lcg(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
 }

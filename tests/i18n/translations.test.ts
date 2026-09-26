@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { useTranslations, getLangFromUrl, getLocalizedPath, translations } from '../../src/i18n/translations';
+import { useTranslations, getLocalizedPath, formatDate, localeMeta, translations } from '../../src/i18n/translations';
 
 describe('useTranslations', () => {
   it('returns English translation for known key', () => {
@@ -26,21 +26,19 @@ describe('useTranslations', () => {
   });
 });
 
-describe('getLangFromUrl', () => {
-  it('extracts "en" from /en/about', () => {
-    expect(getLangFromUrl(new URL('https://example.com/en/about'))).toBe('en');
+describe('localeMeta and formatDate', () => {
+  it('maps the cat route segment to the ca language tag and leaves the others alone', () => {
+    expect(localeMeta.cat.tag).toBe('ca');
+    expect(localeMeta.en.tag).toBe('en');
+    expect(localeMeta.es.tag).toBe('es');
   });
 
-  it('extracts "es" from /es/', () => {
-    expect(getLangFromUrl(new URL('https://example.com/es/'))).toBe('es');
-  });
-
-  it('extracts "cat" from /cat/projects', () => {
-    expect(getLangFromUrl(new URL('https://example.com/cat/projects'))).toBe('cat');
-  });
-
-  it('falls back to "en" for unknown locale', () => {
-    expect(getLangFromUrl(new URL('https://example.com/fr/about'))).toBe('en');
+  it('formats a date in each locale', () => {
+    const date = new Date(Date.UTC(2026, 2, 5, 12));
+    expect(formatDate(date, 'en', 'long')).toBe('5 March 2026');
+    expect(formatDate(date, 'es', 'long')).toBe('5 de marzo de 2026');
+    expect(formatDate(date, 'cat', 'long')).toBe('5 de març del 2026');
+    expect(formatDate(date, 'en', 'short')).toBe('5 Mar 2026');
   });
 });
 

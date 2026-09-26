@@ -9,8 +9,21 @@ export const defaultLang = 'en';
 export const locales = ['en', 'es', 'cat'] as const;
 export type Locale = typeof locales[number];
 
-export function isValidLocale(lang: string): lang is Locale {
-  return locales.includes(lang as Locale);
+/**
+ * What each route locale is called outside the site. The Catalan route
+ * segment is `cat`, which is not a language tag, so anything a browser,
+ * crawler or feed reader interprets (`<html lang>`, hreflang, Open Graph,
+ * the RSS `<language>`, Intl formatting) goes through this table.
+ */
+export const localeMeta = {
+  en: { tag: 'en', og: 'en_GB', intl: 'en-GB' },
+  es: { tag: 'es', og: 'es_ES', intl: 'es-ES' },
+  cat: { tag: 'ca', og: 'ca_ES', intl: 'ca-ES' },
+} as const satisfies Record<Locale, { tag: string; og: string; intl: string }>;
+
+/** A date in the locale's own convention; `month` picks the card or the article byline form. */
+export function formatDate(date: Date, lang: Locale, month: 'short' | 'long'): string {
+  return date.toLocaleDateString(localeMeta[lang].intl, { year: 'numeric', month, day: 'numeric' });
 }
 
 export const translations = {
@@ -25,7 +38,6 @@ export const translations = {
     'nav.themeToggle': 'Toggle dark/light mode',
 
     // Hero
-    'hero.name': 'Ismael Martinez Ramos',
     'hero.tagline': 'Principal Software Developer & Open Source Enthusiast',
     'hero.headline1': 'Building software that\'s ',
     'hero.headlineAccent': 'reliable',
@@ -602,7 +614,6 @@ export const translations = {
     'nav.themeToggle': 'Cambiar modo oscuro/claro',
 
     // Hero
-    'hero.name': 'Ismael Martinez Ramos',
     'hero.tagline': 'Desarrollador de Software Principal y Entusiasta del Open Source',
     'hero.headline1': 'Construyo software ',
     'hero.headlineAccent': 'fiable',
@@ -1181,7 +1192,6 @@ export const translations = {
     'nav.themeToggle': 'Canviar mode fosc/clar',
 
     // Hero
-    'hero.name': 'Ismael Martinez Ramos',
     'hero.tagline': 'Desenvolupador de Software Principal i Entusiasta de l\'Open Source',
     'hero.headline1': 'Construeixo software ',
     'hero.headlineAccent': 'fiable',
@@ -1752,12 +1762,6 @@ export const translations = {
 } as const;
 
 export type TranslationKey = keyof typeof translations.en;
-
-export function getLangFromUrl(url: URL) {
-  const [, lang] = url.pathname.split('/');
-  if (lang in translations) return lang as keyof typeof translations;
-  return defaultLang;
-}
 
 export function useTranslations(lang: keyof typeof translations) {
   return function t(key: TranslationKey) {

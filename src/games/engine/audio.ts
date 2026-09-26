@@ -280,21 +280,15 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   ): void {
     if (!ctx || freq <= 0) return;
     const gain = ctx.createGain();
-    if (envelope === 'pad') {
-      // Slow swell then a long decay across the whole note: a soft sustained bed.
-      const attack = Math.min(duration * 0.4, 0.25);
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(peak, start + attack);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    } else {
-      // Short attack then exponential decay for a plucky chiptune envelope.
-      // Cap the attack to a fraction of the note so very short notes don't
-      // schedule the decay ramp before the attack peak (which glitches Web Audio).
-      const attack = Math.min(0.01, duration * 0.5);
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(peak, start + attack);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    }
+    // A pad swells slowly then decays across the whole note, a soft sustained
+    // bed; a pluck has a short attack then an exponential decay, the chiptune
+    // envelope. Either attack is capped to a fraction of the note so a very
+    // short note never schedules the decay ramp before the attack peak (which
+    // glitches Web Audio).
+    const attack = envelope === 'pad' ? Math.min(duration * 0.4, 0.25) : Math.min(0.01, duration * 0.5);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak, start + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     gain.connect(destination);
     const spawn = (cents: number): void => {
       const osc = ctx!.createOscillator();

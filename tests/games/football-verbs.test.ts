@@ -11,6 +11,7 @@ import { POLICIES, competentWithout } from './football-policies';
 import {
   DIFFICULTIES,
   ladderDiff,
+  ladderSe,
   pairedAgainst,
   pairedLine,
   playMatch
@@ -132,11 +133,7 @@ describe('each revived verb earns its place', () => {
       const rows = paired.get(verb)!;
       const detail = pairedLine(rows);
       const ladder = ladderDiff(rows);
-      // The standard error of the ladder sum is the sum of four independent
-      // cells' variances; each row's own t gives its standard error back.
-      const se = Math.sqrt(
-        rows.reduce((sum, r) => sum + (r.ptsT === 0 ? 0 : (r.pts / r.ptsT) ** 2), 0)
-      );
+      const se = ladderSe(rows);
       expect(
         ladder + 2 * se,
         `${verb} over the ladder = ${ladder.toFixed(3)} +- ${se.toFixed(3)} | ${detail}`

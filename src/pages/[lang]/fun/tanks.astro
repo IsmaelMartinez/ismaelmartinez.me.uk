@@ -1,5 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
 import HighScoreTable from '../../../components/HighScoreTable.astro';
 import SoundToggles from '../../../components/SoundToggles.astro';
 import ToastArea from '../../../components/ToastArea.astro';
@@ -158,36 +159,8 @@ const weapons = [
     padding: var(--space-2xl) 0;
   }
 
-  .back-link {
-    display: inline-block;
-    margin-bottom: var(--space-xl);
-    color: var(--color-text-muted);
-    transition: color 0.2s ease;
-  }
-
-  .back-link:hover {
-    color: var(--color-accent);
-  }
-
   .game-container {
     max-width: 850px;
-    margin: 0 auto;
-  }
-
-  .game-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-lg);
-    flex-wrap: wrap;
-    gap: var(--space-md);
-  }
-
-  .game-header h1 {
-    font-size: 1.75rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
   }
 
   .tank-emoji {
@@ -199,27 +172,8 @@ const weapons = [
     50% { transform: translateX(-3px); }
   }
 
-  .scores {
-    display: flex;
-    gap: var(--space-lg);
-  }
-
-  .score-item {
-    text-align: center;
-  }
-
-  .score-label {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
   .score-value {
     font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--color-accent);
   }
 
   .score-value.p1 {
@@ -228,14 +182,6 @@ const weapons = [
 
   .score-value.p2 {
     color: #f87171;
-  }
-
-  .game-area {
-    position: relative;
-    background: var(--color-bg-secondary);
-    border-radius: 1rem;
-    overflow: hidden;
-    border: 2px solid var(--color-border);
   }
 
   #game-canvas {
@@ -253,29 +199,10 @@ const weapons = [
     color: var(--color-text-muted);
   }
 
-  .game-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    overflow-y: auto;
-    padding: var(--space-md);
-    background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(4px);
-  }
-
   .overlay-content {
-    text-align: center;
-    margin: auto;
-    padding: var(--space-xl);
     max-width: 480px;
   }
 
-  .play-icon,
   .match-score {
     font-size: 1.05rem;
     font-weight: 700;
@@ -283,6 +210,7 @@ const weapons = [
     margin-bottom: var(--space-md);
   }
 
+  .play-icon,
   .round-emoji {
     font-size: 4rem;
     display: block;
@@ -317,6 +245,10 @@ const weapons = [
   .difficulty-buttons,
   .arena-buttons {
     display: inline-flex;
+    /* Five arena pills are wider than a phone frame; unwrapped they set the
+       overlay's minimum width and the whole start screen clips both sides. */
+    flex-wrap: wrap;
+    justify-content: center;
     gap: var(--space-xs);
     padding: 4px;
     background: var(--color-bg-secondary);
@@ -355,11 +287,6 @@ const weapons = [
     gap: var(--space-md);
     justify-content: center;
     flex-wrap: wrap;
-  }
-
-  .btn-large {
-    padding: var(--space-md) var(--space-2xl);
-    font-size: 1.1rem;
   }
 
   .weapon-bar {
@@ -472,11 +399,6 @@ const weapons = [
   }
 
   @media (max-width: 600px) {
-    .game-header {
-      justify-content: center;
-      text-align: center;
-    }
-
     .game-header h1 {
       width: 100%;
       justify-content: center;
@@ -491,11 +413,6 @@ const weapons = [
       width: 100%;
     }
 
-    .overlay-content {
-      padding: var(--space-md);
-    }
-
-    .play-icon,
     .round-emoji {
       font-size: 2.75rem;
       margin-bottom: var(--space-sm);

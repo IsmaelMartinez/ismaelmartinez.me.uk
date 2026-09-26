@@ -5,59 +5,16 @@ import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
 import { bestKey } from '../../src/games/engine/highscores';
 import { doneKey } from '../../src/games/engine/progress';
 import { fullBoard } from './board-fixtures';
+import { flush, hsPanelHtml, installJsdomShims, installLocalStorage, mountHtml } from './dom-helpers';
 
-vi.mock('../../src/games/engine/globalScores', () => ({
-  fetchGlobal: vi.fn(async () => null),
-  submitGlobal: vi.fn(async () => ({ status: 'failed' }))
-}));
+vi.mock('../../src/games/engine/globalScores', async () =>
+  (await import('./dom-helpers')).mockGlobalScores()
+);
 
-/**
- * The runtime skeleton of HighScoreTable.astro's panel markup. Static test
- * fixture, parsed rather than assigned so no live node ever renders it.
- */
-const PANEL_HTML = `
-  <div class="hs-panel" id="highscores" data-hs-game="snake" hidden
-       data-t-world-loading="Loading world board"
-       data-t-world-unavailable="World board unavailable"
-       data-t-world-rank="World rank #{rank}"
-       data-t-score-not-saved="Score not saved. Try again later">
-    <form class="hs-entry" hidden>
-      <input class="hs-input" type="text" maxlength="3" />
-      <button type="submit" class="hs-ok">OK</button>
-    </form>
-    <p class="hs-record" hidden>New personal best!</p>
-    <ol class="hs-list"></ol>
-    <p class="hs-empty" hidden></p>
-    <p class="hs-note" hidden></p>
-  </div>`;
-
+/** The panel on its own, with nothing of a cabinet around it. */
 function buildPanel(): HTMLElement {
-  const parsed = new DOMParser().parseFromString(PANEL_HTML, 'text/html');
-  document.body.replaceChildren(...parsed.body.children);
+  mountHtml(hsPanelHtml('snake'));
   return document.getElementById('highscores')!;
-}
-
-const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-
-/**
- * Minimal in-memory localStorage stand-in, as in highscores.test.ts: Node's
- * own experimental `localStorage` global (undefined without
- * --localstorage-file) shadows jsdom's, so the real one is unreachable here.
- */
-function installLocalStorage(): void {
-  const store: Record<string, string> = {};
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      for (const k of Object.keys(store)) delete store[k];
-    }
-  });
 }
 
 beforeEach(() => {
@@ -66,7 +23,7 @@ beforeEach(() => {
   vi.mocked(fetchGlobal).mockResolvedValue(null);
   vi.mocked(submitGlobal).mockResolvedValue({ status: 'failed' });
   // jsdom does not implement scrollIntoView; commit(true) calls it.
-  Element.prototype.scrollIntoView = vi.fn();
+  installJsdomShims();
 });
 
 describe('initScoreboard commit()', () => {

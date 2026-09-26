@@ -15,7 +15,7 @@ import { MAP_W, MAP_H, nearestWalkable, type MapTile } from './map';
 import { spreadTargets, walkableTiles } from './pathfind';
 import { createUnit, type Unit, type WeaponId } from './units';
 
-export type Objective = 'eliminate' | 'persuade' | 'assassinate' | 'secure' | 'escort';
+type Objective = 'eliminate' | 'persuade' | 'assassinate' | 'secure' | 'escort';
 
 export interface MissionSpec {
   id: number;

@@ -18,11 +18,19 @@ import { initCityGame } from '../../src/games/city';
 import { fetchGlobal, submitGlobal } from '../../src/games/engine/globalScores';
 import { doneKey } from '../../src/games/engine/progress';
 import { CITY_W, CITY_H } from '../../src/games/city/tiles';
+import {
+  createFrameDriver,
+  hsPanelHtml,
+  installCanvasContext,
+  installJsdomShims,
+  installLocalStorage,
+  mountHtml,
+  pressKey
+} from './dom-helpers';
 
-vi.mock('../../src/games/engine/globalScores', () => ({
-  fetchGlobal: vi.fn(async () => null),
-  submitGlobal: vi.fn(async () => ({ status: 'ok', rank: 1, table: [] }))
-}));
+vi.mock('../../src/games/engine/globalScores', async () =>
+  (await import('./dom-helpers')).mockGlobalScores()
+);
 
 // Mirrors the projection constants in src/games/city/game.ts, which are
 // module-private. Tile picking below goes through the engine's own isoProject
@@ -64,19 +72,7 @@ const PAGE_HTML = `
       <h2 id="over-title" tabindex="-1">Bankrupt!</h2>
       <p id="over-desc">The city treasury ran dry.</p>
       <p><strong id="final-months">0</strong><strong id="final-pop">0</strong></p>
-      <div class="hs-panel" id="highscores" data-hs-game="city" hidden
-           data-t-world-loading="Loading world board"
-           data-t-world-unavailable="World board unavailable"
-           data-t-world-rank="World rank #{rank}"
-           data-t-score-not-saved="Score not saved. Try again later">
-        <form class="hs-entry" hidden>
-          <input class="hs-input" type="text" maxlength="3" />
-          <button type="submit" class="hs-ok">OK</button>
-        </form>
-        <ol class="hs-list"></ol>
-        <p class="hs-empty" hidden></p>
-        <p class="hs-note" hidden></p>
-      </div>
+      ${hsPanelHtml('city')}
       <button id="restart-btn">New City</button>
     </div>
     <div id="retire-overlay" style="display: none;" tabindex="-1"
@@ -107,67 +103,8 @@ const PAGE_HTML = `
     </div>
   </div>`;
 
-/**
- * A no-op 2D context. jsdom implements no canvas backend, and the render loop
- * only has to not throw — nothing here is asserted on.
- */
-function stubContext(): CanvasRenderingContext2D {
-  const gradient = { addColorStop: () => {} };
-  const own: Record<string, unknown> = {};
-  return new Proxy(own, {
-    get(target, prop) {
-      if (prop in target) return target[prop as string];
-      if (prop === 'measureText') return () => ({ width: 8 });
-      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') return () => gradient;
-      return () => undefined;
-    },
-    set(target, prop, value) {
-      target[prop as string] = value;
-      return true;
-    }
-  }) as unknown as CanvasRenderingContext2D;
-}
-
-/** In-memory localStorage, as in scoreboard-dom.test.ts (Node's own global shadows jsdom's). */
-function installLocalStorage(): void {
-  const store: Record<string, string> = {};
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      for (const k of Object.keys(store)) delete store[k];
-    }
-  });
-}
-
-let frameCallback: FrameRequestCallback | null = null;
-let clock = 0;
-
-/** Runs the game loop forward over `seconds` of wall time, 250ms per frame (its own cap). */
-function advance(seconds: number): void {
-  const frames = Math.ceil((seconds * 1000) / 250);
-  for (let i = 0; i < frames; i++) {
-    const cb = frameCallback;
-    if (!cb) throw new Error('game loop is not running');
-    clock += 250;
-    cb(clock);
-  }
-}
-
-function mountPage(): HTMLElement {
-  const parsed = new DOMParser().parseFromString(PAGE_HTML, 'text/html');
-  document.body.replaceChildren(...parsed.body.children);
-  const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-  // Logical size == CSS size, so pointer coordinates below are logical ones.
-  canvas.getBoundingClientRect = () =>
-    ({ left: 0, top: 0, width: CANVAS_W, height: CANVAS_H, right: CANVAS_W, bottom: CANVAS_H, x: 0, y: 0 }) as DOMRect;
-  return document.getElementById('city-root')!;
-}
+const frames = createFrameDriver();
+const { advance } = frames;
 
 /** Selects a tool from the toolbar and clicks the tile at (x, y). */
 function buildAt(tool: string, x: number, y: number): void {
@@ -208,20 +145,9 @@ const CANT_AFFORD = 'Not enough funds!';
 
 const navLink = () => document.getElementById('site-nav-link') as HTMLAnchorElement;
 
-/**
- * Sends a key the way a browser would: from whatever holds focus, bubbling and
- * cancellable. Returns the event so a caller can assert the page's own default
- * — the browser's Tab, which jsdom does not implement — was suppressed.
- */
-function pressFrom(target: Element, key: string): KeyboardEvent {
-  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
-  target.dispatchEvent(event);
-  return event;
-}
-
 /** Sends a key the way a player's keyboard would: from inside the dialog, bubbling. */
 function pressInPrompt(key: string): void {
-  pressFrom(document.getElementById('retire-overlay')!, key);
+  pressKey(document.getElementById('retire-overlay')!, key);
 }
 
 /**
@@ -307,36 +233,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchGlobal).mockResolvedValue(null);
   vi.mocked(submitGlobal).mockResolvedValue({ status: 'ok', rank: 1, table: [] });
-  Element.prototype.scrollIntoView = vi.fn();
-  // jsdom implements neither of these; the canvas helper watches DPR changes
-  // through matchMedia and the game paints through a 2D context.
-  vi.stubGlobal('matchMedia', () => ({
-    matches: false,
-    media: '',
-    addEventListener: () => {},
-    removeEventListener: () => {}
-  }));
-  HTMLCanvasElement.prototype.getContext = (() =>
-    stubContext()) as unknown as HTMLCanvasElement['getContext'];
-  frameCallback = null;
-  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    frameCallback = cb;
-    return 1;
-  });
-  vi.stubGlobal('cancelAnimationFrame', () => {
-    frameCallback = null;
-  });
-  mountPage();
+  installJsdomShims();
+  installCanvasContext();
+  frames.install();
+  mountHtml(PAGE_HTML, { canvasSize: [CANVAS_W, CANVAS_H] });
   initCityGame();
-  // The loop seeds its own `last` from performance.now() when it starts, which
-  // initCityGame has just done. Starting the hand-driven clock at zero would
-  // make the first frame's delta `250 - <process uptime>` — hugely negative,
-  // leaving the accumulator so far behind that no simulation step ever runs.
-  // The suite only got away with it while this file happened to be scheduled
-  // early. Starting at or after that same reading makes every frame's delta
-  // land on the loop's own 250ms cap, so tick counts are exact whenever the
-  // file runs.
-  clock = performance.now();
+  // The suite only got away with a clock started at zero while this file
+  // happened to be scheduled early; see `syncClock` for the trap.
+  frames.syncClock();
 });
 
 afterEach(() => {
@@ -636,21 +540,21 @@ describe('Microcity retire confirmation', () => {
 
     // Tab from out there is answered by the dialog, not by the page: the
     // browser's own focus move is suppressed and the safe answer is re-entered.
-    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(true);
+    expect(pressKey(navLink(), 'Tab').defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(cancelBtn());
-    pressFrom(cancelBtn(), 'Tab');
+    pressKey(cancelBtn(), 'Tab');
     expect(document.activeElement).toBe(confirmBtn());
 
     // And Escape still dismisses from outside the root.
     navLink().focus();
-    expect(pressFrom(navLink(), 'Escape').defaultPrevented).toBe(true);
+    expect(pressKey(navLink(), 'Escape').defaultPrevented).toBe(true);
     expect(promptShown()).toBe(false);
     expect(overlayShown()).toBe(false);
     expect(submitGlobal).not.toHaveBeenCalled();
 
     // Closed means released: the page gets its own keys back, so Tab outside a
     // prompt that is no longer open is the browser's again.
-    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(false);
+    expect(pressKey(navLink(), 'Tab').defaultPrevented).toBe(false);
   });
 
   it('ends the run only on the second, deliberate click', () => {
@@ -702,11 +606,11 @@ describe('Microcity retire confirmation', () => {
   it('releases the trap when the page swaps out from under an open prompt', () => {
     foundCity();
     retireBtn().click();
-    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(true);
+    expect(pressKey(navLink(), 'Tab').defaultPrevented).toBe(true);
 
     document.dispatchEvent(new Event('astro:before-swap'));
 
-    expect(pressFrom(navLink(), 'Tab').defaultPrevented).toBe(false);
-    expect(pressFrom(navLink(), 'Escape').defaultPrevented).toBe(false);
+    expect(pressKey(navLink(), 'Tab').defaultPrevented).toBe(false);
+    expect(pressKey(navLink(), 'Escape').defaultPrevented).toBe(false);
   });
 });

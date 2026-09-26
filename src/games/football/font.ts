@@ -22,7 +22,7 @@
 export const GLYPH_W = 5;
 export const GLYPH_H = 7;
 /** Gap between glyphs, in unscaled font pixels. */
-export const TRACKING = 1;
+const TRACKING = 1;
 /** Drawn in place of any character with no glyph. */
 export const FALLBACK = '?';
 
@@ -163,11 +163,6 @@ export function textWidth(text: string, scale = 1): number {
   const n = normaliseText(text).length;
   if (n === 0) return 0;
   return (n * (GLYPH_W + TRACKING) - TRACKING) * scale;
-}
-
-/** Pixel height of one line at `scale`. */
-export function textHeight(scale = 1): number {
-  return GLYPH_H * scale;
 }
 
 export interface TextOptions {

@@ -65,12 +65,12 @@ function makeContext() {
       Q: param(),
       type: 'square',
       buffer: null as unknown,
-      setPeriodicWave: vi.fn(),
       target: null as unknown,
       connect: vi.fn((to: unknown) => {
         n.target = to;
       }),
       disconnect: vi.fn(),
+      setPeriodicWave: vi.fn(),
       start: vi.fn(),
       stop: vi.fn()
     };

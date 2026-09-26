@@ -14,7 +14,7 @@
  * note still sounds the same. That is the point: the claim the snapshots make
  * is "the same graph calls", not "the same music to the ear".
  */
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { createGameAudio, type GameAudioOptions } from '../../src/games/engine/audio';
 
 type Loggable = { __id?: string };
@@ -175,4 +175,29 @@ export function drive(options: GameAudioOptions, seconds: number, cues: Cue[] = 
   audio.dispose();
   vi.advanceTimersByTime(2000);
   return ctx.log.join('\n') + '\n';
+}
+
+/** Every tone's onset as [frequency, time], in the order the tones were made. */
+export function onsets(log: string): [number, number][] {
+  const seen = new Set<string>();
+  const out: [number, number][] = [];
+  for (const line of log.split('\n')) {
+    const m = /^(osc#\d+)\.frequency\.setValueAtTime\(([^,]+), ([^)]+)\)$/.exec(line);
+    if (!m || seen.has(m[1])) continue;
+    seen.add(m[1]);
+    out.push([Number(m[2]), Number(m[3])]);
+  }
+  return out;
+}
+
+/** The onset times of one frequency. */
+export function timesOf(log: string, freq: number): number[] {
+  return onsets(log)
+    .filter(([f]) => f === freq)
+    .map(([, t]) => t);
+}
+
+export function expectTimes(actual: number[], expected: number[]): void {
+  expect(actual).toHaveLength(expected.length);
+  expected.forEach((t, i) => expect(actual[i]).toBeCloseTo(t, 9));
 }

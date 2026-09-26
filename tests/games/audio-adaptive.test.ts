@@ -345,9 +345,11 @@ describe('setScene', () => {
     expect(createGameAudio(SECTIONS).setScene('menu')).toBe(false);
   });
 
-  it('refuses a form that writes danger both ways', () => {
-    const form = { ...SCENED.form!, scenes: { danger: { order: ['fast'] } } };
-    expect(() => createGameAudio({ ...SCENED, form })).toThrow(/danger/);
+  it('refuses danger written as a scene, with or without form.danger beside it', () => {
+    const asScene = { ...SCENED.form!, scenes: { danger: { order: ['fast'] } } };
+    expect(() => createGameAudio({ ...SCENED, form: asScene })).toThrow(/reserved/);
+    const { danger: _danger, ...withoutDanger } = asScene;
+    expect(() => createGameAudio({ ...SCENED, form: withoutDanger })).toThrow(/reserved/);
   });
 });
 

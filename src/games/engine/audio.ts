@@ -179,7 +179,7 @@ export interface ScoreForm {
    * like any other. `setDanger(true)` switches to it at the next bar line and
    * `setDanger(false)` comes back, at the next bar line, to the section that
    * would have followed the one danger interrupted. It is the scene named
-   * `danger`, which `setDanger` drives, so a form writes one or the other.
+   * `danger`, which `setDanger` drives, and is written here and only here.
    */
   danger?: FormScene;
   /**
@@ -188,6 +188,7 @@ export interface ScoreForm {
    * into the next part of `order`. `setScene(name)` moves to one at the next
    * bar line and `setScene(null)` comes back to `order` where it left off.
    * A scene loops with no rest, and plays at its own tempo if it has one.
+   * `danger` is reserved for `ScoreForm.danger` and throws here.
    */
   scenes?: Record<string, FormScene>;
 }
@@ -782,8 +783,10 @@ function normalizeForm(options: GameAudioOptions): NormForm | null {
       return fit(name, lines);
     });
   const order = resolve(form.order);
-  if (form.danger && form.scenes && Object.hasOwn(form.scenes, DANGER)) {
-    throw new Error('score form: "danger" is written both as form.danger and as a scene');
+  // One way to write it, so every reader of a form (the gates, the jukebox)
+  // finds the danger variant in the same place.
+  if (form.scenes && Object.hasOwn(form.scenes, DANGER)) {
+    throw new Error('score form: "danger" is reserved; write the danger variant as form.danger');
   }
   const scenes = new Map<string, { order: Part[]; spb: number | null }>();
   const written: Record<string, FormScene> = { ...form.scenes, ...(form.danger && { [DANGER]: form.danger }) };

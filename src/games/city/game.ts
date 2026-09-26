@@ -1732,8 +1732,23 @@ export function initCityGame(): void {
 
   speedButtons.forEach(btn => {
     btn.addEventListener('click', () => {
+      const wasPaused = speedMult === 0;
       speedMult = parseInt(btn.dataset.speed || '1', 10);
       speedButtons.forEach(b => b.classList.toggle('active', b === btn));
+      // The pause speed (0) is the sim's own pause button, so it silences the
+      // music the same way the confirm prompts stopping play do not need to:
+      // this one has no overlay, just the speed reading zero. The toolbar
+      // lives outside `.game-area` and stays pointer-reachable over every
+      // overlay (the retire prompt traps only the keyboard, per its own note
+      // in city.astro), so a live run still means 'play' *or* 'confirm' — a
+      // speed change made while that prompt is open must not be silently
+      // dropped, or cancelling it leaves the audio out of sync with the speed
+      // it resumes at. Only 'idle' (before a run) and 'over' (after one ends)
+      // skip these transitions, since phase already owns the music there.
+      if (phase === 'play' || phase === 'confirm') {
+        if (speedMult === 0 && !wasPaused) audio.stop();
+        else if (speedMult !== 0 && wasPaused) audio.start();
+      }
     });
   });
 

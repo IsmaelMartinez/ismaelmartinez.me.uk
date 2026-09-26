@@ -21,6 +21,35 @@ import {
   pressKey
 } from './dom-helpers';
 
+/**
+ * Mocked so the pause-audio suite below (issue #368) can observe `start` /
+ * `stop` without a real AudioContext. Harmless to every other test in this
+ * file: none of them assert on sound.
+ *
+ * Built inside `vi.hoisted` because the mock factory below runs when
+ * `initSnakeGame`'s own import of the engine's audio module is resolved,
+ * which happens before this file's own bindings exist (see
+ * `tests/api/scores.test.ts`'s `blob` for the same reasoning).
+ */
+const mockAudio = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  toggleMusicMute: vi.fn(() => false),
+  isMusicMuted: vi.fn(() => false),
+  setMusicMuted: vi.fn(),
+  toggleSfxMute: vi.fn(() => false),
+  isSfxMuted: vi.fn(() => false),
+  setSfxMuted: vi.fn(),
+  playSfx: vi.fn(),
+  setTempo: vi.fn(),
+  dispose: vi.fn()
+}));
+
+vi.mock('../../src/games/engine/audio', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/games/engine/audio')>();
+  return { ...actual, createGameAudio: vi.fn(() => mockAudio) };
+});
+
 /** The runtime skeleton of src/pages/[lang]/fun/snake.astro. */
 const PAGE_HTML = `
   <div id="snake-root" data-t-arena-advance="The walls close in!">
@@ -66,6 +95,8 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  mockAudio.start.mockClear();
+  mockAudio.stop.mockClear();
 });
 
 describe('Snake keyboard handling off the board (issue #271)', () => {
@@ -94,5 +125,19 @@ describe('Snake keyboard handling off the board (issue #271)', () => {
     for (const key of GAME_KEYS) {
       expect(press(key).defaultPrevented).toBe(false);
     }
+  });
+});
+
+describe('Snake pause leaves the music running (#368)', () => {
+  it('stops the music on pause and resumes it on unpause', () => {
+    document.getElementById('start-btn')!.click();
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+
+    press('p');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+
+    press('p');
+    expect(mockAudio.start).toHaveBeenCalledTimes(2);
   });
 });

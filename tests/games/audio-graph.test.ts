@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createGameAudio, type SfxName } from '../../src/games/engine/audio';
-import { TANKS_MUSIC } from '../../src/games/tanks/music';
+import { TANKS_ROUND13_MUSIC } from './tanks-round13-score';
 import { CASCADE_ROUND13_MUSIC } from './cascade-round13-score';
 import { installLocalStorage } from './dom-helpers';
 import { drive } from './audio-graph';
@@ -30,8 +30,8 @@ afterEach(() => {
 });
 
 describe('graph calls for scores that use no new engine fields', () => {
-  it('Tank Duel: a full loop with a pad, detuned twins, echo, every sfx, a mute and a restart', async () => {
-    const log = drive(TANKS_MUSIC, 17.5, [
+  it('Tank Duel (its round 13 score): a full loop with a pad, detuned twins, echo, every sfx, a mute and a restart', async () => {
+    const log = drive(TANKS_ROUND13_MUSIC, 17.5, [
       ...EVERY_SFX.map((name, i) => ({ at: 1 + i * 0.5, run: (a: ReturnType<typeof createGameAudio>) => a.playSfx(name) })),
       { at: 8, run: a => a.setMusicMuted(true) },
       { at: 9, run: a => a.setMusicMuted(false) },

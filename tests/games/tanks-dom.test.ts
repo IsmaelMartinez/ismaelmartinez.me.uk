@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initTanksGame } from '../../src/games/tanks';
+import { STINGER_SECONDS } from '../../src/games/tanks/music';
 import * as matchModule from '../../src/games/tanks/match';
 import {
   createFrameDriver,
@@ -40,6 +41,12 @@ const mockAudio = vi.hoisted(() => ({
   setSfxMuted: vi.fn(),
   playSfx: vi.fn(),
   setTempo: vi.fn(),
+  section: vi.fn(() => null),
+  setLayer: vi.fn(),
+  setSection: vi.fn(() => true),
+  setDanger: vi.fn(),
+  playStinger: vi.fn(() => true),
+  setPaused: vi.fn(),
   dispose: vi.fn()
 }));
 
@@ -107,9 +114,8 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  mockAudio.playSfx.mockClear();
-  mockAudio.stop.mockClear();
-  mockAudio.start.mockClear();
+  vi.useRealTimers();
+  for (const fn of Object.values(mockAudio)) fn.mockClear();
 });
 
 /** Forces the next tick to end the match, straight through the real `on` callback. */
@@ -143,5 +149,133 @@ describe('Tank Duel match-end sound (#368)', () => {
 
     expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+  });
+});
+
+/** The real `tickMatch`, taken before any test spies on it. */
+const realTick = matchModule.tickMatch;
+
+/**
+ * Ends the round through the match's own rules: the losing tank's armour is
+ * gone and its shell has landed, so the next real tick ends the turn, and
+ * `finishRound` tallies the win, decides whether the match is over and fires
+ * `roundOver`, exactly as a killing shot would. `both` is a mutual destruction.
+ */
+function loseRound(loser: 0 | 1 | 'both'): void {
+  vi.spyOn(matchModule, 'tickMatch').mockImplementationOnce((m, dt) => {
+    for (const i of loser === 'both' ? [0, 1] : [loser]) m.tanks[i].hp = 0;
+    m.shots = [];
+    m.blasts = [];
+    m.phase = 'fly';
+    realTick(m, dt);
+  });
+  frames.step(1);
+}
+
+const click = (id: string) => document.getElementById(id)!.click();
+const nextRound = () => click('next-round-btn');
+
+describe('Tank Duel music answers the match (#379)', () => {
+  beforeEach(() => {
+    // Only the timers: the frame driver owns the clock the game loop reads.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  it('plays the won stinger when the player takes a round, then muffles the bed behind the overlay', () => {
+    click('vs-cpu-btn');
+    loseRound(1);
+
+    expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('roundWon');
+    // The pause filter would muffle the stinger too, so it waits for it.
+    vi.advanceTimersByTime(STINGER_SECONDS * 1000 - 1);
+    expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
+    vi.advanceTimersByTime(1);
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(true);
+
+    nextRound();
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+  });
+
+  it('plays the lost stinger when the CPU takes a round', () => {
+    click('vs-cpu-btn');
+    loseRound(0);
+
+    expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('roundLost');
+  });
+
+  it.each([0, 1] as const)('plays the neutral stinger whoever takes a two-player round (loser %i)', loser => {
+    click('two-player-btn');
+    loseRound(loser);
+
+    expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('round');
+  });
+
+  it('plays the neutral stinger for a mutual destruction against the CPU', () => {
+    click('vs-cpu-btn');
+    loseRound('both');
+
+    expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('round');
+  });
+
+  it('leaves the bed unmuffled when the next round starts before the stinger has finished', () => {
+    click('vs-cpu-btn');
+    loseRound(1);
+    nextRound();
+    vi.advanceTimersByTime(STINGER_SECONDS * 1000);
+
+    expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
+  });
+
+  it.each([
+    ['the player', 1],
+    ['the CPU', 0]
+  ] as const)('switches to Sudden Death and brings the drums in when %s reaches match point', (_, loser) => {
+    click('vs-cpu-btn');
+    loseRound(loser);
+    nextRound();
+    // One round up is not match point: no danger, and the drums stay out.
+    expect(mockAudio.setDanger).toHaveBeenLastCalledWith(false);
+    expect(mockAudio.setLayer).not.toHaveBeenCalledWith('drums', true);
+
+    loseRound(loser);
+    nextRound();
+    expect(mockAudio.setDanger).toHaveBeenLastCalledWith(true);
+    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', true);
+  });
+
+  it('ends the match on the effects sting and a stop, with no round stinger and no muffle', () => {
+    click('vs-cpu-btn');
+    loseRound(1);
+    nextRound();
+    loseRound(1);
+    nextRound();
+    mockAudio.playStinger.mockClear();
+    mockAudio.setPaused.mockClear();
+
+    loseRound(1);
+    vi.advanceTimersByTime(STINGER_SECONDS * 1000);
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playStinger).not.toHaveBeenCalled();
+    expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
+  });
+
+  it('takes Sudden Death and the drums away again for a new match', () => {
+    click('vs-cpu-btn');
+    loseRound(1);
+    nextRound();
+    loseRound(1);
+    nextRound();
+    loseRound(1);
+    click('play-again-btn');
+    click('vs-cpu-btn');
+
+    expect(mockAudio.setDanger).toHaveBeenLastCalledWith(false);
+    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', false);
   });
 });

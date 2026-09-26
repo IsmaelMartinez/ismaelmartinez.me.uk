@@ -451,8 +451,12 @@ export function initTanksGame(): void {
     if (winner !== null) {
       (winner === 0 ? p1Wins : p2Wins).textContent = match.wins[winner].toString();
     }
+    // A trophy is for someone in this room. Only the CPU taking a vs-CPU
+    // match keeps the loss sting; every other finish, including a 2P match
+    // decided either way, is a win for whoever is watching it end.
+    const cpuTookMatch = matchOver && match.mode === 'cpu' && winner === 1;
     if (matchOver) {
-      audio.playSfx('gameover');
+      audio.playSfx(cpuTookMatch ? 'gameover' : 'score');
       audio.stop();
     }
     // In the order the ledger paid them: the round bonus, then the surviving
@@ -466,9 +470,6 @@ export function initTanksGame(): void {
     // ever plays two-player (the score argument is a sentinel — markDone only
     // needs it above zero).
     if (matchOver && match.mode === '2p') markDone('tanks', 1);
-    // A trophy is for someone in this room. When the CPU takes the match it
-    // used to raise one too, which read as congratulating the player on losing.
-    const cpuTookMatch = matchOver && match.mode === 'cpu' && winner === 1;
     roundEmoji.textContent = matchOver
       ? cpuTookMatch
         ? '🤖'

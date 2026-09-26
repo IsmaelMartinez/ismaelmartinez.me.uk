@@ -35,7 +35,7 @@ import {
   mountCabinet,
   createConfirmPrompt
 } from '../engine';
-import { CITY_MUSIC } from './music';
+import { CITY_MUSIC, TIER_LAYERS, musicTier } from './music';
 import {
   CITY_W,
   CITY_H,
@@ -98,6 +98,12 @@ const GROWTH_INTERVAL = 1.2;
 /** Cars crawl to this fraction of their speed over a congested road tile, so
  *  traffic visibly clots at chokepoints. */
 const CONGESTED_CAR_SPEED = 0.35;
+
+/**
+ * Seconds a voice takes to fade in or out when the city changes tier: about a
+ * bar at the score's 90 bpm, so a new layer swells in rather than cutting in.
+ */
+const TIER_FADE = 3;
 
 const ZONE_EMOJI: Record<ZoneType, string> = { res: '🏠', com: '🏬', ind: '🏭' };
 const ZONE_TINT: Record<ZoneType, string> = {
@@ -275,6 +281,8 @@ export function initCityGame(): void {
    *  says the city survives another month, so it fires on the way in rather
    *  than every month until the end. */
   let lowFundsWarned = false;
+  /** The score's population tier (see music.ts's `musicTier`), which sets its layers. */
+  let tier = 0;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
   let sparks: { x: number; y: number; vx: number; vy: number; life: number; color: string }[] = [];
@@ -340,6 +348,26 @@ export function initCityGame(): void {
     stats = cityStats(tiles);
     demand = computeDemand(stats, sumDemandModifiers(activeEvents));
     congested = computeCongestion(tiles).map(isCongested);
+    const next = musicTier(stats.population, tier);
+    if (next !== tier) {
+      tier = next;
+      applyTier(TIER_FADE);
+    }
+  }
+
+  /** Sets every voice of the score to the arrangement of the city's tier. */
+  function applyTier(fadeSeconds: number) {
+    for (const [voice, on] of Object.entries(TIER_LAYERS[tier])) audio.setLayer(voice, on, fadeSeconds);
+  }
+
+  /**
+   * The music is muffled whenever a live run is held still: at the pause
+   * speed, and while the Retire prompt is open. Muffled, not stopped, so it
+   * keeps its place and a resume carries on rather than starting the pass over.
+   */
+  function syncMusicPause() {
+    const live = phase === 'play' || phase === 'confirm';
+    audio.setPaused(live && (speedMult === 0 || phase === 'confirm'));
   }
 
   /** Paints the goal strip: the grace month's ultimatum while the treasury is
@@ -391,12 +419,15 @@ export function initCityGame(): void {
     sparks = [];
     fx.clear();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
+    tier = 0;
+    applyTier(0);
     refreshDerivedState();
     renderObjective();
     board.hide();
     retirePrompt.dismiss();
     phase = 'play';
     retireBtn.disabled = false;
+    syncMusicPause();
     audio.start();
   }
 
@@ -415,9 +446,11 @@ export function initCityGame(): void {
     isOpen: () => phase === 'confirm',
     onOpen: () => {
       phase = 'confirm';
+      syncMusicPause();
     },
     onCancel: () => {
       phase = 'play';
+      syncMusicPause();
     },
     onConfirm: () => gameOver('retired')
   });
@@ -438,6 +471,7 @@ export function initCityGame(): void {
     retirePrompt.dismiss();
     audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
     audio.stop();
+    syncMusicPause();
     const retired = reason === 'retired';
     overIconEl.textContent = retired ? '🏁' : bankruptIcon;
     overTitleEl.textContent = retired ? strings.retired : bankruptTitle;
@@ -549,6 +583,9 @@ export function initCityGame(): void {
           addFloater(fire.idx, '🔥', '#fb923c');
           showToast(`🔥 ${strings.fireAlert}`);
           audio.playSfx('hit');
+          // Ignition is capped at 2% a growth tick, one a minute at most on average, so
+          // every fire that breaks out can have its stinger. Spread does not.
+          audio.playStinger('fire');
         }
       }
 
@@ -567,6 +604,7 @@ export function initCityGame(): void {
         tornado = spawnTornado(Math.random);
         showToast(`🌪️ ${strings.tornadoAlert}`);
         audio.playSfx('explosion');
+        audio.playStinger('disaster');
       }
 
       if (!densityToastShown && stats.population >= DENSITY_UNLOCK_POP) {
@@ -621,6 +659,7 @@ export function initCityGame(): void {
         shake = 0.9;
         showToast(`🫨 ${strings.quakeAlert}`);
         audio.playSfx('explosion');
+        audio.playStinger('disaster');
         refreshDerivedState();
       }
 
@@ -651,6 +690,7 @@ export function initCityGame(): void {
       if (verdict === 'grace') {
         showToast(`🚨 ${strings.inTheRed}`);
         audio.playSfx('hit');
+        audio.playStinger('red');
       } else if (verdict === 'lowFunds') {
         // Once per slide into danger, not once a month until the end of it.
         if (!lowFundsWarned) {
@@ -1732,23 +1772,15 @@ export function initCityGame(): void {
 
   speedButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      const wasPaused = speedMult === 0;
       speedMult = parseInt(btn.dataset.speed || '1', 10);
       speedButtons.forEach(b => b.classList.toggle('active', b === btn));
-      // The pause speed (0) is the sim's own pause button, so it silences the
-      // music the same way the confirm prompts stopping play do not need to:
-      // this one has no overlay, just the speed reading zero. The toolbar
-      // lives outside `.game-area` and stays pointer-reachable over every
-      // overlay (the retire prompt traps only the keyboard, per its own note
-      // in city.astro), so a live run still means 'play' *or* 'confirm' — a
-      // speed change made while that prompt is open must not be silently
-      // dropped, or cancelling it leaves the audio out of sync with the speed
-      // it resumes at. Only 'idle' (before a run) and 'over' (after one ends)
-      // skip these transitions, since phase already owns the music there.
-      if (phase === 'play' || phase === 'confirm') {
-        if (speedMult === 0 && !wasPaused) audio.stop();
-        else if (speedMult !== 0 && wasPaused) audio.start();
-      }
+      // The pause speed (0) is the sim's own pause button, so it muffles the
+      // music. The toolbar lives outside `.game-area` and stays
+      // pointer-reachable over every overlay (the retire prompt traps only the
+      // keyboard, per its own note in city.astro), so a speed change can land
+      // while that prompt is open, and `syncMusicPause` reads both. Before a
+      // run and after one ends it leaves the music to the phase.
+      syncMusicPause();
     });
   });
 

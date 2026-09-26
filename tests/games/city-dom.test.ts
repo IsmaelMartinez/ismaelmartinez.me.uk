@@ -33,9 +33,9 @@ vi.mock('../../src/games/engine/globalScores', async () =>
 );
 
 /**
- * Mocked so the speed-zero pause suite below (issue #368) can observe
- * `start` / `stop` without a real AudioContext. Harmless to every other test
- * in this file: none of them assert on sound.
+ * Mocked so the music suite at the end of this file can observe the score's
+ * start, stop, pause, layers and stingers without a real AudioContext.
+ * Harmless to every other test in this file: none of them assert on sound.
  *
  * Built inside `vi.hoisted` because the mock factory below runs when
  * `initCityGame`'s own import of the engine's audio module is resolved,
@@ -53,6 +53,12 @@ const mockAudio = vi.hoisted(() => ({
   setSfxMuted: vi.fn(),
   playSfx: vi.fn(),
   setTempo: vi.fn(),
+  section: vi.fn(() => null),
+  setLayer: vi.fn(),
+  setSection: vi.fn(() => true),
+  setDanger: vi.fn(),
+  playStinger: vi.fn<(name: string) => boolean>(() => true),
+  setPaused: vi.fn(),
   dispose: vi.fn()
 }));
 
@@ -115,6 +121,8 @@ const PAGE_HTML = `
     <div class="toolbar">
       <button class="tool-btn active" data-tool="road"></button>
       <button class="tool-btn" data-tool="res"></button>
+      <button class="tool-btn" data-tool="com"></button>
+      <button class="tool-btn" data-tool="ind"></button>
       <button class="tool-btn" data-tool="power"></button>
       <button class="tool-btn" data-tool="park"></button>
       <button class="tool-btn" data-tool="bulldoze"></button>
@@ -646,62 +654,133 @@ describe('Microcity retire confirmation', () => {
   });
 });
 
-describe('Microcity speed-zero pause leaves the music running (#368)', () => {
-  it('stops the music at speed 0 and resumes it when play speed is picked again', () => {
+/**
+ * The score answers the city (#378): its arrangement follows the population
+ * through `musicTier`, disasters and the grace month land stingers, and every
+ * way a live run is held still muffles the music with `setPaused` instead of
+ * stopping it, which would start the pass over on resume.
+ */
+describe('Microcity music', () => {
+  /** The last `setLayer` call for a voice, as `[voice, on, fade]`. */
+  const lastLayer = (voice: string) => mockAudio.setLayer.mock.calls.filter(c => c[0] === voice).at(-1);
+  const stingers = (name: string) => mockAudio.playStinger.mock.calls.filter(c => c[0] === name).length;
+  const lastPause = () => mockAudio.setPaused.mock.calls.at(-1)?.[0];
+  const speed = (value: string) =>
+    document.querySelector<HTMLButtonElement>(`.speed-btn[data-speed="${value}"]`)!.click();
+  const population = () => Number(document.getElementById('population')!.textContent);
+
+  /**
+   * A town in the making: a power plant, a fifteen-tile street along y=8, a
+   * home on every tile above it, and five shops and four works below it for
+   * the jobs that let the homes fill. The first growth ticks take it past
+   * 120, the second milestone, and the grants it earns on the way keep it
+   * solvent.
+   */
+  function foundTown(): void {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    document.getElementById('start-btn')!.click();
+    vi.spyOn(Math, 'random').mockReturnValue(0.05);
+    buildAt('power', 12, 5);
+    for (let x = 5; x <= 19; x++) buildAt('road', x, 8);
+    for (let x = 5; x <= 19; x++) buildAt('res', x, 7);
+    for (let x = 5; x <= 9; x++) buildAt('com', x, 9);
+    for (let x = 10; x <= 13; x++) buildAt('ind', x, 9);
+  }
+
+  it('opens every city on the village arrangement, before the music starts', () => {
     foundCity();
-    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+    expect(lastLayer('lead')).toEqual(['lead', true, 0]);
+    expect(lastLayer('pad')).toEqual(['pad', true, 0]);
+    expect(lastLayer('bass')).toEqual(['bass', false, 0]);
+    expect(lastLayer('horn')).toEqual(['horn', false, 0]);
+    // Set ahead of `start()`, so the first bar is already the village's.
+    const firstLayer = Math.min(...mockAudio.setLayer.mock.invocationCallOrder);
+    expect(firstLayer).toBeLessThan(mockAudio.start.mock.invocationCallOrder[0]);
+  });
 
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
-    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
-    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+  it('brings the bass in as the city becomes a town, and takes it out when the town is torn down', () => {
+    foundTown();
+    expect(lastLayer('bass')).toEqual(['bass', false, 0]);
 
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
-    expect(mockAudio.start).toHaveBeenCalledTimes(2);
+    advance(2);
+    expect(population()).toBeGreaterThanOrEqual(120);
+    expect(lastLayer('bass')).toEqual(['bass', true, 3]);
+    // The town keeps the bell: the horn is the metropolis's.
+    expect(lastLayer('lead')?.[1]).toBe(true);
+    expect(lastLayer('horn')?.[1]).toBe(false);
+
+    for (let x = 5; x <= 12; x++) buildAt('bulldoze', x, 7);
+    advance(0.25); // the population readout is painted by the loop, not the click
+    expect(population()).toBeLessThan(96);
+    expect(lastLayer('bass')).toEqual(['bass', false, 3]);
+  });
+
+  it('muffles the music at the pause speed and lifts it again, without stopping the score', () => {
+    foundCity();
+    speed('0');
+    expect(lastPause()).toBe(true);
+    speed('3');
+    expect(lastPause()).toBe(false);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('muffles the music while the retire prompt is open', () => {
+    foundCity();
+    retireBtn().click();
+    expect(lastPause()).toBe(true);
+    cancelBtn().click();
+    expect(lastPause()).toBe(false);
+
+    // Paused at speed 0 behind the prompt, cancelling it leaves the run paused.
+    retireBtn().click();
+    speed('0');
+    cancelBtn().click();
+    expect(lastPause()).toBe(true);
+    speed('1');
+    expect(lastPause()).toBe(false);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
   });
 
   /**
-   * The speed toolbar sits beside the canvas rather than inside
-   * `.game-area`, so neither the start overlay nor the game-over overlay
-   * covers it and a click there always reaches the handler, whatever `phase`
-   * is. The handler must not fight the phase's own ownership of the music:
-   * silence before a run starts, and whatever `gameOver()` already set after
-   * one ends.
+   * The speed toolbar sits beside the canvas rather than inside `.game-area`,
+   * so neither the start overlay nor the game-over overlay covers it and a
+   * click there always reaches the handler, whatever `phase` is. Outside a
+   * live run the phase owns the music, so a click must not muffle it.
    */
   it('leaves the music alone when the speed toolbar is clicked outside a live run', () => {
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
-    expect(mockAudio.stop).not.toHaveBeenCalled();
-    expect(mockAudio.start).not.toHaveBeenCalled();
+    speed('0');
+    expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
 
     foundCity();
     retire();
-    mockAudio.stop.mockClear();
-    mockAudio.start.mockClear();
-
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
-    expect(mockAudio.stop).not.toHaveBeenCalled();
-    expect(mockAudio.start).not.toHaveBeenCalled();
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(lastPause()).toBe(false);
+    speed('0');
+    expect(lastPause()).toBe(false);
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
   });
 
-  /**
-   * The retire prompt traps only the keyboard (city.astro's own note on
-   * `#retire-overlay`): it is painted over the canvas alone, so the speed
-   * toolbar stays pointer-reachable while it is open. A speed change made
-   * there must still take effect — dropping it left a cancelled prompt with
-   * `speedMult` and the music disagreeing about whether the run was paused.
-   */
-  it('still applies a speed change made while the retire prompt is open', () => {
+  it('marks the slide into the red with a stinger, once, on the grace month', () => {
     foundCity();
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
-    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    overspend();
+    advance(27);
+    expect(toasted(LOW_FUNDS)).toBe(true);
+    expect(stingers('red')).toBe(0);
 
-    retireBtn().click();
-    expect(promptShown()).toBe(true);
-    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
-    expect(mockAudio.start).toHaveBeenCalledTimes(2);
+    advance(20);
+    expect(toasted(IN_THE_RED)).toBe(true);
+    expect(stingers('red')).toBe(1);
+  });
 
-    cancelBtn().click();
-    expect(promptShown()).toBe(false);
+  it('marks a fire breaking out with a stinger', () => {
+    foundCity();
+    expect(stingers('fire')).toBe(0);
+    // Under the two homes' ignition chance (0.0008).
+    vi.spyOn(Math, 'random').mockReturnValue(0.0001);
+    advance(1.3);
+    // The fixture sets no `data-t-fire-alert`, so this is the module's default.
+    expect(toasted('Fire has broken out!')).toBe(true);
+    expect(stingers('fire')).toBe(1);
   });
 });

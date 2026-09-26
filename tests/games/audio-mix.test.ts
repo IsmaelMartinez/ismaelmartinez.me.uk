@@ -47,6 +47,8 @@ function param() {
     value: 0,
     setValueAtTime: vi.fn(),
     exponentialRampToValueAtTime: vi.fn(),
+    // A voice with vibrato ramps its depth in linearly.
+    linearRampToValueAtTime: vi.fn(),
     setTargetAtTime: vi.fn()
   };
 }

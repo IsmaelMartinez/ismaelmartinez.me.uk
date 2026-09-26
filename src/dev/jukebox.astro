@@ -70,9 +70,11 @@
       } from './jukeboxState';
       import type { ControlState } from './jukeboxState';
 
-      // The same glob and the same "first export with a tracks array" rule as
-      // tests/games/music.test.ts, so a new cabinet appears here as soon as its
-      // music.ts exists. Eager, because every score is listed up front.
+      // The same glob and the same discovery rule as tests/games/music.test.ts,
+      // so a new cabinet appears here as soon as its music.ts exists: every
+      // export with a tracks array is a score, named after the cabinet, or
+      // `cabinet/EXPORT` when a module exports several (Critter Rescue's four
+      // acts). Eager, because every score is listed up front.
       const MODULES = import.meta.glob('../games/*/music.ts', { eager: true }) as Record<
         string,
         Record<string, unknown>
@@ -86,12 +88,15 @@
         );
       }
 
-      const SCORES = Object.entries(MODULES)
-        .map(([path, mod]) => ({
-          name: path.split('/').at(-2) as string,
-          music: Object.values(mod).find(isScore)
-        }))
-        .filter((s): s is { name: string; music: GameAudioOptions } => s.music !== undefined)
+      const SCORES: { name: string; music: GameAudioOptions }[] = Object.entries(MODULES)
+        .flatMap(([path, mod]) => {
+          const cabinet = path.split('/').at(-2) as string;
+          const scores = Object.entries(mod).filter(([, value]) => isScore(value));
+          return scores.map(([exported, music]) => ({
+            name: scores.length > 1 ? `${cabinet}/${exported}` : cabinet,
+            music: music as GameAudioOptions
+          }));
+        })
         .sort((a, b) => a.name.localeCompare(b.name));
 
       const SAMPLE_RATE = 44100;

@@ -4,8 +4,11 @@
  *
  * Drives /en/dev/jukebox headlessly: for each score it clicks Render WAV (two
  * full loops at the score's own tempo, the page's default) and saves the
- * download to music-renders/<label>/<cabinet>.wav, which is gitignored. It
- * then renders the first cabinet a second time and fails unless the two files
+ * download to music-renders/<label>/<cabinet>.wav, which is gitignored. A
+ * cabinet whose music.ts exports several scores lists each as
+ * `cabinet/EXPORT` (Critter Rescue's acts, e.g. lemmings/ACT_I_MUSIC), saved
+ * as lemmings-ACT_I_MUSIC.wav and selected by that name. It
+ * then renders the first score a second time and fails unless the two files
  * are byte-identical, since an A/B between branches only means something when
  * an unchanged score renders the same every time.
  *
@@ -16,7 +19,7 @@
  *   npm run dev                                  # in another terminal
  *   node scripts/render-music.js                 # label = branch or short SHA
  *   node scripts/render-music.js main            # explicit label
- *   node scripts/render-music.js main cascade tanks   # only these cabinets
+ *   node scripts/render-music.js main cascade tanks   # only these scores
  *
  * Optional flags render from an adaptive state instead of the score as
  * written, through the same controls the page shows (#371). A score without

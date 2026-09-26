@@ -14,13 +14,21 @@ const MODULES = import.meta.glob('../../src/games/*/music.ts', { eager: true }) 
   Record<string, unknown>
 >;
 
+/**
+ * Every score every module exports; a cabinet with several (Critter Rescue's
+ * four acts) is held to the ceiling for each, named `cabinet/EXPORT`.
+ */
 const SCORES: { name: string; music: GameAudioOptions }[] = Object.entries(MODULES)
-  .map(([path, mod]) => ({
-    name: path.split('/').at(-2) as string,
-    music: Object.values(mod).find(
-      v => typeof v === 'object' && v !== null && Array.isArray((v as GameAudioOptions).tracks)
-    ) as GameAudioOptions
-  }))
+  .flatMap(([path, mod]) => {
+    const cabinet = path.split('/').at(-2) as string;
+    const scores = Object.entries(mod).filter(
+      ([, v]) => typeof v === 'object' && v !== null && Array.isArray((v as GameAudioOptions).tracks)
+    );
+    return scores.map(([exported, music]) => ({
+      name: scores.length > 1 ? `${cabinet}/${exported}` : cabinet,
+      music: music as GameAudioOptions
+    }));
+  })
   .sort((a, b) => a.name.localeCompare(b.name));
 
 const ALL_SFX: SfxName[] = ['blip', 'score', 'hit', 'explosion', 'gameover', 'rescue'];
@@ -65,6 +73,7 @@ function makeContext() {
         n.target = to;
       }),
       disconnect: vi.fn(),
+      setPeriodicWave: vi.fn(),
       start: vi.fn(),
       stop: vi.fn()
     };
@@ -79,6 +88,8 @@ function makeContext() {
     close: vi.fn(() => Promise.resolve()),
     createGain: vi.fn(node),
     createOscillator: vi.fn(node),
+    // A pulse-duty voice sets its oscillator's wave from one of these.
+    createPeriodicWave: vi.fn(() => ({})),
     createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() }))
   };
   vi.stubGlobal('window', {

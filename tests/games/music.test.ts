@@ -43,20 +43,28 @@ function isScore(value: unknown): value is GameAudioOptions {
   );
 }
 
+/** The directory a score module sits in, which is the cabinet's name. */
+const cabinetOf = (path: string): string => path.split('/').at(-2) as string;
+
 /**
- * `{cabinet name} → its score and its profile`, keyed by the directory the
- * module sits in. The profile is found by its export name, `MUSIC_PROFILE`,
- * which every score module carries beside its `GameAudioOptions`.
+ * Every score every module exports, with the module's profile. The profile is
+ * found by its export name, `MUSIC_PROFILE`, which every score module carries
+ * beside its `GameAudioOptions`. A cabinet with one score is named after its
+ * directory; one with several (Critter Rescue's four acts) gets an entry per
+ * score, named `cabinet/EXPORT`, so no score it plays escapes the gates.
  */
-const DISCOVERED: { name: string; music: GameAudioOptions; profile: MusicProfile }[] = Object.entries(
-  MODULES
-)
-  .map(([path, mod]) => ({
-    name: path.split('/').at(-2) as string,
-    music: Object.values(mod).find(isScore) as GameAudioOptions,
-    profile: mod.MUSIC_PROFILE as MusicProfile
-  }))
-  .sort((a, b) => a.name.localeCompare(b.name));
+const DISCOVERED: { name: string; cabinet: string; music: GameAudioOptions; profile: MusicProfile }[] =
+  Object.entries(MODULES)
+    .flatMap(([path, mod]) => {
+      const scores = Object.entries(mod).filter(([, value]) => isScore(value));
+      return scores.map(([exported, music]) => ({
+        name: scores.length > 1 ? `${cabinetOf(path)}/${exported}` : cabinetOf(path),
+        cabinet: cabinetOf(path),
+        music: music as GameAudioOptions,
+        profile: mod.MUSIC_PROFILE as MusicProfile
+      }));
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
 /**
  * The loop length each cabinet had before the 2026-08-14 music round, whose
@@ -174,9 +182,10 @@ describe('the arcade scores', () => {
     // Guards the discovery itself: if the glob stopped matching, every
     // it.each below would vacuously pass over an empty list.
     expect(DISCOVERED.length).toBeGreaterThan(0);
-    for (const { name, music } of DISCOVERED) {
-      expect(music, `${name}/music.ts exports no GameAudioOptions`).toBeDefined();
-      expect(WAS_BEATS[name], `${name} has no entry in WAS_BEATS`).toBeDefined();
+    for (const path of Object.keys(MODULES)) {
+      const cabinet = cabinetOf(path);
+      expect(DISCOVERED.some(d => d.cabinet === cabinet), `${cabinet}/music.ts exports no GameAudioOptions`).toBe(true);
+      expect(WAS_BEATS[cabinet], `${cabinet} has no entry in WAS_BEATS`).toBeDefined();
     }
   });
 
@@ -188,8 +197,8 @@ describe('the arcade scores', () => {
     expect(unequalBlocks(music)).toEqual([]);
   });
 
-  it.each(DISCOVERED)('$name is at least twice the length it was', ({ name, music }) => {
-    expect(passBeats(music)).toBeGreaterThanOrEqual(WAS_BEATS[name] * 2);
+  it.each(DISCOVERED)('$name is at least twice the length it was', ({ cabinet, music }) => {
+    expect(passBeats(music)).toBeGreaterThanOrEqual(WAS_BEATS[cabinet] * 2);
   });
 
   it.each(DISCOVERED)('$name has a playable tempo and at least two voices', ({ music }) => {

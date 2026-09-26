@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createGameAudio, renderScore, type GameAudioOptions, type Note } from '../../src/games/engine/audio';
 import { REST } from '../../src/games/engine/pitch';
-import { SNAKE_MUSIC } from '../../src/games/snake/music';
+import { SNAKE_ROUND13_MUSIC } from './snake-round13-score';
 import { installLocalStorage } from './dom-helpers';
 import { drive, makeRecordingContext } from './audio-graph';
 
@@ -244,13 +244,13 @@ describe('slides', () => {
 
 describe('renderScore', () => {
   it('resolves to null where there is no OfflineAudioContext', async () => {
-    await expect(renderScore(SNAKE_MUSIC, 1)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, 1)).resolves.toBeNull();
   });
 
   it('schedules the same notes the live engine plays over the same window', async () => {
     // Live, from a clock at -50 ms so its first note lands on 0 like the render's.
     const seconds = 4;
-    const live = drive(SNAKE_MUSIC, seconds - 0.05, [], -0.05).split('\n');
+    const live = drive(SNAKE_ROUND13_MUSIC, seconds - 0.05, [], -0.05).split('\n');
 
     const ctx = makeRecordingContext(8000);
     const rendered = { length: 0 };
@@ -263,9 +263,9 @@ describe('renderScore', () => {
         }
       }
     });
-    await expect(renderScore(SNAKE_MUSIC, seconds, 8000)).resolves.toBe(rendered);
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, seconds, 8000)).resolves.toBe(rendered);
     expect(made).toEqual([1, 32000, 8000]);
-    expect(ctx.log.slice(0, 2)).toEqual(['create gain#1()', `gain#1.gain.value = ${SNAKE_MUSIC.volume}`]);
+    expect(ctx.log.slice(0, 2)).toEqual(['create gain#1()', `gain#1.gain.value = ${SNAKE_ROUND13_MUSIC.volume}`]);
 
     // Node numbering differs (live interleaves voices per 100 ms window, the
     // render takes each voice in one pass), so compare what each note does.
@@ -281,12 +281,12 @@ describe('renderScore', () => {
 
   it('refuses a length or a sample rate it cannot render at', async () => {
     vi.stubGlobal('window', { OfflineAudioContext: class {} });
-    await expect(renderScore(SNAKE_MUSIC, 0)).resolves.toBeNull();
-    await expect(renderScore(SNAKE_MUSIC, NaN)).resolves.toBeNull();
-    await expect(renderScore(SNAKE_MUSIC, Infinity)).resolves.toBeNull();
-    await expect(renderScore(SNAKE_MUSIC, 1, 0)).resolves.toBeNull();
-    await expect(renderScore(SNAKE_MUSIC, 1, NaN)).resolves.toBeNull();
-    await expect(renderScore(SNAKE_MUSIC, 1, Infinity)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, 0)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, NaN)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, Infinity)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, 1, 0)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, 1, NaN)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, 1, Infinity)).resolves.toBeNull();
   });
 
   it('resolves to null when the browser rejects the rate, rather than throwing', async () => {
@@ -297,6 +297,6 @@ describe('renderScore', () => {
         }
       }
     });
-    await expect(renderScore(SNAKE_MUSIC, 1, 1000)).resolves.toBeNull();
+    await expect(renderScore(SNAKE_ROUND13_MUSIC, 1, 1000)).resolves.toBeNull();
   });
 });

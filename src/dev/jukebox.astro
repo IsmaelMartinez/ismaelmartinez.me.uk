@@ -27,7 +27,9 @@
     <p>
       Every score found in <code>src/games/*/music.ts</code>. Play runs the live engine; Render WAV
       runs the same scheduler through an <code>OfflineAudioContext</code> and downloads 16-bit mono
-      PCM. The default length is two full loops at the tempo shown.
+      PCM. The default length is two full loops at the tempo shown, plus the intro once for a score
+      that has one. The controls under a score are its adaptive ones, shown only where the score has
+      them; a render starts from the voices, danger and section they are set to.
     </p>
     <ul id="scores" data-jukebox></ul>
 
@@ -44,9 +46,9 @@
           <span data-status></span>
         </div>
         <!--
-          Extension point. #371 adds its section, layer, danger and stinger
-          toggles here, and #370's sections become selectable here, each wired
-          to this card's GameAudio through `mountExtraControls` in the script.
+          The adaptive controls (#370's sections, #371's layers, danger,
+          stingers and pause), built by `mountExtraControls` in the script and
+          only for what this score has. Renders start from the state they show.
         -->
         <div class="row" data-extra-controls></div>
       </li>
@@ -56,6 +58,17 @@
       import { createGameAudio, renderScore } from '../games/engine/audio';
       import type { GameAudio, GameAudioOptions } from '../games/engine/audio';
       import { encodeWav } from './wav';
+      import {
+        defaultControls,
+        hasLayers,
+        introBeats,
+        loopBeats,
+        renderFileName,
+        renderParts,
+        sectionNames,
+        voiceLabel
+      } from './jukeboxState';
+      import type { ControlState } from './jukeboxState';
 
       // The same glob and the same "first export with a tracks array" rule as
       // tests/games/music.test.ts, so a new cabinet appears here as soon as its
@@ -85,21 +98,130 @@
       /** The engine's own fallback when a score sets no tempo. */
       const DEFAULT_TEMPO = 120;
 
-      /** One pass through the first voice, in beats (music.test.ts pins every voice equal). */
-      function loopBeats(music: GameAudioOptions): number {
-        return music.tracks[0]?.melody.reduce((sum, n) => sum + n.beats, 0) ?? 0;
+      /** What a card's Play and Render WAV need from its adaptive controls. */
+      interface ExtraControls {
+        state(): ControlState;
+        /** Called right after `start()`: `start()` begins outside danger at the top, so the controls re-apply. */
+        started(): void;
+        stopped(): void;
+      }
+
+      /** How often the section readout refreshes while a score plays, in ms. */
+      const READOUT_MS = 250;
+
+      function checkbox(parent: HTMLElement, text: string, hook: string, checked: boolean): HTMLInputElement {
+        const label = document.createElement('label');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = checked;
+        box.setAttribute(hook, '');
+        label.append(box, ` ${text}`);
+        parent.append(label);
+        return box;
       }
 
       /**
-       * Where #371's and #370's per-score controls attach: `el` is the card's
-       * empty `data-extra-controls` row and `audio()` returns the card's live
-       * GameAudio (created on first call). Nothing to mount yet.
+       * Builds a card's adaptive controls into its `data-extra-controls` row,
+       * each one only when the score has the feature: a toggle per voice for a
+       * score with named or initially silent voices, a section picker and a
+       * readout for a score with a form, a Danger toggle for a form with a
+       * danger variant, a button per stinger, and Pause for every score. The
+       * live controls act on the card's GameAudio; the render reads `state()`.
        */
       function mountExtraControls(
-        _el: HTMLElement,
-        _music: GameAudioOptions,
-        _audio: () => GameAudio
-      ): void {}
+        el: HTMLElement,
+        music: GameAudioOptions,
+        audio: () => GameAudio
+      ): ExtraControls {
+        const control = defaultControls(music);
+        let playing = false;
+
+        if (hasLayers(music)) {
+          const group = document.createElement('span');
+          group.setAttribute('data-voices', '');
+          group.textContent = 'Voices:';
+          music.tracks.forEach((track, t) => {
+            const box = checkbox(group, voiceLabel(track, t), 'data-layer', control.layers[t]);
+            box.dataset.layer = voiceLabel(track, t);
+            box.addEventListener('change', () => {
+              control.layers[t] = box.checked;
+              audio().setLayer(t, box.checked);
+            });
+          });
+          el.append(group);
+        }
+
+        const sections = sectionNames(music);
+        let readout: HTMLSpanElement | null = null;
+        if (sections.length) {
+          const label = document.createElement('label');
+          const picker = document.createElement('select');
+          picker.setAttribute('data-section', '');
+          picker.append(new Option('from the top', ''), ...sections.map(name => new Option(name, name)));
+          picker.addEventListener('change', () => {
+            control.section = picker.value;
+            if (playing && picker.value) audio().setSection(picker.value);
+          });
+          label.append('Section ', picker);
+          readout = document.createElement('span');
+          readout.setAttribute('data-section-now', '');
+          el.append(label, readout);
+        }
+
+        if (music.form?.danger) {
+          const box = checkbox(el, 'Danger', 'data-danger', false);
+          box.addEventListener('change', () => {
+            control.danger = box.checked;
+            if (playing) audio().setDanger(box.checked);
+          });
+        }
+
+        for (const name of Object.keys(music.stingers ?? {})) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = `Stinger: ${name}`;
+          button.dataset.stinger = name;
+          button.addEventListener('click', () => {
+            const played = audio().playStinger(name);
+            if (stingerNote) stingerNote.textContent = played ? '' : 'stingers play over running music: press Play first';
+          });
+          el.append(button);
+        }
+        const stingerNote = music.stingers ? document.createElement('span') : null;
+        if (stingerNote) {
+          stingerNote.setAttribute('data-stinger-note', '');
+          el.append(stingerNote);
+        }
+
+        const pause = checkbox(el, 'Pause', 'data-pause', false);
+        pause.addEventListener('change', () => audio().setPaused(pause.checked));
+
+        let timer: ReturnType<typeof setInterval> | null = null;
+        const showSection = () => {
+          if (!readout) return;
+          const now = playing ? audio().section() : null;
+          readout.textContent = now ? `now: ${now.name}${now.danger ? ' (danger)' : ''}` : 'now: stopped';
+        };
+        showSection();
+
+        return {
+          state: () => ({ ...control, layers: [...control.layers] }),
+          started() {
+            playing = true;
+            const a = audio();
+            if (control.danger) a.setDanger(true);
+            if (control.section) a.setSection(control.section);
+            if (readout && timer === null) timer = setInterval(showSection, READOUT_MS);
+            showSection();
+          },
+          stopped() {
+            playing = false;
+            if (timer !== null) clearInterval(timer);
+            timer = null;
+            showSection();
+          }
+        };
+      }
 
       /**
        * Renders a score one voice at a time and sums the voices here, in track
@@ -116,11 +238,22 @@
        * inputs at most, so each part is repeatable, and the sum is exact in
        * the fixed order below. Everything after the bus (echo, master volume)
        * is linear, so the mix is the whole-score render up to that last bit.
+       *
+       * The card's adaptive controls apply per voice through `renderParts`: a
+       * voice switched off is left out of the sum, and every voice starts in
+       * the chosen danger variant and section, so the voices stay in step.
        */
-      async function renderMix(music: GameAudioOptions, seconds: number): Promise<Float32Array | null> {
-        let mix: Float32Array | null = null;
-        for (const track of music.tracks) {
-          const part = await renderScore({ ...music, tracks: [track] }, seconds, SAMPLE_RATE);
+      async function renderMix(
+        music: GameAudioOptions,
+        seconds: number,
+        control: ControlState
+      ): Promise<Float32Array | null> {
+        if (!(seconds > 0)) return null;
+        const { parts, from } = renderParts(music, control);
+        // With every voice off the render is silence, at the length a render would have.
+        let mix = parts.length ? null : new Float32Array(Math.ceil(seconds * SAMPLE_RATE));
+        for (const voice of parts) {
+          const part = await renderScore(voice, seconds, SAMPLE_RATE, from);
           if (!part) return null;
           const samples = part.getChannelData(0);
           if (!mix) mix = new Float32Array(samples.length);
@@ -147,18 +280,21 @@
         const status = q<HTMLSpanElement>('[data-status]');
 
         const beats = loopBeats(music);
+        const intro = introBeats(music);
         const baseTempo = music.tempo ?? DEFAULT_TEMPO;
         q('[data-name]').textContent = name;
         q('[data-meta]').textContent =
-          `${music.tracks.length} voices, ${beats} beats a loop, ${baseTempo} bpm` +
-          (music.echo ? ', echo' : '');
+          `${music.tracks.length} voices, ${beats} beats a loop${intro ? ` after ${intro} of intro` : ''}, ${baseTempo} bpm` +
+          (music.echo ? ', echo' : '') +
+          (music.form ? `, form ${music.form.order.join(' ')}` : '') +
+          (music.form?.danger ? `, danger ${music.form.danger.order.join(' ')}` : '');
         tempoIn.value = String(baseTempo);
 
         const tempo = () => {
           const bpm = Number(tempoIn.value);
           return Number.isFinite(bpm) && bpm > 0 ? bpm : baseTempo;
         };
-        const seconds = () => (Math.max(Number(loopsIn.value) || 0, 0) * beats * 60) / tempo();
+        const seconds = () => ((Math.max(Number(loopsIn.value) || 0, 0) * beats + intro) * 60) / tempo();
         const showSeconds = () => {
           secondsOut.textContent = `= ${seconds().toFixed(1)} s`;
         };
@@ -174,8 +310,10 @@
           }
           return audio;
         };
+        const extra = mountExtraControls(q<HTMLElement>('[data-extra-controls]'), music, getAudio);
         const stop = () => {
           audio?.stop();
+          extra.stopped();
           playBtn.textContent = 'Play';
           if (playing?.stop === stop) playing = null;
         };
@@ -189,6 +327,7 @@
           const a = getAudio();
           a.setTempo(tempo());
           a.start();
+          extra.started();
           playBtn.textContent = 'Stop';
           playing = { stop };
         });
@@ -203,7 +342,8 @@
           const length = seconds();
           renderBtn.disabled = true;
           status.textContent = 'rendering...';
-          const samples = await renderMix({ ...music, tempo: tempo() }, length);
+          const control = extra.state();
+          const samples = await renderMix({ ...music, tempo: tempo() }, length, control);
           renderBtn.disabled = false;
           if (!samples) {
             status.textContent = 'render failed (no OfflineAudioContext, or a zero length)';
@@ -213,13 +353,12 @@
           const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
           const link = document.createElement('a');
           link.href = url;
-          link.download = `${name}.wav`;
+          link.download = renderFileName(name, music, control);
           link.click();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
           status.textContent = `${length.toFixed(1)} s, ${wav.byteLength} bytes`;
         });
 
-        mountExtraControls(q<HTMLElement>('[data-extra-controls]'), music, getAudio);
         list.append(card);
       }
       list.dataset.ready = String(SCORES.length);
@@ -259,6 +398,14 @@
       }
       input {
         width: 5rem;
+      }
+      input[type='checkbox'] {
+        width: auto;
+      }
+      [data-voices] {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
       }
     </style>
   </body>

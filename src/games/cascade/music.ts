@@ -9,10 +9,25 @@
  * out into clatter, and a sustained chord bed underneath holds the harmony
  * together as the tempo climbs.
  */
-import { p, REST, type GameAudioOptions } from '../engine';
+import { p, REST, type GameAudioOptions, type MusicProfile } from '../engine';
 
 /** Starting tempo. The per-level ramp in `game.ts` winds up from here. */
 export const BASE_TEMPO = 126;
+
+/**
+ * The ceiling the per-level ramp in `game.ts` stops at, reached at level 14.
+ * It lives with the score rather than with the ramp because ADR 003 sizes a
+ * ramping loop at its fastest tempo, so this is the number the score is
+ * measured against.
+ */
+export const MAX_TEMPO = 240;
+
+/** A short, fast-paced run; the loop is measured at the ramp's ceiling. */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'standard',
+  fastestTempo: MAX_TEMPO,
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const CASCADE_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,

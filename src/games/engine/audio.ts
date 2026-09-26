@@ -201,7 +201,28 @@ export interface GameAudioOptions {
   stingers?: Record<string, Note[][]>;
 }
 
-export type SfxName = 'blip' | 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';
+/**
+ * What a cabinet's score is measured against, exported beside it from its
+ * `music.ts` as `MUSIC_PROFILE`; `tests/games/music.test.ts` holds each score
+ * to the floors ADR 003's round 2 amendment sets for its session.
+ */
+export interface MusicProfile {
+  /**
+   * How long a player stays with the music, which sets the floor on one pass
+   * of the loop: 'long' is 45 s, 'standard' 30 s, 'minimal' 20 s.
+   */
+  session: 'long' | 'standard' | 'minimal';
+  /** The fastest tempo the game ramps the score to; the floor is checked there. Left out when it never ramps. */
+  fastestTempo?: number;
+  /**
+   * Why the score does not meet the gates yet. While it is set the test
+   * asserts that at least one gate still fails, so a flag left behind by a
+   * rescore that cleared them all goes red; the rescore removes it.
+   */
+  gatePending?: string;
+}
+
+export type SfxName = 'blip'| 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';
 
 export interface GameAudio {
   /** Begin (or resume) the looping music. Safe to call repeatedly. */

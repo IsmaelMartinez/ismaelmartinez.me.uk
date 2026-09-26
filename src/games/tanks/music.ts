@@ -10,7 +10,13 @@
  * step it can (E-D-E-F-E-F-D-E), so the march has body without a second melody
  * competing with the lead.
  */
-import { p, REST, type GameAudioOptions } from '../engine';
+import { p, REST, type GameAudioOptions, type MusicProfile } from '../engine';
+
+/** A match is a few minutes of turns, and the score never ramps. */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'standard',
+  gatePending: 'awaiting round 2 rescore (#374-#381)'
+};
 
 export const TANKS_MUSIC: GameAudioOptions = {
   tempo: 116,

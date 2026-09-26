@@ -16,6 +16,7 @@ export { createGameAudio, loadMusicMuted, loadSfxMuted, renderScore } from './au
 export type {
   GameAudio,
   GameAudioOptions,
+  MusicProfile,
   Note,
   SfxName,
   Track,

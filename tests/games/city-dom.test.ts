@@ -683,4 +683,25 @@ describe('Microcity speed-zero pause leaves the music running (#368)', () => {
     expect(mockAudio.stop).not.toHaveBeenCalled();
     expect(mockAudio.start).not.toHaveBeenCalled();
   });
+
+  /**
+   * The retire prompt traps only the keyboard (city.astro's own note on
+   * `#retire-overlay`): it is painted over the canvas alone, so the speed
+   * toolbar stays pointer-reachable while it is open. A speed change made
+   * there must still take effect — dropping it left a cancelled prompt with
+   * `speedMult` and the music disagreeing about whether the run was paused.
+   */
+  it('still applies a speed change made while the retire prompt is open', () => {
+    foundCity();
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="0"]')!.click();
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+
+    retireBtn().click();
+    expect(promptShown()).toBe(true);
+    document.querySelector<HTMLButtonElement>('.speed-btn[data-speed="1"]')!.click();
+    expect(mockAudio.start).toHaveBeenCalledTimes(2);
+
+    cancelBtn().click();
+    expect(promptShown()).toBe(false);
+  });
 });

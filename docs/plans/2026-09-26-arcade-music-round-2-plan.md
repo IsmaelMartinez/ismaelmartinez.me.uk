@@ -237,22 +237,22 @@ only goal that says a score is good.
 
 ## Issues
 
-Tracking issue: #TRACK.
+Tracking issue: #382.
 
 | Item | Issue |
 |---|---|
-| 0.1 Jukebox and offline render | #J |
-| 0.2 Audio wiring bugs | #B |
-| 1.1 Percussion and timbre | #P |
-| 1.2 Form: intro, sections, rests | #F |
-| 1.3 Adaptivity: layers, sections, danger, stingers, pause filter | #A |
-| 1.4 Mix: effects against music | #M |
-| 1.5 ADR 003 amendment and test gates | #C |
-| 2.1 Line Hold | #L1 |
-| 2.2 Cascade | #L2 |
-| 2.3 Critter Rescue | #L3 |
-| 2.4 CALCIO '90 | #L4 |
-| 2.5 Microcity | #L5 |
-| 2.6 Tank Duel | #L6 |
-| 2.7 Snake | #L7 |
-| 3 Parked cabinets | #PK |
+| 0.1 Jukebox and offline render | #367 |
+| 0.2 Audio wiring bugs | #368 |
+| 1.1 Percussion and timbre | #369 |
+| 1.2 Form: intro, sections, rests | #370 |
+| 1.3 Adaptivity: layers, sections, danger, stingers, pause filter | #371 |
+| 1.4 Mix: effects against music | #372 |
+| 1.5 ADR 003 amendment and test gates | #373 |
+| 2.1 Line Hold | #374 |
+| 2.2 Cascade | #375 |
+| 2.3 Critter Rescue | #376 |
+| 2.4 CALCIO '90 | #377 |
+| 2.5 Microcity | #378 |
+| 2.6 Tank Duel | #379 |
+| 2.7 Snake | #380 |
+| 3 Parked cabinets | #381 |

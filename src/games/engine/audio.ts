@@ -249,7 +249,8 @@ export interface GameAudio {
   /**
    * Change the loop's tempo on the fly (already-scheduled notes keep their
    * old length; the ~100ms lookahead means the shift lands almost at once).
-   * Games whose pace ramps (Cascade's per-level speed-up) lean on this.
+   * Games whose pace ramps (Cascade's levels, Snake's step interval, CALCIO
+   * '90's knockout stages) lean on this.
    */
   setTempo(bpm: number): void;
   /**
@@ -1360,8 +1361,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     }
     // Dropping the scheduler only stops *new* notes. Everything already handed
     // to the audio graph plays to its end, and a voice commits a whole note at
-    // a time, so a cabinet with a sustained voice (Tank Duel's horn is 4 beats,
-    // just over two seconds at its tempo) would go on droning over the
+    // a time, so a cabinet with a sustained voice (a 4-beat pad note is two
+    // to three seconds at the arcade's tempos) would go on droning over the
     // game-over sting and the results overlay. Ducking the master is what
     // actually stops the music; start() lifts it again.
     if (musicMaster && ctx) {
@@ -1559,9 +1560,10 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       // whose notes are long stays on old-tempo timing for the whole of its
       // in-flight note while short-note voices re-time within the 0.1s
       // lookahead — so every tempo change slides the voices further apart and
-      // none of it comes back. Cascade is the only cabinet that ramps, and
-      // across its thirteen level-ups its sustained voice ended up around a
-      // beat and a half behind the melody, which reads as the previous bar's
+      // none of it comes back. Cascade was the first cabinet to ramp (Snake
+      // and CALCIO '90 have since joined it), and across its thirteen
+      // level-ups its sustained voice ended up around a beat and a half
+      // behind the melody, which reads as the previous bar's
       // chord still sounding under the current one. Rescaling the outstanding
       // gap by the same ratio for every voice restates them all in the new
       // tempo; the cost is one sub-note seam where the tempo changes.

@@ -17,6 +17,7 @@ import { p, type GameAudioOptions } from '../engine';
 export const TOWERDEFENSE_MUSIC: GameAudioOptions = {
   tempo: 136,
   volume: 0.12,
+  tonic: p('A3'),
   echo: { time: 0.28, feedback: 0.25, mix: 0.2 },
   tracks: [
     {

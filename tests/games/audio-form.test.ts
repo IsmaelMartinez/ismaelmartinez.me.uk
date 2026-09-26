@@ -8,34 +8,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createGameAudio, renderScore, scoreSeconds, type GameAudioOptions, type Note } from '../../src/games/engine/audio';
 import { SNAKE_MUSIC } from '../../src/games/snake/music';
 import { installLocalStorage } from './dom-helpers';
-import { drive, makeRecordingContext, type Cue } from './audio-graph';
+import { drive, expectTimes, makeRecordingContext, onsets, timesOf, type Cue } from './audio-graph';
 
 const n = (freq: number, beats: number): Note => ({ freq, beats });
-
-/** Every tone's onset as [frequency, time], in the order the tones were made. */
-function onsets(log: string): [number, number][] {
-  const seen = new Set<string>();
-  const out: [number, number][] = [];
-  for (const line of log.split('\n')) {
-    const m = /^(osc#\d+)\.frequency\.setValueAtTime\(([^,]+), ([^)]+)\)$/.exec(line);
-    if (!m || seen.has(m[1])) continue;
-    seen.add(m[1]);
-    out.push([Number(m[2]), Number(m[3])]);
-  }
-  return out;
-}
-
-/** The onset times of one frequency. */
-function timesOf(log: string, freq: number): number[] {
-  return onsets(log)
-    .filter(([f]) => f === freq)
-    .map(([, t]) => t);
-}
-
-function expectTimes(actual: number[], expected: number[]): void {
-  expect(actual).toHaveLength(expected.length);
-  expected.forEach((t, i) => expect(actual[i]).toBeCloseTo(t, 9));
-}
 
 beforeEach(() => {
   installLocalStorage();

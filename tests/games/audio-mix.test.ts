@@ -47,7 +47,10 @@ function param() {
     value: 0,
     setValueAtTime: vi.fn(),
     exponentialRampToValueAtTime: vi.fn(),
-    setTargetAtTime: vi.fn()
+    setTargetAtTime: vi.fn(),
+    // Vibrato's depth ramp and a layer's fade, which a score using them reaches.
+    linearRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn()
   };
 }
 
@@ -59,7 +62,10 @@ function makeContext() {
       gain: param(),
       frequency: param(),
       detune: param(),
+      Q: param(),
       type: 'square',
+      buffer: null as unknown,
+      setPeriodicWave: vi.fn(),
       target: null as unknown,
       connect: vi.fn((to: unknown) => {
         n.target = to;
@@ -72,6 +78,7 @@ function makeContext() {
   };
   const ctx = {
     currentTime: 0,
+    sampleRate: 44100,
     state: 'running',
     destination,
     resume: vi.fn(() => Promise.resolve()),
@@ -79,6 +86,11 @@ function makeContext() {
     close: vi.fn(() => Promise.resolve()),
     createGain: vi.fn(node),
     createOscillator: vi.fn(node),
+    // Pulse duties, drums and the pause filter, for scores that use them.
+    createPeriodicWave: vi.fn(() => ({})),
+    createBiquadFilter: vi.fn(node),
+    createBufferSource: vi.fn(node),
+    createBuffer: vi.fn((_channels: number, length: number) => ({ getChannelData: () => new Float32Array(length) })),
     createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() }))
   };
   vi.stubGlobal('window', {

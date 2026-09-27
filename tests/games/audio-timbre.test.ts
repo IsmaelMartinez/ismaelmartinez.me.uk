@@ -1,6 +1,6 @@
 /**
  * The engine's opt-in instrument: drums, pulse duties, vibrato, slides, pan,
- * and the offline render. Each is read off the recording context's graph log (see
+ * ADSR envelopes, filters, and the offline render. Each is read off the recording context's graph log (see
  * `audio-graph.ts`), so an assertion names the exact node call it expects.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -281,6 +281,103 @@ describe('pan', () => {
     expect(log).toContain('panner#1.connect(gain#4)');
     expect(log).toContain('panner#2.connect(gain#2)');
     expect(args(log, 'panner#2.pan', 'setValueAtTime')[0][0]).toBe(1);
+  });
+});
+
+describe('adsr', () => {
+  // One beat at 60 bpm, at full track volume: a one-second gate peaking at 0.8.
+  const ENV = 'gain#3.gain';
+
+  it('rises, decays to the sustain, holds it for the whole beat, then releases', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { adsr: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 0.3 } });
+    expect(args(log, ENV, 'setValueAtTime')).toEqual([
+      [0, T0],
+      [0.4, T0 + 1]
+    ]);
+    const [[peak, peakAt]] = args(log, ENV, 'linearRampToValueAtTime');
+    expect(peak).toBeCloseTo(0.8, 9);
+    expect(peakAt).toBeCloseTo(T0 + 0.1, 9);
+    const [[held, heldAt], [floor, goneAt]] = args(log, ENV, 'exponentialRampToValueAtTime');
+    expect(held).toBeCloseTo(0.4, 9);
+    expect(heldAt).toBeCloseTo(T0 + 0.3, 9);
+    expect(floor).toBe(0.0001);
+    expect(goneAt).toBeCloseTo(T0 + 1.3, 9);
+    // The oscillator rings on through the release.
+    const [[stop]] = args(log, 'osc#1', 'stop');
+    expect(stop).toBeCloseTo(T0 + 1.32, 9);
+  });
+
+  it('stops part way up an attack longer than the note', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { adsr: { attack: 2, decay: 0, sustain: 1, release: 0.1 } });
+    const [[top, at]] = args(log, ENV, 'linearRampToValueAtTime');
+    expect(top).toBeCloseTo(0.4, 9);
+    expect(at).toBeCloseTo(T0 + 1, 9);
+    expect(args(log, ENV, 'exponentialRampToValueAtTime')).toHaveLength(1);
+  });
+
+  it('releases from part way down a decay longer than the note, where the curve had got to', () => {
+    // Half of a decay from 0.8 towards 0.2 is 0.8 * (0.2 / 0.8) ^ 0.5 = 0.4.
+    const log = playLine([{ freq: 440, beats: 1 }], { adsr: { attack: 0.1, decay: 1.8, sustain: 0.25, release: 0.1 } });
+    const [[held, heldAt]] = args(log, ENV, 'exponentialRampToValueAtTime');
+    expect(held).toBeCloseTo(0.4, 9);
+    expect(heldAt).toBeCloseTo(T0 + 1, 9);
+  });
+
+  it('overrides the pad envelope, and never releases in under 5 ms', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], {
+      envelope: 'pad',
+      adsr: { attack: 0, decay: 0, sustain: 0, release: -1 }
+    });
+    // A sustain of 0 holds at the exponential floor rather than zero.
+    expect(args(log, ENV, 'setValueAtTime')).toEqual([
+      [0, T0],
+      [0.0001, T0 + 1]
+    ]);
+    const release = args(log, ENV, 'exponentialRampToValueAtTime').at(-1) as number[];
+    expect(release[1]).toBeCloseTo(T0 + 1.005, 9);
+  });
+});
+
+describe('filter', () => {
+  it('puts a filter between the oscillators and the envelope, swept down from above the cutoff', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], {
+      detune: 6,
+      filter: { cutoff: 800, q: 4, envAmount: 2, envDecay: 0.2 }
+    });
+    expect(log).toContain('filter#1.type = lowpass');
+    expect(args(log, 'filter#1.Q', 'setValueAtTime')).toEqual([[4, T0]]);
+    expect(args(log, 'filter#1.frequency', 'setValueAtTime')).toEqual([[3200, T0]]);
+    const [[to, at]] = args(log, 'filter#1.frequency', 'exponentialRampToValueAtTime');
+    expect(to).toBe(800);
+    expect(at).toBeCloseTo(T0 + 0.2, 9);
+    expect(log).toContain('filter#1.connect(gain#3)');
+    // The voice and its twin both go through it.
+    expect(log).toContain('osc#1.connect(filter#1)');
+    expect(log).toContain('osc#2.connect(filter#1)');
+    expect(log).not.toContain('osc#1.connect(gain#3)');
+  });
+
+  it('holds a filter with no sweep, of the type asked for, and keeps it under Nyquist', () => {
+    const fixed = playLine([{ freq: 440, beats: 1 }], { filter: { type: 'bandpass', cutoff: 1200 } });
+    expect(fixed).toContain('filter#1.type = bandpass');
+    expect(args(fixed, 'filter#1.Q', 'setValueAtTime')).toEqual([[1, T0]]);
+    expect(args(fixed, 'filter#1.frequency', 'setValueAtTime')).toEqual([[1200, T0]]);
+    expect(args(fixed, 'filter#1.frequency', 'exponentialRampToValueAtTime')).toEqual([]);
+    const high = playLine([{ freq: 440, beats: 1 }], { filter: { cutoff: 30000, envAmount: 1 } });
+    expect(args(high, 'filter#1.frequency', 'setValueAtTime')).toEqual([[22050, T0]]);
+  });
+
+  it('opens up from below when the sweep is negative, over 0.1 s by default', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { filter: { cutoff: 2000, envAmount: -1 } });
+    expect(args(log, 'filter#1.frequency', 'setValueAtTime')).toEqual([[1000, T0]]);
+    const [[to, at]] = args(log, 'filter#1.frequency', 'exponentialRampToValueAtTime');
+    expect(to).toBe(2000);
+    expect(at).toBeCloseTo(T0 + 0.1, 9);
+  });
+
+  it('leaves drums alone', () => {
+    const log = playLine([{ freq: REST, beats: 1, drum: 'kick' }], { filter: { cutoff: 500 } });
+    expect(log.some(l => l.startsWith('create filter'))).toBe(false);
   });
 });
 

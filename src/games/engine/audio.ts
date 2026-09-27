@@ -141,6 +141,54 @@ export interface Track {
    * past the layers. Out of range clamps; anything not finite is the centre.
    */
   pan?: number;
+  /**
+   * An attack, decay, sustain, release envelope in place of `envelope`'s two
+   * fixed shapes, which it overrides. The note holds its sustain for its whole
+   * length (no pluck's trimmed gap) and then releases, so a release longer
+   * than the gap to the next note overlaps it, as a synth's does.
+   */
+  adsr?: Adsr;
+  /**
+   * A filter on every note of the voice, between its oscillators and its
+   * envelope, with its own sweep: SNES softness, brass that opens as it
+   * speaks, a bass that closes after the pluck. Drums ignore it.
+   */
+  filter?: VoiceFilter;
+}
+
+/**
+ * A voice's amplitude envelope, in seconds except `sustain`. A note shorter
+ * than `attack` never reaches the peak: it gets the share of it its length
+ * allows, then releases. One shorter than `attack + decay` releases from part
+ * way down the decay. Negative or non-finite times are 0.
+ */
+export interface Adsr {
+  /** Linear rise from silence to the note's peak. */
+  attack: number;
+  /** Exponential fall from the peak to the sustain level. */
+  decay: number;
+  /** The level held until the note ends, 0–1 of the peak. */
+  sustain: number;
+  /** Exponential fall to silence after the note ends; at least 5 ms, so it never clicks. */
+  release: number;
+}
+
+/** A voice's per-note filter; see `Track.filter`. */
+export interface VoiceFilter {
+  /** Defaults to 'lowpass'. */
+  type?: 'lowpass' | 'highpass' | 'bandpass';
+  /** Where the filter settles, in Hz, clamped to the audible range. */
+  cutoff: number;
+  /** Web Audio's own `Q`: resonance in dB for a low- or high-pass, the width for a band-pass. Defaults to 1. */
+  q?: number;
+  /**
+   * How far above the cutoff the note starts, in octaves, falling back to the
+   * cutoff over `envDecay`; negative starts below and opens up. Defaults to 0,
+   * a fixed filter.
+   */
+  envAmount?: number;
+  /** Seconds the sweep takes from note onset. Defaults to 0.1. */
+  envDecay?: number;
 }
 
 /** Feedback-delay send applied to the whole music mix. */
@@ -537,6 +585,8 @@ interface NormTrack {
   name: string | undefined;
   startsMuted: boolean;
   pan: number;
+  adsr: Adsr | undefined;
+  filter: VoiceFilter | undefined;
 }
 
 /** Fills in per-track defaults. */
@@ -551,7 +601,9 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
     vibrato: t.vibrato ?? 0,
     name: t.name,
     startsMuted: t.startsMuted ?? false,
-    pan: t.pan !== undefined && Number.isFinite(t.pan) ? Math.min(Math.max(t.pan, -1), 1) : 0
+    pan: t.pan !== undefined && Number.isFinite(t.pan) ? Math.min(Math.max(t.pan, -1), 1) : 0,
+    adsr: t.adsr,
+    filter: t.filter
   }));
 }
 
@@ -565,10 +617,73 @@ interface ToneMotion {
   vibrato?: number;
 }
 
+/** The optional shaping of one tone's sound, a voice's `adsr` and `filter`. */
+interface ToneColour {
+  adsr?: Adsr;
+  filter?: VoiceFilter;
+}
+
+/** Shortest release an `Adsr` gets, in seconds; an instant drop to silence clicks. */
+const MIN_RELEASE = 0.005;
+/** How long a filter's sweep takes when `envDecay` is left out, in seconds. */
+const FILTER_ENV_DECAY = 0.1;
+
+/** A time in seconds from an authored value: 0 for anything negative or not finite. */
+function authoredSeconds(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * Schedules an `Adsr` on a tone's level for a note held `duration` seconds,
+ * and returns how long its release rings on after that. A note cut short in
+ * its attack or decay stops at the level the envelope had reached, which for
+ * the exponential decay is `peak * (level / peak) ^ fraction`.
+ */
+function shapeAdsr(level: AudioParam, start: number, duration: number, peak: number, adsr: Adsr): number {
+  const attack = authoredSeconds(adsr.attack);
+  const decay = authoredSeconds(adsr.decay);
+  const release = Math.max(authoredSeconds(adsr.release), MIN_RELEASE);
+  const sustain = Math.max(peak * Math.min(Math.max(Number.isFinite(adsr.sustain) ? adsr.sustain : 1, 0), 1), 0.0001);
+  const end = start + duration;
+  level.setValueAtTime(0, start);
+  let held: number;
+  if (attack >= duration) {
+    held = peak * (attack > 0 ? duration / attack : 1);
+    level.linearRampToValueAtTime(held, end);
+  } else {
+    level.linearRampToValueAtTime(peak, start + attack);
+    const reach = Math.min(decay, duration - attack);
+    held = decay > 0 ? peak * Math.pow(sustain / peak, reach / decay) : sustain;
+    level.exponentialRampToValueAtTime(held, start + attack + reach);
+    level.setValueAtTime(held, end);
+  }
+  level.exponentialRampToValueAtTime(0.0001, end + release);
+  return release;
+}
+
+/** A tone's filter from its voice's `filter`, swept from onset, feeding `into`. */
+function toneFilter(ctx: BaseAudioContext, spec: VoiceFilter, start: number, into: AudioNode): BiquadFilterNode {
+  const nyquist = ctx.sampleRate / 2;
+  const clamp = (hz: number) => Math.min(Math.max(hz, 20), nyquist);
+  const cutoff = clamp(Number.isFinite(spec.cutoff) ? spec.cutoff : nyquist);
+  const filter = ctx.createBiquadFilter();
+  filter.type = spec.type ?? 'lowpass';
+  filter.Q.setValueAtTime(spec.q !== undefined && Number.isFinite(spec.q) ? spec.q : 1, start);
+  const octaves = spec.envAmount !== undefined && Number.isFinite(spec.envAmount) ? spec.envAmount : 0;
+  const from = clamp(cutoff * Math.pow(2, octaves));
+  filter.frequency.setValueAtTime(from, start);
+  if (from !== cutoff) {
+    const sweep = spec.envDecay === undefined ? FILTER_ENV_DECAY : authoredSeconds(spec.envDecay);
+    filter.frequency.exponentialRampToValueAtTime(cutoff, start + sweep);
+  }
+  filter.connect(into);
+  return filter;
+}
+
 /**
  * Schedules one enveloped tone. The order and values of the graph calls for a
- * tone with no `motion` are the ones the engine has always made; the motion
- * adds calls after them and never changes them.
+ * tone with no `motion` and no `colour` are the ones the engine has always
+ * made; either adds calls and never changes the ones a tone without it makes.
  */
 function playTone(
   ctx: BaseAudioContext,
@@ -580,20 +695,30 @@ function playTone(
   destination: AudioNode,
   envelope: 'pluck' | 'pad' = 'pluck',
   detune = 0,
-  motion: ToneMotion = {}
+  motion: ToneMotion = {},
+  colour: ToneColour = {}
 ): void {
   if (freq <= 0) return;
   const gain = ctx.createGain();
-  // A pad swells slowly then decays across the whole note, a soft sustained
-  // bed; a pluck has a short attack then an exponential decay, the chiptune
-  // envelope. Either attack is capped to a fraction of the note so a very
-  // short note never schedules the decay ramp before the attack peak (which
-  // glitches Web Audio).
-  const attack = envelope === 'pad' ? Math.min(duration * 0.4, 0.25) : Math.min(0.01, duration * 0.5);
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(peak, start + attack);
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  // How long the tone sounds past `duration`: an ADSR's release, else none.
+  let ring = 0;
+  if (colour.adsr) {
+    ring = shapeAdsr(gain.gain, start, duration, peak, colour.adsr);
+  } else {
+    // A pad swells slowly then decays across the whole note, a soft sustained
+    // bed; a pluck has a short attack then an exponential decay, the chiptune
+    // envelope. Either attack is capped to a fraction of the note so a very
+    // short note never schedules the decay ramp before the attack peak (which
+    // glitches Web Audio).
+    const attack = envelope === 'pad' ? Math.min(duration * 0.4, 0.25) : Math.min(0.01, duration * 0.5);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak, start + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  }
   gain.connect(destination);
+  // The oscillators feed the filter when the voice has one, else the envelope.
+  const input: AudioNode = colour.filter ? toneFilter(ctx, colour.filter, start, gain) : gain;
+  const stopAt = start + duration + ring + 0.02;
   const slide = Math.min(SLIDE_TIME, duration / 2);
   const slideFrom = motion.slideFrom ?? 0;
   const scoop = slideFrom > 0;
@@ -611,7 +736,7 @@ function playTone(
     depth.gain.linearRampToValueAtTime(vibrato, start + VIBRATO_FULL);
     lfo.connect(depth);
     lfo.start(start);
-    lfo.stop(start + duration + 0.02);
+    lfo.stop(stopAt);
   }
   const spawn = (cents: number): void => {
     const osc = ctx.createOscillator();
@@ -619,9 +744,9 @@ function playTone(
     else osc.type = type;
     osc.frequency.setValueAtTime(scoop ? slideFrom : freq, start);
     if (cents) osc.detune.setValueAtTime(cents, start);
-    osc.connect(gain);
+    osc.connect(input);
     osc.start(start);
-    osc.stop(start + duration + 0.02);
+    osc.stop(stopAt);
     if (scoop) osc.frequency.exponentialRampToValueAtTime(freq, start + slide);
     if (motion.slideTo !== undefined && motion.slideTo > 0) {
       osc.frequency.setValueAtTime(freq, start + duration - slide);
@@ -896,9 +1021,10 @@ function playNote(
     playDrum(ctx, note.drum, at, peak, out);
     return;
   }
-  // Pads play their full length so they sustain and connect; plucks trim
-  // to leave the terse gap that reads as chiptune.
-  const playDur = track.envelope === 'pad' ? dur : dur * 0.9;
+  // Pads and ADSR voices play their full length so they sustain and connect
+  // (an ADSR's release then rings past it); plucks trim to leave the terse
+  // gap that reads as chiptune.
+  const playDur = track.envelope === 'pad' || track.adsr ? dur : dur * 0.9;
   const shift = (f: number | undefined): number | undefined =>
     f !== undefined && f > 0 ? f * Math.pow(2, track.octaveShift) : f;
   const freq = note.freq > 0 ? note.freq * Math.pow(2, track.octaveShift) : note.freq;
@@ -907,7 +1033,8 @@ function playNote(
     slideFrom: shift(note.slideFrom),
     slideTo: note.slideNext && following && !following.drum ? shift(following.freq) : undefined
   };
-  playTone(ctx, freq, at, playDur, track.wave, peak, out, track.envelope, track.detune, motion);
+  const colour: ToneColour = { adsr: track.adsr, filter: track.filter };
+  playTone(ctx, freq, at, playDur, track.wave, peak, out, track.envelope, track.detune, motion, colour);
 }
 
 /** A panner at `pan` feeding `bus`, for one note of a panned voice. */

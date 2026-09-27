@@ -472,6 +472,8 @@ describe('the round 2 gates', () => {
     expect(failedGates(music, { ...long, gates: { rhythms: false } })).toEqual(['seconds', 'syncopation', 'seam']);
     // A gate set to true, or left out, is on: the default is today's behaviour.
     expect(failedGates(music, { ...long, gates: { seam: true } })).toEqual(['seconds', 'rhythms', 'syncopation', 'seam']);
+    // Nor does a gate written as undefined, which is left out by another name.
+    expect(failedGates(music, { ...long, gates: { seam: undefined } })).toEqual(['seconds', 'rhythms', 'syncopation', 'seam']);
     const none = { seam: false, syncopation: false, rhythms: false };
     expect(failedGates(music, { ...long, gates: none })).toEqual(['seconds']);
     expect(failedGates(music, { session: 'standard', gates: none })).toEqual([]);
@@ -485,6 +487,9 @@ describe('the round 2 gates', () => {
     };
     expect(sceneProfile(profile, 'calm')).toEqual({ session: 'minimal', gates: { seam: false, syncopation: false } });
     expect(sceneProfile(profile, 'match')).toEqual({ session: 'long', gates: { seam: true, syncopation: false } });
+    // A scene that writes a gate as undefined inherits the cabinet's choice rather than switching it back on.
+    const unset: MusicProfile = { ...profile, scenes: { calm: { session: 'minimal', gates: { seam: undefined } } } };
+    expect(sceneProfile(unset, 'calm').gates?.seam).toBe(false);
     const home = passing();
     endBass(home, bassBar('C3', 'G2'));
     expect(failedGates(home, sceneProfile(profile, 'calm'))).toEqual([]);

@@ -209,6 +209,9 @@ export function sceneScore(music: GameAudioOptions, scene: string): GameAudioOpt
   return { ...music, form: { sections: form.sections, beatsPerBar: form.beatsPerBar, order: [...form.scenes![scene].order] } };
 }
 
+/** The style gates a profile can switch off. */
+const GATES = ['seam', 'syncopation', 'rhythms'] as const;
+
 /**
  * The profile one of a form's scenes is gated against: its own session and
  * tempo, and the cabinet's `gates` with any the scene sets laid over them, so
@@ -217,7 +220,9 @@ export function sceneScore(music: GameAudioOptions, scene: string): GameAudioOpt
  */
 export function sceneProfile(profile: MusicProfile, scene: string): MusicProfile {
   const own = profile.scenes![scene];
-  return { ...own, gates: { ...profile.gates, ...own.gates } };
+  // Key by key, so a scene that writes `seam: undefined` inherits the cabinet's choice rather than erasing it.
+  const gates = Object.fromEntries(GATES.map(g => [g, own.gates?.[g] ?? profile.gates?.[g]]));
+  return { ...own, gates };
 }
 
 /**
@@ -228,7 +233,8 @@ export function sceneProfile(profile: MusicProfile, scene: string): MusicProfile
 export function failedGates(music: GameAudioOptions, profile: MusicProfile): string[] {
   const failed: string[] = [];
   const bar = beatsPerBar(music);
-  const on = { seam: true, syncopation: true, rhythms: true, ...profile.gates };
+  // Only an explicit false switches a gate off; left out or undefined, it is on.
+  const on = Object.fromEntries(GATES.map(g => [g, profile.gates?.[g] !== false]));
   if (passSecondsAtFastest(music, profile) < PASS_FLOOR_SECONDS[profile.session]) failed.push('seconds');
   const lead = passLine(music, leadIndex(music));
   if (on.rhythms && new Set(barRhythms(lead, bar)).size < MIN_BAR_RHYTHMS) failed.push('rhythms');

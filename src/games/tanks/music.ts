@@ -63,7 +63,8 @@ import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type 
 
 /** A match is a few minutes of turns; the bed never ramps. */
 export const MUSIC_PROFILE: MusicProfile = {
-  session: 'standard'
+  session: 'standard',
+  palettePending: 'same instruments as Line Hold, awaiting the round 3 rescores (#415, #410)'
 };
 
 /** The bed's tempo. */

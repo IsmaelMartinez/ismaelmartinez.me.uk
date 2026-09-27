@@ -290,8 +290,17 @@ export interface GameAudio {
    * has stingers routes every voice through its own gain from the first note;
    * any other score gets them on its first `setLayer`, so a note already in
    * flight at that moment plays out at full level.
+   *
+   * `at` is when the fade starts: 'now' (the default), or 'section', the start
+   * of the next part of a playing score's form, so a voice that enters comes in
+   * on the first note of a section rather than mid-phrase. With a
+   * `setSection`, `setScene` or `setDanger` waiting, that is the bar line it
+   * lands on, which is how a caller brings a voice in within a bar at the top
+   * of a section. A later call for the same voice replaces one still waiting,
+   * and a score without a form, or one that is not playing, takes 'section'
+   * as 'now'.
    */
-  setLayer(track: number | string, on: boolean, fadeSeconds?: number): void;
+  setLayer(track: number | string, on: boolean, fadeSeconds?: number, at?: 'now' | 'section'): void;
   /**
    * Moves a playing score with a form into the scene `name` from its top, or
    * with null back to `order` where the score left it, at the next bar line or
@@ -755,6 +764,8 @@ interface FormState {
   resume: { step: number; pass: number } | null;
   /** The scene danger was entered from, which releasing it returns to. */
   beforeDanger: string | null;
+  /** Called with its start each time a new part begins, for the layer changes that wait for one. */
+  onMove?: (at: number) => void;
 }
 
 /** The beats a line lasts as the scheduler plays it: a non-positive length still steps one beat. */
@@ -1025,6 +1036,7 @@ function scheduleForm(
       v.idx = 0;
       v.beat = 0;
     }
+    state.onMove?.(pos.start);
   }
 }
 
@@ -1278,13 +1290,22 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
   // A score with a form also carries where in the form it is; null without one.
   const formPlan = normalizeForm(options);
-  const form: FormState | null = formPlan && { form: formPlan, pos: formTop(formPlan, 0), pending: null, resume: null, beforeDanger: null };
+  const form: FormState | null = formPlan && {
+    form: formPlan,
+    pos: formTop(formPlan, 0),
+    pending: null,
+    resume: null,
+    beforeDanger: null,
+    onMove: at => applyWaitingLayers(at)
+  };
   let scheduler: ReturnType<typeof setInterval> | null = null;
   // Where each voice's notes go: the bus, until layers exist, then its own gain.
   let buses: AudioNode[] = [];
   let lane: GainNode | null = null;
   let layerGains: GainNode[] | null = null;
   const layerOn = tracks.map(t => !t.startsMuted);
+  // Layer changes asked for at the next part's start, by voice; see `setLayer`.
+  const waitingLayers = new Map<number, { on: boolean; fade: number }>();
   const stingers = new Map(
     Object.entries(options.stingers ?? {}).map(([name, lines]) => [
       name,
@@ -1356,6 +1377,25 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     pauseGain.gain.setTargetAtTime(paused ? PAUSE_GAIN : 1, now, ADAPT_RAMP);
   }
 
+  /** Fades voice `t`'s layer gain towards `on`, starting at `at`. */
+  function fadeLayer(t: number, on: boolean, fadeSeconds: number, at: number): void {
+    layerOn[t] = on;
+    if (!ctx || !layerGains) return;
+    const g = layerGains[t].gain;
+    g.cancelScheduledValues(at);
+    // A time constant of a quarter of the fade is within 2% of the target by
+    // its end; a linear ramp would need the level it starts from, which a
+    // fade already in progress does not report.
+    if (Number.isFinite(fadeSeconds) && fadeSeconds > 0) g.setTargetAtTime(on ? 1 : 0, at, fadeSeconds / 4);
+    else g.setValueAtTime(on ? 1 : 0, at);
+  }
+
+  /** Starts the layer changes waiting for a part to begin, at its start. */
+  function applyWaitingLayers(at: number): void {
+    for (const [t, { on, fade }] of waitingLayers) fadeLayer(t, on, fade, at);
+    waitingLayers.clear();
+  }
+
   function scheduleAhead(): void {
     if (!ctx || !musicBus || tracks.length === 0) return;
     // Schedule every track's notes due within the next ~100ms window.
@@ -1409,6 +1449,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         // lands at once rather than a bar into a section it is leaving.
         if (form.pending) form.pending.cut = t0;
       }
+      // Either way a part starts again at t0, which is what a waiting layer waits for.
+      applyWaitingLayers(t0);
     }
   }
 
@@ -1662,21 +1704,18 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         scene: form.pos.scene
       };
     },
-    setLayer(track: number | string, on: boolean, fadeSeconds = LAYER_FADE) {
+    setLayer(track: number | string, on: boolean, fadeSeconds = LAYER_FADE, at: 'now' | 'section' = 'now') {
       const t = trackIndex(tracks, track);
       if (t < 0) return;
       // Built at the level the voice had, so that a first fade is a fade.
       const ready = ensureLayers();
-      layerOn[t] = on;
-      if (!ready || !ctx || !layerGains) return;
-      const g = layerGains[t].gain;
-      const now = ctx.currentTime;
-      g.cancelScheduledValues(now);
-      // A time constant of a quarter of the fade is within 2% of the target by
-      // its end; a linear ramp would need the level it starts from, which a
-      // fade already in progress does not report.
-      if (Number.isFinite(fadeSeconds) && fadeSeconds > 0) g.setTargetAtTime(on ? 1 : 0, now, fadeSeconds / 4);
-      else g.setValueAtTime(on ? 1 : 0, now);
+      waitingLayers.delete(t);
+      // The scheduler starts it when the form moves on (`onMove`).
+      if (at === 'section' && form && running && ready) {
+        waitingLayers.set(t, { on, fade: fadeSeconds });
+        return;
+      }
+      fadeLayer(t, on, fadeSeconds, ctx ? ctx.currentTime : 0);
     },
     setScene(name: string | null) {
       if (!form || !running || !ctx) return false;

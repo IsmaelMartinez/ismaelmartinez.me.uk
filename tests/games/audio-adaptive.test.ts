@@ -207,6 +207,79 @@ describe('setSection', () => {
   });
 });
 
+// SECTIONS with its voices named and the lead held back, as a wave layer is.
+const WAITING: GameAudioOptions = {
+  ...SECTIONS,
+  tracks: [
+    { wave: 'triangle', name: 'lead', startsMuted: true },
+    { wave: 'triangle', envelope: 'pad', name: 'pad' }
+  ]
+};
+
+describe('setLayer at the next section', () => {
+  // Master gain#1, bus gain#2, lane gain#3, the lead's layer gain#4.
+  const lead = (log: string) => writes(log, 'gain#4.gain');
+
+  it('waits for the form to move on, and starts the fade on the next part’s first note', () => {
+    const log = drive(WAITING, 18, [{ at: 1.5, run: a => a.setLayer('lead', true, 0, 'section') }]);
+    // Asked for in bar 1 of a, it holds until b starts at 8.05, where b's
+    // first lead note is, and lands once: the next part, at 16.05, leaves it be.
+    expect(lead(log)).toEqual([
+      'gain#4.gain.value = 0',
+      'gain#4.gain.cancelScheduledValues(8.05)',
+      'gain#4.gain.setValueAtTime(1, 8.05)'
+    ]);
+    expectTimes(timesOf(log, 300).slice(0, 1), [8.05]);
+    expect(onsets(log)).toEqual(onsets(drive(WAITING, 18)));
+  });
+
+  it('lands with a jump that is waiting, on its bar line at the top of the section', () => {
+    const log = drive(WAITING, 6, [
+      { at: 1.5, run: a => a.setSection('a') },
+      { at: 1.5, run: a => a.setLayer('lead', true, 1, 'section') }
+    ]);
+    // The bar line after 2.05 is 4.05, where a starts again from its first note.
+    expect(lead(log)).toEqual([
+      'gain#4.gain.value = 0',
+      'gain#4.gain.cancelScheduledValues(4.05)',
+      'gain#4.gain.setTargetAtTime(1, 4.05, 0.25)'
+    ]);
+    expectTimes(timesOf(log, 200), [0.05, 1.05, 2.05, 3.05, 4.05, 5.05, 6.05]);
+    expectTimes(timesOf(log, 201), [0.05, 4.05]);
+  });
+
+  it('is replaced by a later call for the same voice before it lands', () => {
+    const log = drive(WAITING, 10, [
+      { at: 1.5, run: a => a.setLayer('lead', true, 0, 'section') },
+      { at: 3, run: a => a.setLayer('lead', false, 0) }
+    ]);
+    expect(lead(log)).toEqual([
+      'gain#4.gain.value = 0',
+      'gain#4.gain.cancelScheduledValues(3)',
+      'gain#4.gain.setValueAtTime(0, 3)'
+    ]);
+  });
+
+  it('starts at the top when the score is restarted while it waits', () => {
+    const log = drive(WAITING, 6, [
+      { at: 1.5, run: a => a.setLayer('lead', true, 0, 'section') },
+      { at: 2, run: a => a.stop() },
+      { at: 3, run: a => a.start() }
+    ]);
+    expect(lead(log)).toContain('gain#4.gain.setValueAtTime(1, 3.05)');
+    expect(lead(log).filter(l => l.includes('setValueAtTime'))).toHaveLength(1);
+  });
+
+  it('takes effect at once on a score without a form', () => {
+    const log = drive(LAYERED, 2, [{ at: 1, run: a => a.setLayer('drums', true, 0, 'section') }]);
+    expect(writes(log, 'gain#5.gain')).toEqual([
+      'gain#5.gain.value = 0',
+      'gain#5.gain.cancelScheduledValues(1)',
+      'gain#5.gain.setValueAtTime(1, 1)'
+    ]);
+  });
+});
+
 const DANGER: GameAudioOptions = {
   tempo: 60,
   tracks: [{ wave: 'triangle' }],

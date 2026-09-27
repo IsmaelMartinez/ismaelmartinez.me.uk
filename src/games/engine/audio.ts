@@ -228,7 +228,8 @@ export interface GameAudioOptions {
 /**
  * What a cabinet's score is measured against, exported beside it from its
  * `music.ts` as `MUSIC_PROFILE`; `tests/games/music.test.ts` holds each score
- * to the floors ADR 003's round 2 amendment sets for its session.
+ * to the floors ADR 003's round 2 amendment sets for its session, and to the
+ * round 3 amendment's rule that no two cabinets share an instrument set.
  */
 export interface MusicProfile {
   /**
@@ -245,12 +246,35 @@ export interface MusicProfile {
    */
   gatePending?: string;
   /**
+   * Which of the style gates this cabinet's brief keeps (ADR 003's round 3
+   * amendment). Each is on unless set to false, so a profile without `gates`
+   * is held to all three; the seconds floor is not a choice and has no switch.
+   * `seam` bans arriving home on the last bar, `syncopation` wants a push in
+   * every eight bars of the lead, and `rhythms` wants three bar rhythms in it:
+   * right for a pop-song loop, wrong for a buzzer tune or an artillery drone.
+   */
+  gates?: MusicGates;
+  /**
+   * Why this cabinet still shares its instrument set (each voice's wave,
+   * envelope and register band, plus echo) with another cabinet, naming the
+   * rescore that will change it. While it is set the test asserts the
+   * collision still exists, so the rescore that ends it removes the flag.
+   */
+  palettePending?: string;
+  /**
    * A profile for each of the form's `scenes`, since each one is what a player
    * hears on repeat while it holds; the top-level fields then measure `order`.
    * Every scene needs one, and `danger` none (it is a short variant, not a
-   * loop a player lives in).
+   * loop a player lives in). A scene's `gates` override the cabinet's key by key.
    */
-  scenes?: Record<string, Pick<MusicProfile, 'session' | 'fastestTempo'>>;
+  scenes?: Record<string, Pick<MusicProfile, 'session' | 'fastestTempo' | 'gates'>>;
+}
+
+/** The style gates a cabinet may switch off; see `MusicProfile.gates`. */
+export interface MusicGates {
+  seam?: boolean;
+  syncopation?: boolean;
+  rhythms?: boolean;
 }
 
 export type SfxName = 'blip'| 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';

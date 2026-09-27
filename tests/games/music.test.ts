@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { pitch, p } from '../../src/games/engine/pitch';
-import { scoreSeconds, type GameAudioOptions, type MusicProfile, type Note } from '../../src/games/engine/audio';
+import { scoreSeconds, type GameAudioOptions, type MusicProfile, type Note, type Track } from '../../src/games/engine/audio';
 import {
   PASS_FLOOR_SECONDS,
   barRhythms,
   failedGates,
+  instrumentSignature,
   leadIndex,
   lowestVoiceIndex,
   passLine,
   passSecondsAtFastest,
+  sceneProfile,
   sceneScore,
   seamArrivals,
   unsyncopatedWindows
@@ -457,6 +459,38 @@ describe('the round 2 gates', () => {
     expect(failedGates(music, standard)).toEqual(['seam']);
   });
 
+  it('lets a profile switch off each style gate, and never the seconds floor', () => {
+    // One score failing all four: too short for a long session, one bar
+    // rhythm with no push, and a bass that arrives home in its last bar.
+    const music = passing();
+    music.tracks[0].melody = leadOf(() => quarters('C5'));
+    endBass(music, bassBar('C3', 'G2'));
+    const long: MusicProfile = { session: 'long' };
+    expect(failedGates(music, long)).toEqual(['seconds', 'rhythms', 'syncopation', 'seam']);
+    expect(failedGates(music, { ...long, gates: { seam: false } })).toEqual(['seconds', 'rhythms', 'syncopation']);
+    expect(failedGates(music, { ...long, gates: { syncopation: false } })).toEqual(['seconds', 'rhythms', 'seam']);
+    expect(failedGates(music, { ...long, gates: { rhythms: false } })).toEqual(['seconds', 'syncopation', 'seam']);
+    // A gate set to true, or left out, is on: the default is today's behaviour.
+    expect(failedGates(music, { ...long, gates: { seam: true } })).toEqual(['seconds', 'rhythms', 'syncopation', 'seam']);
+    const none = { seam: false, syncopation: false, rhythms: false };
+    expect(failedGates(music, { ...long, gates: none })).toEqual(['seconds']);
+    expect(failedGates(music, { session: 'standard', gates: none })).toEqual([]);
+  });
+
+  it("gates a scene with the cabinet's choices, overridden key by key by the scene's own", () => {
+    const profile: MusicProfile = {
+      session: 'standard',
+      gates: { seam: false, syncopation: false },
+      scenes: { calm: { session: 'minimal' }, match: { session: 'long', gates: { seam: true } } }
+    };
+    expect(sceneProfile(profile, 'calm')).toEqual({ session: 'minimal', gates: { seam: false, syncopation: false } });
+    expect(sceneProfile(profile, 'match')).toEqual({ session: 'long', gates: { seam: true, syncopation: false } });
+    const home = passing();
+    endBass(home, bassBar('C3', 'G2'));
+    expect(failedGates(home, sceneProfile(profile, 'calm'))).toEqual([]);
+    expect(failedGates(home, sceneProfile(profile, 'match'))).toEqual(['seconds', 'seam']);
+  });
+
   it('finds a profile beside every score, with a session and a ramp no slower than its base', () => {
     for (const { name, music, profile } of DISCOVERED) {
       expect(profile, `${name}/music.ts exports no MUSIC_PROFILE`).toBeDefined();
@@ -476,7 +510,7 @@ describe('the round 2 gates', () => {
   );
 
   it.each(SCENES)('$name clears every gate on its own loop', ({ scene, music, profile }) => {
-    const failed = failedGates(sceneScore(music, scene), profile.scenes![scene]);
+    const failed = failedGates(sceneScore(music, scene), sceneProfile(profile, scene));
     expect(failed, `fails ${failed.join(', ')}`).toEqual([]);
   });
 
@@ -490,6 +524,128 @@ describe('the round 2 gates', () => {
         expect(failed, `${name} clears every gate; remove its gatePending`).not.toEqual([]);
       } else {
         expect(failed, `${name} fails ${failed.join(', ')}`).toEqual([]);
+      }
+    }
+  );
+});
+
+/**
+ * Round 3's goal G3 (ADR 003's 2026-09-27 amendment): no two cabinets share an
+ * instrument set. The definition lives in `music-gates.ts` beside the gates;
+ * the synthetic scores below pin what it does and does not count.
+ */
+describe('the round 3 difference test', () => {
+  const n = (name: string, beats = 4): Note => ({ freq: p(name), beats });
+  const kick: Note = { freq: 0, beats: 4, drum: 'kick' };
+  /** A score of one-note voices, each track written as its instrument plus the pitch it sits on. */
+  const band = (...voices: [Track, string][]): GameAudioOptions => ({
+    tempo: 120,
+    tracks: voices.map(([track, name]) => ({ ...track, melody: [n(name)] }))
+  });
+  const lead: Track = { wave: 'pulse25' };
+  const bass: Track = { wave: 'triangle' };
+  const pad: Track = { wave: 'sawtooth', envelope: 'pad' };
+
+  it('reads each voice as its wave, envelope and register band, plus the echo', () => {
+    expect(instrumentSignature(band([lead, 'A5'], [bass, 'A2'], [pad, 'A3']))).toBe(
+      'bass {envelope:pluck,wave:triangle} | high {envelope:pluck,wave:pulse25} | mid {envelope:pad,wave:sawtooth} | dry'
+    );
+  });
+
+  it('draws the bands at C3 and C5, on the mean pitch with the octave shift counted', () => {
+    const one = (track: Track, ...names: string[]) =>
+      instrumentSignature({ tempo: 120, tracks: [{ ...track, melody: names.map(x => n(x)) }] }).split(' ')[0];
+    expect(one({}, 'B2')).toBe('bass');
+    expect(one({}, 'C3')).toBe('mid');
+    expect(one({}, 'B4')).toBe('mid');
+    expect(one({}, 'C5')).toBe('high');
+    // A2 and A4 average to A3: the mean, not the lowest or highest note.
+    expect(one({}, 'A2', 'A4')).toBe('mid');
+    expect(one({ octaveShift: -1 }, 'B3')).toBe('bass');
+    expect(one({ octaveShift: 1 }, 'C4')).toBe('high');
+    // Rests do not pull the mean anywhere.
+    expect(instrumentSignature({ tempo: 120, tracks: [{ melody: [n('C5'), { freq: 0, beats: 4 }] }] })).toMatch(/^high /);
+  });
+
+  it('ignores the order of the voices, their level, name, layer flag, twin and vibrato', () => {
+    const plain = instrumentSignature(band([lead, 'A5'], [bass, 'A2']));
+    expect(instrumentSignature(band([bass, 'A2'], [lead, 'A5']))).toBe(plain);
+    const dressed: Track = { ...lead, volume: 0.3, name: 'lead', startsMuted: true, detune: 7, vibrato: 8 };
+    expect(instrumentSignature(band([dressed, 'A5'], [bass, 'A2']))).toBe(plain);
+  });
+
+  it('fills in the default wave and envelope, so leaving one out is the same as writing it', () => {
+    expect(instrumentSignature(band([{}, 'A4']))).toBe(instrumentSignature(band([{ wave: 'square', envelope: 'pluck' }, 'A4'])));
+    expect(instrumentSignature(band([{}, 'A4']))).not.toBe(instrumentSignature(band([{ wave: 'sine' }, 'A4'])));
+    expect(instrumentSignature(band([{}, 'A4']))).not.toBe(instrumentSignature(band([{ envelope: 'pad' }, 'A4'])));
+  });
+
+  it('tells a voice apart by its band, the echo apart from a dry mix, and counts a drum track as a voice', () => {
+    const plain = band([lead, 'A5'], [bass, 'A2']);
+    expect(instrumentSignature(band([lead, 'A4'], [bass, 'A2']))).not.toBe(instrumentSignature(plain));
+    expect(instrumentSignature({ ...plain, echo: { time: 0.2, feedback: 0.3, mix: 0.2 } })).toBe(
+      instrumentSignature(plain).replace('dry', 'echo')
+    );
+    const drums = { ...plain, tracks: [...plain.tracks, { melody: [kick] }] };
+    expect(instrumentSignature(drums)).toContain('| drums |');
+    // The multiset keeps duplicates: two identical pads are not one pad.
+    expect(instrumentSignature(band([pad, 'A3'], [pad, 'A3']))).not.toBe(instrumentSignature(band([pad, 'A3'])));
+  });
+
+  it('takes a field the engine gains later into the signature without being taught it', () => {
+    // Round 3 plans a pan, an ADSR, a filter, a wavetable and FM on `Track`.
+    // None exists yet, so this writes one the type does not know about.
+    const panned = { ...lead, pan: -1, adsr: { sustain: 0.5, attack: 0.01 } } as Track;
+    const plain = instrumentSignature(band([lead, 'A5']));
+    const moved = instrumentSignature(band([panned, 'A5']));
+    expect(moved).not.toBe(plain);
+    expect(moved).toBe('high {adsr:{attack:0.01,sustain:0.5},envelope:pluck,pan:-1,wave:pulse25} | dry');
+  });
+
+  it("reads a form's voices across the intro and every section, not only the looping order", () => {
+    const music: GameAudioOptions = {
+      tempo: 120,
+      tracks: [{}],
+      form: { intro: [[n('C6')]], sections: { a: [[n('C4')]], b: [[n('C6')]] }, order: ['a'] }
+    };
+    // C6, C4 and C6 average above C5; the order alone would read C4, mid.
+    expect(instrumentSignature(music)).toMatch(/^high /);
+  });
+
+  /**
+   * One cabinet's signatures, a set because a cabinet may export several
+   * scores (Critter Rescue's four acts are one cabinet). The parked cabinets
+   * are left out: they are not on the floor, and a revival (#381) rescores them.
+   */
+  const PARKED = new Set(['park', 'syndicate']);
+  const CABINETS = [...new Set(DISCOVERED.map(d => d.cabinet))]
+    .filter(cabinet => !PARKED.has(cabinet))
+    .map(cabinet => {
+      const scores = DISCOVERED.filter(d => d.cabinet === cabinet);
+      return { cabinet, profile: scores[0].profile, signatures: new Set(scores.map(d => instrumentSignature(d.music))) };
+    });
+  /** The other live cabinets with a score whose signature matches one of this cabinet's. */
+  const twinsOf = (cabinet: string): string[] => {
+    const own = CABINETS.find(c => c.cabinet === cabinet)!.signatures;
+    return CABINETS.filter(c => c.cabinet !== cabinet && [...c.signatures].some(s => own.has(s))).map(c => c.cabinet);
+  };
+
+  it('finds the live cabinets and leaves the parked ones out', () => {
+    expect(CABINETS.length).toBeGreaterThanOrEqual(7);
+    expect(CABINETS.some(c => PARKED.has(c.cabinet))).toBe(false);
+    expect(CABINETS.filter(c => c.cabinet === 'lemmings')).toHaveLength(1);
+  });
+
+  it.each(CABINETS)(
+    '$cabinet shares its instrument set with no other cabinet, or still does while it waits for its rescore',
+    ({ cabinet, profile }) => {
+      const twins = twinsOf(cabinet);
+      if (profile.palettePending) {
+        // A flag on a cabinet that no longer collides is stale. Ending a
+        // collision can clear two flags at once, since both sides lose their twin.
+        expect(twins, `${cabinet} no longer shares its instrument set; remove its palettePending`).not.toEqual([]);
+      } else {
+        expect(twins, `${cabinet} has the same instruments as ${twins.join(', ')}`).toEqual([]);
       }
     }
   );

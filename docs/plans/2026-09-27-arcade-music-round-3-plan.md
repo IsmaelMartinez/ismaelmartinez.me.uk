@@ -204,19 +204,22 @@ Unchanged: Pixel Park and Syndicate follow the same process only when revived (#
 
 ## Decisions for the owner
 
+The owner approved the plan on 2026-09-27 without choosing among these, so each is settled by the
+default below, recorded here so it can be reversed.
+
 Korobeiniki. The tune is public domain, but a search summary (not read directly) reports that Tetris
 Holding registered a US sound mark on an electronic Korobeiniki in video games (reg. 3517007) and
-has sent takedowns to clones. Keep Korobeiniki as Cascade's A type, or move Cascade to a Bach minuet
-and original folk-minor tunes that keep the Game Boy sound without the tune.
+has sent takedowns to clones. Default: Cascade moves to Bach's French Suite No. 3 Menuet and original
+folk-minor tunes, which keep the Game Boy sound without the tune and fit the owner's "similar, not
+the same" brief.
 
-Critter Rescue's tunes. Keep the four current public-domain tunes (Foster, Grieg, the Saints) in the
-Amiga style, or move towards the Lemmings canon itself.
+Critter Rescue's tunes. Default: the acts move to public-domain pieces the original Lemmings used,
+such as the Can-Can galop, Rondo alla Turca and Tchaikovsky, in the Amiga style.
 
-Line Hold's size. An orchestral battle cue needs more voices than ADR 003 allows. Allow it, or keep
-Line Hold to three pitched voices plus drums and get its weight from the new envelopes and filters.
+Line Hold's size. Default: allowed. Line Hold may use up to four pitched voices plus drums if its
+battle cue needs the weight.
 
-Cascade's music select. Whether the player can pick A, B, C or off on the start screen, as the Game
-Boy allowed, beyond the level-band rotation.
+Cascade's music select. Default: not this round; the tunes rotate by level band only.
 
 ## What this plan does not do
 
@@ -252,6 +255,7 @@ https://en.wikipedia.org/wiki/Desktop_Tower_Defense.
 
 ## Issues
 
-To be filed once the owner has approved this plan and made the decisions above: one per Phase 0,
-1 and 2 item, under a new tracking issue, with Phase 0 first and each rescore blocked on the engine
-items its brief needs.
+Tracking issue #402. Phase 0: #403. Phase 1: #404 (stereo), #405 (ADSR and filter), #406
+(wavetables and noise), #407 (FM and pitch envelope), #408 (arpeggio), #409 (conventions and the
+difference test). Phase 2: #410 (Line Hold), #411 (Microcity), #412 (Cascade), #413 (CALCIO '90),
+#414 (Critter Rescue), #415 (Tank Duel), #416 (Snake), #417 (beginnings and endings). Phase 3: #381.

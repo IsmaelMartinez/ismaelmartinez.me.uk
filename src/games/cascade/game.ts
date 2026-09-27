@@ -26,7 +26,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { CASCADE_MUSIC, BASE_TEMPO, MAX_TEMPO, DANGER_TEMPO_LIFT, DRUMS_FROM_LEVEL } from './music';
+import { CASCADE_MUSIC, BASE_TEMPO, MAX_TEMPO, DANGER_TEMPO_LIFT, FOLK_TOP, tuneFor } from './music';
 import { WELL_W, WELL_H } from './well';
 import { cellsOf, ROTATIONS, type PieceId } from './piece';
 import {
@@ -87,8 +87,10 @@ const DAS_REPEAT = 0.05;
 
 // BASE_TEMPO and the MAX_TEMPO ceiling belong to the score and live with it in
 // music.ts (the score is sized at the ceiling); this step is the ramp policy
-// that winds it up as the level climbs.
-const TEMPO_PER_LEVEL = 9;
+// that winds it up as the level climbs. It is gentle (144 to 168 over eight
+// levels) because the Game Boy's tunes hold their pace and only the stack
+// speeds them up; the level is heard through the tune changing instead.
+const TEMPO_PER_LEVEL = 3;
 
 type Phase = 'idle' | 'play' | 'over';
 
@@ -346,9 +348,26 @@ export function initCascadeGame(): void {
     audio.setTempo(lifted ? Math.round(ramp * DANGER_TEMPO_LIFT) : ramp);
   }
 
-  /** The drum layer: in from the milestone level, or for a countdown's final stretch. */
-  function applyDrums(fadeSeconds?: number) {
-    audio.setLayer('drums', run.level >= DRUMS_FROM_LEVEL || run.finalStretch, fadeSeconds);
+  /** The tune the music is on (null is the folk tune, the form's order). */
+  let tune: ReturnType<typeof tuneFor> = null;
+
+  /**
+   * Moves the music to the level band's tune, at the next bar line. Held back
+   * while the stack is in danger, since a scene change would take the score
+   * out of the danger variant; the release calls this again. Coming back
+   * round to the folk tune starts it from its top rather than where it was
+   * left three bands ago.
+   */
+  function applyTune() {
+    const want = tuneFor(run.level);
+    if (run.danger || want === tune) return;
+    tune = want;
+    if (want === null) {
+      audio.setScene(null);
+      audio.setSection(FOLK_TOP);
+    } else {
+      audio.setScene(want);
+    }
   }
 
   function startRun() {
@@ -365,9 +384,8 @@ export function initCascadeGame(): void {
     dasDir = 0;
     phase = 'play';
     applyTempo();
-    // Layers keep their state across stop() and start(), so a run that ended
-    // with the drums in must take them out again before the new one begins.
-    applyDrums(0);
+    // start() always opens on the form's order, the folk tune, level 1's band.
+    tune = null;
     audio.start();
   }
 
@@ -422,7 +440,7 @@ export function initCascadeGame(): void {
         bannerText = strings.levelUp.replace('{n}', String(event.level));
         bannerTimer = 1.6;
         applyTempo();
-        applyDrums();
+        applyTune();
         audio.playStinger('levelUp');
         // A flourish of sparks around the well rim.
         for (let n = 0; n < 26; n++) {
@@ -439,11 +457,12 @@ export function initCascadeGame(): void {
       } else if (event.type === 'danger') {
         // The authored danger variant comes in (or goes) at the next bar line.
         audio.setDanger(event.on);
+        // A band change that arrived during danger lands now, on the same bar line.
+        if (!event.on) applyTune();
         applyTempo();
       } else if (event.type === 'finalStretch') {
         audio.playStinger('hurry');
         applyTempo();
-        applyDrums();
       } else if (event.type === 'topOut') {
         endRun('topOut');
       } else if (event.type === 'timeUp') {

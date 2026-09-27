@@ -1,337 +1,446 @@
 /**
- * Cascade's score: Korobeiniki in A minor, the key the folk tune is sung in,
- * wound up level by level through `setTempo`.
+ * Cascade's score: three tunes on a Game Boy, after Hirokazu Tanaka's
+ * Tetris (1989), rotated by level band (#412).
  *
- * Key and mode. A minor with its leading tone. The tune's first and third
- * bars sit over E major with G sharp in the bass (E/G#), so the leading tone
- * is the first bass note the player hears and every return to the top leans
- * on it; the round 13 score framed the same tune in E minor, never played a G
- * sharp or a D sharp in its accompaniment, and so sounded suspended. The
- * borrowed colours are the house ones from ADR 003: F (bVI) and G (bVII) in
- * the second strain and in the closing phrase.
+ * The brief (ADR 003, round 3). Game Boy Tetris offers three tunes, Type A
+ * (Korobeiniki), Type B (an original) and Type C (the Menuet from Bach's
+ * French Suite No. 3), at about 150 bpm on the Game Boy's APU: two duty-cycle
+ * pulses, a 4-bit, 32-step wave channel for the bass and a noise channel, in
+ * mono, with no pads and no echo. Its signature is folk-minor or Baroque
+ * material on two pulses moving in thirds and sixths, a wave-channel bass
+ * bouncing in octaves, noise-channel ticks, and a speed-up tied to the stack.
+ * Korobeiniki is not used: a US sound mark on an electronic Korobeiniki in
+ * video games is reported (the round 3 plan's owner default), so the A slot
+ * is an original in the same folk-minor manner rather than the tune.
  *
- * Form, four eight-bar sections, a pass of 32 bars (128 beats), no intro:
- *   a   the folk tune as it is sung, both phrases, closing on A minor;
- *   a2  the same tune with a new bass and an altered ending that turns
- *       through F and G towards the relative major;
- *   b   an original strain (Korobeiniki's second half-phrase belongs to the
- *       folk song, the Game Boy's half-note bridge does not, so it is not
- *       borrowed here): a rising sequence of fourths, C to F, D to G, E to A,
- *       peaking on a held C6, then falling back through Dm and G to E;
- *   c   the tune's second phrase again, sequenced up a third over F and G,
- *       and a Dm to E half cadence. The bass ends the pass on E and walks up
- *       through F sharp into the G sharp that opens the next one, so the
- *       tonic never arrives at the seam: it arrives a bar later, where the
- *       tune itself puts it.
- * One pass is 61 s at the base tempo (126) and 38.8 s at the ramp's ceiling
- * (198), against the 30 s standard floor.
+ * The three tunes, one per level band (`TUNE_BAND_LEVELS`), cycling:
+ *   folk (the `order`, levels 1 to 3), D minor, 2/4: an original dance in a
+ *       Russian folk-minor manner. Its hook is one cell, a note, a push a
+ *       third above it held over the beat, and a step back, climbing by
+ *       thirds (D, F, G) to a B flat peak and falling home, an arch; the
+ *       second strain turns to the relative major and sequences down by
+ *       step; the third (`fc`) is a stamping close over an A pedal that hands
+ *       back to the top on the dominant.
+ *   dance (scene, levels 4 to 6), E minor with the Dorian C sharp, 2/4: an
+ *       original in the manner of the Type B slot, a dotted gallop that
+ *       sequences down a step per bar pair (Em A, D G, C D7), a second strain
+ *       in G major that climbs to a C6 peak, and a close on B7.
+ *   menuet (scene, levels 7 to 9), B minor, 3/4: Bach's Menuet from the French
+ *       Suite No. 3, BWV 814 (public domain), as written: the right hand's
+ *       broken-chord eighths on the lead, the left hand on the wave bass, where
+ *       Bach already bounces it in octaves (B3 B2, B2 B3, A2 A3). Both strains
+ *       are played with their repeats, and the second pulse joins only on the
+ *       repeat, holding thirds and sixths under the right hand, so the first
+ *       time through is Bach's two voices and the repeat is the Game Boy's three.
+ * Level 10 starts the folk tune again from its top, and so on round.
  *
- * Session and load. Runs are short to medium (a two-minute countdown, or a
- * marathon that rarely outlasts ten or fifteen minutes) and attention is high
- * throughout, so the score is a tune with a hook rather than a bed, and its
- * adaptivity follows the stack rather than the clock.
+ * Voices, and the reference trait each serves:
+ *   lead, a 50% pulse with a Game Boy-style volume envelope (a hard attack
+ *     decaying to a held level, no vibrato): pulse channel 1;
+ *   harmony, a 25% pulse under the lead, mostly in parallel thirds and sixths,
+ *     sometimes a slower countermelody: pulse channel 2 and the "two pulses in
+ *     thirds" signature. It rests the first time through each tune, so the
+ *     texture fills as a tune settles in;
+ *   bass, a 32-step wavetable quantised to 4 bits, with no decay (the wave
+ *     channel has only fixed levels): the wave channel, bouncing in octaves
+ *     under the folk tune, root-octave-fifth under the dance, and Bach's own
+ *     line under the menuet;
+ *   ticks, the NES/Game Boy short (metallic) noise on hats and a noise snare,
+ *     no kick (the noise channel has none): the noise channel. Always on in
+ *     the two originals, silent in the menuet, which is a keyboard piece.
+ * Mono (no pan), dry (no echo), no pad, no detuned twin: the Game Boy had none
+ * of them, and ADR 003's round 3 amendment says not to reach for a feature
+ * the platform lacked.
+ *
+ * Metre. The form's bar is 6 beats, the common multiple of the originals' 2/4
+ * and the menuet's 3/4, so `setScene` and `setDanger` always land on a bar
+ * line of whichever tune is playing (every third 2/4 bar, every other 3/4 bar),
+ * at worst 6 beats (2.5 s at the base tempo) after the call.
+ *
+ * Tempo and length. `BASE_TEMPO` 144, the Game Boy's pace, winds up 3 bpm per
+ * level to `MAX_TEMPO` 168 (level 9), and every loop is sized there: the folk
+ * tune and the dance are 96 beats (34.3 s at 168, 40 s at 144), the menuet 216
+ * (77 s at 168). Session: standard, runs of a few minutes to a quarter of an
+ * hour with high attention, so each band is a tune with a hook, not a bed.
  *
  * Adaptive hooks, all wired in `game.ts`:
- *   - the tempo ramp, 126 + 9 per level, capped at `MAX_TEMPO`;
- *   - `setDanger` on the run's `danger` event: the stack reaching row 4 swaps
- *     in `rush`, a separately written tense variant (constant eighths, an
- *     E7 flat nine, octave-pumping bass), after NES Tetris's fast versions,
- *     played `DANGER_TEMPO_LIFT` faster; it is released, at the next bar
- *     line, once the stack is back down to row 7 (see `run.ts`);
- *   - the `drums` layer starts muted and enters at `DRUMS_FROM_LEVEL`, or in
- *     a countdown's final 20 seconds if that comes first;
- *   - the `levelUp` stinger on each level-up, and the `hurry` stinger with a
- *     tempo lift when a countdown enters its final 20 seconds.
+ *   - the level band picks the tune (`tuneFor`), moving on a bar line at the
+ *     level-up that crosses into a new band; the band change is what a player
+ *     hears as progress, which is why the drum layer of the round 2 score is
+ *     gone: the Game Boy's noise ticks play from the first bar, as they do
+ *     under Type A, so they are part of the palette rather than a reward;
+ *   - the tempo ramp above, and the danger variant `rush` when the stack
+ *     reaches row 4, played `DANGER_TEMPO_LIFT` faster, after Game Boy and NES
+ *     Tetris speeding up near the top of the well. It is one variant for all
+ *     three tunes: the pulses climb a sequence in parallel thirds over a
+ *     throbbing dominant pedal (a single pitch, not the octave bounce), with
+ *     sixteenth ticks. A band change that comes while the stack is in danger
+ *     waits until it recovers;
+ *   - the `levelUp` stinger, a D major arpeggio in thirds on the two pulses,
+ *     and the `hurry` stinger, a semitone alarm on both pulses, when a
+ *     countdown enters its final 20 seconds, with the tempo lift.
+ *
+ * Gates. The originals are held to all three style gates. The menuet scene
+ * switches two off, because the brief is Bach's piece as written: a Baroque
+ * minuet has no syncopation, and it closes on its own tonic cadence, which
+ * the Game Boy's Type C loops unaltered, so the seam arrives home.
  */
-import { p, REST, type GameAudioOptions, type MusicProfile, type Note, type DrumName } from '../engine';
+import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
 
-/** Starting tempo. The per-level ramp in `game.ts` winds up from here. */
-export const BASE_TEMPO = 126;
+/** Starting tempo, the Game Boy's pace. The per-level ramp in `game.ts` winds up from here. */
+export const BASE_TEMPO = 144;
 
 /**
  * The ceiling the per-level ramp in `game.ts` stops at, reached at level 9.
- * It lives with the score rather than with the ramp because ADR 003 sizes a
- * ramping loop at its fastest tempo, so this is the number the score is
- * measured against.
- *
- * It was 240 while the tune ran in eighths; written in the tune's own quarter
- * notes it is half as busy at a given tempo, and 198 already takes it past the
- * Game Boy's level-0 pace. The lower cap also leaves room above it for the
- * danger variant's lift (about 228 at the top, NES Tetris's fast tune runs at
- * about 225), and the Sonotris study found that a tempo ramp synced to the
- * game makes Tetris measurably harder for novices, so the ramp is a
- * difficulty lever worth keeping short.
+ * It lives with the score because ADR 003 sizes a ramping loop at its fastest
+ * tempo. It was 198 in round 2; the Game Boy's tunes sit near 150 and do not
+ * ramp with the level at all (only the stack speeds them up), and the
+ * Sonotris study found a synced ramp makes Tetris measurably harder for
+ * novices, so the ramp is kept short: enough to be felt, never a different
+ * piece. The danger lift takes it to 193 at the top.
  */
-export const MAX_TEMPO = 198;
+export const MAX_TEMPO = 168;
 
 /** How much faster the danger variant plays than the tempo the level has reached. */
 export const DANGER_TEMPO_LIFT = 1.15;
 
-/** The level at which the drum layer enters. */
-export const DRUMS_FROM_LEVEL = 5;
+/** Levels per tune: 1 to 3 the folk tune, 4 to 6 the dance, 7 to 9 the menuet, then round again. */
+export const TUNE_BAND_LEVELS = 3;
 
-/** A short, fast-paced run; the loop is measured at the ramp's ceiling. */
+/** The tunes in band order; null is the form's `order` (the folk tune), the rest are scenes. */
+export const TUNES = [null, 'dance', 'menuet'] as const;
+
+/** The tune a level plays: the scene name, or null for the folk tune. */
+export function tuneFor(level: number): (typeof TUNES)[number] {
+  const band = Math.floor((Math.max(1, level) - 1) / TUNE_BAND_LEVELS);
+  return TUNES[band % TUNES.length];
+}
+
+/** The first section of the folk tune, where the band cycle comes back to. */
+export const FOLK_TOP = 'fa';
+
+/** A short, fast-paced run; every tune is measured at the ramp's ceiling. */
 export const MUSIC_PROFILE: MusicProfile = {
   session: 'standard',
-  fastestTempo: MAX_TEMPO
+  fastestTempo: MAX_TEMPO,
+  scenes: {
+    dance: { session: 'standard', fastestTempo: MAX_TEMPO },
+    // Bach as written: no syncopation, and his own final cadence at the seam.
+    menuet: { session: 'standard', fastestTempo: MAX_TEMPO, gates: { syncopation: false, seam: false } }
+  }
 };
 
-const n = (name: string, beats: number, gain?: number): Note =>
-  gain === undefined ? { freq: p(name), beats } : { freq: p(name), beats, gain };
-const r = (beats: number): Note => ({ freq: REST, beats });
-const d = (drum: DrumName, beats: number, gain?: number): Note =>
-  gain === undefined ? { freq: REST, beats, drum } : { freq: REST, beats, drum, gain };
+const DRUMS: Record<string, DrumName> = { h: 'hat', s: 'snare' };
 
-/** Four beats of octave eighths on a root: the bass's driving bar. */
-const pump = (low: string, high: string): Note[] =>
-  [0, 1, 2, 3].flatMap(i => [n(low, 0.5, i % 2 ? 0.8 : 1), n(high, 0.5, 0.6)]);
-/** A whole-bar chord third (or colour tone) for the pad. */
-const hold = (...names: string[]): Note[] => names.map(name => n(name, 4));
+/**
+ * A line in a compact notation, one token per note: a pitch name (`D5`), `r`
+ * for a rest, or `h`/`s` for a noise hat or snare, then `:beats`, which later
+ * tokens without one reuse (as LilyPond carries a duration over). `|` marks a
+ * bar line; with `bar` given, a bar that does not add up throws, so a slip in
+ * the note data fails `music.test.ts` at import rather than sliding a voice.
+ * A note starting off the beat is ducked a little, which is all the accent a
+ * Game Boy envelope gives: the strong beats are the ones left at full level.
+ */
+function line(text: string, bar?: number): Note[] {
+  const out: Note[] = [];
+  let beats = 0.5;
+  let at = 0;
+  let inBar = 0;
+  const close = () => {
+    if (bar !== undefined && Math.abs(inBar - bar) > 1e-9) {
+      throw new Error(`bar of ${inBar} beats, not ${bar}, near beat ${at} in "${text.slice(0, 40)}..."`);
+    }
+    inBar = 0;
+  };
+  for (const token of text.match(/\||[^\s|]+/g) ?? []) {
+    if (token === '|') {
+      close();
+      continue;
+    }
+    const [name, len] = token.split(':');
+    if (len !== undefined) beats = Number(len);
+    const offBeat = Math.abs(at - Math.round(at)) > 1e-9;
+    const gain = offBeat ? 0.82 : undefined;
+    let note: Note;
+    if (name === 'r') note = { freq: REST, beats };
+    else if (DRUMS[name]) note = { freq: REST, beats, drum: DRUMS[name], ...(offBeat ? { gain: 0.6 } : {}) };
+    else note = { freq: p(name), beats, ...(gain ? { gain } : {}) };
+    out.push(note);
+    at += beats;
+    inBar += beats;
+  }
+  if (inBar > 0) close();
+  return out;
+}
 
-/** A bar of backbeat: kick on 1 and 3 (and its push), snare on 2 and 4. */
-const groove = (): Note[] => [
-  d('kick', 0.5),
-  d('hat', 0.5, 0.6),
-  d('snare', 0.5),
-  d('hat', 0.5, 0.6),
-  d('kick', 0.5),
-  d('kick', 0.5, 0.7),
-  d('snare', 0.5),
-  d('hat', 0.5, 0.6)
-];
-/** The last bar of a section: a snare pickup into the next. */
-const fill = (): Note[] => [
-  d('kick', 0.5),
-  d('hat', 0.5, 0.6),
-  d('snare', 0.5),
-  d('hat', 0.5, 0.6),
-  d('snare', 0.25, 0.7),
-  d('snare', 0.25, 0.7),
-  d('snare', 0.5, 0.85),
-  d('kick', 0.5),
-  d('snare', 0.5)
-];
-/** Eight bars of drums, the fill in the last. */
-const drums = (): Note[] => [...Array.from({ length: 7 }, groove).flat(), ...fill()];
-/** Danger's beat: the snare pushed onto the off-beat, hats doubled at the end. */
-const rushBeat = (): Note[] => [
-  d('kick', 0.5),
-  d('hat', 0.5, 0.6),
-  d('snare', 0.5),
-  d('kick', 0.5, 0.8),
-  d('kick', 0.5),
-  d('hat', 0.5, 0.6),
-  d('snare', 0.5),
-  d('hat', 0.25, 0.5),
-  d('hat', 0.25, 0.5)
-];
+/** The same pitch name an octave up. */
+const up = (name: string): string => name.replace(/\d+$/, o => String(Number(o) + 1));
 
-// The folk tune's two phrases, as `a` states them. `a2` and `c` reuse bars of
-// them, which is where the pass's repetition comes from.
-const TUNE_1 = [
-  // E/G#
-  n('E5', 1), n('B4', 0.5, 0.8), n('C5', 0.5, 0.85), n('D5', 1, 0.95), n('C5', 0.5, 0.8), n('B4', 0.5, 0.8),
-  // Am
-  n('A4', 1), n('A4', 0.5, 0.8), n('C5', 0.5, 0.85), n('E5', 1, 0.95), n('D5', 0.5, 0.8), n('C5', 0.5, 0.8),
-  // E/G#
-  n('B4', 1.5), n('C5', 0.5, 0.8), n('D5', 1, 0.95), n('E5', 1, 0.95),
-  // Am
-  n('C5', 1), n('A4', 1, 0.9), n('A4', 1, 0.9), r(1)
-];
-const TUNE_2_HEAD = [
-  // Dm: the eighth rest and the D held over the beat are the tune's own push.
-  r(0.5), n('D5', 1), n('F5', 0.5, 0.85), n('A5', 1, 0.95), n('G5', 0.5, 0.8), n('F5', 0.5, 0.8),
-  // C
-  n('E5', 1.5), n('C5', 0.5, 0.8), n('E5', 1, 0.95), n('D5', 0.5, 0.8), n('C5', 0.5, 0.8)
-];
-const TUNE_2_CLOSE = [
-  // E
-  n('B4', 1), n('B4', 0.5, 0.8), n('C5', 0.5, 0.85), n('D5', 1, 0.95), n('E5', 1, 0.95),
-  // Am
-  n('C5', 1), n('A4', 1, 0.9), n('A4', 1, 0.9), r(1)
-];
+/** The folk tune's bass: a 2/4 bar of the wave channel bouncing root and octave in eighths. */
+const bounce = (roots: string): string =>
+  roots
+    .trim()
+    .split(/\s+/)
+    .map(r => `${r}:.5 ${up(r)} ${r} ${up(r)} |`)
+    .join(' ');
+/** The folk tune's first time through: the same roots, a quarter each on root and octave. */
+const stride = (roots: string): string =>
+  roots
+    .trim()
+    .split(/\s+/)
+    .map(r => `${r}:1 ${up(r)} |`)
+    .join(' ');
+/** The dance's bass: root, octave, fifth, octave, the fifth written as a pitch name. */
+const hop = (bars: string): string =>
+  bars
+    .trim()
+    .split(/\s+/)
+    .map(pair => {
+      const [root, fifth] = pair.split('/');
+      return `${root}:.5 ${up(root)} ${fifth} ${up(root)} |`;
+    })
+    .join(' ');
+/**
+ * A voice resting for `bars` bars, one rest per bar. Never one long rest: the
+ * engine commits a whole note before it moves on, so a 32-beat rest would
+ * hold every `setScene` and `setDanger` back until it ran out.
+ */
+const silent = (bars: number, beats: number): Note[] => Array.from({ length: bars }, () => ({ freq: REST, beats }));
+/** `n` bars of a 2/4 tick pattern. */
+const ticks = (bar: string, n: number): string => Array.from({ length: n }, () => `${bar} |`).join(' ');
 
-const A_LEAD = [...TUNE_1, ...TUNE_2_HEAD, ...TUNE_2_CLOSE];
-const A_BASS = [
-  // E/G#, Am, E/G#, Am: the leading tone under the tune's first bar.
-  n('G#2', 1), n('E3', 1, 0.7), n('B2', 1, 0.85), n('E3', 1, 0.7),
-  ...pump('A2', 'A3'),
-  n('G#2', 1), n('B2', 1, 0.7), n('E3', 1, 0.85), n('B2', 1, 0.7),
-  n('A2', 0.5), n('A3', 0.5, 0.6), n('A2', 0.5, 0.8), n('A3', 0.5, 0.6), n('A2', 1, 0.85), n('C3', 1, 0.7),
-  // Dm, C, E, Am
-  ...pump('D2', 'D3'),
-  n('C3', 1), n('G2', 1, 0.7), n('C3', 1, 0.85), n('E3', 1, 0.7),
-  n('E2', 1), n('G#2', 1, 0.7), n('B2', 1, 0.85), n('G#2', 1, 0.7),
-  n('A2', 0.5), n('A3', 0.5, 0.6), n('A2', 0.5, 0.8), n('A3', 0.5, 0.6), n('A2', 1, 0.85), n('B2', 1, 0.7)
-];
-const A_PAD = hold('G#3', 'C4', 'G#3', 'C4', 'F4', 'E4', 'D4', 'C4');
+// ---------------------------------------------------------------------------
+// The folk tune, D minor, 2/4. 16-bar strains: the theme (Dm A Dm A7 Gm Dm A7
+// Dm), the second strain (F F C7 C Dm Bb A7 A7), and the close.
 
-const A2_LEAD = [
-  ...TUNE_1,
-  ...TUNE_2_HEAD,
-  // F (bVI): the tune's seventh bar turned onto F.
-  n('C5', 1), n('C5', 0.5, 0.8), n('D5', 0.5, 0.85), n('C5', 1, 0.95), n('A4', 1, 0.9),
-  // G (bVII): a push onto G5 over the half bar, heading for C.
-  n('B4', 1), n('D5', 0.5, 0.85), n('G5', 1.5), n('D5', 1, 0.85)
-];
-const A2_BASS = [
-  // E/G#, Am, E/G#, Am, pumped where `a` walked and walked where it pumped.
-  ...[0, 1, 2, 3].flatMap(i => [n('G#2', 0.5, i % 2 ? 0.8 : 1), n('E3', 0.5, 0.6)]),
-  n('A2', 1), n('E3', 1, 0.7), n('A2', 1, 0.85), n('E3', 1, 0.7),
-  n('G#2', 0.5), n('E3', 0.5, 0.6), n('G#2', 0.5, 0.8), n('E3', 0.5, 0.6),
-  n('B2', 0.5, 0.85), n('E3', 0.5, 0.6), n('G#2', 0.5, 0.8), n('E3', 0.5, 0.6),
-  n('A2', 1), n('C3', 1, 0.7), n('E3', 1, 0.85), n('C3', 1, 0.7),
-  // Dm, C, F, G
-  ...pump('D2', 'D3'),
-  ...pump('C2', 'C3'),
-  n('F2', 1), n('C3', 1, 0.7), n('A2', 1, 0.85), n('C3', 1, 0.7),
-  n('G2', 0.5), n('G3', 0.5, 0.6), n('G2', 0.5, 0.8), n('G3', 0.5, 0.6), n('G2', 1, 0.85), n('B2', 1, 0.7)
-];
-const A2_PAD = hold('G#3', 'C4', 'G#3', 'C4', 'F4', 'E4', 'A3', 'B3');
+const FOLK_THEME = `
+  D5:.5 F5:1 E5:.5 | D5:.5 C#5 D5 E5 | F5:.5 A5:1 G5:.5 | F5:.5 E5 D5 C#5 |
+  G5:.5 Bb5:1 A5:.5 | G5:.5 F5 E5 D5 | E5:.5 C#5 A4 C#5 | D5:1.5 r:.5 |`;
+const FOLK_SECOND = `
+  C5:.5 F5 F5 G5 | A5:1 G5:.5 F5 | Bb4:.5 E5 E5 F5 | G5:1 F5:.5 E5 |
+  A4:.5 D5 D5 E5 | F5:1 E5:.5 D5 | C#5:.5 E5 A5 G5 | F5:.5 E5 D5 C#5 |`;
+const FOLK_CLOSE = `
+  D5:.5 F5 Bb5:1 | A5:.5 G5 F5:1 | Bb4:.5 D5 G5:1 | F5:.5 E5 C#5:1 |
+  A4:.5 D5 F5 A5 | Bb5:.5 A5:1 G5:.5 | G5:.5 F5 E5 D5 | C#5:1 E5 |
+  A5:.5 A5 G5 F5 | E5:.5 F5:1 D5:.5 | C#5:.5 C#5 D5 E5 | F5:1 E5 |
+  D5:.5 D5 E5 F5 | G5:.5 F5 E5 D5 | C#5:.5 D5 E5 G5 | E5:1 A4:.5 r |`;
 
-const B_LEAD = [
-  // C, F, G: the same bar three times, each a step higher, each a leap of a
-  // fourth held over the half bar.
-  n('G4', 1, 0.9), n('C5', 1.5), n('B4', 0.5, 0.8), n('C5', 1, 0.9),
-  n('C5', 1, 0.9), n('F5', 1.5), n('E5', 0.5, 0.8), n('F5', 1, 0.9),
-  n('D5', 1, 0.9), n('G5', 1.5), n('F5', 0.5, 0.8), n('G5', 1, 0.9),
-  // Am: the peak, a held C6.
-  n('E5', 0.5, 0.85), n('A5', 0.5, 0.9), n('C6', 2), n('B5', 0.5, 0.8), n('A5', 0.5, 0.8),
-  // Dm, G: the fall, the Dm bar sequenced down a step.
-  n('A5', 1.5), n('F5', 0.5, 0.8), n('D5', 1, 0.9), n('F5', 1, 0.85),
-  n('G5', 1.5), n('D5', 0.5, 0.8), n('B4', 1, 0.9), n('D5', 1, 0.85),
-  // Am, E
-  n('E5', 1), n('C5', 1, 0.9), n('A4', 1, 0.9), n('C5', 0.5, 0.85), n('B4', 0.5, 0.8),
-  n('B4', 2), n('G#4', 1, 0.9), r(1)
-];
-const B_BASS = [
-  // C, F, G
-  ...pump('C2', 'C3'),
-  n('F2', 1), n('C3', 1, 0.7), n('F2', 1, 0.85), n('C3', 1, 0.7),
-  n('G2', 1), n('D3', 1, 0.7), n('G2', 1, 0.85), n('D3', 1, 0.7),
-  // Am
-  n('A2', 0.5), n('A3', 0.5, 0.6), n('A2', 0.5, 0.8), n('A3', 0.5, 0.6), n('A2', 1, 0.85), n('C3', 1, 0.7),
-  // Dm, G
-  n('D2', 1), n('A2', 1, 0.7), n('D3', 1, 0.85), n('A2', 1, 0.7),
-  n('G2', 1), n('D3', 1, 0.7), n('B2', 1, 0.85), n('D3', 1, 0.7),
-  // Am, E
-  n('A2', 1), n('C3', 1, 0.7), n('E3', 1, 0.85), n('C3', 1, 0.7),
-  ...pump('E2', 'E3')
-];
-const B_PAD = hold('E4', 'A3', 'B3', 'C4', 'F4', 'B3', 'C4', 'G#3');
+// The second pulse: sixths and thirds under the theme and second strain,
+// then a countermelody through the close.
+const FOLK_THEME_THIRDS = `
+  F4:.5 A4:1 G4:.5 | F4:.5 E4 F4 G4 | D5:.5 F5:1 E5:.5 | A4:.5 G4 F4 E4 |
+  Bb4:.5 D5:1 C5:.5 | Bb4:.5 A4 G4 F4 | C#5:.5 A4 E4 A4 | F4:1.5 r:.5 |`;
+const FOLK_SECOND_THIRDS = `
+  A4:.5 C5 A4 C5 | F5:1 E5:.5 C5 | G4:.5 C5 C5 A4 | E5:1 D5:.5 C5 |
+  F4:.5 A4 A4 C5 | D5:1 C5:.5 Bb4 | A4:.5 C#5 E5 E5 | A4:.5 G4 F4 E4 |`;
+const FOLK_CLOSE_COUNTER = `
+  Bb4:2 | A4:1 C5 | G4:2 | A4:1 E4 |
+  F4:2 | D5:1 Bb4 | Bb4:1 G4 | A4:2 |
+  C#5:1 C#5 | A4:2 | A4:1 G4 | D5:1 C#5 |
+  Bb4:2 | E5:.5 D5 C#5 Bb4 | A4:.5 Bb4 C#5 E5 | C#5:1 E4:.5 r |`;
 
-const C_LEAD = [
-  ...TUNE_2_HEAD,
-  ...TUNE_2_CLOSE,
-  // F (bVI): the tune's push, sequenced up a third.
-  r(0.5), n('F5', 1), n('A5', 0.5, 0.85), n('C6', 1, 0.95), n('B5', 0.5, 0.8), n('A5', 0.5, 0.8),
-  // G (bVII)
-  n('G5', 1.5), n('D5', 0.5, 0.8), n('G5', 1, 0.95), n('F5', 0.5, 0.8), n('E5', 0.5, 0.8),
-  // Dm: a run of eighths down onto
-  n('D5', 0.5), n('F5', 0.5, 0.8), n('E5', 0.5, 0.8), n('D5', 0.5, 0.85), n('C5', 0.5, 0.8), n('D5', 0.5, 0.8),
-  n('B4', 0.5, 0.85), n('C5', 0.5, 0.8),
-  // E, the half cadence: the leading tone in the tune for once.
-  n('B4', 2), n('G#4', 1, 0.9), n('B4', 1, 0.8)
-];
-const C_BASS = [
-  // Dm, C, E, Am
-  ...pump('D2', 'D3'),
-  n('C3', 1), n('G2', 1, 0.7), n('C3', 1, 0.85), n('E3', 1, 0.7),
-  n('E2', 1), n('G#2', 1, 0.7), n('B2', 1, 0.85), n('G#2', 1, 0.7),
-  n('A2', 0.5), n('A3', 0.5, 0.6), n('A2', 0.5, 0.8), n('A3', 0.5, 0.6), n('A2', 1, 0.85), n('G2', 1, 0.7),
-  // F, G, Dm
-  ...pump('F2', 'F3'),
-  ...pump('G2', 'G3'),
-  n('D2', 1), n('F2', 1, 0.7), n('A2', 1, 0.85), n('D3', 1, 0.7),
-  // E, held off the tonic: E on both strong beats, then a walk up through F#
-  // into the G# that opens the pass.
-  n('E2', 1), n('E3', 1, 0.7), n('E2', 1, 0.85), n('F#2', 1, 0.75)
-];
-const C_PAD = hold('F4', 'E4', 'D4', 'C4', 'A3', 'B3', 'A3', 'G#3');
+const FOLK_ROOTS = 'D2 A2 D2 A2 G2 D2 A2 D2 F2 F2 C2 C2 D2 Bb1 A1 A1';
+const FOLK_CLOSE_ROOTS = 'Bb1 F2 G2 A2 D2 G2 E2 A2 A2 A2 A2 A2 Bb1 A1 A1 A1';
 
-// The danger variant: written for the top of the well rather than sped up,
-// constant eighths over octave-pumping bass, the E chord taking an F natural
-// (E7 flat nine) and the harmony never reaching C major to rest.
-const RUSH_LEAD = [
-  // E
-  n('E5', 0.5), n('B4', 0.5, 0.8), n('C5', 0.5, 0.85), n('D5', 0.5, 0.8),
-  n('E5', 0.5, 0.95), n('D5', 0.5, 0.8), n('C5', 0.5, 0.85), n('B4', 0.5, 0.8),
-  // Am
-  n('A4', 0.5), n('C5', 0.5, 0.8), n('E5', 0.5, 0.85), n('A5', 0.5, 0.8),
-  n('G#5', 0.5, 0.95), n('E5', 0.5, 0.8), n('C5', 0.5, 0.85), n('E5', 0.5, 0.8),
-  // E7b9
-  n('B4', 0.5), n('C5', 0.5, 0.8), n('D5', 0.5, 0.85), n('E5', 0.5, 0.8),
-  n('F5', 0.5, 0.95), n('E5', 0.5, 0.8), n('D5', 0.5, 0.85), n('C5', 0.5, 0.8),
-  // Am
-  n('A4', 1), n('E5', 0.5, 0.85), n('A5', 1.5), n('G#5', 1, 0.9),
-  // Dm
-  n('D5', 0.5), n('F5', 0.5, 0.8), n('A5', 0.5, 0.85), n('F5', 0.5, 0.8),
-  n('D5', 0.5, 0.95), n('F5', 0.5, 0.8), n('A5', 0.5, 0.85), n('G#5', 0.5, 0.8),
-  // E
-  n('G#5', 0.5), n('E5', 0.5, 0.8), n('B4', 0.5, 0.85), n('E5', 0.5, 0.8),
-  n('G#5', 0.5, 0.95), n('B5', 0.5, 0.8), n('A5', 0.5, 0.85), n('G#5', 0.5, 0.8),
-  // F
-  n('A5', 0.5), n('F5', 0.5, 0.8), n('C5', 0.5, 0.85), n('F5', 0.5, 0.8),
-  n('A5', 0.5, 0.95), n('C6', 0.5, 0.8), n('B5', 0.5, 0.85), n('A5', 0.5, 0.8),
-  // E
-  n('G#5', 1.5), n('E5', 0.5, 0.8), n('F5', 0.5, 0.85), n('E5', 0.5, 0.8), n('D5', 0.5, 0.85), n('B4', 0.5, 0.8)
-];
-const RUSH_BASS = [
-  ...pump('E2', 'E3'),
-  ...pump('A2', 'A3'),
-  ...pump('E2', 'E3'),
-  ...pump('A2', 'A3'),
-  ...pump('D2', 'D3'),
-  ...pump('E2', 'E3'),
-  ...pump('F2', 'F3'),
-  ...pump('E2', 'E3')
-];
-const RUSH_PAD = hold('G#3', 'C4', 'D4', 'C4', 'F4', 'G#3', 'A3', 'G#3');
-const RUSH_DRUMS = Array.from({ length: 8 }, rushBeat).flat();
+const FOLK_TICK = 'h:.5 h s h';
+
+// ---------------------------------------------------------------------------
+// The dance, E minor with the Dorian C sharp, 2/4.
+
+const DANCE_THEME_HEAD = `
+  E5:.75 F#5:.25 G5:.5 E5 | F#5:.5 E5 C#5:1 | D5:.75 E5:.25 F#5:.5 D5 | E5:.5 D5 B4:1 |
+  C5:.75 D5:.25 E5:.5 C5 | D5:.5 C5 A4:1 | B4:.5 E5 G5 B5 | A5:.5 G5 F#5:1 |
+  E5:.75 F#5:.25 G5:.5 E5 | F#5:.5 E5 C#5:1 | D5:.75 E5:.25 F#5:.5 D5 | E5:.5 D5 B4:1 |
+  C5:.5 E5:1 A5:.5 | G5:.5 F#5 E5 D#5 |`;
+const DANCE_THEME_HOME = 'E5:.5 B4 G4 B4 | E5:1 r |';
+const DANCE_THEME_AWAY = 'E5:.5 G5 C6 B5 | A5:.5 F#5 D#5:1 |';
+const DANCE_SECOND = `
+  B5:1 A5:.5 G5 | F#5:1 E5:.5 D5 | E5:.5 G5:1 E5:.5 | D5:1.5 B4:.5 |
+  C5:.5 E5 A5 G5 | F#5:.5 E5 D5 A4 | B4:.5 G5:1 F#5:.5 | F#5:1 D#5 |
+  G5:.5 E5 C5 E5 | A5:1 G5:.5 E5 | F#5:.5 D5 A4 D5 | B5:1 G5 |
+  E5:.5 G5:1 C6:.5 | B5:.5 A5 G5 E5 | F#5:.5 A5 G5 F#5 | D#5:1 B4 |`;
+
+const DANCE_THEME_THIRDS = `
+  G4:.75 A4:.25 B4:.5 G4 | A4:.5 C#5 A4:1 | F#4:.75 G4:.25 A4:.5 F#4 | G4:.5 B4 G4:1 |
+  E4:.75 E4:.25 G4:.5 E4 | F#4:.5 A4 F#4:1 | G4:.5 B4 E5 G5 | F#5:.5 E5 D#5:1 |
+  G4:.75 A4:.25 B4:.5 G4 | A4:.5 C#5 A4:1 | F#4:.75 G4:.25 A4:.5 F#4 | G4:.5 B4 G4:1 |
+  A4:.5 C5:1 E5:.5 | E5:.5 D#5 B4 F#4 | C5:.5 E5 G5 G5 | F#5:.5 D#5 B4:1 |`;
+const DANCE_SECOND_COUNTER = `
+  D5:1 B4 | A4:2 | G4:1 C5 | B4:2 |
+  E4:1 A4 | D5:1 C5 | G4:2 | A4:1 F#4 |
+  C5:1 G4 | E5:1 C5 | A4:1 F#4 | D5:2 |
+  C5:1 E5 | E5:1 C5 | D#5:2 | A4:1 F#4 |`;
+
+const DANCE_THEME_BASS = hop('E2/B2 A2/E3 D2/A2 G2/D3 C2/G2 D2/A2 E2/B2 B1/F#2 E2/B2 A2/E3 D2/A2 G2/D3 A2/E3 B1/F#2');
+const DANCE_BASS_HOME = hop('E2/B2 E2/B2');
+const DANCE_BASS_AWAY = hop('C2/G2 B1/F#2');
+const DANCE_SECOND_BASS = hop(
+  'G2/D3 D2/A2 C2/G2 G2/D3 A2/E3 D2/A2 E2/B2 B1/F#2 C2/G2 A2/E3 D2/A2 G2/D3 C2/G2 A2/E3 B1/F#2 B1/F#2'
+);
+
+/** The dance's ticks: the gallop's own long-short figure on the noise channel. */
+const DANCE_TICK = 'h:.75 h:.25 s:.5 h';
+
+// ---------------------------------------------------------------------------
+// The menuet: Bach, BWV 814, as written (transcribed from the Mutopia
+// Project's engraving, maintained by Knute Snortum). B minor, 3/4.
+
+const MENUET_A_RH = `
+  D5:.5 F#5 B5 F#5 C#5 F#5 | D5 F#5 B4 F#5 A#4 F#5 | B4 F#5 B5 F#5 C#5 F#5 | D5 F#5 B4 F#5 A#4 F#5 |
+  D5 F#5 D5 B4 G5 E5 | C#5 E5 C#5 A4 F#5 D5 | B4 F#5 E5 D5 C#5 B4 | A#4 F#4 A#4 C#5 F#5 E5 |
+  D5 F#5 B5 F#5 C#5 F#5 | D5 F#5 B4 F#5 A#4 F#5 | B4 F#5 B5 F#5 C#5 F#5 | D5 F#5 B4 F#5 A#4 F#5 |
+  D5 F#5 D5 B4 G5 E5 | C#5 E5 C#5 A4 A5 E5 | F#5 A5 F#5 D5 A4 C#5 | D5:3 |`;
+const MENUET_A_LH = `
+  B3:1 B2 A#3 | B3 D4 F#4 | D4 B3 A#3 | B3 D3 F#3 |
+  B2 B3 E3 | A2 A3 D3 | G2 G3 E3 | F#3:.5 G3 F#3 E3 D3 C#3 |
+  B2:1 B3 A#3 | B3 D4 F#4 | D4 B3 A#3 | B3 D3 F#3 |
+  B2 B3 E3 | A2 A3 C#3 | D3 F#3 A3 | D3 A2 D2 |`;
+const MENUET_B_RH = `
+  A5:.5 G5 F#5 E5 D5 C#5 | D5 E5 F#5 D5 E5 G5 | F#5 G5 A5:1 C#5 | D5 F#5 E5 |
+  F#5 B5 G#5 | B4:.5 C#5 D5:1 C#5 | B4:.5 A4 G#4 F#4 G#4 E#4 | F#4:3 |
+  A4:1.5 B4:.25 C5 B4:1 | A4:.5 G4 A4 F#4 G4 E4 | B4:1.5 C#5:.25 D5 C#5:1 | B4:.5 A#4 B4 G#4 A#4 F#4 |
+  E5 C#5 F#4 C#5 E5 F#5 | G5 C#5 F#5 C#5 E5 C#5 | D5 B4 F#4 B4 D5 B4 | F#5 B4 E5 B4 D5 B4 |
+  C#5 B4 D5 B4 E5 B4 | F#5 B4 G5 B4 E5 B4 | F#5:1 E5:.5 D5 C#5 D5 | B4:3 |`;
+const MENUET_B_LH = `
+  F#3:.5 A3 D4 A3 C#4 A3 | F#3 A3 D3 A3 C#3 A3 | D3 A3 D4 A3 C#4 A3 | F#3 A3 D3 A3 C#3 A3 |
+  D3 F#3 D3 B2 B3 G#3 | E#3 G#3 E#3 C#3 G#3 E#3 | F#3:1 C#4 C#3 | F#3:.5 A3 C#4 A3 E3 A3 |
+  D#3 F#3 B2 F#3 D#3 F#3 | E3:1 B2 E2 | E#3:.5 G#3 C#3 G#3 E#3 G#3 | F#3:1 C#3 F#2 |
+  A#2 C#3 F#3 | A#3 F#3 A#3 | B2 D3 F#3 | B3 C#4 D4 |
+  E4 F#4 G4 | D4 E4 C#4 | D4 E4 F#4 | B3 F#3 B2 |`;
+// The second pulse, on the repeats only: a held third or sixth under the right
+// hand's figure, and in the second strain's last bars a line in tenths over
+// Bach's rising bass.
+const MENUET_A_P2 = `
+  B4:2 A#4:1 | B4:1 F#4:2 | F#4:2 A#4:1 | B4:1 F#4:2 |
+  B4:2 E5:1 | A4:2 D5:1 | G4:2 A#4:1 | E4:3 |
+  D4:2 C#4:1 | D4:1 F#4:2 | F#4:2 E4:1 | D4:1 F#4:2 |
+  F#4:2 G4:1 | E4:2 G4:1 | F#4:2 E4:1 | F#4:3 |`;
+const MENUET_B_P2 = `
+  A4:2 G4:1 | F#4:2 E4:1 | F#4:2 G4:1 | A4:2 G4:1 |
+  D5:2 B4:1 | G#4:2 E#4:1 | C#5:2 G#4:1 | A4:3 |
+  F#4:2 D#4:1 | B4:3 | G#4:2 E#4:1 | C#5:3 |
+  A#4:3 | E4:3 | D4:3 | D4:1 E4 F#4 |
+  G4:1 A4 B4 | F#4:1 G4 E4 | F#4:1 G4 A#4 | F#4:3 |`;
+
+// ---------------------------------------------------------------------------
+// The danger variant, D minor over an A pedal: the pulses climb in parallel
+// thirds, a four-note cell a step higher every other bar, while the wave bass
+// throbs on the dominant and the ticks run in sixteenths.
+
+const RUSH_LEAD = `
+  A4:.5 C#5 D5 E5 | F5 E5 D5 C#5 | Bb4 D5 E5 F5 | G5 F5 E5 D5 |
+  C#5 E5 F5 G5 | A5 G5 F5 E5 | D5 F5 G5 A5 | Bb5 A5 G5 F5 |
+  E5 G5 Bb5 A5 | G#5:1 A5 | F5:.5 E5 D5 C#5 | D5:.5 F5:1 E5:.5 |
+  C#5:.5 E5 A5 G5 | F5 E5 D5 C#5 | E5 D5 C#5 Bb4 | A4:1 C#5 |`;
+const RUSH_THIRDS = `
+  F4:.5 A4 Bb4 C#5 | D5 C#5 Bb4 A4 | G4 Bb4 C#5 D5 | E5 D5 C#5 Bb4 |
+  A4 C#5 D5 E5 | F5 E5 D5 C#5 | Bb4 D5 E5 F5 | G5 F5 E5 D5 |
+  C#5 E5 G5 F5 | E5:1 C#5 | D5:.5 C#5 Bb4 A4 | Bb4:.5 D5:1 C#5:.5 |
+  A4:.5 C#5 F5 E5 | D5 C#5 Bb4 A4 | C#5 Bb4 A4 G4 | E4:1 A4 |`;
+const RUSH_BASS = `${Array.from({ length: 14 }, () => 'A2:.5 A2 A2 A2 |').join(' ')} Bb2:.5 Bb2 Bb2 Bb2 | A2:.5 A2 A2 A2 |`;
+const RUSH_TICK = 'h:.25 h h h s h h h';
+
 
 export const CASCADE_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,
   volume: 0.11,
-  tonic: p('A3'),
+  tonic: p('D3'),
   tracks: [
-    // LEAD: a 25% pulse, the NES's reedier duty, with a singer's vibrato on
-    // the held notes (the C6 and B4 of `b`, the push in `a2`).
-    { name: 'lead', wave: 'pulse25', volume: 1.0, vibrato: 8 },
-    // BASS: triangle, some bars pumping octave eighths, some walking quarters.
-    { name: 'bass', wave: 'triangle', volume: 0.8 },
-    // PAD: each chord's third (a seventh where it leads somewhere), an octave
-    // above where the round 13 pad doubled the bass's roots.
-    { name: 'pad', wave: 'triangle', envelope: 'pad', detune: 6, volume: 0.3 },
-    // DRUMS: withheld until a level milestone (see `DRUMS_FROM_LEVEL`).
-    { name: 'drums', volume: 0.5, startsMuted: true }
+    // Pulse channel 1: a 50% duty, a hard attack settling onto a held level,
+    // no vibrato.
+    { name: 'lead', wave: 'pulse50', volume: 0.9, adsr: { attack: 0.003, decay: 0.16, sustain: 0.55, release: 0.03 } },
+    // Pulse channel 2: the thinner 25% duty, quicker to settle, under the lead.
+    { name: 'harmony', wave: 'pulse25', volume: 0.55, adsr: { attack: 0.003, decay: 0.1, sustain: 0.45, release: 0.03 } },
+    // The wave channel: a 32-step trapezoid (a square with its edges cut),
+    // quantised to the Game Boy's 4 bits, held at one level as the channel's
+    // volume shift holds it.
+    {
+      name: 'bass',
+      volume: 0.85,
+      wavetable: {
+        samples: [
+          0, 0.25, 0.5, 0.75, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.75, 0.5, 0.25, 0, -0.25, -0.5, -0.75, -1, -1, -1, -1, -1, -1, -1,
+          -1, -1, -0.75, -0.5, -0.25
+        ],
+        bits: 4
+      },
+      adsr: { attack: 0.002, decay: 0.05, sustain: 0.9, release: 0.02 }
+    },
+    // The noise channel in its short (metallic) mode.
+    { name: 'ticks', volume: 0.3, noise: 'short' }
   ],
   form: {
+    beatsPerBar: 6,
     sections: {
-      a: [A_LEAD, A_BASS, A_PAD, drums()],
-      a2: [A2_LEAD, A2_BASS, A2_PAD, drums()],
-      b: [B_LEAD, B_BASS, B_PAD, drums()],
-      c: [C_LEAD, C_BASS, C_PAD, drums()],
-      rush: [RUSH_LEAD, RUSH_BASS, RUSH_PAD, RUSH_DRUMS]
+      // The folk tune: lead and bass with offbeat ticks, then the pulses in thirds, then the close.
+      fa: [
+        line(FOLK_THEME + FOLK_SECOND, 2),
+        silent(16, 2),
+        line(stride(FOLK_ROOTS), 2),
+        line(ticks('r:.5 h r h', 16), 2)
+      ],
+      fb: [
+        line(FOLK_THEME + FOLK_SECOND, 2),
+        line(FOLK_THEME_THIRDS + FOLK_SECOND_THIRDS, 2),
+        line(bounce(FOLK_ROOTS), 2),
+        line(ticks(FOLK_TICK, 16), 2)
+      ],
+      fc: [
+        line(FOLK_CLOSE, 2),
+        line(FOLK_CLOSE_COUNTER, 2),
+        line(bounce(FOLK_CLOSE_ROOTS), 2),
+        line(`${ticks(FOLK_TICK, 15)} h:.25 h h h s:.5 s`, 2)
+      ],
+      // The dance: the theme alone, the second strain with a countermelody,
+      // the theme in thirds turning away onto B7.
+      ba: [
+        line(DANCE_THEME_HEAD + DANCE_THEME_HOME, 2),
+        silent(16, 2),
+        line(DANCE_THEME_BASS + DANCE_BASS_HOME, 2),
+        line(ticks('h:.5 r h h', 16), 2)
+      ],
+      bb: [
+        line(DANCE_SECOND, 2),
+        line(DANCE_SECOND_COUNTER, 2),
+        line(DANCE_SECOND_BASS, 2),
+        line(ticks(DANCE_TICK, 16), 2)
+      ],
+      bc: [
+        line(DANCE_THEME_HEAD + DANCE_THEME_AWAY, 2),
+        line(DANCE_THEME_THIRDS, 2),
+        line(DANCE_THEME_BASS + DANCE_BASS_AWAY, 2),
+        line(ticks(DANCE_TICK, 16), 2)
+      ],
+      // The menuet: each strain as Bach's two voices, then its repeat with the second pulse.
+      ma: [line(MENUET_A_RH, 3), silent(16, 3), line(MENUET_A_LH, 3), silent(16, 3)],
+      ma2: [line(MENUET_A_RH, 3), line(MENUET_A_P2, 3), line(MENUET_A_LH, 3), silent(16, 3)],
+      mb: [line(MENUET_B_RH, 3), silent(20, 3), line(MENUET_B_LH, 3), silent(20, 3)],
+      mb2: [line(MENUET_B_RH, 3), line(MENUET_B_P2, 3), line(MENUET_B_LH, 3), silent(20, 3)],
+      rush: [line(RUSH_LEAD, 2), line(RUSH_THIRDS, 2), line(RUSH_BASS, 2), line(ticks(RUSH_TICK, 16), 2)]
     },
-    order: ['a', 'a2', 'b', 'c'],
+    order: ['fa', 'fb', 'fc'],
+    scenes: {
+      dance: { order: ['ba', 'bb', 'bc'] },
+      menuet: { order: ['ma', 'ma2', 'mb', 'mb2'] }
+    },
     danger: { order: ['rush'] }
   },
   stingers: {
-    // A level-up: an A major arpeggio, the picardy third the tune never
-    // allows itself, over the root and fifth.
+    // A level-up: D major rising in thirds on the two pulses, the wave channel
+    // leaping its octave, a noise snare on the arrival.
     levelUp: [
-      [n('E5', 0.5, 0.85), n('A5', 0.5, 0.9), n('C#6', 0.5, 0.95), n('E6', 1)],
-      [n('A2', 0.5), n('E3', 0.5, 0.7), n('A3', 0.5, 0.8), n('A2', 1)],
-      [n('C#4', 2.5)],
-      []
+      line('D5:.25 F#5 A5 D6:.75'),
+      line('A4:.25 D5 F#5 A5:.75'),
+      line('D2:.5 D3:1'),
+      line('h:.25 h s:1')
     ],
-    // A countdown's last twenty seconds: a chromatic climb onto the dominant,
-    // Super Mario Bros.'s warning before it resumes faster.
+    // A countdown's last twenty seconds: both pulses shaking a semitone apart
+    // over the dominant, then the leading tone.
     hurry: [
-      [n('E5', 0.5, 0.85), n('F5', 0.5, 0.85), n('F#5', 0.5, 0.9), n('G#5', 0.5, 0.95), n('B5', 1)],
-      [n('E2', 0.5), n('E3', 0.5, 0.7), n('E2', 0.5, 0.8), n('E3', 0.5, 0.7), n('E2', 1)],
-      [n('G#3', 3)],
-      []
+      line('E5:.25 F5 E5 F5 E5 F5 G#5:1'),
+      line('C#5:.25 D5 C#5 D5 C#5 D5 E5:1'),
+      line('A2:.5 A2 A2 A2:1'),
+      line('h:.25 h h h h h s:1')
     ]
   }
 };

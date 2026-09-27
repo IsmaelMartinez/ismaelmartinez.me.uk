@@ -1,10 +1,10 @@
 /** @vitest-environment jsdom */
 /**
- * Cascade's score following the game (#375), driven through the real page
- * wiring. The run state machine decides when the stack is in danger and when
- * a countdown enters its final stretch (`cascade.test.ts` plays both
- * headlessly); this suite checks that `game.ts` hands each of them, and the
- * level ramp, to the music.
+ * Cascade's score following the game (#375, #412), driven through the real
+ * page wiring. The run state machine decides when the stack is in danger and
+ * when a countdown enters its final stretch (`cascade.test.ts` plays both
+ * headlessly); this suite checks that `game.ts` hands each of them, the level
+ * ramp and the level band's tune, to the music.
  *
  * `createGameAudio` is mocked so the calls are observable without a real
  * AudioContext. The run is reached through the page's own `#dev` handle, the
@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initCascadeGame } from '../../src/games/cascade';
 import { WELL_W, WELL_H } from '../../src/games/cascade/well';
 import { DANGER_ENTER_ROW, DANGER_EXIT_ROW, FINAL_STRETCH, type CascadeRun } from '../../src/games/cascade/run';
-import { BASE_TEMPO, DANGER_TEMPO_LIFT, DRUMS_FROM_LEVEL } from '../../src/games/cascade/music';
+import { BASE_TEMPO, DANGER_TEMPO_LIFT, FOLK_TOP, TUNE_BAND_LEVELS } from '../../src/games/cascade/music';
 import {
   createFrameDriver,
   installCanvasContext,
@@ -37,6 +37,7 @@ const mockAudio = vi.hoisted(() => ({
   setTempo: vi.fn(),
   section: vi.fn(() => null),
   setLayer: vi.fn(),
+  setScene: vi.fn(() => true),
   setSection: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
@@ -103,6 +104,21 @@ function start(mode: 'marathon' | 'countdown' = 'marathon'): void {
   document.getElementById('start-btn')!.click();
 }
 
+/**
+ * Clears a line that takes the run to `level`, then lets the clear flash and
+ * the landslide play out so the next piece is falling.
+ */
+function levelUpTo(run: CascadeRun, level: number): void {
+  run.lines = (level - 1) * 10 - 1;
+  run.level = level - 1;
+  run.well.fill(0);
+  primeLine(run);
+  hardDrop();
+  expect(run.level).toBe(level);
+  frames.step(4);
+  expect(run.phase).toBe('falling');
+}
+
 const lifted = (tempo: number) => Math.round(tempo * DANGER_TEMPO_LIFT);
 
 beforeEach(() => {
@@ -125,14 +141,13 @@ afterEach(() => {
   for (const fn of Object.values(mockAudio)) fn.mockClear();
 });
 
-describe('Cascade score following the game (#375)', () => {
-  it('starts each run at the base tempo with the drums held back', () => {
+describe('Cascade score following the game (#375, #412)', () => {
+  it("starts each run at the base tempo on the folk tune, the form's own order", () => {
     start();
     expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO);
-    expect(mockAudio.setLayer).toHaveBeenCalledWith('drums', false, 0);
-    // Taken out before the music starts, so a run that ended with them in
-    // does not open the next one with a bar of drums.
-    expect(mockAudio.setLayer.mock.invocationCallOrder[0]).toBeLessThan(mockAudio.start.mock.invocationCallOrder[0]);
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+    expect(mockAudio.setScene).not.toHaveBeenCalled();
+    expect(mockAudio.setLayer).not.toHaveBeenCalled();
   });
 
   it('swaps in the danger variant when the stack reaches the top, and releases it only on recovery', () => {
@@ -152,40 +167,87 @@ describe('Cascade score following the game (#375)', () => {
     frames.step(1);
     expect(mockAudio.setDanger.mock.calls).toEqual([[true], [false]]);
     expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO);
+    // Still level 1's band, so recovering changes no tune.
+    expect(mockAudio.setScene).not.toHaveBeenCalled();
   });
 
-  it('plays the level-up stinger on every level, and brings the drums in at the milestone', () => {
+  it('plays the level-up stinger on every level and winds the tempo up three a level', () => {
+    start();
+    levelUpTo(liveRun(), 2);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('levelUp');
+    expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO + 3);
+    // Level 2 is still the folk tune's band.
+    expect(mockAudio.setScene).not.toHaveBeenCalled();
+  });
+
+  it('moves to the next tune at each level band, and back round to the folk tune from its top', () => {
     start();
     const run = liveRun();
-    run.lines = 9;
-    primeLine(run);
-    hardDrop();
-    expect(run.level).toBe(2);
-    expect(mockAudio.playStinger).toHaveBeenCalledWith('levelUp');
-    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', false, undefined);
-    expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO + 9);
+    levelUpTo(run, TUNE_BAND_LEVELS);
+    expect(mockAudio.setScene).not.toHaveBeenCalled();
 
-    // Let the clear flash and the landslide play out, so the next piece is falling.
-    frames.step(4);
-    expect(run.phase).toBe('falling');
-    run.lines = (DRUMS_FROM_LEVEL - 1) * 10 - 1;
-    run.level = DRUMS_FROM_LEVEL - 1;
-    run.well.fill(0);
-    primeLine(run);
-    hardDrop();
-    expect(run.level).toBe(DRUMS_FROM_LEVEL);
-    expect(mockAudio.playStinger).toHaveBeenCalledTimes(2);
-    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', true, undefined);
-    expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO + 9 * (DRUMS_FROM_LEVEL - 1));
+    levelUpTo(run, TUNE_BAND_LEVELS + 1);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance']]);
+    levelUpTo(run, TUNE_BAND_LEVELS + 2);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance']]);
+
+    levelUpTo(run, 2 * TUNE_BAND_LEVELS + 1);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance'], ['menuet']]);
+    expect(mockAudio.setSection).not.toHaveBeenCalled();
+
+    levelUpTo(run, 3 * TUNE_BAND_LEVELS + 1);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance'], ['menuet'], [null]]);
+    expect(mockAudio.setSection.mock.calls).toEqual([[FOLK_TOP]]);
+    // After the return to the order, so the jump lands in it rather than in the menuet.
+    expect(mockAudio.setSection.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockAudio.setScene.mock.invocationCallOrder[2]
+    );
+    expect(mockAudio.playStinger).toHaveBeenCalledTimes(5);
   });
 
-  it("sounds the warning, lifts the tempo and brings the drums in for a countdown's final stretch", () => {
+  it('holds a band change back while the stack is in danger, and makes it on recovery', () => {
+    start();
+    const run = liveRun();
+    // A supported column from the danger row down, so the clear below leaves the stack high.
+    for (let y = DANGER_ENTER_ROW; y < WELL_H - 1; y++) run.well[y * WELL_W] = 1;
+    frames.step(1);
+    expect(mockAudio.setDanger.mock.calls).toEqual([[true]]);
+
+    run.lines = TUNE_BAND_LEVELS * 10 - 1;
+    run.level = TUNE_BAND_LEVELS;
+    primeLine(run);
+    hardDrop();
+    expect(run.level).toBe(TUNE_BAND_LEVELS + 1);
+    frames.step(4);
+    expect(run.danger).toBe(true);
+    expect(mockAudio.setScene).not.toHaveBeenCalled();
+
+    stackTo(run, DANGER_EXIT_ROW);
+    frames.step(1);
+    expect(mockAudio.setDanger.mock.calls).toEqual([[true], [false]]);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance']]);
+    // After the release, so the scene change replaces the return to the old tune.
+    expect(mockAudio.setScene.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockAudio.setDanger.mock.invocationCallOrder[1]
+    );
+  });
+
+  it('opens a new run on the folk tune whatever band the last one reached', () => {
+    start();
+    levelUpTo(liveRun(), TUNE_BAND_LEVELS + 1);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance']]);
+    // start() puts the score back on its order, so the game must forget the band too.
+    document.getElementById('start-btn')!.click();
+    levelUpTo(liveRun(), TUNE_BAND_LEVELS + 1);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance'], ['dance']]);
+  });
+
+  it("sounds the warning and lifts the tempo for a countdown's final stretch", () => {
     start('countdown');
     const run = liveRun();
     run.timeLeft = FINAL_STRETCH + 0.1;
     frames.step(1);
     expect(mockAudio.playStinger).toHaveBeenCalledWith('hurry');
-    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', true, undefined);
     expect(mockAudio.setTempo).toHaveBeenLastCalledWith(lifted(BASE_TEMPO));
   });
 

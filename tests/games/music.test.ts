@@ -272,8 +272,19 @@ describe('the arcade scores', () => {
   });
 
   it('gives Cascade a base tempo its per-level ramp can wind up from', () => {
-    expect(BASE_TEMPO).toBe(126);
+    expect(BASE_TEMPO).toBe(144);
     expect(CASCADE_MUSIC.tempo).toBe(BASE_TEMPO);
+  });
+
+  it("keeps every Cascade note inside one bar, so a band's tune and the danger variant arrive within a bar", () => {
+    // The engine commits a whole note, rests included, before a jump can land,
+    // so one long rest in a resting voice would hold a scene change back until
+    // it ran out (a 32-beat rest held the first draft's back for 13 seconds).
+    const bar = CASCADE_MUSIC.form!.beatsPerBar!;
+    const long = Object.entries(CASCADE_MUSIC.form!.sections).flatMap(([name, lines]) =>
+      lines.flatMap((line, t) => line.filter(n => n.beats > bar).map(n => `${name}[${t}] ${n.beats}`))
+    );
+    expect(long).toEqual([]);
   });
 
   it('gives Football a base tempo its knockout ramp can wind up from', () => {

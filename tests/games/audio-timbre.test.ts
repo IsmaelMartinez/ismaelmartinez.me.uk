@@ -1,6 +1,7 @@
 /**
  * The engine's opt-in instrument: drums, pulse duties, vibrato, slides, pan,
- * ADSR envelopes, filters, wavetables, noise, and the offline render. Each is read off the recording context's graph log (see
+ * ADSR envelopes, filters, wavetables, noise, FM, pitch envelopes, and the
+ * offline render. Each is read off the recording context's graph log (see
  * `audio-graph.ts`), so an assertion names the exact node call it expects.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -543,6 +544,79 @@ describe('noise', () => {
     expect(log).toContain('source#1.connect(filter#2)');
     expect(log).toContain('filter#2.connect(filter#1)');
     expect(log).toContain('filter#1.connect(gain#3)');
+  });
+});
+
+describe('fm', () => {
+  // With no vibrato the modulator is osc#1 and its swing gain#4, after the
+  // master, the bus and the note's envelope; the carrier and its twin follow.
+  it('swings the carrier and its twin from one modulator at the ratio, the index falling over indexDecay', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { detune: 6, fm: { ratio: 2, index: 3, indexDecay: 0.3 } });
+    expect(log).toContain('osc#1.type = sine');
+    expect(args(log, 'osc#1.frequency', 'setValueAtTime')).toEqual([[880, T0]]);
+    expect(args(log, 'gain#4.gain', 'setValueAtTime')).toEqual([[1320, T0]]);
+    const [[target, at, constant]] = args(log, 'gain#4.gain', 'setTargetAtTime');
+    expect([target, at]).toEqual([0, T0]);
+    expect(constant).toBeCloseTo(0.1, 9);
+    expect(log).toContain('osc#1.connect(gain#4)');
+    expect(log).toContain('gain#4.connect(osc#2.frequency)');
+    expect(log).toContain('gain#4.connect(osc#3.frequency)');
+    // The modulator never reaches the output on its own.
+    expect(log.filter(l => l.startsWith('osc#1.connect('))).toEqual(['osc#1.connect(gain#4)']);
+    const [[stop]] = args(log, 'osc#1', 'stop');
+    expect(stop).toBeCloseTo(T0 + 0.92, 9);
+  });
+
+  it('holds the index when there is no indexDecay', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { fm: { ratio: 1, index: 2 } });
+    expect(args(log, 'gain#4.gain', 'setValueAtTime')).toEqual([[880, T0]]);
+    expect(args(log, 'gain#4.gain', 'setTargetAtTime')).toEqual([]);
+  });
+
+  it('keeps the modulator at its ratio through a slide and under the vibrato', () => {
+    const log = playLine([{ freq: 440, beats: 1, slideFrom: 330 }], { vibrato: 8, fm: { ratio: 2, index: 1 } });
+    // The vibrato LFO is osc#1 and its depth gain#4, so the modulator is osc#2.
+    expect(args(log, 'osc#2.frequency', 'setValueAtTime')).toEqual([[660, T0]]);
+    const [[to, at]] = args(log, 'osc#2.frequency', 'exponentialRampToValueAtTime');
+    expect(to).toBe(880);
+    expect(at).toBeCloseTo(T0 + 0.06, 9);
+    expect(log).toContain('gain#4.connect(osc#2.detune)');
+  });
+
+  it('leaves drums and noise notes alone', () => {
+    const drum = playLine([{ freq: REST, beats: 1, drum: 'hat' }], { fm: { ratio: 2, index: 3 } });
+    expect(drum.some(l => l.startsWith('create osc'))).toBe(false);
+    const noise = playLine([{ freq: 440, beats: 1 }], { wave: 'noise', fm: { ratio: 2, index: 3 } });
+    expect(noise.some(l => l.startsWith('create osc'))).toBe(false);
+  });
+});
+
+describe('pitch envelope', () => {
+  it('starts a note of the voice its semitones away and glides into it over its time', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { octaveShift: 1, pitchEnv: { semitones: 12, time: 0.03 } });
+    expect(args(log, 'osc#1.frequency', 'setValueAtTime')).toEqual([[1760, T0]]);
+    const [[to, at]] = args(log, 'osc#1.frequency', 'exponentialRampToValueAtTime');
+    expect(to).toBe(880);
+    expect(at).toBeCloseTo(T0 + 0.03, 9);
+  });
+
+  it('lets a note carry its own, and a slideFrom beat both', () => {
+    const own = playLine([{ freq: 440, beats: 1, pitchEnv: { semitones: -12, time: 0.2 } }], {
+      pitchEnv: { semitones: 12, time: 0.03 }
+    });
+    expect(args(own, 'osc#1.frequency', 'setValueAtTime')).toEqual([[220, T0]]);
+    expect(args(own, 'osc#1.frequency', 'exponentialRampToValueAtTime')[0][1]).toBeCloseTo(T0 + 0.2, 9);
+    const scoop = playLine([{ freq: 440, beats: 1, slideFrom: 330, pitchEnv: { semitones: -12, time: 0.2 } }]);
+    expect(args(scoop, 'osc#1.frequency', 'setValueAtTime')).toEqual([[330, T0]]);
+    expect(args(scoop, 'osc#1.frequency', 'exponentialRampToValueAtTime')[0][1]).toBeCloseTo(T0 + 0.06, 9);
+  });
+
+  it('never glides for longer than the note, and does nothing at 0 semitones', () => {
+    // A pluck plays 0.9 of its one-second beat.
+    const long = playLine([{ freq: 440, beats: 1 }], { pitchEnv: { semitones: 7, time: 5 } });
+    expect(args(long, 'osc#1.frequency', 'exponentialRampToValueAtTime')[0][1]).toBeCloseTo(T0 + 0.9, 9);
+    const flat = playLine([{ freq: 440, beats: 1 }], { pitchEnv: { semitones: 0, time: 0.1 } });
+    expect(args(flat, 'osc#1.frequency', 'exponentialRampToValueAtTime')).toEqual([]);
   });
 });
 

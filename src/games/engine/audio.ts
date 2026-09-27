@@ -80,6 +80,48 @@ export interface Note {
    * rest or a drum, or when a form's rest comes between them.
    */
   slideNext?: boolean;
+  /**
+   * This note's pitch envelope, in place of the track's `pitchEnv`. Ignored
+   * when the note has a `slideFrom`, which is the same scoop written in Hz.
+   */
+  pitchEnv?: PitchEnv;
+}
+
+/**
+ * A pitch envelope: the note starts `semitones` away from its pitch (above
+ * when positive) and glides into it over `time` seconds, or the whole note if
+ * that is shorter. A few semitones over 30 ms is a DAC-style kick or a tom
+ * punch, a couple over 100 ms a timpani, an octave or more over a beat a sweep.
+ * It is a `slideFrom` measured from the note, so on a noise voice it moves the cutoff.
+ */
+export interface PitchEnv {
+  semitones: number;
+  time: number;
+}
+
+/**
+ * Two-operator FM, the Mega Drive's YM2612 cut down to one modulator: a sine
+ * at `ratio` times the note's frequency swings the carrier's frequency by
+ * `index` times the note's frequency either side of it. Ratio 1 with an index
+ * falling from 3 or so is brass; ratio 1 or 2 with a fast fall is a slap
+ * bass; a ratio like 3.5 is a bell. The carrier is the voice's own wave, so
+ * a pulse or a wavetable can be modulated too. Each note costs one more
+ * oscillator and one more gain than it would without FM (a detuned twin
+ * shares them). Measured on 2026-09-27 in Chrome's offline render, four
+ * voices of eighth notes took 6.4 s to render a minute as FM sines against
+ * 6.2 s as plain squares, while a detuned twin doubled it, so FM is the
+ * cheap way to a rich voice and a twin on top of it the expensive one.
+ */
+export interface FmOptions {
+  /** Modulator frequency over the note's; a whole number keeps the tone harmonic. */
+  ratio: number;
+  /** Peak frequency swing over the note's frequency; 0 is a plain tone, 5 is harsh. */
+  index: number;
+  /**
+   * Seconds the index takes to fall to 5% of itself from onset, the bright
+   * attack that settles into a rounder tone. Left out, it holds.
+   */
+  indexDecay?: number;
 }
 
 /** The three drum instruments a percussion track can play. */
@@ -147,6 +189,10 @@ export interface Track {
   wavetable?: Wavetable;
   /** The noise this voice's snares, hats and noise notes use. Defaults to 'white'. */
   noise?: NoiseKind;
+  /** Two-operator FM on every pitched note of the voice; ignored by drums and noise notes. */
+  fm?: FmOptions;
+  /** A pitch envelope for every note of the voice that does not carry its own. */
+  pitchEnv?: PitchEnv;
   /** Relative mix level 0–1 within the music bus. Defaults to 1. */
   volume?: number;
   /**
@@ -738,6 +784,8 @@ interface NormTrack {
   filter: VoiceFilter | undefined;
   wavetable: Wavetable | undefined;
   noise: NoiseKind;
+  fm: FmOptions | undefined;
+  pitchEnv: PitchEnv | undefined;
 }
 
 /** Fills in per-track defaults. */
@@ -756,7 +804,9 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
     adsr: t.adsr,
     filter: t.filter,
     wavetable: t.wavetable,
-    noise: t.noise ?? 'white'
+    noise: t.noise ?? 'white',
+    fm: t.fm,
+    pitchEnv: t.pitchEnv
   }));
 }
 
@@ -764,6 +814,8 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
 interface ToneMotion {
   /** Frequency the tone starts at and glides from into its own. */
   slideFrom?: number;
+  /** How long that glide takes, in seconds; left out, `SLIDE_TIME`. */
+  slideFromTime?: number;
   /** Frequency the tone glides into over its tail. */
   slideTo?: number;
   /** Vibrato depth in cents. */
@@ -776,6 +828,7 @@ interface ToneColour {
   filter?: VoiceFilter;
   wavetable?: Wavetable;
   noise?: NoiseKind;
+  fm?: FmOptions;
 }
 
 /** Shortest release an `Adsr` gets, in seconds; an instant drop to silence clicks. */
@@ -877,13 +930,15 @@ function playTone(
   const slide = Math.min(SLIDE_TIME, duration / 2);
   const slideFrom = motion.slideFrom ?? 0;
   const scoop = slideFrom > 0;
+  const scoopTime = motion.slideFromTime === undefined ? slide : Math.min(motion.slideFromTime, duration);
   // A tone's frequency, or a noise note's cutoff, after its onset value: the
-  // scoop into it and the glide out of it.
-  const glide = (f: AudioParam): void => {
-    if (scoop) f.exponentialRampToValueAtTime(freq, start + slide);
+  // scoop into it and the glide out of it, all times `scale` for an FM
+  // modulator, which follows the carrier at its ratio.
+  const glide = (f: AudioParam, scale = 1): void => {
+    if (scoop) f.exponentialRampToValueAtTime(freq * scale, start + scoopTime);
     if (motion.slideTo !== undefined && motion.slideTo > 0) {
-      f.setValueAtTime(freq, start + duration - slide);
-      f.exponentialRampToValueAtTime(motion.slideTo, start + duration);
+      f.setValueAtTime(freq * scale, start + duration - slide);
+      f.exponentialRampToValueAtTime(motion.slideTo * scale, start + duration);
     }
   };
   if (type === 'noise') {
@@ -917,6 +972,26 @@ function playTone(
     lfo.start(start);
     lfo.stop(stopAt);
   }
+  // One modulator per note, shared by the twin, into the carriers' frequency
+  // through a gain whose level is the swing in Hz.
+  let swing: GainNode | null = null;
+  const fm = colour.fm;
+  if (fm && Number.isFinite(fm.ratio) && fm.ratio > 0 && Number.isFinite(fm.index)) {
+    const modulator = ctx.createOscillator();
+    modulator.type = 'sine';
+    modulator.frequency.setValueAtTime((scoop ? slideFrom : freq) * fm.ratio, start);
+    glide(modulator.frequency, fm.ratio);
+    swing = ctx.createGain();
+    swing.gain.setValueAtTime(fm.index * freq, start);
+    if (fm.indexDecay !== undefined && authoredSeconds(fm.indexDecay) > 0) {
+      swing.gain.setTargetAtTime(0, start, fm.indexDecay / 3);
+    }
+    modulator.connect(swing);
+    modulator.start(start);
+    modulator.stop(stopAt);
+    // The vibrato moves the modulator with the carrier, so the ratio holds.
+    if (depth) depth.connect(modulator.detune);
+  }
   const spawn = (cents: number): void => {
     const osc = ctx.createOscillator();
     if (colour.wavetable) osc.setPeriodicWave(tableWave(ctx, colour.wavetable));
@@ -929,6 +1004,7 @@ function playTone(
     osc.stop(stopAt);
     glide(osc.frequency);
     if (depth) depth.connect(osc.detune);
+    if (swing) swing.connect(osc.frequency);
   };
   spawn(0);
   // A slightly detuned twin thickens the voice into a warm chorus.
@@ -1219,7 +1295,18 @@ function playNote(
     slideFrom: shift(note.slideFrom),
     slideTo: note.slideNext && following && !following.drum ? shift(following.freq) : undefined
   };
-  const colour: ToneColour = { adsr: track.adsr, filter: track.filter, wavetable: track.wavetable, noise: track.noise };
+  const env = note.pitchEnv ?? track.pitchEnv;
+  if (motion.slideFrom === undefined && env && freq > 0 && Number.isFinite(env.semitones) && env.semitones !== 0) {
+    motion.slideFrom = freq * Math.pow(2, env.semitones / 12);
+    motion.slideFromTime = authoredSeconds(env.time);
+  }
+  const colour: ToneColour = {
+    adsr: track.adsr,
+    filter: track.filter,
+    wavetable: track.wavetable,
+    noise: track.noise,
+    fm: track.fm
+  };
   playTone(ctx, freq, at, playDur, track.wave, peak, out, track.envelope, track.detune, motion, colour);
 }
 

@@ -891,7 +891,9 @@ function playNote(
   dur: number
 ): void {
   const peak = VOICE_PEAK * track.volume * noteGain(note.gain);
-  const out = track.pan === 0 ? bus : panTo(ctx, bus, track.pan, at);
+  // A rest makes no nodes, so it gets no panner either.
+  const sounds = !!note.drum || note.freq > 0;
+  const out = track.pan === 0 || !sounds ? bus : panTo(ctx, bus, track.pan, at);
   if (note.drum) {
     playDrum(ctx, note.drum, at, peak, out);
     return;

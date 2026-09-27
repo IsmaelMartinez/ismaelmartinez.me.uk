@@ -348,8 +348,11 @@ export function initCascadeGame(): void {
     audio.setTempo(lifted ? Math.round(ramp * DANGER_TEMPO_LIFT) : ramp);
   }
 
-  /** The tune the music is on (null is the folk tune, the form's order). */
-  let tune: ReturnType<typeof tuneFor> = null;
+  /**
+   * The tune the music is on or heading to (null is the folk tune, the form's
+   * order); undefined when a move to it was overtaken before it landed.
+   */
+  let tune: ReturnType<typeof tuneFor> | undefined = null;
 
   /**
    * Moves the music to the level band's tune, at the next bar line. Held back
@@ -455,6 +458,11 @@ export function initCascadeGame(): void {
           );
         }
       } else if (event.type === 'danger') {
+        // A band change still waiting for its bar line is replaced by the
+        // danger jump, and the release would go back to the old tune, so it
+        // is forgotten here and made again on recovery.
+        const at = audio.section();
+        if (event.on && at && at.scene !== tune) tune = undefined;
         // The authored danger variant comes in (or goes) at the next bar line.
         audio.setDanger(event.on);
         // A band change that arrived during danger lands now, on the same bar line.

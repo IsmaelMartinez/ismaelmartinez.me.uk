@@ -139,6 +139,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   for (const fn of Object.values(mockAudio)) fn.mockClear();
+  mockAudio.section.mockReturnValue(null);
 });
 
 describe('Cascade score following the game (#375, #412)', () => {
@@ -230,6 +231,34 @@ describe('Cascade score following the game (#375, #412)', () => {
     expect(mockAudio.setScene.mock.invocationCallOrder[0]).toBeGreaterThan(
       mockAudio.setDanger.mock.invocationCallOrder[1]
     );
+  });
+
+  it('makes a band change again on recovery when danger overtook it before its bar line', () => {
+    start();
+    const run = liveRun();
+    levelUpTo(run, TUNE_BAND_LEVELS + 1);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance']]);
+    // The engine still on the folk tune: the move to the dance is waiting for its bar line.
+    mockAudio.section.mockReturnValue({ name: 'fa', start: 0, danger: false, scene: null } as never);
+    stackTo(run, DANGER_ENTER_ROW);
+    frames.step(1);
+    stackTo(run, DANGER_EXIT_ROW);
+    frames.step(1);
+    expect(mockAudio.setDanger.mock.calls).toEqual([[true], [false]]);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance'], ['dance']]);
+  });
+
+  it('leaves a band change alone on recovery once it has landed', () => {
+    start();
+    const run = liveRun();
+    levelUpTo(run, TUNE_BAND_LEVELS + 1);
+    mockAudio.section.mockReturnValue({ name: 'ba', start: 0, danger: false, scene: 'dance' } as never);
+    stackTo(run, DANGER_ENTER_ROW);
+    frames.step(1);
+    stackTo(run, DANGER_EXIT_ROW);
+    frames.step(1);
+    expect(mockAudio.setDanger.mock.calls).toEqual([[true], [false]]);
+    expect(mockAudio.setScene.mock.calls).toEqual([['dance']]);
   });
 
   it('opens a new run on the folk tune whatever band the last one reached', () => {

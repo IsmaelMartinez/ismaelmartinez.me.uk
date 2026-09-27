@@ -279,7 +279,7 @@ describe('the arcade scores', () => {
   it('gives Football a base tempo its knockout ramp can wind up from', () => {
     // Same split as Cascade: the pace the score was written at belongs to the
     // arrangement, the stage ramp in `game.ts` belongs to the game.
-    expect(FOOTBALL_BASE_TEMPO).toBe(132);
+    expect(FOOTBALL_BASE_TEMPO).toBe(124);
     expect(FOOTBALL_MUSIC.tempo).toBe(FOOTBALL_BASE_TEMPO);
   });
 

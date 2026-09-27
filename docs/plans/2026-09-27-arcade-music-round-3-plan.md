@@ -1,177 +1,257 @@
-# Arcade music, round 3: from one good loop to a session's worth of music
+# Arcade music, round 3: every cabinet sounds like its game
 
-Written 2026-09-27, the day after round 2 (`docs/plans/2026-09-26-arcade-music-round-2-plan.md`,
-tracked in #382) merged in #399 and the scene engine it left open merged in #400. Round 2 fixed
-the loop: every live score now clears ADR 003's round 2 gates, with passes of 31 to 72 seconds,
-syncopated leads, borrowed-chord seams and at least one response to the game. This plan starts
-from what round 2 did not measure, and from the one goal it did not meet.
+Written 2026-09-27, after round 2 (`docs/plans/2026-09-26-arcade-music-round-2-plan.md`, #382)
+merged in #399 and its scene engine in #400. The owner has now listened. The verdict: the music is
+longer and better than before, but it needs a revamp, because the seven cabinets "all sound the
+same... just slightly different", and Line Hold's "jumps all over the place". The brief for this
+round is to find what the music of each original game was and write something similar, close in
+character but never a copy.
 
-## Where round 2 left the floor
+This plan rests on three investigations run in parallel on 2026-09-27: two on the music of the
+classics the cabinets homage, and one note-level audit of why the shipped scores converge and what
+the engine lacks to sound like each original platform. Sources are listed per cabinet, and anything
+seen only in a search summary rather than read directly is marked second-hand.
 
-The goal round 2 missed is its first. G1 said every rescore would be auditioned by the owner in
-the jukebox before it merged, and the batch merged through #399 without that listening pass. So
-nothing yet says the new scores are good, only that they clear the floors, and round 2's own plan
-is explicit that the floors cannot say it.
+## Why they sound the same
 
-The gap round 2 did not measure is the session. Its gates read one pass of one loop, and every
-long-session cabinet still plays one tune for the whole of a session. A throwaway probe over the
-shipped `music.ts` modules on 2026-09-27 gives the material each cabinet has and, against the
-session length its own docstring states, roughly how many times a player hears it:
+The audit measured all seven cabinets, CALCIO '90's scenes and Critter Rescue's four acts. The
+sameness has four causes, and three of them are of our own making.
 
-| Cabinet | Session (docstring) | Distinct music | Hearings per session (estimate) |
-| --- | --- | --- | --- |
-| Microcity | 40 min, music two passes in three | one 64 s tune, re-voiced by tier | about 25 |
-| Cascade | 10 to 15 min | one 32-bar tune, 61 s to 39 s as it ramps, plus `rush` | about 14 |
-| Line Hold | 13.5 min | one 48 s tune plus the horde | about 13 |
-| Critter Rescue | 30 min over four acts | one 46 to 51 s tune per act | about 9 per act |
-| Tank Duel | a few minutes a match | one 72 s bed plus Sudden Death | about 7 |
-| CALCIO '90 | a tournament | four scenes, 159 s in all | about 6 |
-| Snake | a minute or two | one 29 s tune | about 4 |
+The engine offers one instrument. There are two envelopes, a pluck that decays across the whole note
+and a pad that swells for at most a quarter second, with no sustain level, and one vibrato rate. So
+every score chose from the same kit and landed on the same preset: a plucked triangle bass in the
+same register in all ten, a detuned triangle or sawtooth pad in nine, a 25% pulse lead with 6 to 8
+cents of vibrato in six. Five cabinets use the echo, and all five set it to about an eighth note.
 
-The estimates are arithmetic on docstrings and will be replaced by the computed figure in Phase
-1; they are here to show the shape. The three cabinets players stay with longest hear the same
-passage thirteen to twenty-five times a session, which is the owner's "too short" at the scale a
-player lives at, even though no single loop is short any more.
+The conventions made the harmony uniform. ADR 003's round 2 amendment made the borrowed bVI and bVII
+"the house harmonic colour", and the seam gate in `tests/games/music-gates.ts` then requires every
+loop to hand back through V or bVII. All sixteen passes measured put bVI or bVII on bass downbeats,
+and every loop ends the same way.
 
-Two smaller findings from the same probe. The intro that round 2 added to the engine (`form.intro`)
-is used by no cabinet, so no run has a beginning. And runs end without music: Cascade and Snake
-play the shared descending `gameover` effect, which is not in their key, and the rest simply stop.
+The gates made the rhythm uniform. The syncopation gate is cheapest to pass with a note pushed over
+the half bar, and one cell (dotted quarter, eighth, two quarters) now dominates CALCIO '90's match
+and final and recurs in Cascade, Tank Duel and Line Hold. Cascade's drum groove and Line Hold's are
+the same bar, and four cabinets built their danger variant the same way: faster, with an octave
+eighths bass in every bar.
 
-## What the research adds
+And the scores were copied from each other. Microcity, Tank Duel and Line Hold share the `a b a2`
+skeleton and a `halves` pad helper copied with its docstring. The leads all sit between C5 and A5 on
+average and top out between C6 and E6, and seven of the ten main passes run at 112 to 134 bpm.
 
-Round 2's research is the base and is not repeated here; ADR 003's amendment holds it. Three of
-its findings carry this round. McGowan's survey put "too repetitive, or there simply isn't enough
-musical material" as the top reason players mute, which names material, not loop length. Hunt's
-corpus puts exact bar repetition at about 63% while song length grew across hardware generations,
-so the answer to repetition is more music between repeats, not less repetition inside a tune (the
-shipped leads repeat 0 to 38% of their bars, well under that). And the genre references already
-show the three cheap ways a game gets more material without a longer loop. Tetris shipped three
-tunes, not one (the A, B and C types). Lemmings rotated short tunes as levels were beaten, so a new
-tune was a reward. Soyo Oka's SimCity brief was one motif varied "from the simple to the grandiose"
-as the city grows. C418's rests are the fourth, and the only one that reduces music rather than
-adding it.
+The round 2 gates set floors on variety inside a score. Nothing measures difference between
+cabinets, so nothing stopped them converging.
 
-One honest limit carries over unchanged. No source gives a repetition threshold in hearings or in
-seconds; ADR 003 records the search. The hearings-per-session target below is therefore an
-editorial anchor, taken from the corpus rather than from a psychoacoustic finding: a Tetris tune
-of one to two minutes under a ten to fifteen minute game is heard about seven or eight times, and
-eight is the figure used here. The ADR amendment will say so in those words.
+Line Hold's jumpiness is mostly wiring, not notes. Its lead is no leapier than the rest (a mean step
+of 2.5 semitones, one leap over a fifth in 92 notes). But every wave, `waveLayer(true)` at
+`src/games/towerdefense/game.ts:456` fades the lead in at once, wherever the form happens to be, so
+the tune enters mid-phrase at a different bar each wave. The launch stinger fires at the same moment
+with an E5 to A5 bugle in the lead's own timbre, over the lead's own call. From wave 18 the danger
+switch changes tempo, section and register twice per wave cycle. And the pad re-swells every half
+note, which is busy for a bed. The references below show what tower-defense music does instead.
+
+## What the originals sounded like
+
+Several originals had no music at all, so the reference is the version or descendant whose sound
+defines the genre. The rule for all of it: arrange public-domain material freely; evoke copyrighted
+music by its character (mode, tempo, timbre, form), never by its melody.
+
+Tank Duel. Kee Games' Tank (1974) had only effects. The artillery games it plays like were nearly
+silent while aiming: QBasic Gorillas (1991) has a short PC-speaker intro of stepwise quarter notes
+and a fast 32nd-note victory flourish, and nothing during play; Worms (1995, Bjørn Lynne) has a
+title theme and one long ambience bed per landscape. The signature is silence under the aim, a drone
+per arena, and short square-wave jingles only at the edges of a round.
+
+Snake. Blockade (1976) had beeps that ticked with the arrows and a crash; Nokia Snake (1998) had a
+monophonic buzzer. The signature is one dry square voice, no harmony, no vibrato, no echo, short
+ringtone-length phrases and a pulse locked to the snake's step. The Nokia tune is a registered sound
+mark, so it is evoked, not quoted.
+
+Cascade. The Tetris sound is Hirokazu Tanaka's Game Boy score (1989): three selectable tunes, Type A
+Korobeiniki, Type B an original, Type C Bach's French Suite No. 3 Menuet, at about 150 bpm, on two
+duty-cycle pulses, a 4-bit wavetable bass and a noise channel, in mono, with no pads. The signature
+is folk-minor or Baroque material on two pulses in thirds, a bouncing wave-channel bass in octaves,
+noise-channel ticks, and a speed-up tied to the stack.
+
+Microcity. SNES SimCity (1991, Soyo Oka) has one track per city size, Village, Town, City, Capital,
+Metropolis and Megalopolis, 1:19 to 2:37 each, rising in tempo, density and "mechanized" percussion
+as the city grows, with a xylophone as the thread through most of them. Oka wanted music that would
+not stress the player. The opening theme is transcribed in C major at 131 bpm in 3/4, with sevenths
+and a borrowed minor iv. The signature is a mallet lead, bright major-seventh harmony, SPC-style
+echo, and a separate track per tier.
+
+CALCIO '90. Sega's Mega Drive World Cup Italia '90 had in-match music, three rotating themes plus
+title and menu music on the YM2612 (six 4-operator FM channels, one able to play PCM drums) and the
+SN76489 PSG; the Amiga line, Kick Off 2 at least, had no music in play. The anthems of the summer,
+"Un'estate italiana" and "World in Motion", are copyrighted and point to a major key near 124 bpm,
+dance-pop drums and a chanted hook. The signature is FM brass lead, a bright octave-bouncing FM
+bass, punchy DAC drums with a loud snare, fast PSG arpeggios on held chords, and no long echo.
+
+Critter Rescue. Lemmings' Amiga score (Brian Johnston, Tim Wright) was ProTracker modules on Paula's
+four 8-bit channels, two hard left and two hard right, arranging public-domain pieces (the Can-Can
+galop, Rondo alla Turca, Tchaikovsky's Reed Flutes and Little Swans, Pachelbel's Canon, London
+Bridge, She'll Be Comin' Round the Mountain) in a bouncy music-hall manner with tracker drums. The
+signature is hard stereo, a dry sampled-sounding texture, an arpeggiated chord channel instead of a
+pad, and jaunty quotations of well-known classics.
+
+Line Hold. Kingdom Rush (2011) pairs a sparse "Preparation" cue with a separate "Battle" cue per
+region; Plants vs. Zombies (2009, Laura Shigihara) layers instruments onto a constant groove as the
+waves intensify, with "marching band percussion and swing beats" and "lots of half steps". Nothing
+could be sourced on Desktop Tower Defense's music. The signature is an ostinato that stays put while
+the player thinks: a one- or two-bar riff in the middle register within about a sixth, over a pedal
+or a two-chord vamp, with intensity coming from added layers and percussion rather than new melody,
+and a distinct, suspended build cue.
 
 ## Goals
 
-G1, heard, including round 2. The owner has auditioned every live cabinet's round 2 score and
-recorded a verdict (keep, revise or rescore) before any Phase 2 work starts, and every round 3
-change is auditioned the same way before it merges, its PR recording the approval.
+G1, heard. The owner auditions every rescore in the jukebox against its written reference brief
+before it merges, and the PR records the verdict. Round 2 merged without this; round 3 does not.
 
-G2, enough music for the session. For each live cabinet, the music a player hears in a typical
-session divided by the seconds of distinct material they can reach is at most eight. Distinct
-material is every section reachable through `order`, `scenes`, `danger` and `intro`, counted once,
-at the tempo the profile names. The session length is declared in `MUSIC_PROFILE` and a rest
-counts as silence. Asserted in `music.test.ts`, with `gatePending` for cabinets awaiting their work.
+G2, recognisably its game. Each cabinet's score follows its reference brief above (platform palette,
+mode, tempo range, texture, form) and its docstring names the brief. Judged by G1, not by a test.
 
-G3, progress is heard. Each long-session cabinet (Microcity, Line Hold, Cascade, Critter Rescue)
-changes its material, not only its arrangement, at a milestone the game already tracks, so a new
-tune is a reward for getting further. Each is covered by a test on the game module that drives it.
+G3, unlike each other. No two cabinets share an instrument set, measured as the tuple of each voice's
+wave, envelope and register band, plus echo on or off. A new test in `tests/games/music.test.ts`
+fails when two cabinets' scores match. Critter Rescue's acts count as one cabinet.
 
-G4, every run has a beginning and an end. Every live cabinet opens a run with a once-only intro
-and closes it on a phrase written in the score's key, in place of the shared `gameover` effect.
+G4, Line Hold's wiring fixed. The wave layer enters on a phrase boundary, the launch stinger does
+not double the lead, and the late-game danger switch no longer flips twice per wave cycle. Each fix
+has a regression test on the game module.
 
-G5, nothing regresses. Round 2's gates keep passing on every order and scene, and the wiring
-tests from round 2 stay green.
+G5, round 2's floors stay where they still make sense. Loop length in seconds stays. The seam rule,
+the syncopation gate and the bar-rhythm gate become per-cabinet choices in `MUSIC_PROFILE`, because
+a Nokia buzzer tune or an artillery drone should not have to pass a pop-song syncopation test.
 
-## Phase 0: listen
+## Phase 0: fix Line Hold's wiring now
 
-0.1, a session render. The jukebox renders one loop; a player hears a session. Add a render that
-plays a scripted timeline, a list of timed calls (`setScene`, `setSection`, `setLayer`, `setDanger`,
-`playStinger`, `setTempo`) against the same scheduler, so the owner can hear ten minutes of Line
-Hold's waves or Microcity's growth without playing them. Each cabinet's `music.ts` exports one
-representative timeline beside its profile. Done when every live cabinet's timeline renders
-deterministically through `scripts/render-music.js` and the page stays out of the production build.
+This does not wait for the rescore, because it is a bug the owner can already hear. `setLayer` gains
+an option to take effect at the next section boundary (or bar line), which Line Hold's wave layer
+uses; the launch stinger moves to a register and timbre the lead does not use; and the danger switch
+holds for a whole wave cycle. Done when a DOM test proves the lead's first note on a wave is the
+first note of a section.
 
-0.2, the listening pass. The owner listens to every live cabinet in the jukebox, one loop and one
-session render each, against the round 13 score where one is kept (Cascade, Tank Duel, Snake), and
-records one verdict and one line per cabinet in a single tracking issue. Those verdicts re-rank
-Phase 2 and can add a rescore to it. This is round 2's missing G1, and nothing in Phase 2 starts
-before it.
+## Phase 1: the instruments the references need
 
-## Phase 1: measure the session
+Each engine feature is additive: a score that uses none of it renders byte-identically, which the
+jukebox's WAV render proves. Ordered by distinctiveness bought per unit of work, as the audit ranked
+them.
 
-1.1, the G2 gate. `MusicProfile` gains the typical session length in minutes, and
-`tests/games/music-gates.ts` gains the hearings-per-session figure, computed from the form as
-G2 defines it. The figures in the table above are replaced by computed ones in this plan when it
-lands, and the cabinets that fail carry `gatePending` naming the Phase 2 item that clears them.
-ADR 003 gains a short amendment recording the target and that it is editorial. Done when the gate
-fails on today's Microcity, Cascade and Line Hold and passes on the rest.
+1.1, stereo. A pan per track and a stereo render. Amiga hard panning is the cheapest authentic
+signature in the arcade, and it serves the Game Boy and Mega Drive palettes too.
 
-1.2, rests inside a scene. A scene loops without the form's rest today (#400), which is why
-Microcity kept layers instead of scenes. `FormScene` gains an optional `rest` with the same meaning
-as the form's, so a cabinet can move between scenes and keep C418's gaps. Done when a scene with a
-rest leaves exactly that silence every N passes, a scene without one plays as it does now, and the
-jukebox's session render includes it.
+1.2, envelopes and filters. An ADSR with a sustain level in place of the two fixed envelopes, and a
+per-voice low-pass with its own envelope. This alone breaks the one pluck shape every lead shares,
+and it gives SNES softness, orchestral brass and strings, and filtered basses.
 
-## Phase 2: more music where players stay longest
+1.3, wavetables and noise. Custom single-cycle wavetables with optional 4-bit quantisation (reusing
+the pulse-wave cache), and a short-period noise mode beside the white noise, with a sustained noise
+voice. This is the Game Boy wave-channel bass and metallic hats, a mallet or e-piano colour for
+Microcity, and the crowd CALCIO '90 had to drop.
 
-Ordered by the hearings table, largest first. Each item keeps its cabinet's identity from round 2
-and clears G2 to G5.
+1.4, FM and pitch envelopes. Two-operator FM with an index envelope, and a pitch envelope per note.
+FM is what makes the Mega Drive sound like itself (brass, slap bass); the pitch envelope gives punchy
+DAC-style kicks, timpani and pitch sweeps.
 
-2.1 Microcity, Oka literally. Each population tier plays its own variation of the one motif as a
-scene with rests (needs 1.2): the village a sparse statement, the town a fuller one in a new
-section order, the metropolis a grand one with the horn, so the tune grows rather than only gaining
-instruments. Layers stay for the instruments within a tier. The target is eight or fewer hearings
-over forty minutes, which the rests help with as much as the new material does.
+1.5, arpeggio. A fast chord-arpeggio per note, the tracker and PSG way of implying chords with one
+voice, for Critter Rescue's chord channel, CALCIO '90's PSG and Snake's single buzzer.
 
-2.2 Cascade, the A, B and C types. Two further tunes beside Korobeiniki, original and in the
-cabinet's minor-mode character, rotated by level band so reaching a new band is heard, with the
-danger variant and the level-up stinger kept per tune. Whether the player may also pick a tune (or
-none) on the start screen, as Tetris allowed, is a decision for the owner below.
+1.6, conventions. An ADR 003 amendment that replaces the house harmony with a per-cabinet brief:
+the bVI/bVII colour stays where the reference uses it (the football anthems, Oka's borrowed iv) and
+goes where it does not. It records each cabinet's platform palette, moves the seam, syncopation and
+bar-rhythm gates into `MUSIC_PROFILE` as per-cabinet choices, adds the G3 difference test, and lets
+Line Hold's orchestral texture exceed the pitched-voice limit if its rescore needs it.
 
-2.3 Line Hold, a tune per arc of waves. `waves.ts` already writes its eighteen authored waves as
-three arcs of six (the teaching arc, the pressure building, the escalation), and each gets its own
-build and wave material as scenes in one form (the instruments and key stay, which is what makes
-scenes the right tool here, unlike Critter Rescue's acts), with the horde finale kept as the danger
-variant and the endless assault after wave 18 staying on the third arc's material.
+## Phase 2: rescore each cabinet to its reference
 
-2.4 Critter Rescue, second-time variation. Each act's tune gains a varied second pass through the
-existing `order` (a new verse, a re-voiced chorus), so an act of six or seven levels is not nine
-hearings of one pass. No engine work.
+Every item starts from a written brief (in its issue) drawn from the section above, is auditioned
+under G1, and removes shared helpers in favour of the cabinet's own. The session-length ideas from
+the earlier draft of this plan survive where the reference supports them.
 
-2.5 Beginnings. A once-only intro of two to four bars for every live cabinet, the cabinet
-switching on, written in the score's key and style. CALCIO '90's menu and Snake's short runs need
-it shortest.
+2.1 Line Hold, preparation and battle. A sparse, suspended build cue and a separate battle cue built
+on a mid-register ostinato over a pedal, with percussion and a counter-riff as the layers that grow
+with the wave, after Kingdom Rush and Plants vs. Zombies. The three arcs of waves that `waves.ts`
+already writes (teaching, pressure, escalation) each get their own pair, as Kingdom Rush gives each
+region its own.
 
-2.6 Endings. A game-over phrase and, where a run can be won or retired, a victory phrase, as
-stingers in the score's key that the game plays instead of the shared `gameover` effect before the
-music stops. Cascade and Snake first, since they play that effect today.
+2.2 Microcity, Oka's tiers. A mallet lead over bright seventh chords with SNES echo, and a separate
+piece per population tier that rises in tempo and gains mechanical percussion as the city grows,
+in place of one tune gaining layers.
+
+2.3 Cascade, the Game Boy palette. Two pulses and a 4-bit wave bass with noise ticks, no pad and no
+echo, and more than one tune in the manner of the A, B and C types, rotated by level band. Which
+tunes depends on the owner's decision on Korobeiniki below; a Bach minuet is public domain either
+way.
+
+2.4 CALCIO '90, the Mega Drive palette. FM brass and bass, DAC-style drums, PSG arpeggios, the long
+echo removed, and a crowd layer from sustained noise. The scene structure from #400 stays.
+
+2.5 Critter Rescue, the Amiga palette. Hard-panned four-channel texture, a light tracker kit, an
+arpeggiated chord channel in place of the pad counter-line, a dry mix, and the owner's choice of
+whether one or more acts switch to the Lemmings canon (the Can-Can, Rondo alla Turca, Tchaikovsky).
+
+2.6 Tank Duel, artillery. Near-silence while aiming: a quiet drone per arena (the five arenas each get
+their own), short square-wave jingles for the round start, round won and round lost, and the melody
+kept for match point only.
+
+2.7 Snake, the buzzer. One dry square voice, no vibrato, no echo, ringtone-length phrases, and its
+step-locked tempo kept. Optionally a sparse second voice; the reference argues for none.
+
+2.8 Beginnings and endings. Once the palettes exist, each cabinet gets a short intro and a game-over
+or victory phrase in its own style, in place of the shared `gameover` effect Cascade and Snake play.
 
 ## Phase 3: the parked cabinets
 
-Unchanged from round 2: Pixel Park and Syndicate are brought to the conventions only when one is
-revived, recorded in #381, which will gain a line saying round 3's G2 and G4 apply too.
+Unchanged: Pixel Park and Syndicate follow the same process only when revived (#381).
 
 ## Decisions for the owner
 
-Three choices change the work and are the owner's rather than the plan's.
+Korobeiniki. The tune is public domain, but a search summary (not read directly) reports that Tetris
+Holding registered a US sound mark on an electronic Korobeiniki in video games (reg. 3517007) and
+has sent takedowns to clones. Keep Korobeiniki as Cascade's A type, or move Cascade to a Bach minuet
+and original folk-minor tunes that keep the Game Boy sound without the tune.
 
-Whether Cascade offers a music select (A, B, C or off) on its start screen as well as rotating by
-level. It is the most recognisable music feature in the genre, and it costs a control and a stored
-preference on a cabinet whose start screen is already busy.
+Critter Rescue's tunes. Keep the four current public-domain tunes (Foster, Grieg, the Saints) in the
+Amiga style, or move towards the Lemmings canon itself.
 
-Whether to measure muting. McGowan's mute rate is the one direct measure of music failing, and the
-arcade could count it anonymously per cabinet alongside the score submission it already makes
-(ADR 002). It would be the first data the site collects beyond scores, so it is out of scope unless
-the owner wants it.
+Line Hold's size. An orchestral battle cue needs more voices than ADR 003 allows. Allow it, or keep
+Line Hold to three pitched voices plus drums and get its weight from the new envelopes and filters.
 
-Whether Tank Duel and CALCIO '90, both under the G2 target already, should get anything this round
-beyond intros and endings. The plan assumes not.
+Cascade's music select. Whether the player can pick A, B, C or off on the start screen, as the Game
+Boy allowed, beyond the level-band rotation.
 
 ## What this plan does not do
 
-It does not add audio files or sampled sound, as ADR 003 records. It does not rescore a cabinet the
-listening pass keeps. And it does not treat the hearings target as a finding: it is a floor chosen
-from the corpus to stop a long-session cabinet from shipping one tune again, and the owner's ear
-remains the only goal that says a score is good.
+It does not add audio files or samples; every sound stays synthesised, which the new envelopes,
+filters, wavetables and FM make far less limiting. It does not copy a copyrighted melody. And it does
+not accept a score on its test results alone: the owner's ear, against the written brief, is the
+gate.
+
+## Sources
+
+Read directly unless marked second-hand (seen only in a search summary because the page refused the
+fetch).
+
+Tank Duel: https://en.wikipedia.org/wiki/Tank_(video_game);
+https://gist.github.com/paulera/2525813cc3e5314c5932e1212a1d811b (Gorillas source);
+https://www.vgmpf.com/Wiki/index.php?title=Introduction_-_QBasic_Gorillas_%28DOS%29;
+https://drawesome.bandcamp.com/album/worms-original-game-soundtrack. Snake:
+https://en.wikipedia.org/wiki/Blockade_(video_game); https://en.wikipedia.org/wiki/Snake_(1998_video_game);
+https://en.wikipedia.org/wiki/Nokia_tune. Cascade: https://en.wikipedia.org/wiki/Tetris_(Game_Boy_video_game);
+https://www.vgmpf.com/Wiki/index.php?title=Tetris_%28GB%29; https://www.vgmpf.com/Wiki/index.php?title=Korobeiniki;
+https://gbdev.io/pandocs/Audio.html; the sound mark, second-hand: https://uspto.report/TM/90746082 and
+https://itch.io/takedowns/2073998. Microcity: https://www.vgmpf.com/Wiki/index.php/SimCity_(SNES);
+https://www.timeextension.com/features/interview-super-mario-kart-and-simcity-composer-soyo-oka-on-her-most-iconic-nintendo-soundtracks;
+https://www.hooktheory.com/theorytab/view/soyo-oka/simcity-snes-opening-screen-theme; https://snes.nesdev.org/wiki/S-DSP.
+CALCIO '90: https://en.wikipedia.org/wiki/World_Cup_Italia_'90; https://www.sega-16.com/2012/04/world-cup-italia-90/;
+https://en.wikipedia.org/wiki/Yamaha_YM2612; https://en.wikipedia.org/wiki/Un%27estate_italiana;
+https://en.wikipedia.org/wiki/World_in_Motion; Kick Off 2 having no music, second-hand:
+https://www.lemonamiga.com/review/kick-off-2/270. Critter Rescue: https://en.wikipedia.org/wiki/Lemmings_(video_game);
+https://archive.org/details/06-tim-1; https://coldstorage.bandcamp.com/album/lemmings-the-original-amiga-game-audio;
+https://en.wikipedia.org/wiki/Original_Chip_Set. Line Hold: https://archive.org/details/kingdom-rush-series-ost;
+https://www.gamedeveloper.com/game-platforms/interview-the-terrifying-true-story-of-the-i-plants-vs-zombies-i-soundtrack;
+https://en.wikipedia.org/wiki/Desktop_Tower_Defense.
 
 ## Issues
 
-To be filed once the owner has approved this plan, one per numbered item, under a new tracking
-issue, with 0.2 blocking every Phase 2 item.
+To be filed once the owner has approved this plan and made the decisions above: one per Phase 0,
+1 and 2 item, under a new tracking issue, with Phase 0 first and each rescore blocked on the engine
+items its brief needs.

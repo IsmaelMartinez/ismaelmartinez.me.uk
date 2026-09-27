@@ -25,9 +25,11 @@
  *
  * Beyond the four stock oscillator shapes the synth has three NES pulse duties,
  * three drums built from one shared noise buffer, per-note delayed vibrato and
- * slides, and a stereo pan per voice. All of it is opt-in per track or per
- * note: a score that uses none of it builds exactly the graph it built before
- * these existed, which
+ * slides, and a stereo pan per voice; round 3 added an ADSR envelope, a swept
+ * filter, wavetables, the NES short noise and a sustained noise voice,
+ * two-operator FM, pitch envelopes and arpeggios. All of it is opt-in per
+ * track or per note: a score that uses none of it builds exactly the graph it
+ * built before these existed, which
  * `tests/games/audio-graph.test.ts` checks call for call. The scheduler that
  * plays a score live is the same one `renderScore` runs into an
  * `OfflineAudioContext`, so a render is what the page would have played.
@@ -85,6 +87,15 @@ export interface Note {
    * when the note has a `slideFrom`, which is the same scoop written in Hz.
    */
   pitchEnv?: PitchEnv;
+  /**
+   * A chord in one voice, the tracker and PSG way: semitone offsets from
+   * `freq` (e.g. `[0, 4, 7]` for a major triad) that the note cycles through
+   * at the track's `arpRate`, starting on the first, for its whole length. The
+   * steps are in seconds, not beats, so a tempo change alters how many fit in
+   * a note but never how fast they go. The note's slides and pitch envelope
+   * are dropped, as a tracker's arpeggio overrides its portamento.
+   */
+  arp?: number[];
 }
 
 /**
@@ -193,6 +204,12 @@ export interface Track {
   fm?: FmOptions;
   /** A pitch envelope for every note of the voice that does not carry its own. */
   pitchEnv?: PitchEnv;
+  /**
+   * Steps a second for this voice's `Note.arp`, capped at 1000. Defaults to
+   * 50, a PAL tracker's tick; 60 is the NES frame, and slower rates read as a
+   * broken chord rather than a buzzing one.
+   */
+  arpRate?: number;
   /** Relative mix level 0–1 within the music bus. Defaults to 1. */
   volume?: number;
   /**
@@ -560,6 +577,10 @@ const VOICE_PEAK = 0.8;
 /** How long a `slideFrom` scoop or a `slideNext` glide takes, in seconds. */
 const SLIDE_TIME = 0.06;
 
+/** `Track.arpRate` when a voice does not set one, and the most it may. */
+const ARP_RATE = 50;
+const MAX_ARP_RATE = 1000;
+
 /** Vibrato LFO rate in Hz. */
 const VIBRATO_RATE = 5.5;
 /** Seconds after onset that a note starts to waver. */
@@ -786,6 +807,7 @@ interface NormTrack {
   noise: NoiseKind;
   fm: FmOptions | undefined;
   pitchEnv: PitchEnv | undefined;
+  arpRate: number;
 }
 
 /** Fills in per-track defaults. */
@@ -806,7 +828,8 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
     wavetable: t.wavetable,
     noise: t.noise ?? 'white',
     fm: t.fm,
-    pitchEnv: t.pitchEnv
+    pitchEnv: t.pitchEnv,
+    arpRate: t.arpRate !== undefined && Number.isFinite(t.arpRate) && t.arpRate > 0 ? Math.min(t.arpRate, MAX_ARP_RATE) : ARP_RATE
   }));
 }
 
@@ -820,6 +843,9 @@ interface ToneMotion {
   slideTo?: number;
   /** Vibrato depth in cents. */
   vibrato?: number;
+  /** A `Note.arp` to cycle through, and its steps a second. */
+  arp?: number[];
+  arpRate?: number;
 }
 
 /** The optional shaping of one tone's sound, from its voice's fields of the same names. */
@@ -941,6 +967,16 @@ function playTone(
       f.exponentialRampToValueAtTime(motion.slideTo * scale, start + duration);
     }
   };
+  // An arpeggio holds each step until the next, so it starts on its first
+  // offset and moves on at every step that begins inside the note.
+  const arp = motion.arp?.length ? motion.arp : null;
+  const arpRate = motion.arpRate ?? ARP_RATE;
+  const arpFreq = (i: number): number => (arp ? freq * Math.pow(2, arp[i % arp.length] / 12) : freq);
+  const onset = scoop ? slideFrom : arpFreq(0);
+  const arpeggiate = (f: AudioParam, scale = 1): void => {
+    if (!arp) return;
+    for (let i = 1; i / arpRate < duration; i++) f.setValueAtTime(arpFreq(i) * scale, start + i / arpRate);
+  };
   if (type === 'noise') {
     const source = ctx.createBufferSource();
     source.buffer = noiseBuffer(ctx, colour.noise);
@@ -948,8 +984,9 @@ function playTone(
     source.loop = true;
     const cutoff = ctx.createBiquadFilter();
     cutoff.type = 'lowpass';
-    cutoff.frequency.setValueAtTime(scoop ? slideFrom : freq, start);
+    cutoff.frequency.setValueAtTime(onset, start);
     glide(cutoff.frequency);
+    arpeggiate(cutoff.frequency);
     source.connect(cutoff);
     cutoff.connect(input);
     source.start(start);
@@ -979,8 +1016,9 @@ function playTone(
   if (fm && Number.isFinite(fm.ratio) && fm.ratio > 0 && Number.isFinite(fm.index)) {
     const modulator = ctx.createOscillator();
     modulator.type = 'sine';
-    modulator.frequency.setValueAtTime((scoop ? slideFrom : freq) * fm.ratio, start);
+    modulator.frequency.setValueAtTime(onset * fm.ratio, start);
     glide(modulator.frequency, fm.ratio);
+    arpeggiate(modulator.frequency, fm.ratio);
     swing = ctx.createGain();
     swing.gain.setValueAtTime(fm.index * freq, start);
     if (fm.indexDecay !== undefined && authoredSeconds(fm.indexDecay) > 0) {
@@ -997,12 +1035,13 @@ function playTone(
     if (colour.wavetable) osc.setPeriodicWave(tableWave(ctx, colour.wavetable));
     else if (isPulse(type)) osc.setPeriodicWave(pulseWave(ctx, type));
     else osc.type = type;
-    osc.frequency.setValueAtTime(scoop ? slideFrom : freq, start);
+    osc.frequency.setValueAtTime(onset, start);
     if (cents) osc.detune.setValueAtTime(cents, start);
     osc.connect(input);
     osc.start(start);
     osc.stop(stopAt);
     glide(osc.frequency);
+    arpeggiate(osc.frequency);
     if (depth) depth.connect(osc.detune);
     if (swing) swing.connect(osc.frequency);
   };
@@ -1299,6 +1338,13 @@ function playNote(
   if (motion.slideFrom === undefined && env && freq > 0 && Number.isFinite(env.semitones) && env.semitones !== 0) {
     motion.slideFrom = freq * Math.pow(2, env.semitones / 12);
     motion.slideFromTime = authoredSeconds(env.time);
+  }
+  if (note.arp?.length) {
+    // The arpeggio owns the pitch for the whole note.
+    motion.slideFrom = undefined;
+    motion.slideTo = undefined;
+    motion.arp = note.arp;
+    motion.arpRate = track.arpRate;
   }
   const colour: ToneColour = {
     adsr: track.adsr,

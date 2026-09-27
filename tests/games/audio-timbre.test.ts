@@ -1,8 +1,9 @@
 /**
  * The engine's opt-in instrument: drums, pulse duties, vibrato, slides, pan,
- * ADSR envelopes, filters, wavetables, noise, FM, pitch envelopes, and the
- * offline render. Each is read off the recording context's graph log (see
- * `audio-graph.ts`), so an assertion names the exact node call it expects.
+ * ADSR envelopes, filters, wavetables, noise, FM, pitch envelopes, arpeggios,
+ * and the offline render. Each is read off the recording context's graph log
+ * (see `audio-graph.ts`), so an assertion names the exact node call it
+ * expects.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createGameAudio, renderScore, type GameAudioOptions, type Note } from '../../src/games/engine/audio';
@@ -617,6 +618,74 @@ describe('pitch envelope', () => {
     expect(args(long, 'osc#1.frequency', 'exponentialRampToValueAtTime')[0][1]).toBeCloseTo(T0 + 0.9, 9);
     const flat = playLine([{ freq: 440, beats: 1 }], { pitchEnv: { semitones: 0, time: 0.1 } });
     expect(args(flat, 'osc#1.frequency', 'exponentialRampToValueAtTime')).toEqual([]);
+  });
+});
+
+describe('arpeggio', () => {
+  /** Every step of one oscillator's frequency as [Hz, seconds after the first note]. */
+  const steps = (log: string[], osc: string) =>
+    args(log, `${osc}.frequency`, 'setValueAtTime').map(([hz, at]) => [hz, Math.round((at - T0) * 1e6) / 1e6]);
+
+  it('cycles the note and its twin through the chord at the rate, from the first offset, inside the note', () => {
+    // A pluck plays 0.9 of its one-second beat, so ten steps a second fit nine.
+    const log = playLine([{ freq: 440, beats: 1, arp: [0, 4, 7] }], { detune: 6, arpRate: 10 });
+    const third = 440 * Math.pow(2, 4 / 12);
+    const fifth = 440 * Math.pow(2, 7 / 12);
+    const expected = Array.from({ length: 9 }, (_, i) => [[440, third, fifth][i % 3], i / 10]);
+    for (const osc of ['osc#1', 'osc#2']) {
+      const got = steps(log, osc);
+      expect(got).toHaveLength(9);
+      got.forEach(([hz, at], i) => {
+        expect(hz).toBeCloseTo(expected[i][0], 9);
+        expect(at).toBeCloseTo(expected[i][1], 9);
+      });
+    }
+  });
+
+  it('runs at 50 steps a second unless the voice says otherwise, and drops the slides', () => {
+    const log = playLine(
+      [{ freq: 440, beats: 0.25, arp: [12, 0], slideFrom: 220, slideNext: true, pitchEnv: { semitones: 5, time: 0.1 } }],
+      { pitchEnv: { semitones: 5, time: 0.1 } }
+    );
+    // A quarter beat at 60 bpm plays for 0.225 s: onset plus steps at 20 ms to 220 ms.
+    const got = steps(log, 'osc#1');
+    expect(got).toHaveLength(12);
+    expect(got[0][0]).toBe(880);
+    expect(got[1][0]).toBe(440);
+    expect(got[11][1]).toBeCloseTo(0.22, 9);
+    expect(args(log, 'osc#1.frequency', 'exponentialRampToValueAtTime')).toEqual([]);
+  });
+
+  it('keeps an FM modulator on the chord at its ratio', () => {
+    const log = playLine([{ freq: 440, beats: 1, arp: [0, 12] }], { arpRate: 4, fm: { ratio: 2, index: 1 } });
+    expect(steps(log, 'osc#1').map(([hz]) => hz)).toEqual([880, 1760, 880, 1760]);
+    expect(steps(log, 'osc#2').map(([hz]) => hz)).toEqual([440, 880, 440, 880]);
+  });
+
+  it('keeps its rate through a tempo change, fitting as many steps as the new notes hold', () => {
+    const line = drive(
+      { tempo: 60, tracks: [{ arpRate: 10, melody: [{ freq: 440, beats: 1, arp: [0, 7] }] }] },
+      3.6,
+      [{ at: 1.5, run: a => a.setTempo(120) }]
+    ).split('\n');
+    const notes = line.filter(l => /^create osc#/.test(l)).map(l => l.slice(7, -2));
+    const per = notes.map(osc => args(line, `${osc}.frequency`, 'setValueAtTime').map(([, at]) => at));
+    const gaps = per.flatMap(times => times.slice(1).map((t, i) => t - times[i]));
+    for (const gap of gaps) expect(gap).toBeCloseTo(0.1, 9);
+    // Nine steps in each 0.9 s note before the change, and fewer after it.
+    expect(per[0]).toHaveLength(9);
+    const after = per.at(-1) as number[];
+    expect(after.length).toBeLessThan(9);
+    expect(after.length).toBeGreaterThan(0);
+  });
+
+  it('clamps a rate that would flood the scheduler, and ignores one that is not a rate', () => {
+    const flood = playLine([{ freq: 440, beats: 0.105, arp: [0, 7] }], { arpRate: 1e9 });
+    // At the 1000-step cap a 0.0945 s note holds its onset and 94 steps.
+    expect(steps(flood, 'osc#1')).toHaveLength(95);
+    const bad = playLine([{ freq: 440, beats: 0.105, arp: [0, 7] }], { arpRate: NaN });
+    // At the default 50 a second it holds its onset and 4.
+    expect(steps(bad, 'osc#1')).toHaveLength(5);
   });
 });
 

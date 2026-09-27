@@ -259,6 +259,11 @@ describe('pan', () => {
     expect(log).toContain('gain#3.connect(panner#1)');
   });
 
+  it('makes no panner for a rest', () => {
+    const log = playLine([{ freq: REST, beats: 1 }], { pan: 1 });
+    expect(log.some(l => l.startsWith('create panner'))).toBe(false);
+  });
+
   it('makes no panner at the centre, and clamps or centres a bad value', () => {
     for (const pan of [0, NaN, Infinity]) {
       expect(playLine([{ freq: 440, beats: 1 }], { pan }).some(l => l.startsWith('create panner'))).toBe(false);

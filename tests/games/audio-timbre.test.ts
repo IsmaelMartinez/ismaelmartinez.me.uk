@@ -1,6 +1,6 @@
 /**
  * The engine's opt-in instrument: drums, pulse duties, vibrato, slides, pan,
- * ADSR envelopes, filters, and the offline render. Each is read off the recording context's graph log (see
+ * ADSR envelopes, filters, wavetables, noise, and the offline render. Each is read off the recording context's graph log (see
  * `audio-graph.ts`), so an assertion names the exact node call it expects.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -383,6 +383,166 @@ describe('filter', () => {
   it('leaves drums alone', () => {
     const log = playLine([{ freq: REST, beats: 1, drum: 'kick' }], { filter: { cutoff: 500 } });
     expect(log.some(l => l.startsWith('create filter'))).toBe(false);
+  });
+});
+
+/**
+ * Plays `options` for `seconds` on a recording context at `rate` and hands
+ * back every periodic wave and buffer the engine made, for the tests that need
+ * the numbers inside them rather than the calls around them.
+ */
+function capture(options: GameAudioOptions, seconds: number, rate = 44100) {
+  const ctx = makeRecordingContext(rate);
+  const waves: { real: Float32Array; imag: Float32Array }[] = [];
+  const buffers: Float32Array[] = [];
+  const createWave = ctx.createPeriodicWave as (r: Float32Array, i: Float32Array) => unknown;
+  ctx.createPeriodicWave = (real: Float32Array, imag: Float32Array) => {
+    waves.push({ real, imag });
+    return createWave(real, imag);
+  };
+  const createBuffer = ctx.createBuffer as (c: number, l: number, r: number) => { getChannelData(c: number): Float32Array };
+  ctx.createBuffer = (channels: number, length: number, r: number) => {
+    const buffer = createBuffer(channels, length, r);
+    buffers.push(buffer.getChannelData(0));
+    return buffer;
+  };
+  vi.stubGlobal('window', {
+    AudioContext: class {
+      constructor() {
+        return ctx;
+      }
+    }
+  });
+  const audio = createGameAudio(options);
+  audio.start();
+  for (let i = 1; i <= Math.round(seconds / 0.025); i++) {
+    ctx.currentTime = i * 0.025;
+    vi.advanceTimersByTime(25);
+  }
+  audio.dispose();
+  return { log: ctx.log, waves, buffers };
+}
+
+/** A square wave's series, which a four-step [1, 1, -1, -1] cycle is exactly: 4 / (n pi) on the odd sine terms. */
+function expectSquareSeries(wave: { real: Float32Array; imag: Float32Array }, level = 1): void {
+  expect(wave.imag).toHaveLength(65);
+  for (let n = 1; n <= 64; n++) {
+    expect(wave.real[n]).toBeCloseTo(0, 6);
+    expect(wave.imag[n]).toBeCloseTo(n % 2 ? (4 * level) / (n * Math.PI) : 0, 6);
+  }
+}
+
+describe('wavetables', () => {
+  it('builds a stepped cycle from its own series, once per table, for every note and twin', () => {
+    const table = { samples: [1, 1, -1, -1] };
+    const { log, waves } = capture(
+      {
+        tempo: 120,
+        tracks: [{ wave: 'pulse12', wavetable: table, detune: 6, melody: [{ freq: 440, beats: 0.5 }, { freq: 550, beats: 0.5 }] }]
+      },
+      2
+    );
+    // The table wins over the pulse duty, which is never built.
+    expect(waves).toHaveLength(1);
+    expectSquareSeries(waves[0]);
+    const oscs = log.filter(l => /^create osc#/.test(l)).length;
+    expect(oscs).toBeGreaterThan(4);
+    expect(log.filter(l => l.endsWith('.setPeriodicWave(wave#1)'))).toHaveLength(oscs);
+  });
+
+  it('quantises the cycle to 2^bits levels before building it', () => {
+    // One bit rounds every level to the nearer of -1 and 1: a square.
+    expectSquareSeries(capture({ tracks: [{ wavetable: { samples: [0.9, 0.2, -0.3, -0.8], bits: 1 }, melody: [{ freq: 440, beats: 1 }] }] }, 0.5).waves[0]);
+    // Four bits: 0.5 is step round(0.75 * 15) = 11 of 15, which is 11 * 2 / 15 - 1.
+    const four = capture({ tracks: [{ wavetable: { samples: [0.5, 0.5, -0.5, -0.5], bits: 4 }, melody: [{ freq: 440, beats: 1 }] }] }, 0.5);
+    expectSquareSeries(four.waves[0], (11 * 2) / 15 - 1);
+  });
+
+  it('plays a harmonics table as smooth sine partials, or draws it into 32 steps when it is quantised', () => {
+    const smooth = capture({ tracks: [{ wavetable: { harmonics: [1, 0, 0.5] }, melody: [{ freq: 440, beats: 1 }] }] }, 0.5).waves[0];
+    expect(Array.from(smooth.imag)).toEqual([0, 1, 0, 0.5]);
+    expect(Array.from(smooth.real)).toEqual([0, 0, 0, 0]);
+    const stepped = capture({ tracks: [{ wavetable: { harmonics: [1], bits: 4 }, melody: [{ freq: 440, beats: 1 }] }] }, 0.5).waves[0];
+    // A 32-step sine: the fundamental, then images either side of 32 and 64.
+    expect(stepped.imag).toHaveLength(65);
+    expect(Math.abs(stepped.imag[1])).toBeGreaterThan(0.9);
+    expect(Math.abs(stepped.imag[31]) + Math.abs(stepped.real[31])).toBeGreaterThan(0.01);
+    expect(Math.abs(stepped.imag[2]) + Math.abs(stepped.real[2])).toBeLessThan(0.01);
+  });
+});
+
+describe('noise', () => {
+  it('builds the short mode as a 93-step cycle with no DC, at the level of white noise', () => {
+    const { buffers } = capture({ tracks: [{ noise: 'short', melody: [{ freq: REST, beats: 1, drum: 'hat' }] }] }, 0.5);
+    expect(buffers).toHaveLength(1);
+    const [data] = buffers;
+    for (let i = 0; i < 1000; i++) expect(data[i + 93]).toBe(data[i]);
+    expect(new Set(data.slice(0, 93)).size).toBe(2);
+    const cycle = Array.from(data.slice(0, 93));
+    const mean = cycle.reduce((a, b) => a + b, 0) / 93;
+    const rms = Math.sqrt(cycle.reduce((a, b) => a + b * b, 0) / 93);
+    expect(mean).toBeCloseTo(0, 6);
+    expect(rms).toBeCloseTo(1 / Math.sqrt(3), 6);
+  });
+
+  it('steps the short mode at the same rate whatever the sample rate of the context', () => {
+    const { buffers } = capture({ tracks: [{ noise: 'short', melody: [{ freq: REST, beats: 1, drum: 'hat' }] }] }, 0.5, 88200);
+    const [data] = buffers;
+    // Each step lasts two samples at twice the rate, so the cycle is 186 long.
+    for (let i = 0; i < 1000; i += 2) expect(data[i + 1]).toBe(data[i]);
+    for (let i = 0; i < 1000; i++) expect(data[i + 186]).toBe(data[i]);
+    expect(data.slice(0, 186).some((v, i) => v !== data[i + 93])).toBe(true);
+  });
+
+  it('gives each voice its own noise for its snare and hat, white unless it asks', () => {
+    const { log, buffers } = capture(
+      {
+        tempo: 60,
+        tracks: [
+          { noise: 'short', melody: [{ freq: REST, beats: 1, drum: 'snare' }] },
+          { melody: [{ freq: REST, beats: 1, drum: 'hat' }] }
+        ]
+      },
+      0.5
+    );
+    expect(buffers).toHaveLength(2);
+    // The short buffer repeats every 93 samples and the white one does not.
+    const short = buffers.find(b => b[500] === b[593] && b[501] === b[594]);
+    expect(short).toBeDefined();
+    expect(buffers.filter(b => b !== short)).toHaveLength(1);
+    expect(log.filter(l => /^source#\d+\.buffer = /.test(l)).sort()).toEqual(['source#1.buffer = buffer#1', 'source#2.buffer = buffer#2']);
+  });
+
+  it('plays a noise note for its whole length through a low-pass at its pitch, looping the buffer', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { wave: 'noise', octaveShift: 1, envelope: 'pad', detune: 6, vibrato: 8 });
+    expect(log.some(l => l.startsWith('create osc'))).toBe(false);
+    expect(log).toContain('source#1.buffer = buffer#1');
+    expect(log).toContain('source#1.loop = true');
+    expect(log).toContain('filter#1.type = lowpass');
+    expect(args(log, 'filter#1.frequency', 'setValueAtTime')).toEqual([[880, T0]]);
+    expect(log).toContain('source#1.connect(filter#1)');
+    expect(log).toContain('filter#1.connect(gain#3)');
+    expect(args(log, 'source#1', 'start')).toEqual([[T0]]);
+    const [[stop]] = args(log, 'source#1', 'stop');
+    expect(stop).toBeCloseTo(T0 + 1.02, 9);
+  });
+
+  it('plays a noise note from the short mode when the voice asks for it', () => {
+    const { buffers } = capture({ tracks: [{ wave: 'noise', noise: 'short', melody: [{ freq: 1000, beats: 1 }] }] }, 0.5);
+    expect(buffers).toHaveLength(1);
+    for (let i = 0; i < 1000; i++) expect(buffers[0][i + 93]).toBe(buffers[0][i]);
+  });
+
+  it('slides the cutoff of a noise note, and runs it through the voice filter', () => {
+    const log = playLine([{ freq: 2000, beats: 1, slideFrom: 500 }], { wave: 'noise', filter: { type: 'highpass', cutoff: 300 } });
+    expect(args(log, 'filter#2.frequency', 'setValueAtTime')).toEqual([[500, T0]]);
+    const [[to, at]] = args(log, 'filter#2.frequency', 'exponentialRampToValueAtTime');
+    expect(to).toBe(2000);
+    expect(at).toBeCloseTo(T0 + 0.06, 9);
+    // Source, then its cutoff, then the voice's filter, then the envelope.
+    expect(log).toContain('source#1.connect(filter#2)');
+    expect(log).toContain('filter#2.connect(filter#1)');
+    expect(log).toContain('filter#1.connect(gain#3)');
   });
 });
 

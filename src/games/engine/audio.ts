@@ -92,8 +92,47 @@ export type DrumName = 'kick' | 'snare' | 'hat';
  */
 export type PulseWave = 'pulse12' | 'pulse25' | 'pulse50';
 
-/** A voice's timbre: a stock oscillator shape or a pulse duty. */
-export type Wave = OscillatorType | PulseWave;
+/**
+ * A voice's timbre: a stock oscillator shape, a pulse duty, or 'noise', which
+ * plays the voice's `noise` for the whole note through a low-pass whose cutoff
+ * is the note's frequency in Hz, so a higher note is a brighter hiss: a crowd,
+ * wind, surf. The envelope, `adsr`, `filter`, pan and levels apply to it and
+ * a slide moves its cutoff; `detune`, `vibrato` and `wavetable` do not.
+ */
+export type Wave = OscillatorType | PulseWave | 'noise';
+
+/**
+ * The noise a voice's drums and noise notes use. 'white' is the shared seeded
+ * buffer; 'short' is the NES noise channel's short mode, a 15-bit LFSR fed
+ * back from bit 6 that repeats every 93 steps, which through the hat's
+ * high-pass is a metallic ring rather than a hiss. Both are levelled to the
+ * same RMS, so a kit keeps its balance whichever it uses.
+ */
+export type NoiseKind = 'white' | 'short';
+
+/**
+ * A single-cycle wavetable, the Game Boy wave channel's 32 steps or a Namco
+ * or Amiga-style custom cycle, played through a `PeriodicWave` built once per
+ * context. Give `samples` or `harmonics`.
+ */
+export interface Wavetable {
+  /**
+   * One cycle as levels in -1..1, any number of steps, held flat between them
+   * as a wave RAM plays them: the steps are part of the sound, so the wave is
+   * built from the stepped shape's own series (64 harmonics), not a smoothed one.
+   */
+  samples?: number[];
+  /**
+   * Levels of the sine partials 1, 2, 3 and so on, used when `samples` is
+   * left out. With `bits` they are first drawn into a 32-step cycle.
+   */
+  harmonics?: number[];
+  /**
+   * Quantises the cycle to 2^bits levels across -1..1 before it is built, 4
+   * for the Game Boy's wave channel. Left out, the levels are kept as written.
+   */
+  bits?: number;
+}
 
 /** One simultaneous voice of the music. */
 export interface Track {
@@ -102,8 +141,12 @@ export interface Track {
    * form instead and leaves this out.
    */
   melody?: Note[];
-  /** Oscillator type or pulse duty. Defaults to 'square'. */
+  /** Oscillator type, pulse duty or 'noise'. Defaults to 'square'. */
   wave?: Wave;
+  /** A custom single-cycle wave in place of `wave`, which it overrides for pitched notes. */
+  wavetable?: Wavetable;
+  /** The noise this voice's snares, hats and noise notes use. Defaults to 'white'. */
+  noise?: NoiseKind;
   /** Relative mix level 0–1 within the music bus. Defaults to 1. */
   volume?: number;
   /**
@@ -508,8 +551,9 @@ const DRUMS: Record<DrumName, { decay: number; level: number }> = {
  * context that made it, and both are worth making once rather than per note,
  * so they are keyed on the context and go when it does.
  */
-const noiseBuffers = new WeakMap<BaseAudioContext, AudioBuffer>();
-const pulseWaves = new WeakMap<BaseAudioContext, Map<PulseWave, PeriodicWave>>();
+const noiseBuffers = new WeakMap<BaseAudioContext, Map<NoiseKind, AudioBuffer>>();
+/** Pulse duties by name, wavetables by the object a score wrote. */
+const periodicWaves = new WeakMap<BaseAudioContext, Map<PulseWave | Wavetable, PeriodicWave>>();
 
 function isPulse(wave: Wave): wave is PulseWave {
   return wave in PULSE_DUTY;
@@ -520,35 +564,140 @@ function isPulse(wave: Wave): wave is PulseWave {
  * train's Fourier series: cosine terms (2 / n pi) sin(n pi d), no sine terms.
  */
 function pulseWave(ctx: BaseAudioContext, wave: PulseWave): PeriodicWave {
-  let cache = pulseWaves.get(ctx);
-  if (!cache) {
-    cache = new Map();
-    pulseWaves.set(ctx, cache);
-  }
-  let built = cache.get(wave);
-  if (!built) {
+  return cachedWave(ctx, wave, () => {
     const d = PULSE_DUTY[wave];
     const real = new Float32Array(PULSE_HARMONICS + 1);
     const imag = new Float32Array(PULSE_HARMONICS + 1);
     for (let n = 1; n <= PULSE_HARMONICS; n++) {
       real[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * d);
     }
+    return [real, imag];
+  });
+}
+
+/** The context's `PeriodicWave` for `key`, built from `build`'s coefficients on first use. */
+function cachedWave(
+  ctx: BaseAudioContext,
+  key: PulseWave | Wavetable,
+  build: () => [Float32Array, Float32Array]
+): PeriodicWave {
+  let cache = periodicWaves.get(ctx);
+  if (!cache) {
+    cache = new Map();
+    periodicWaves.set(ctx, cache);
+  }
+  let built = cache.get(key);
+  if (!built) {
+    const [real, imag] = build();
     built = ctx.createPeriodicWave(real, imag);
-    cache.set(wave, built);
+    cache.set(key, built);
   }
   return built;
 }
 
-/** The context's one second of seeded white noise, built on first use. */
-function noiseBuffer(ctx: BaseAudioContext): AudioBuffer {
-  let buffer = noiseBuffers.get(ctx);
+/** Steps a `harmonics` table is drawn into before it is quantised: the Game Boy's wave RAM. */
+const TABLE_STEPS = 32;
+
+/**
+ * The stepped cycle a table plays, quantised if it asks to be, or null for a
+ * `harmonics` table played smooth.
+ */
+function tableCycle(table: Wavetable): number[] | null {
+  let cycle = table.samples?.length ? table.samples : null;
+  const bits = table.bits !== undefined && Number.isFinite(table.bits) ? Math.floor(table.bits) : 0;
+  if (!cycle && bits >= 1 && table.harmonics?.length) {
+    const partials = table.harmonics;
+    const drawn = Array.from({ length: TABLE_STEPS }, (_, k) =>
+      partials.reduce((sum, level, i) => sum + level * Math.sin((2 * Math.PI * (i + 1) * k) / TABLE_STEPS), 0)
+    );
+    const top = Math.max(...drawn.map(Math.abs));
+    cycle = top > 0 ? drawn.map(v => v / top) : drawn;
+  }
+  if (!cycle || bits < 1) return cycle;
+  const top = 2 ** bits - 1;
+  return cycle.map(v => (Math.round(((Math.min(Math.max(v, -1), 1) + 1) / 2) * top) * 2) / top - 1);
+}
+
+/**
+ * The context's wave for a wavetable, built on first use. A stepped cycle of N
+ * levels v_k is the series of the flat-topped shape itself: harmonic n has
+ * cosine term sum v_k (sin(2 pi n (k+1) / N) - sin(2 pi n k / N)) / (pi n) and
+ * sine term sum v_k (cos(2 pi n k / N) - cos(2 pi n (k+1) / N)) / (pi n),
+ * taken to the same 64 harmonics as a pulse duty. A smooth `harmonics` table
+ * is its partials as sine terms.
+ */
+function tableWave(ctx: BaseAudioContext, table: Wavetable): PeriodicWave {
+  return cachedWave(ctx, table, () => {
+    const cycle = tableCycle(table);
+    if (!cycle) {
+      const partials = table.harmonics ?? [];
+      const imag = new Float32Array(partials.length + 1);
+      partials.forEach((level, i) => (imag[i + 1] = level));
+      return [new Float32Array(partials.length + 1), imag];
+    }
+    const real = new Float32Array(PULSE_HARMONICS + 1);
+    const imag = new Float32Array(PULSE_HARMONICS + 1);
+    const steps = cycle.length;
+    for (let n = 1; n <= PULSE_HARMONICS; n++) {
+      const w = (2 * Math.PI * n) / steps;
+      for (let k = 0; k < steps; k++) {
+        real[n] += (cycle[k] * (Math.sin(w * (k + 1)) - Math.sin(w * k))) / (Math.PI * n);
+        imag[n] += (cycle[k] * (Math.cos(w * k) - Math.cos(w * (k + 1)))) / (Math.PI * n);
+      }
+    }
+    return [real, imag];
+  });
+}
+
+/**
+ * How fast the short noise's LFSR steps, in Hz, whatever the context's rate:
+ * one step a sample at 44.1 kHz, so its 93-step cycle buzzes at about 474 Hz.
+ */
+const SHORT_NOISE_CLOCK = 44100;
+
+/**
+ * One cycle of the NES noise channel's short mode: a 15-bit shift register
+ * from 1, fed back from bits 0 and 6, read on bit 0, until it comes round.
+ */
+function shortNoiseCycle(): number[] {
+  const cycle: number[] = [];
+  let reg = 1;
+  do {
+    cycle.push(reg & 1);
+    reg = (reg >> 1) | (((reg ^ (reg >> 6)) & 1) << 14);
+  } while (reg !== 1);
+  return cycle;
+}
+
+/**
+ * The context's one second of a noise, built on first use: seeded white noise,
+ * or the short mode's cycle with its DC offset taken out (it is mostly zeros)
+ * and scaled to white noise's RMS.
+ */
+function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): AudioBuffer {
+  let cache = noiseBuffers.get(ctx);
+  if (!cache) {
+    cache = new Map();
+    noiseBuffers.set(ctx, cache);
+  }
+  let buffer = cache.get(kind);
   if (!buffer) {
     const length = Math.ceil(ctx.sampleRate * NOISE_SECONDS);
     buffer = ctx.createBuffer(1, length, ctx.sampleRate);
     const data = buffer.getChannelData(0);
-    const rng = seededRng(NOISE_SEED);
-    for (let i = 0; i < length; i++) data[i] = rng() * 2 - 1;
-    noiseBuffers.set(ctx, buffer);
+    if (kind === 'short') {
+      const cycle = shortNoiseCycle();
+      const mean = cycle.reduce((a, b) => a + b, 0) / cycle.length;
+      const rms = Math.sqrt(cycle.reduce((sum, bit) => sum + (bit - mean) ** 2, 0) / cycle.length);
+      const scale = 1 / Math.sqrt(3) / rms;
+      for (let i = 0; i < length; i++) {
+        data[i] = (cycle[Math.floor((i * SHORT_NOISE_CLOCK) / ctx.sampleRate) % cycle.length] - mean) * scale;
+      }
+    } else {
+      const rng = seededRng(NOISE_SEED);
+      for (let i = 0; i < length; i++) data[i] = rng() * 2 - 1;
+    }
+    cache.set(kind, buffer);
   }
   return buffer;
 }
@@ -587,6 +736,8 @@ interface NormTrack {
   pan: number;
   adsr: Adsr | undefined;
   filter: VoiceFilter | undefined;
+  wavetable: Wavetable | undefined;
+  noise: NoiseKind;
 }
 
 /** Fills in per-track defaults. */
@@ -603,7 +754,9 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
     startsMuted: t.startsMuted ?? false,
     pan: t.pan !== undefined && Number.isFinite(t.pan) ? Math.min(Math.max(t.pan, -1), 1) : 0,
     adsr: t.adsr,
-    filter: t.filter
+    filter: t.filter,
+    wavetable: t.wavetable,
+    noise: t.noise ?? 'white'
   }));
 }
 
@@ -617,10 +770,12 @@ interface ToneMotion {
   vibrato?: number;
 }
 
-/** The optional shaping of one tone's sound, a voice's `adsr` and `filter`. */
+/** The optional shaping of one tone's sound, from its voice's fields of the same names. */
 interface ToneColour {
   adsr?: Adsr;
   filter?: VoiceFilter;
+  wavetable?: Wavetable;
+  noise?: NoiseKind;
 }
 
 /** Shortest release an `Adsr` gets, in seconds; an instant drop to silence clicks. */
@@ -722,6 +877,30 @@ function playTone(
   const slide = Math.min(SLIDE_TIME, duration / 2);
   const slideFrom = motion.slideFrom ?? 0;
   const scoop = slideFrom > 0;
+  // A tone's frequency, or a noise note's cutoff, after its onset value: the
+  // scoop into it and the glide out of it.
+  const glide = (f: AudioParam): void => {
+    if (scoop) f.exponentialRampToValueAtTime(freq, start + slide);
+    if (motion.slideTo !== undefined && motion.slideTo > 0) {
+      f.setValueAtTime(freq, start + duration - slide);
+      f.exponentialRampToValueAtTime(motion.slideTo, start + duration);
+    }
+  };
+  if (type === 'noise') {
+    const source = ctx.createBufferSource();
+    source.buffer = noiseBuffer(ctx, colour.noise);
+    // The buffer is a second long; a longer note loops it.
+    source.loop = true;
+    const cutoff = ctx.createBiquadFilter();
+    cutoff.type = 'lowpass';
+    cutoff.frequency.setValueAtTime(scoop ? slideFrom : freq, start);
+    glide(cutoff.frequency);
+    source.connect(cutoff);
+    cutoff.connect(input);
+    source.start(start);
+    source.stop(stopAt);
+    return;
+  }
   // One LFO per note, shared by the twin so the two waver together. It feeds
   // `detune`, which is in cents, so the depth gain is the depth in cents.
   let depth: GainNode | null = null;
@@ -740,18 +919,15 @@ function playTone(
   }
   const spawn = (cents: number): void => {
     const osc = ctx.createOscillator();
-    if (isPulse(type)) osc.setPeriodicWave(pulseWave(ctx, type));
+    if (colour.wavetable) osc.setPeriodicWave(tableWave(ctx, colour.wavetable));
+    else if (isPulse(type)) osc.setPeriodicWave(pulseWave(ctx, type));
     else osc.type = type;
     osc.frequency.setValueAtTime(scoop ? slideFrom : freq, start);
     if (cents) osc.detune.setValueAtTime(cents, start);
     osc.connect(input);
     osc.start(start);
     osc.stop(stopAt);
-    if (scoop) osc.frequency.exponentialRampToValueAtTime(freq, start + slide);
-    if (motion.slideTo !== undefined && motion.slideTo > 0) {
-      osc.frequency.setValueAtTime(freq, start + duration - slide);
-      osc.frequency.exponentialRampToValueAtTime(motion.slideTo, start + duration);
-    }
+    glide(osc.frequency);
     if (depth) depth.connect(osc.detune);
   };
   spawn(0);
@@ -759,7 +935,7 @@ function playTone(
   if (detune > 0) spawn(detune);
 }
 
-/** A burst of the shared noise through a filter, decaying to silence. */
+/** A burst of a shared noise through a filter, decaying to silence. */
 function noiseHit(
   ctx: BaseAudioContext,
   start: number,
@@ -767,10 +943,11 @@ function noiseHit(
   peak: number,
   filterType: BiquadFilterType,
   cutoff: number,
-  destination: AudioNode
+  destination: AudioNode,
+  noise: NoiseKind
 ): void {
   const source = ctx.createBufferSource();
-  source.buffer = noiseBuffer(ctx);
+  source.buffer = noiseBuffer(ctx, noise);
   const filter = ctx.createBiquadFilter();
   filter.type = filterType;
   filter.frequency.setValueAtTime(cutoff, start);
@@ -811,9 +988,16 @@ function toneHit(
  * The three drums. The kick is a triangle dropping from 150 to 45 Hz in 60 ms,
  * the NES's own trick for a kick on a channel with no noise in it; the snare
  * is band-passed noise over a short 200 Hz triangle body; the hat is noise
- * high-passed at 7 kHz.
+ * high-passed at 7 kHz. The noise is the voice's own (`Track.noise`).
  */
-function playDrum(ctx: BaseAudioContext, name: DrumName, start: number, peak: number, destination: AudioNode): void {
+function playDrum(
+  ctx: BaseAudioContext,
+  name: DrumName,
+  start: number,
+  peak: number,
+  destination: AudioNode,
+  noise: NoiseKind = 'white'
+): void {
   const { decay, level } = DRUMS[name];
   const p = peak * level;
   switch (name) {
@@ -821,11 +1005,11 @@ function playDrum(ctx: BaseAudioContext, name: DrumName, start: number, peak: nu
       toneHit(ctx, start, decay, p, 150, 45, destination);
       break;
     case 'snare':
-      noiseHit(ctx, start, decay, p, 'bandpass', 1500, destination);
+      noiseHit(ctx, start, decay, p, 'bandpass', 1500, destination, noise);
       toneHit(ctx, start, 0.08, p * 0.6, 200, 200, destination);
       break;
     case 'hat':
-      noiseHit(ctx, start, decay, p, 'highpass', 7000, destination);
+      noiseHit(ctx, start, decay, p, 'highpass', 7000, destination, noise);
       break;
   }
 }
@@ -1020,7 +1204,7 @@ function playNote(
   const sounds = !!note.drum || note.freq > 0;
   const out = track.pan === 0 || !sounds ? bus : panTo(ctx, bus, track.pan, at);
   if (note.drum) {
-    playDrum(ctx, note.drum, at, peak, out);
+    playDrum(ctx, note.drum, at, peak, out, track.noise);
     return;
   }
   // Pads and ADSR voices play their full length so they sustain and connect
@@ -1035,7 +1219,7 @@ function playNote(
     slideFrom: shift(note.slideFrom),
     slideTo: note.slideNext && following && !following.drum ? shift(following.freq) : undefined
   };
-  const colour: ToneColour = { adsr: track.adsr, filter: track.filter };
+  const colour: ToneColour = { adsr: track.adsr, filter: track.filter, wavetable: track.wavetable, noise: track.noise };
   playTone(ctx, freq, at, playDur, track.wave, peak, out, track.envelope, track.detune, motion, colour);
 }
 

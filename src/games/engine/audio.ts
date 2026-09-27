@@ -353,7 +353,8 @@ export interface ScoreForm {
    * state lasts, a menu theme, a shootout bed, a final, instead of running on
    * into the next part of `order`. `setScene(name)` moves to one at the next
    * bar line and `setScene(null)` comes back to `order` where it left off.
-   * A scene loops with no rest, and plays at its own tempo if it has one.
+   * A scene loops with no rest unless it writes its own, and plays at its own
+   * tempo if it has one.
    * `danger` is reserved for `ScoreForm.danger` and throws here.
    */
   scenes?: Record<string, FormScene>;
@@ -364,6 +365,15 @@ export interface FormScene {
   order: string[];
   /** Beats per minute while the scene plays, clamped like any other; left out, the score's. */
   tempo?: number;
+  /**
+   * Silence between passes of this scene, as `ScoreForm.rest` is for `order`:
+   * after every `after` passes of the scene's order, `beats` of nothing at the
+   * scene's tempo, then the scene resumes from its top. The count starts when
+   * the scene is entered. For a scene a player can stay in for a long session
+   * (Microcity's tiers), which would otherwise be constant music. Left out,
+   * the scene loops with no rest, as every scene did before it.
+   */
+  rest?: { after: number; beats: number };
 }
 
 export interface GameAudioOptions {
@@ -1187,8 +1197,18 @@ interface NormForm {
   restAfter: number;
   restBeats: number;
   beatsPerBar: number;
-  /** Each scene's order and its seconds per beat (null keeps the score's); `danger` among them. */
-  scenes: Map<string, { order: Part[]; spb: number | null }>;
+  /**
+   * Each scene's order, its seconds per beat (null keeps the score's) and its
+   * rest (0 for none, as for the order); `danger` among them.
+   */
+  scenes: Map<string, NormScene>;
+}
+
+interface NormScene {
+  order: Part[];
+  spb: number | null;
+  restAfter: number;
+  restBeats: number;
 }
 
 /** The scene `form.danger` becomes and `setDanger` drives. */
@@ -1206,6 +1226,8 @@ interface FormPosition {
   start: number;
   /** The scene whose order `step` indexes, or null for the form's `order`. */
   scene: string | null;
+  /** Completed passes of the scene's order since it was entered, which its rest counts; 0 in the order. */
+  loops: number;
 }
 
 /** A requested move (`setSection`, `setScene`, `setDanger`) and the bar line it lands on. */
@@ -1240,6 +1262,14 @@ function partBeats(part: Part): number {
   return Math.max(0, ...part.lines.map(lineBeats));
 }
 
+/** A written rest as passes between rests and its beats, both 0 for none or for one that could not sound. */
+function normRest(rest: { after: number; beats: number } | undefined): { restAfter: number; restBeats: number } {
+  const after = Math.floor(rest?.after ?? 0);
+  const beats = rest?.beats ?? 0;
+  const resting = after >= 1 && Number.isFinite(beats) && beats > 0;
+  return { restAfter: resting ? after : 0, restBeats: resting ? beats : 0 };
+}
+
 /** Resolves a score's form, or null for a score without one. */
 function normalizeForm(options: GameAudioOptions): NormForm | null {
   const form = options.form;
@@ -1261,28 +1291,28 @@ function normalizeForm(options: GameAudioOptions): NormForm | null {
   if (form.scenes && Object.hasOwn(form.scenes, DANGER)) {
     throw new Error('score form: "danger" is reserved; write the danger variant as form.danger');
   }
-  const scenes = new Map<string, { order: Part[]; spb: number | null }>();
+  const scenes = new Map<string, NormScene>();
   const written: Record<string, FormScene> = { ...form.scenes, ...(form.danger && { [DANGER]: form.danger }) };
   for (const [name, scene] of Object.entries(written)) {
     const parts = resolve(scene.order);
     // A scene with no notes would loop without moving the clock; it is left
     // out, so asking for it is refused rather than hanging the scheduler.
     if (parts.some(part => partBeats(part) > 0)) {
-      scenes.set(name, { order: parts, spb: scene.tempo === undefined ? null : beatSeconds(scene.tempo) });
+      scenes.set(name, {
+        order: parts,
+        spb: scene.tempo === undefined ? null : beatSeconds(scene.tempo),
+        ...normRest(scene.rest)
+      });
     }
   }
   const bar = form.beatsPerBar ?? 4;
   const intro = form.intro ? fit('intro', form.intro) : null;
-  const after = Math.floor(form.rest?.after ?? 0);
-  const beats = form.rest?.beats ?? 0;
-  const resting = after >= 1 && Number.isFinite(beats) && beats > 0;
   return {
     intro: intro && partBeats(intro) > 0 ? intro : null,
     // An order with no notes anywhere would advance forever without moving
     // the clock, so it plays as silence instead.
     order: order.some(part => partBeats(part) > 0) ? order : [],
-    restAfter: resting ? after : 0,
-    restBeats: resting ? beats : 0,
+    ...normRest(form.rest),
     beatsPerBar: Number.isFinite(bar) && bar > 0 ? bar : 4,
     scenes
   };
@@ -1290,7 +1320,7 @@ function normalizeForm(options: GameAudioOptions): NormForm | null {
 
 /** The top of a form: the intro if it has one, else the first section. */
 function formTop(form: NormForm, at: number): FormPosition {
-  return { step: form.intro ? -1 : 0, pass: 0, start: at, scene: null };
+  return { step: form.intro ? -1 : 0, pass: 0, start: at, scene: null, loops: 0 };
 }
 
 function orderOf(form: NormForm, scene: string | null): Part[] {
@@ -1309,16 +1339,32 @@ function formBeatSeconds(form: NormForm, scene: string | null, spb: number): num
 /**
  * What follows the current part, and whether a rest comes first: the one place
  * the form's next move is decided. A pending jump takes the place of the
- * order's next step; a scene loops its own order without rests.
+ * order's next step; a scene loops its own order, resting only if it writes a
+ * rest of its own.
  */
-function nextStep(state: FormState): { step: number; pass: number; scene: string | null; rest: boolean } {
+function nextStep(state: FormState): { step: number; pass: number; scene: string | null; loops: number; rest: boolean } {
   const { form, pos, pending } = state;
-  if (pending) return { step: pending.step, pass: pending.pass, scene: pending.scene, rest: false };
+  if (pending) {
+    // A jump inside the scene keeps its count; entering one starts it.
+    const loops = pending.scene !== null && pending.scene === pos.scene ? pos.loops : 0;
+    return { step: pending.step, pass: pending.pass, scene: pending.scene, loops, rest: false };
+  }
   const order = orderOf(form, pos.scene);
-  if (pos.step + 1 < order.length) return { step: pos.step + 1, pass: pos.pass, scene: pos.scene, rest: false };
-  if (pos.scene !== null) return { step: 0, pass: pos.pass, scene: pos.scene, rest: false };
+  if (pos.step + 1 < order.length) {
+    return { step: pos.step + 1, pass: pos.pass, scene: pos.scene, loops: pos.loops, rest: false };
+  }
+  if (pos.scene !== null) {
+    const loops = pos.loops + 1;
+    const every = form.scenes.get(pos.scene)?.restAfter ?? 0;
+    return { step: 0, pass: pos.pass, scene: pos.scene, loops, rest: every > 0 && loops % every === 0 };
+  }
   const pass = pos.pass + 1;
-  return { step: 0, pass, scene: null, rest: form.restAfter > 0 && pass % form.restAfter === 0 };
+  return { step: 0, pass, scene: null, loops: 0, rest: form.restAfter > 0 && pass % form.restAfter === 0 };
+}
+
+/** The beats of the rest before the next pass of a scene, or of the order for null. */
+function restBeatsOf(form: NormForm, scene: string | null): number {
+  return scene === null ? form.restBeats : (form.scenes.get(scene)?.restBeats ?? 0);
 }
 
 /**
@@ -1523,7 +1569,9 @@ function scheduleForm(
     pos.step = after.step;
     pos.pass = after.pass;
     pos.scene = after.scene;
-    pos.start = end + (after.rest ? form.restBeats * spb : 0);
+    pos.loops = after.loops;
+    // A rest only ever comes before a scene's own next pass, so `spb` is its tempo.
+    pos.start = end + (after.rest ? restBeatsOf(form, after.scene) * spb : 0);
     for (const v of cursors) {
       v.next = pos.start;
       v.idx = 0;

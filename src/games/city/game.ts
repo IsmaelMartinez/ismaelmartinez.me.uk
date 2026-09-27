@@ -35,7 +35,7 @@ import {
   mountCabinet,
   createConfirmPrompt
 } from '../engine';
-import { CITY_MUSIC, TIER_LAYERS, musicTier } from './music';
+import { CITY_MUSIC, TIER_SCENES, musicTier } from './music';
 import {
   CITY_W,
   CITY_H,
@@ -98,12 +98,6 @@ const GROWTH_INTERVAL = 1.2;
 /** Cars crawl to this fraction of their speed over a congested road tile, so
  *  traffic visibly clots at chokepoints. */
 const CONGESTED_CAR_SPEED = 0.35;
-
-/**
- * Seconds a voice takes to fade in or out when the city changes tier: about a
- * bar at the score's 90 bpm, so a new layer swells in rather than cutting in.
- */
-const TIER_FADE = 3;
 
 const ZONE_EMOJI: Record<ZoneType, string> = { res: '🏠', com: '🏬', ind: '🏭' };
 const ZONE_TINT: Record<ZoneType, string> = {
@@ -281,7 +275,7 @@ export function initCityGame(): void {
    *  says the city survives another month, so it fires on the way in rather
    *  than every month until the end. */
   let lowFundsWarned = false;
-  /** The score's population tier (see music.ts's `musicTier`), which sets its layers. */
+  /** The score's population tier (see music.ts's `musicTier`), which picks its piece. */
   let tier = 0;
   let activeEvents: ActiveEvent[] = [];
   let smoke: { x: number; y: number; vx: number; r: number; life: number; maxLife: number }[] = [];
@@ -349,15 +343,11 @@ export function initCityGame(): void {
     demand = computeDemand(stats, sumDemandModifiers(activeEvents));
     congested = computeCongestion(tiles).map(isCongested);
     const next = musicTier(stats.population, tier);
+    // Each tier is its own piece, which the score moves to at its next bar line.
     if (next !== tier) {
       tier = next;
-      applyTier(TIER_FADE);
+      audio.setScene(TIER_SCENES[tier]);
     }
-  }
-
-  /** Sets every voice of the score to the arrangement of the city's tier. */
-  function applyTier(fadeSeconds: number) {
-    for (const [voice, on] of Object.entries(TIER_LAYERS[tier])) audio.setLayer(voice, on, fadeSeconds);
   }
 
   /**
@@ -419,8 +409,8 @@ export function initCityGame(): void {
     sparks = [];
     fx.clear();
     speedButtons.forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
+    // The village is the score's order, where `start()` below puts it.
     tier = 0;
-    applyTier(0);
     refreshDerivedState();
     renderObjective();
     board.hide();

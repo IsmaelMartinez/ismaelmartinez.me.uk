@@ -91,6 +91,17 @@ export const WAVES: WaveEntry[][] = [
 /** Number of hand-authored waves; past this the endless assault takes over. */
 export const AUTHORED_WAVES = WAVES.length;
 
+/** Waves in each of the campaign's arcs: teaching, pressure, escalation. */
+export const ARC_WAVES = 6;
+
+/**
+ * The arc a wave belongs to, 0 to 2 (teaching, pressure, escalation). The
+ * endless assault counts as the last arc, which it carries on from.
+ */
+export function waveArc(waveIndex: number): number {
+  return Math.floor(Math.min(Math.max(0, waveIndex), AUTHORED_WAVES - 1) / ARC_WAVES);
+}
+
 /**
  * The endless assault past the authored campaign. A pure function of the wave
  * index (no RNG, so tests are exact): three rotating compositions whose counts

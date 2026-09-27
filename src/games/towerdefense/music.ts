@@ -1,77 +1,157 @@
 /**
- * Line Hold's score: a garrison march in A minor that plays the defence.
+ * Line Hold's score: a preparation cue and a battle cue for each of the
+ * campaign's three arcs, and the horde for the finale.
+ *
+ * The brief (round 3, #410; ADR 003's round 3 amendment). Kingdom Rush (2011)
+ * pairs a sparse "Preparation" cue with a separate "Battle" cue for each
+ * region, orchestral in palette; Plants vs. Zombies (2009, Laura Shigihara)
+ * keeps one groove going and stacks instruments on it as the waves intensify,
+ * with "marching band percussion and swing beats" and "lots of half steps" in
+ * a darkish minor. The shared signature is an ostinato that stays put while
+ * the player thinks: a one- or two-bar riff in the middle register within
+ * about a sixth, over a pedal or a two-chord vamp, with intensity from added
+ * layers and percussion rather than new melody, and a distinct, suspended
+ * build cue. The owner's complaint about the round 2 score was that it "jumps
+ * all over the place"; the answer here is that the battle tune does not move
+ * at all, and everything that grows is a layer on top of it.
  *
  * Session and load. A run is the longest on the floor, about thirteen and a
  * half minutes over eighteen authored waves and then an endless assault, and
- * it alternates two states the player feels in the body: a 12 second build
- * lull spent reading the map and placing towers (planning, high cognitive
- * load, no time pressure beyond the countdown), then a wave of marchers the
- * towers fight on their own while the player watches and patches (reactive,
- * lower load, high tension). The score is built around that switch, after
- * Kingdom Rush's split between preparation and attack and Plants vs. Zombies
- * holding its drums back until the waves come.
+ * it alternates two states: a 12 second build lull spent reading the map and
+ * placing towers (planning, high cognitive load), then a wave the towers
+ * fight while the player watches and patches (reactive, lower load, high
+ * tension). The riff never asks to be listened to, which is what a planning
+ * player needs from music under them, and it is the same riff for a whole arc
+ * of six waves, so the ear stops tracking it and hears only the layers change.
  *
- * Form. Four voices in `form` sections, 24 bars at 120 bpm, so one pass lasts
- * 48 s (the long-session floor is 45 s; the tempo never ramps, so base and
- * fastest are the same). `a` (8 bars) states the tune and half-closes on E,
- * `b` (8 bars) answers it with a falling circle of fifths (Dm G C F) and a
- * Phrygian bII, Bb, into E again, and `a2` repeats `a` until its last bar,
- * which swaps E for G, bVII, so the pass hands back to the top without ever
- * landing on A: the bass sits on G and D in bar 24. There is no intro, since
- * the build lull is itself the introduction, and no `rest`: a rest counts
- * passes rather than listening to the game, so it would sooner or later fall
- * in the middle of a wave, and the build bed already gives the ear a lighter
- * texture every forty seconds or so.
+ * Palette (Kingdom Rush's orchestra, Plants vs. Zombies' mallets). Four
+ * pitched voices and a kit, the one cabinet the ADR allows a fourth:
  *
- * Harmony and register. A minor with the parallel-major borrowings the ADR
- * names as house colour (bVI F and bVII G carry most of the weight, and Bb
- * darkens the answer phrase), with E major kept for the two half cadences.
- * The low register is open: the bass alone lives below C3, on roots and
- * fifths from F2 to E3, and the pad sits an octave and more above it (A3 to
- * F4), which is what the old score's E2 bass under a G#2 walk and an A2 drone
- * did not do.
+ * - `riff`, the ostinato, a marimba: a sine carrier under a 4:1 FM modulator
+ *   whose index falls away in 40 ms, a struck bar with no sustain. Always on.
+ *   It plays every battle riff between G#3 and A4 and every preparation
+ *   figure between A3 and A4, so it never changes register.
+ * - `horn`, brass swells: a sawtooth under a low-pass that opens as the note
+ *   speaks, with a slow attack and a held sustain. The preparation cue's
+ *   suspended long notes, and in battle the counter-riff layer.
+ * - `pizz`, plucked strings: a sawtooth whose filter snaps shut in 60 ms under
+ *   a short decay. The last layer in, an off-beat or broken-chord figure above
+ *   the riff.
+ * - `timpani`: a triangle struck two semitones sharp and settling in 90 ms,
+ *   with a long ring. The pedal (tonic and fifth, as two tuned drums), and a
+ *   soft roll under the preparation cues.
+ * - `drums`, the marching band's snare and bass drum: the first battle layer.
  *
- * The tune. The lead is an arch: a repeated-note call on E5 that leaps a
- * fourth to A5 (the hook, held over the half bar), a sequence of it on F5 over
- * D minor, the apex on C6 in bar 7 and a fall to the leading tone. `b` slows
- * down into long tied notes (syncopated over the half bar) and climbs in plain
- * quarters to C6 again before the Bb. Sustained lead notes carry a light
- * vibrato on a 25% pulse, which reads as a bugle rather than a buzzer.
+ * There is no pad and no echo. An orchestra's room is reverb, which the
+ * engine does not have, and a feedback delay on a marimba ostinato smears the
+ * one thing the cue is built on.
  *
- * Adaptivity. The voices are named so `game.ts` can play the state of the
- * run rather than a fixed loop:
+ * Keys and tempo. All three arcs sit in the A minor family, one tempo per arc
+ * for both of its cues so a launch never lurches, rising as the arcs do:
  *
- * - `pad` and `bass` are the build bed and always play.
- * - `lead` and `drums` start muted and are the wave layer: `launchWave` jumps
- *   the form to the top of the march (or of the horde) on the next bar line
- *   and brings them in there, so every wave hears the tune from its first
- *   note, and the end of a wave (held or leaked, both go back to building)
- *   fades them out.
- * - The `launch` stinger is a snare roll into a low hit on the tonic, played
- *   on every wave launch, so the moment the marchers start is heard as well
- *   as seen. It stays out of the lead's voice and register so it never plays
- *   over the tune's opening.
- * - The `danger` order is the horde, a faster (138 bpm) section of driving
- *   eighth-note bass, repeated-note lead and a busier kit, switched on when
- *   the finale (wave 18) launches and held from then until the run ends, the
- *   build lulls between the endless waves included. Releasing it at each
- *   wave's end flipped tempo, section and register twice a cycle; the horde's
- *   own pad and driving bass are the late game's lull instead.
- * - The stand-down prompt holds the run still, and the score is muffled with
- *   `setPaused` for as long as it is open rather than stopped and restarted.
+ * - Teaching (waves 1 to 6), 108 bpm, A minor: a two-bar riff over a vamp of
+ *   Am for four bars and Dm for four, the turn bar tipping onto E.
+ * - Pressure (7 to 12), 116 bpm, the E Phrygian dominant (A minor's fifth
+ *   with its G sharp): a dotted, marching riff over E for four bars and the
+ *   half step above, F, for four. The kit swings its hats here, Shigihara's
+ *   swing beats.
+ * - Escalation (13 to 18), 124 bpm, A minor with its Phrygian B flat: the vamp
+ *   quickens to Am and Bb every two bars, a half step apart, and the snare
+ *   rolls.
+ * - The horde (the finale and the endless assault), 138 bpm: the escalation's
+ *   material pressed into a one-bar chromatic riff on A, the vamp flipping
+ *   every bar.
+ *
+ * Form. Every cue is a scene of one form (`CUES` names them for `game.ts`),
+ * so the instruments and the key family are shared and only the lines change.
+ * A battle cue is three eight-bar phrases, 24 bars, 46 to 53 seconds a pass
+ * at its tempo, over the long session's 45 s floor. The riff is literally the
+ * same in every phrase; the second phrase gives the horn a more rhythmic
+ * counter-riff and the strings a broken chord instead of the off-beat plucks,
+ * which is the only development the cue has. A battle pass ends on the vamp's
+ * second chord (Dm to E, F, or E) with the timpani off the tonic, so it hands
+ * back to the top through a half step or the dominant, which is how a vamp
+ * behaves anyway.
+ *
+ * A preparation cue is twelve bars of suspension over a pedal: the horn holds
+ * sus4 and sus2 tones in slow swells, the marimba plays a sparse quartal
+ * figure with a bar of silence in every four, and the timpani rolls softly
+ * into the phrase. It is written in long notes and rests at the battle's
+ * tempo, not as the battle with instruments missing: none of its lines is a
+ * battle line. Its session is minimal (20 s): a build lull is 12 seconds and
+ * each one starts the cue from its top, so its first four bars (8 to 9
+ * seconds) are a complete call and answer, and the rest is heard only while
+ * the stand-down prompt holds the lull. The form's `order` is the teaching
+ * arc's preparation, which is what a run opens on.
+ *
+ * Gates. All three stay on. The riff is the lead the gates read (track 0), and
+ * each riff pushes one note over a beat (the syncopation), turns its phrase
+ * with a bar of its own (the third bar rhythm), and every pass reaches the
+ * top off the tonic (the seam).
+ *
+ * Adaptivity, all wired in `game.ts` (the policy lives there, the names here):
+ *
+ * - Each arc's lull moves to its `prep` scene and each launch to its `battle`
+ *   scene, at the next bar line and from the scene's top, so every wave hears
+ *   its riff from the first note.
+ * - Layers grow through an arc, Plants vs. Zombies' stacking: the kit comes in
+ *   with every battle, the horn's counter-riff joins from an arc's third wave
+ *   and the plucked strings from its fifth. Every layer change is
+ *   section-aligned (`setLayer(..., 'section')`), so it lands on the bar line
+ *   the scene change lands on, and a lull takes the kit and the strings out
+ *   and brings the horn back for the preparation.
+ * - The launch stinger is a timpani roll into a low stroke with a snare roll
+ *   beside it, on the arc's tonic (`launch-a`, or `launch-e` for the pressure
+ *   arc on E), half a bar long. Nothing in the riff's voice or register, so it
+ *   never sits on the riff's first note.
+ * - The finale switches to the `danger` variant, the horde, and holds it from
+ *   wave 18 through every endless wave and the lulls between them, with the
+ *   lulls taking the same layers out. Releasing it each wave used to flip
+ *   tempo, section and register twice a cycle.
+ * - The stand-down prompt muffles the score with `setPaused` rather than
+ *   stopping it.
  */
 import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
 
-/** A run is eighteen waves and then endless, about thirteen and a half minutes, under one score. */
-export const MUSIC_PROFILE: MusicProfile = {
-  session: 'long',
-  palettePending: 'same instruments as Tank Duel, awaiting the round 3 rescores (#410, #415)'
-};
-
-/** The score's tempo; the horde runs at its own `HORDE_TEMPO` rather than ramping this one. */
-export const BASE_TEMPO = 120;
-/** The finale's tempo, the danger order's own. */
+/** The teaching arc's tempo, the score's own; the later arcs and the horde set theirs on their scenes. */
+export const BASE_TEMPO = 108;
+/** The pressure arc's tempo. */
+export const PRESSURE_TEMPO = 116;
+/** The escalation arc's tempo. */
+export const ESCALATION_TEMPO = 124;
+/** The horde's tempo, the danger variant's own. */
 export const HORDE_TEMPO = 138;
+
+/**
+ * Each arc's two cues and its launch stinger, by the arc's place in the
+ * campaign (teaching, pressure, escalation). The teaching preparation is also
+ * the form's `order`, which a run starts on.
+ */
+export const CUES = [
+  { prep: 'prep-1', battle: 'battle-1', launch: 'launch-a' },
+  { prep: 'prep-2', battle: 'battle-2', launch: 'launch-e' },
+  { prep: 'prep-3', battle: 'battle-3', launch: 'launch-a' }
+] as const;
+/** The horde's launch stinger: it is in A, like the escalation it grows out of. */
+export const HORDE_LAUNCH = 'launch-a';
+
+/**
+ * A run is eighteen waves and then endless, about thirteen and a half minutes,
+ * under one score. The `order` and the preparation scenes are what a 12 second
+ * build lull plays from its top, so the minimal floor is the honest one for
+ * them; the battles are what a wave lives in, and are long.
+ */
+export const MUSIC_PROFILE: MusicProfile = {
+  session: 'minimal',
+  scenes: {
+    'prep-1': { session: 'minimal' },
+    'battle-1': { session: 'long' },
+    'prep-2': { session: 'minimal', fastestTempo: PRESSURE_TEMPO },
+    'battle-2': { session: 'long', fastestTempo: PRESSURE_TEMPO },
+    'prep-3': { session: 'minimal', fastestTempo: ESCALATION_TEMPO },
+    'battle-3': { session: 'long', fastestTempo: ESCALATION_TEMPO }
+  }
+};
 
 /** A pitched note, by name. */
 const n = (name: string, beats: number, gain?: number): Note => ({ freq: p(name), beats, gain });
@@ -79,338 +159,405 @@ const n = (name: string, beats: number, gain?: number): Note => ({ freq: p(name)
 const r = (beats: number): Note => ({ freq: REST, beats });
 /** A drum hit. */
 const d = (drum: DrumName, beats: number, gain?: number): Note => ({ freq: REST, beats, drum, gain });
+/** A two-bar cell played `times` over. */
+const again = (times: number, ...cell: Note[][]): Note[] => Array.from({ length: times }, () => cell.flat()).flat();
+/** Swung eighths: the long and short halves of a beat, Shigihara's swing. */
+const LONG = 2 / 3;
+const SHORT = 1 / 3;
 
-// --- lead ---------------------------------------------------------------
+/**
+ * A timpani roll: sixteenths on one drum over `beats`, swelling from `from`
+ * to `to`, the orchestra's way of holding a note it cannot sustain.
+ */
+function roll(name: string, beats: number, from: number, to: number): Note[] {
+  const strokes = Math.round(beats * 4);
+  return Array.from({ length: strokes }, (_, i) => n(name, 0.25, from + ((to - from) * i) / Math.max(1, strokes - 1)));
+}
 
-/** The hook: a repeated-note call that leaps a fourth and holds over the half bar. */
-const call = (low: string, high: string, turn: string): Note[] => [
-  n(low, 0.5, 0.8),
-  n(low, 0.5, 0.7),
-  n(high, 1.5, 1),
-  n(turn, 0.5, 0.75),
-  n(low, 1, 0.85)
+/** A snare roll in sixteenths, swelling the same way. */
+function snareRoll(beats: number, from: number, to: number): Note[] {
+  const strokes = Math.round(beats * 4);
+  return Array.from({ length: strokes }, (_, i) => d('snare', 0.25, from + ((to - from) * i) / Math.max(1, strokes - 1)));
+}
+
+// --- the teaching arc: A minor, Am and Dm, 108 bpm ------------------------
+
+/** The riff's first bar: up the triad to E, pushed over beat two, and down the scale. */
+const RIFF_1A: Note[] = [
+  n('A3', 0.5, 0.9),
+  n('A3', 0.5, 0.6),
+  n('C4', 0.5, 0.75),
+  n('E4', 1, 1),
+  n('D4', 0.5, 0.7),
+  n('C4', 0.5, 0.7),
+  n('B3', 0.5, 0.65)
+];
+/** Its answer: home through the chromatic lower neighbour, then a beat of air. */
+const RIFF_1B: Note[] = [n('C4', 1, 0.85), n('A3', 0.5, 0.7), n('G#3', 0.5, 0.6), n('A3', 1, 0.8), r(1)];
+/** The phrase's last bar, over Dm and then E: down to the leading tone. */
+const TURN_1: Note[] = [n('E4', 1, 0.9), n('D4', 0.5, 0.7), n('C4', 0.5, 0.7), n('B3', 1, 0.8), n('G#3', 1, 0.75)];
+const RIFF_1: Note[] = [...again(3, RIFF_1A, RIFF_1B), ...RIFF_1A, ...TURN_1];
+
+/** The horn's counter-riff, long: an answer in the riff's rest, over Am, then Dm, then the turn. */
+const HORN_1A: Note[] = [
+  ...again(2, [r(2), n('C5', 2, 0.8)], [n('B4', 1.5, 0.9), n('A4', 0.5, 0.7), n('E4', 2, 0.8)]),
+  ...[r(2), n('D5', 2, 0.8)],
+  ...[n('C5', 1.5, 0.9), n('A4', 0.5, 0.7), n('F4', 2, 0.8)],
+  ...[r(2), n('D5', 2, 0.85)],
+  ...[n('C5', 2, 0.9), n('B4', 2, 0.85)]
+];
+/** And rhythmic, for the second phrase: the same answer in march time. */
+const HORN_1B: Note[] = [
+  ...again(2, [n('A4', 1.5, 0.9), n('E4', 0.5, 0.7), n('A4', 1, 0.8), n('C5', 1, 0.85)], [n('B4', 3, 0.85), r(1)]),
+  ...[n('A4', 1.5, 0.9), n('F4', 0.5, 0.7), n('A4', 1, 0.8), n('D5', 1, 0.85)],
+  ...[n('C5', 3, 0.85), r(1)],
+  ...[n('A4', 1.5, 0.9), n('F4', 0.5, 0.7), n('A4', 1, 0.8), n('D5', 1, 0.85)],
+  ...[n('C5', 2, 0.9), n('B4', 2, 0.85)]
 ];
 
-/** Bars 1 to 7 of `a`, which `a2` repeats. */
-const LEAD_A_HEAD: Note[] = [
-  // 1 Am, the call
-  ...call('E5', 'A5', 'G5'),
-  // 2 Am, stepping back down with a breath
-  n('D5', 0.5, 0.75),
-  n('C5', 0.5, 0.75),
-  n('B4', 1, 0.8),
-  n('A4', 1.5, 0.85),
-  r(0.5),
-  // 3 F, rising again, held over the half bar
-  n('C5', 1, 0.8),
-  n('F5', 1.5, 0.95),
-  n('E5', 0.5, 0.75),
-  n('F5', 1, 0.85),
-  // 4 G, a long note to breathe on
-  n('G5', 3, 0.9),
-  r(1),
-  // 5 Am, the call again
-  ...call('E5', 'A5', 'G5'),
-  // 6 Dm, the call in sequence a third higher
-  ...call('F5', 'A5', 'G5'),
-  // 7 F, the apex of the arch
-  n('C6', 1.5, 1),
-  n('A5', 0.5, 0.8),
-  n('G5', 0.5, 0.75),
-  n('F5', 0.5, 0.75),
-  n('E5', 1, 0.85)
+/** Off-beat plucks, the band's after-beat, on two chord tones. */
+const afterBeat = (top: string, low: string): Note[] => [
+  r(0.5), n(top, 0.5, 0.8), r(0.5), n(low, 0.5, 0.65), r(0.5), n(top, 0.5, 0.75), r(0.5), n(low, 0.5, 0.65)
+];
+/** A broken chord in eighths, root, fifth, third, fifth, twice. */
+const broken = (root: string, fifth: string, third: string): Note[] =>
+  again(2, [n(root, 0.5, 0.8), n(fifth, 0.5, 0.6), n(third, 0.5, 0.7), n(fifth, 0.5, 0.6)]);
+
+const PIZZ_1A: Note[] = [
+  ...again(4, afterBeat('E5', 'C5')),
+  ...again(3, afterBeat('F5', 'D5')),
+  ...[r(0.5), n('F5', 0.5, 0.8), r(0.5), n('D5', 0.5, 0.65), r(0.5), n('E5', 0.5, 0.8), r(0.5), n('B4', 0.5, 0.7)]
+];
+const PIZZ_1B: Note[] = [
+  ...again(4, broken('A4', 'E5', 'C5')),
+  ...again(3, broken('D5', 'A5', 'F5')),
+  ...[n('D5', 0.5, 0.8), n('A5', 0.5, 0.6), n('F5', 0.5, 0.7), n('A5', 0.5, 0.6), n('E5', 0.5, 0.8), n('B4', 0.5, 0.6), n('G#4', 0.5, 0.7), n('B4', 0.5, 0.6)]
 ];
 
-const LEAD_A: Note[] = [
-  ...LEAD_A_HEAD,
-  // 8 E, the half cadence: an appoggiatura, a breath, the leading tone
-  n('F5', 0.5, 0.85),
-  n('E5', 1.5, 0.9),
-  r(0.5),
-  n('B4', 0.5, 0.75),
-  n('G#4', 1, 0.85)
+/** The pedal, two tuned drums: the root on one, a pair of eighths on three's pickup, the fifth on four. */
+const pedal = (root: string, fifth: string): Note[] => [
+  n(root, 1, 0.95), r(1), n(root, 0.5, 0.55), n(root, 0.5, 0.7), n(fifth, 1, 0.8)
+];
+/** Bar 8: D, then E, walking back up to A through B; never A on a strong beat. */
+const TIMP_1: Note[] = [
+  ...again(4, pedal('A2', 'E3')),
+  ...again(3, pedal('D3', 'A2')),
+  ...[n('D3', 1, 0.9), r(1), n('E3', 1, 0.9), n('B2', 0.5, 0.6), n('E3', 0.5, 0.7)]
 ];
 
-const LEAD_B: Note[] = [
-  // 9 Dm, long notes tied over the half bar
-  r(0.5),
-  n('A4', 0.5, 0.75),
-  n('D5', 0.5, 0.8),
-  n('F5', 2.5, 0.95),
-  // 10 G
-  n('E5', 0.5, 0.8),
-  n('D5', 0.5, 0.75),
-  n('B4', 3, 0.85),
-  // 11 C, bar 9 a step down
-  r(0.5),
-  n('G4', 0.5, 0.75),
-  n('C5', 0.5, 0.8),
-  n('E5', 2.5, 0.95),
-  // 12 F, bar 10 a step down
-  n('D5', 0.5, 0.8),
-  n('C5', 0.5, 0.75),
-  n('A4', 3, 0.85),
-  // 13 Dm, climbing in plain quarters
-  n('D5', 1, 0.8),
-  n('E5', 1, 0.85),
-  n('F5', 1, 0.9),
-  n('A5', 1, 0.95),
-  // 14 Am, the apex again
-  n('C6', 2, 1),
-  n('B5', 1, 0.85),
-  n('A5', 1, 0.85),
-  // 15 Bb, the Phrygian darkening
-  n('Bb5', 1.5, 0.95),
-  n('A5', 0.5, 0.8),
-  n('F5', 1, 0.85),
-  n('D5', 1, 0.8),
-  // 16 E7, falling to the leading tone
-  n('E5', 1.5, 0.9),
-  n('D5', 0.5, 0.75),
-  n('B4', 1, 0.8),
-  n('G#4', 1, 0.85)
+/** The teaching march: bass drum on one and three, snare on two and a ruff into four. */
+const MARCH_1: Note[] = [
+  d('kick', 1, 0.8), d('snare', 1, 0.7), d('kick', 1, 0.75), d('snare', 0.5, 0.7), d('snare', 0.25, 0.45), d('snare', 0.25, 0.55)
+];
+const FILL_1: Note[] = [d('kick', 1, 0.85), ...snareRoll(1, 0.45, 0.7), d('snare', 0.5, 0.8), d('snare', 0.5, 0.6), d('kick', 1, 0.9)];
+const DRUMS_1: Note[] = [...again(7, MARCH_1), ...FILL_1];
+
+/** Teaching preparation: a quartal marimba figure over an A pedal, a bar of silence in every four. */
+const PREP_RIFF_1: Note[] = [
+  ...again(
+    2,
+    [r(0.5), n('A3', 0.5, 0.6), n('D4', 0.5, 0.65), n('E4', 2.5, 0.8)],
+    [r(2), n('B3', 0.5, 0.55), n('D4', 1.5, 0.7)],
+    [r(0.5), n('A3', 0.5, 0.6), n('D4', 0.5, 0.65), n('E4', 1, 0.75), n('A4', 1.5, 0.8)],
+    [r(4)]
+  ),
+  ...[r(0.5), n('A3', 0.5, 0.6), n('D4', 0.5, 0.65), n('E4', 2.5, 0.8)],
+  ...[r(2), n('B3', 0.5, 0.55), n('D4', 1.5, 0.7)],
+  ...[r(0.5), n('A3', 0.5, 0.6), n('D4', 0.5, 0.65), n('E4', 1, 0.75), n('A4', 1.5, 0.8)],
+  // Esus4: the call that hands the lull to the launch.
+  ...[r(1), n('B3', 1, 0.6), n('E4', 2, 0.7)]
+];
+/** Sus4 falling to the fourth, never to the third; over A, then D, then A tipping to Esus4. */
+const PREP_HORN_1: Note[] = [
+  ...[r(1), n('E4', 3, 0.8)], ...[n('D4', 4, 0.75)], ...[r(1), n('E4', 1, 0.75), n('A4', 2, 0.85)], ...[n('B4', 3, 0.8), r(1)],
+  ...[r(1), n('A4', 3, 0.8)], ...[n('G4', 4, 0.75)], ...[r(1), n('E4', 1, 0.75), n('D4', 2, 0.8)], ...[n('E4', 3, 0.8), r(1)],
+  ...[r(1), n('E4', 3, 0.8)], ...[n('D4', 4, 0.75)], ...[r(1), n('E4', 1, 0.75), n('A4', 2, 0.85)], ...[n('B4', 4, 0.8)]
+];
+/**
+ * The preparation's silent voices, a bar of rest at a time: a scene move waits
+ * for the bar line after everything a voice has scheduled, and one 48-beat
+ * rest would hold a launch off until the lull's cue had finished.
+ */
+const TACET: Note[] = again(12, [r(4)]);
+/** A soft roll into each phrase, a stroke to land on, then nothing but the horn. */
+const prepTimp = (root: string, fifth: string): Note[] => [
+  ...roll(root, 2, 0.25, 0.6), n(root, 2, 0.75), r(4), r(4), r(2), n(fifth, 1, 0.45), r(1)
+];
+const PREP_TIMP_1: Note[] = [
+  ...prepTimp('A2', 'E3'),
+  ...prepTimp('D3', 'A2'),
+  // The last phrase rolls on A and then rests on the dominant.
+  ...roll('A2', 2, 0.25, 0.6), n('A2', 2, 0.75), r(4), r(4), n('E3', 1, 0.6), r(3)
 ];
 
-const LEAD_A2: Note[] = [
-  ...LEAD_A_HEAD,
-  // 24 G, bVII: held over the half bar, handing back to the call on E
-  n('D5', 0.5, 0.8),
-  n('E5', 0.5, 0.8),
-  n('G5', 2.5, 0.95),
-  r(0.5)
+// --- the pressure arc: E Phrygian dominant, E and F, 116 bpm ---------------
+
+/** A dotted call, the marching band's figure, pushed up to the G sharp. */
+const riff2a = (top: string): Note[] => [
+  n('E4', 0.75, 0.9), n('E4', 0.25, 0.6), n('F4', 0.5, 0.75), n(top, 1.5, 1), n('F4', 0.5, 0.7), n('E4', 0.5, 0.7)
+];
+/** Its answer in plain eighths, settling for two beats. */
+const riff2b = (turn: string, home: string): Note[] => [
+  n('C4', 0.5, 0.8), n(turn, 0.5, 0.7), n('C4', 0.5, 0.75), n('D4', 0.5, 0.7), n(home, 2, 0.85)
+];
+const TURN_2: Note[] = [n('F4', 1, 0.9), n('E4', 0.5, 0.7), n('D4', 0.5, 0.7), n('C4', 1, 0.8), n('B3', 1, 0.75)];
+const RIFF_2: Note[] = [
+  ...again(2, riff2a('G#4'), riff2b('B3', 'B3')),
+  ...riff2a('A4'), ...riff2b('A3', 'C4'),
+  ...riff2a('A4'), ...TURN_2
 ];
 
-// --- pad ----------------------------------------------------------------
-
-/** Two half notes, the chord's inner voices one after the other. */
-const halves = (first: string, second: string, gain = 0.85): Note[] => [n(first, 2, gain), n(second, 2, gain * 0.9)];
-
-const PAD_A_HEAD: Note[] = [
-  ...halves('C4', 'E4'), // Am
-  ...halves('E4', 'C4'), // Am
-  ...halves('C4', 'A3'), // F
-  ...halves('B3', 'D4'), // G
-  ...halves('C4', 'E4'), // Am
-  ...halves('F4', 'D4'), // Dm
-  ...halves('C4', 'F4') // F
+const HORN_2A: Note[] = [
+  ...again(2, [r(2), n('B4', 2, 0.8)], [n('G#4', 1.5, 0.9), n('A4', 0.5, 0.7), n('B4', 2, 0.8)]),
+  ...[r(2), n('C5', 2, 0.8)],
+  ...[n('A4', 1.5, 0.9), n('F4', 0.5, 0.7), n('A4', 2, 0.8)],
+  ...[r(2), n('C5', 2, 0.85)],
+  ...[n('A4', 2, 0.9), n('G#4', 2, 0.85)]
 ];
-const PAD_A: Note[] = [...PAD_A_HEAD, ...halves('B3', 'G#3')]; // E
-const PAD_B: Note[] = [
-  n('F4', 4, 0.8), // Dm
-  n('D4', 4, 0.75), // G
-  n('E4', 4, 0.8), // C
-  n('C4', 4, 0.75), // F
-  n('F4', 4, 0.8), // Dm
-  n('E4', 4, 0.85), // Am
-  n('D4', 4, 0.9), // Bb
-  n('B3', 4, 0.9) // E
-];
-const PAD_A2: Note[] = [...PAD_A_HEAD, ...halves('D4', 'B3')]; // G
-
-// --- bass ---------------------------------------------------------------
-
-/** The march bar: root, root, fifth, root, the first long. */
-const march = (root: string, fifth: string, accent = 0.9): Note[] => [
-  n(root, 1.5, accent),
-  n(root, 0.5, 0.6),
-  n(fifth, 1, 0.8),
-  n(root, 1, 0.7)
+const HORN_2B: Note[] = [
+  ...again(2, [n('B4', 0.75, 0.9), n('B4', 0.25, 0.65), n('G#4', 1, 0.8), n('E4', 1, 0.8), n('B4', 1, 0.85)], [n('A4', 3, 0.85), r(1)]),
+  ...[n('C5', 0.75, 0.9), n('C5', 0.25, 0.65), n('A4', 1, 0.8), n('F4', 1, 0.8), n('C5', 1, 0.85)],
+  ...[n('B4', 3, 0.85), r(1)],
+  ...[n('C5', 0.75, 0.9), n('C5', 0.25, 0.65), n('A4', 1, 0.8), n('F4', 1, 0.8), n('C5', 1, 0.85)],
+  ...[n('A4', 2, 0.9), n('G#4', 2, 0.85)]
 ];
 
-const BASS_A_HEAD: Note[] = [
-  ...march('A2', 'E3'), // Am
-  ...march('A2', 'E3', 0.85), // Am
-  ...march('F2', 'C3'), // F
-  ...march('G2', 'D3'), // G
-  ...march('A2', 'E3'), // Am
-  ...march('D3', 'A2'), // Dm
-  ...march('F2', 'C3') // F
-];
-const BASS_A: Note[] = [...BASS_A_HEAD, ...march('E3', 'B2', 0.95)]; // E
-const BASS_B: Note[] = [
-  n('D3', 2, 0.9), n('A2', 2, 0.75), // Dm
-  n('G2', 2, 0.9), n('D3', 2, 0.75), // G
-  n('C3', 2, 0.9), n('G2', 2, 0.75), // C
-  n('F2', 2, 0.9), n('C3', 2, 0.75), // F
-  n('D3', 2, 0.9), n('A2', 2, 0.75), // Dm
-  n('A2', 2, 0.9), n('E3', 2, 0.75), // Am
-  n('Bb2', 2, 0.95), n('F2', 2, 0.8), // Bb
-  n('E3', 2, 0.95), n('B2', 1, 0.8), n('G#2', 1, 0.8) // E, walking up to the top
-];
-// Bar 24 on G, walking up through B: the pass never lands on A before the top.
-const BASS_A2: Note[] = [...BASS_A_HEAD, n('G2', 1.5, 0.9), n('G2', 0.5, 0.6), n('D3', 1, 0.8), n('B2', 1, 0.75)];
+const PIZZ_2A: Note[] = [...again(4, afterBeat('E5', 'B4')), ...again(4, afterBeat('F5', 'C5'))];
+const PIZZ_2B: Note[] = [...again(4, broken('E5', 'B5', 'G#5')), ...again(4, broken('F5', 'C6', 'A5'))];
 
-// --- drums --------------------------------------------------------------
+/** The pressure pedal: a dotted stroke on the root, the fifth on three, the root again on four. */
+const pedal2 = (root: string, fifth: string): Note[] => [n(root, 0.75, 0.95), n(root, 0.25, 0.55), r(1), n(fifth, 1, 0.8), n(root, 1, 0.75)];
+const TIMP_2: Note[] = [...again(4, pedal2('E3', 'B2')), ...again(4, pedal2('F2', 'C3'))];
 
-/** The march: kick on one and three, snare on two and four, hats between. */
-const STEP: Note[] = [
-  d('kick', 0.5, 0.9),
-  d('hat', 0.5, 0.6),
-  d('snare', 0.5, 0.85),
-  d('hat', 0.5, 0.6),
-  d('kick', 0.5, 0.85),
-  d('kick', 0.5, 0.6),
-  d('snare', 0.5, 0.85),
-  d('hat', 0.5, 0.6)
+/** The pressure kit: the march with its hats swung. */
+const SWING: Note[] = [
+  d('kick', LONG, 0.85), d('hat', SHORT, 0.45), d('snare', LONG, 0.75), d('hat', SHORT, 0.45),
+  d('kick', LONG, 0.8), d('hat', SHORT, 0.45), d('snare', LONG, 0.75), d('hat', SHORT, 0.55)
 ];
-/** The lighter kit under the answer phrase. */
-const WALK: Note[] = [d('kick', 0.5, 0.85), d('hat', 0.5, 0.5), d('snare', 1, 0.75), d('kick', 0.5, 0.8), d('hat', 0.5, 0.5), d('snare', 1, 0.75)];
-/** The phrase-end fill: a rising snare roll. */
-const FILL: Note[] = [
-  d('kick', 0.5, 0.9),
-  d('hat', 0.5, 0.6),
-  d('snare', 0.5, 0.8),
-  d('snare', 0.5, 0.6),
-  d('snare', 0.25, 0.5),
-  d('snare', 0.25, 0.6),
-  d('snare', 0.25, 0.7),
-  d('snare', 0.25, 0.8),
-  d('snare', 0.5, 0.9),
-  d('kick', 0.5, 1)
+const FILL_2: Note[] = [
+  d('kick', LONG, 0.85), d('hat', SHORT, 0.45), d('snare', LONG, 0.75), d('snare', SHORT, 0.5),
+  d('snare', SHORT, 0.55), d('snare', SHORT, 0.65), d('snare', SHORT, 0.75), d('kick', 1, 0.9)
 ];
-const bars = (pattern: Note[], count: number): Note[] => Array.from({ length: count }, () => pattern).flat();
-const DRUMS_A: Note[] = [...bars(STEP, 7), ...FILL];
-const DRUMS_B: Note[] = [...bars(WALK, 7), ...FILL];
+const DRUMS_2: Note[] = [...again(7, SWING), ...FILL_2];
 
-// --- the horde (danger order) -------------------------------------------
-
-/** The horde's hook: three repeated eighths and a push held over the half bar. */
-const charge = (note: string, top: string, turn: string): Note[] => [
-  n(note, 0.5, 0.85),
-  n(note, 0.5, 0.7),
-  n(note, 0.5, 0.75),
-  n(top, 1, 1),
-  n(turn, 0.5, 0.8),
-  n(note, 1, 0.85)
+/** Pressure preparation: the half step E to F, rung softly and left hanging. */
+const PREP_RIFF_2: Note[] = [
+  ...again(
+    2,
+    [r(0.5), n('B3', 0.5, 0.6), n('E4', 0.5, 0.65), n('F4', 2.5, 0.8)],
+    [r(2), n('E4', 0.5, 0.55), n('B3', 1.5, 0.7)],
+    [r(0.5), n('B3', 0.5, 0.6), n('E4', 0.5, 0.65), n('A4', 1, 0.75), n('G#4', 1.5, 0.8)],
+    [r(4)]
+  ),
+  ...[r(0.5), n('B3', 0.5, 0.6), n('E4', 0.5, 0.65), n('F4', 2.5, 0.8)],
+  ...[r(2), n('E4', 0.5, 0.55), n('B3', 1.5, 0.7)],
+  ...[r(0.5), n('B3', 0.5, 0.6), n('E4', 0.5, 0.65), n('A4', 1, 0.75), n('G#4', 1.5, 0.8)],
+  ...[r(1), n('C4', 1, 0.6), n('F4', 2, 0.7)]
 ];
-/** Driving eighths on the root, turning to the fifth in the second half. */
-const drive = (root: string, fifth: string): Note[] => [
-  n(root, 0.5, 0.95),
-  n(root, 0.5, 0.6),
-  n(root, 0.5, 0.75),
-  n(root, 0.5, 0.6),
-  n(fifth, 0.5, 0.85),
-  n(fifth, 0.5, 0.6),
-  n(root, 0.5, 0.75),
-  n(root, 0.5, 0.6)
+const PREP_HORN_2: Note[] = [
+  ...[r(1), n('B4', 3, 0.8)], ...[n('A4', 4, 0.75)], ...[r(1), n('F4', 1, 0.75), n('E4', 2, 0.85)], ...[n('B3', 3, 0.8), r(1)],
+  ...[r(1), n('C5', 3, 0.8)], ...[n('B4', 4, 0.75)], ...[r(1), n('G#4', 1, 0.75), n('A4', 2, 0.8)], ...[n('B4', 3, 0.8), r(1)],
+  ...[r(1), n('B4', 3, 0.8)], ...[n('A4', 4, 0.75)], ...[r(1), n('F4', 1, 0.75), n('E4', 2, 0.85)], ...[n('F4', 4, 0.8)]
 ];
-const RUSH: Note[] = [
-  d('kick', 0.5, 0.95),
-  d('hat', 0.25, 0.5),
-  d('hat', 0.25, 0.6),
-  d('snare', 0.5, 0.9),
-  d('hat', 0.5, 0.6),
-  d('kick', 0.5, 0.9),
-  d('kick', 0.5, 0.7),
-  d('snare', 0.5, 0.9),
-  d('hat', 0.25, 0.5),
-  d('hat', 0.25, 0.6)
+const PREP_TIMP_2: Note[] = [
+  ...prepTimp('E3', 'B2'),
+  ...prepTimp('E3', 'B2'),
+  // Ending on F, the half step above the pedal, which the top resolves.
+  ...roll('E3', 2, 0.25, 0.6), n('E3', 2, 0.75), r(4), r(4), n('F2', 1, 0.6), r(3)
 ];
 
-const HORDE: Note[][] = [
-  [
-    ...charge('A5', 'C6', 'B5'), // Am
-    ...charge('Bb5', 'D6', 'C6'), // Bb
-    ...charge('A5', 'C6', 'B5'), // Am
-    n('Bb5', 1.5, 0.95), n('A5', 0.5, 0.8), n('F5', 1, 0.85), n('D5', 1, 0.8), // Bb
-    n('A5', 1.5, 0.9), n('G5', 0.5, 0.75), n('F5', 1, 0.8), n('E5', 1, 0.8), // F
-    n('D5', 0.5, 0.8), n('E5', 0.5, 0.8), n('G5', 2, 0.95), n('B5', 1, 0.9), // G
-    n('G#5', 2, 1), n('E5', 1, 0.8), n('B4', 1, 0.8), // E
-    n('E5', 2, 0.9), r(1), n('E5', 0.5, 0.75), n('E5', 0.5, 0.8) // E, the pickup
-  ],
-  [
-    ...halves('E4', 'C4', 0.8), // Am
-    ...halves('F4', 'D4', 0.85), // Bb
-    ...halves('E4', 'C4', 0.8), // Am
-    ...halves('D4', 'F4', 0.85), // Bb
-    ...halves('C4', 'A3', 0.8), // F
-    ...halves('D4', 'B3', 0.8), // G
-    ...halves('B3', 'G#3', 0.9), // E
-    ...halves('B3', 'D4', 0.9) // E7
-  ],
-  [
-    ...drive('A2', 'E3'),
-    ...drive('Bb2', 'F2'),
-    ...drive('A2', 'E3'),
-    ...drive('Bb2', 'F2'),
-    ...drive('F2', 'C3'),
-    ...drive('G2', 'D3'),
-    ...drive('E3', 'B2'),
-    ...drive('E3', 'B2')
-  ],
-  [...bars(RUSH, 7), ...FILL]
+// --- the escalation arc: A minor and its B flat, every two bars, 124 bpm ---
+
+/** A two-bar riff, now in sixteenths at the front, the B flat a half step over the root. */
+const riff3a = (root: string, step: string, third: string, top: string, back: string): Note[] => [
+  n(root, 0.5, 0.9), n(root, 0.25, 0.55), n(root, 0.25, 0.65), n(step, 0.5, 0.7), n(top, 1, 1), n(back, 0.5, 0.7), n(third, 0.5, 0.75), n(step, 0.5, 0.65)
+];
+const riff3b = (top: string, back: string, third: string, step: string, root: string): Note[] => [
+  n(top, 0.5, 0.85), n(back, 0.5, 0.7), n(third, 0.5, 0.75), n(step, 0.5, 0.65), n(root, 1, 0.8), r(1)
+];
+const RIFF_3_AM = [riff3a('A3', 'Bb3', 'C4', 'E4', 'D4'), riff3b('E4', 'D4', 'C4', 'Bb3', 'A3')];
+const RIFF_3_BB = [riff3a('Bb3', 'A3', 'D4', 'F4', 'E4'), riff3b('F4', 'E4', 'D4', 'C4', 'Bb3')];
+/** The turn, over E: a chromatic fall from F to the leading tone. */
+const TURN_3: Note[] = [n('E4', 0.5, 0.85), n('F4', 0.5, 0.8), n('E4', 0.5, 0.75), n('D4', 0.5, 0.7), n('C4', 0.5, 0.75), n('Bb3', 0.5, 0.7), n('G#3', 1, 0.8)];
+const RIFF_3: Note[] = [...RIFF_3_AM.flat(), ...RIFF_3_BB.flat(), ...RIFF_3_AM.flat(), ...RIFF_3_BB[0], ...TURN_3];
+
+const HORN_3A: Note[] = [
+  ...[r(2), n('C5', 2, 0.85)], ...[n('B4', 1.5, 0.9), n('A4', 0.5, 0.7), n('E4', 2, 0.8)],
+  ...[r(2), n('D5', 2, 0.85)], ...[n('C5', 1.5, 0.9), n('Bb4', 0.5, 0.7), n('F4', 2, 0.8)],
+  ...[r(2), n('C5', 2, 0.85)], ...[n('B4', 1.5, 0.9), n('A4', 0.5, 0.7), n('E4', 2, 0.8)],
+  ...[r(2), n('D5', 2, 0.85)], ...[n('B4', 2, 0.9), n('G#4', 2, 0.85)]
+];
+/** Brass stabs on the off-beats, the counter-riff at full cry. */
+const stabs = (a: string, b: string): Note[] => [r(0.5), n(a, 0.5, 0.85), r(0.5), n(a, 0.5, 0.75), r(0.5), n(b, 1.5, 0.9)];
+const HORN_3B: Note[] = [
+  ...stabs('A4', 'C5'), ...[n('B4', 3, 0.85), r(1)],
+  ...stabs('Bb4', 'D5'), ...[n('C5', 3, 0.85), r(1)],
+  ...stabs('A4', 'C5'), ...[n('B4', 3, 0.85), r(1)],
+  ...stabs('Bb4', 'D5'), ...[n('B4', 2, 0.9), n('G#4', 2, 0.85)]
 ];
 
-const HORDE_B: Note[][] = [
-  [
-    ...charge('F5', 'A5', 'G5'), // Dm
-    n('E5', 1.5, 0.9), n('C5', 0.5, 0.75), n('A4', 2, 0.85), // Am
-    n('A5', 0.5, 0.85), n('A5', 0.5, 0.7), n('A5', 0.5, 0.75), n('C6', 1, 1), n('A5', 0.5, 0.8), n('F5', 1, 0.85), // F
-    n('G5', 3, 0.9), r(1), // G
-    ...charge('F5', 'A5', 'G5'), // Dm
-    n('E5', 1.5, 0.9), n('D5', 0.5, 0.75), n('C5', 1, 0.8), n('B4', 1, 0.8), // Am
-    n('D5', 0.5, 0.8), n('F5', 0.5, 0.85), n('Bb5', 2.5, 1), r(0.5), // Bb
-    n('G#5', 1.5, 0.95), n('F5', 0.5, 0.8), n('E5', 1, 0.85), n('D5', 1, 0.8) // E7
-  ],
-  [
-    n('F4', 4, 0.8), // Dm
-    n('E4', 4, 0.8), // Am
-    n('C4', 4, 0.8), // F
-    n('D4', 4, 0.8), // G
-    n('F4', 4, 0.85), // Dm
-    n('E4', 4, 0.85), // Am
-    n('D4', 4, 0.9), // Bb
-    n('B3', 4, 0.9) // E
-  ],
-  [
-    ...drive('D3', 'A2'),
-    ...drive('A2', 'E3'),
-    ...drive('F2', 'C3'),
-    ...drive('G2', 'D3'),
-    ...drive('D3', 'A2'),
-    ...drive('A2', 'E3'),
-    ...drive('Bb2', 'F2'),
-    ...drive('E3', 'B2')
-  ],
-  [...bars(RUSH, 7), ...FILL]
+const PIZZ_3A: Note[] = [
+  ...afterBeat('E5', 'C5'), ...afterBeat('E5', 'A4'), ...afterBeat('F5', 'D5'), ...afterBeat('F5', 'Bb4'),
+  ...afterBeat('E5', 'C5'), ...afterBeat('E5', 'A4'), ...afterBeat('F5', 'D5'), ...afterBeat('E5', 'G#4')
+];
+const PIZZ_3B: Note[] = [
+  ...again(2, broken('A4', 'E5', 'C5')), ...again(2, broken('Bb4', 'F5', 'D5')),
+  ...again(2, broken('A4', 'E5', 'C5')), ...broken('Bb4', 'F5', 'D5'), ...broken('G#4', 'E5', 'B4')
+];
+
+/** The escalation pedal: a stroke and two eighths driving to the fifth. */
+const pedal3 = (root: string, fifth: string): Note[] => [n(root, 1, 0.95), n(root, 0.5, 0.6), n(root, 0.5, 0.7), r(0.5), n(fifth, 0.5, 0.7), n(fifth, 1, 0.85)];
+const TIMP_3: Note[] = [
+  ...again(2, pedal3('A2', 'E3')), ...again(2, pedal3('Bb2', 'F3')),
+  ...again(2, pedal3('A2', 'E3')), ...pedal3('Bb2', 'F3'), ...pedal3('E3', 'B2')
+];
+
+/** The escalation kit: a ruff into two and into four, the bass drum on one and three. */
+const ROLLING: Note[] = [
+  d('kick', 0.5, 0.9), d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('snare', 0.5, 0.85), d('hat', 0.5, 0.45),
+  d('kick', 0.5, 0.85), d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('snare', 0.5, 0.85), d('hat', 0.5, 0.45)
+];
+const FILL_3: Note[] = [d('kick', 0.5, 0.9), ...snareRoll(2.5, 0.4, 0.85), d('kick', 1, 1)];
+const DRUMS_3: Note[] = [...again(7, ROLLING), ...FILL_3];
+
+/** Escalation preparation: the B flat shadowing the root, hung on a suspension. */
+const PREP_RIFF_3: Note[] = [
+  ...again(
+    2,
+    [r(0.5), n('A3', 0.5, 0.6), n('D4', 0.5, 0.65), n('E4', 2.5, 0.8)],
+    [r(2), n('Bb3', 0.5, 0.6), n('D4', 1.5, 0.7)],
+    [r(0.5), n('A3', 0.5, 0.6), n('Bb3', 0.5, 0.6), n('E4', 1, 0.75), n('F4', 1.5, 0.8)],
+    [r(4)]
+  ),
+  ...[r(0.5), n('A3', 0.5, 0.6), n('D4', 0.5, 0.65), n('E4', 2.5, 0.8)],
+  ...[r(2), n('Bb3', 0.5, 0.6), n('D4', 1.5, 0.7)],
+  ...[r(0.5), n('A3', 0.5, 0.6), n('Bb3', 0.5, 0.6), n('E4', 1, 0.75), n('F4', 1.5, 0.8)],
+  ...[r(1), n('B3', 1, 0.6), n('E4', 2, 0.7)]
+];
+const PREP_HORN_3: Note[] = [
+  ...[r(1), n('E4', 3, 0.8)], ...[n('F4', 4, 0.8)], ...[r(1), n('E4', 1, 0.75), n('D4', 2, 0.85)], ...[n('E4', 3, 0.8), r(1)],
+  ...[r(1), n('A4', 3, 0.8)], ...[n('Bb4', 4, 0.8)], ...[r(1), n('A4', 1, 0.75), n('D4', 2, 0.8)], ...[n('E4', 3, 0.8), r(1)],
+  ...[r(1), n('E4', 3, 0.8)], ...[n('F4', 4, 0.8)], ...[r(1), n('E4', 1, 0.75), n('D4', 2, 0.85)], ...[n('B4', 4, 0.8)]
+];
+/** Two rolls a phrase now, the second on the B flat. */
+const prepTimp3: Note[] = [...roll('A2', 2, 0.25, 0.6), n('A2', 2, 0.75), r(4), ...roll('Bb2', 2, 0.2, 0.5), n('Bb2', 2, 0.65), r(4)];
+const PREP_TIMP_3: Note[] = [
+  ...prepTimp3,
+  ...prepTimp3,
+  ...roll('A2', 2, 0.25, 0.6), n('A2', 2, 0.75), r(4), r(4), n('E3', 1, 0.6), r(3)
+];
+
+// --- the horde (danger): A minor, Am and Bb every bar, 138 bpm -------------
+
+/** The horde's riff, one bar: the root hammered, the half step, the push to the fifth. */
+const hordeRiff = (root: string, step: string, top: string, third: string): Note[] => [
+  n(root, 0.5, 0.9), n(root, 0.5, 0.55), n(step, 0.5, 0.7), n(top, 1, 1), n(root, 0.5, 0.6), n(step, 0.5, 0.65), n(third, 0.5, 0.75)
+];
+const HORDE_RIFF: Note[] = [
+  ...again(3, hordeRiff('A3', 'Bb3', 'E4', 'C4'), hordeRiff('Bb3', 'A3', 'F4', 'D4')),
+  ...[n('E4', 0.5, 0.9), n('E4', 0.5, 0.55), n('F4', 0.5, 0.7), n('G#4', 1, 1), n('F4', 0.5, 0.65), n('E4', 0.5, 0.7), n('D4', 0.5, 0.7)],
+  ...[n('C4', 0.5, 0.8), n('B3', 0.5, 0.7), n('Bb3', 0.5, 0.7), n('A3', 0.5, 0.75), n('G#3', 2, 0.85)]
+];
+const HORDE_HORN_A: Note[] = [
+  ...again(3, stabs('A4', 'C5'), stabs('Bb4', 'D5')),
+  ...stabs('B4', 'D5'), ...[n('B4', 2, 0.9), n('G#4', 2, 0.9)]
+];
+const HORDE_HORN_B: Note[] = [
+  ...again(3, [n('E5', 3, 0.9), n('C5', 1, 0.8)], [n('F5', 3, 0.9), n('D5', 1, 0.8)]),
+  ...[n('E5', 2, 0.9), n('D5', 2, 0.85)], ...[n('B4', 4, 0.9)]
+];
+const HORDE_PIZZ: Note[] = [
+  ...again(3, broken('A4', 'E5', 'C5'), broken('Bb4', 'F5', 'D5')),
+  ...broken('E5', 'B5', 'G#5'), ...broken('G#4', 'E5', 'B4')
+];
+/** The horde pedal: every eighth of the bar's front half on the root, then the fifth. */
+const hordePedal = (root: string, fifth: string): Note[] => [
+  n(root, 0.5, 0.95), n(root, 0.25, 0.5), n(root, 0.25, 0.6), n(fifth, 0.5, 0.8), n(root, 0.5, 0.6), n(root, 1, 0.9), n(fifth, 1, 0.8)
+];
+const HORDE_TIMP: Note[] = [...again(3, hordePedal('A2', 'E3'), hordePedal('Bb2', 'F3')), ...again(2, hordePedal('E3', 'B2'))];
+const STORM: Note[] = [
+  d('kick', 0.5, 0.95), d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('kick', 0.5, 0.85), d('snare', 0.5, 0.9),
+  d('kick', 0.5, 0.9), d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('kick', 0.5, 0.85), d('snare', 0.5, 0.9)
+];
+const HORDE_DRUMS: Note[] = [...again(7, STORM), d('kick', 0.5, 1), ...snareRoll(3.5, 0.45, 0.95)];
+
+/** The launch: a timpani roll into a low stroke on the arc's tonic, a snare roll beside it, half a bar. */
+const launch = (root: string): Note[][] => [
+  [],
+  [],
+  [],
+  [...roll(root, 1.5, 0.35, 0.8), n(root, 0.5, 1)],
+  [...snareRoll(1.5, 0.35, 0.8), d('kick', 0.5, 1)]
 ];
 
 export const TOWERDEFENSE_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,
-  volume: 0.12,
+  volume: 0.09,
   tonic: p('A3'),
-  echo: { time: 0.25, feedback: 0.22, mix: 0.18 },
   tracks: [
-    // The wave layer's tune: a 25% pulse, vibrato on its long notes.
-    { name: 'lead', wave: 'pulse25', volume: 0.85, vibrato: 8, startsMuted: true },
-    // The build bed's upper half: the chord's inner voices, an open octave and more over the bass.
-    { name: 'pad', wave: 'sawtooth', envelope: 'pad', volume: 0.35, detune: 6 },
-    // The build bed's floor: roots and fifths, alone below C3.
-    { name: 'bass', wave: 'triangle', volume: 0.75 },
-    // The wave layer's march.
-    { name: 'drums', volume: 0.6, startsMuted: true }
+    // The ostinato: a marimba, a sine struck by a 4:1 modulator that dies in 40 ms.
+    {
+      name: 'riff',
+      wave: 'sine',
+      fm: { ratio: 4, index: 1.8, indexDecay: 0.04 },
+      adsr: { attack: 0.002, decay: 0.35, sustain: 0, release: 0.12 },
+      volume: 0.9
+    },
+    // Brass swells: the low-pass opens an octave and a half as the note speaks.
+    {
+      name: 'horn',
+      wave: 'sawtooth',
+      filter: { cutoff: 1600, q: 0.7, envAmount: -1.5, envDecay: 0.2 },
+      adsr: { attack: 0.06, decay: 0.3, sustain: 0.6, release: 0.25 },
+      volume: 0.38
+    },
+    // Plucked strings: the filter snaps shut behind the attack.
+    {
+      name: 'pizz',
+      wave: 'sawtooth',
+      filter: { cutoff: 900, q: 1.5, envAmount: 2, envDecay: 0.06 },
+      adsr: { attack: 0.002, decay: 0.14, sustain: 0, release: 0.06 },
+      volume: 0.4,
+      startsMuted: true
+    },
+    // Timpani: struck two semitones sharp, settling as the head does.
+    {
+      name: 'timpani',
+      wave: 'triangle',
+      pitchEnv: { semitones: 2, time: 0.09 },
+      adsr: { attack: 0.003, decay: 0.8, sustain: 0, release: 0.3 },
+      volume: 0.95
+    },
+    // The marching band: bass drum and snare, hats only for the swing.
+    { name: 'drums', volume: 0.55, startsMuted: true }
   ],
   form: {
     sections: {
-      a: [LEAD_A, PAD_A, BASS_A, DRUMS_A],
-      b: [LEAD_B, PAD_B, BASS_B, DRUMS_B],
-      a2: [LEAD_A2, PAD_A2, BASS_A2, DRUMS_A],
-      horde: HORDE,
-      'horde-b': HORDE_B
+      'p1': [PREP_RIFF_1, PREP_HORN_1, TACET, PREP_TIMP_1, TACET],
+      'b1a': [RIFF_1, HORN_1A, PIZZ_1A, TIMP_1, DRUMS_1],
+      'b1b': [RIFF_1, HORN_1B, PIZZ_1B, TIMP_1, DRUMS_1],
+      'p2': [PREP_RIFF_2, PREP_HORN_2, TACET, PREP_TIMP_2, TACET],
+      'b2a': [RIFF_2, HORN_2A, PIZZ_2A, TIMP_2, DRUMS_2],
+      'b2b': [RIFF_2, HORN_2B, PIZZ_2B, TIMP_2, DRUMS_2],
+      'p3': [PREP_RIFF_3, PREP_HORN_3, TACET, PREP_TIMP_3, TACET],
+      'b3a': [RIFF_3, HORN_3A, PIZZ_3A, TIMP_3, DRUMS_3],
+      'b3b': [RIFF_3, HORN_3B, PIZZ_3B, TIMP_3, DRUMS_3],
+      horde: [HORDE_RIFF, HORDE_HORN_A, HORDE_PIZZ, HORDE_TIMP, HORDE_DRUMS],
+      'horde-b': [HORDE_RIFF, HORDE_HORN_B, HORDE_PIZZ, HORDE_TIMP, HORDE_DRUMS]
     },
-    order: ['a', 'b', 'a2'],
+    order: ['p1'],
+    scenes: {
+      'prep-1': { order: ['p1'] },
+      'battle-1': { order: ['b1a', 'b1b', 'b1a'] },
+      'prep-2': { order: ['p2'], tempo: PRESSURE_TEMPO },
+      'battle-2': { order: ['b2a', 'b2b', 'b2a'], tempo: PRESSURE_TEMPO },
+      'prep-3': { order: ['p3'], tempo: ESCALATION_TEMPO },
+      'battle-3': { order: ['b3a', 'b3b', 'b3a'], tempo: ESCALATION_TEMPO }
+    },
     danger: { order: ['horde', 'horde', 'horde-b'], tempo: HORDE_TEMPO }
   },
   stingers: {
-    // The gate opens: a rising snare roll into one low hit on the tonic, in
-    // the bass and pad, half a bar long. Nothing in the lead's voice or
-    // register, since the tune itself comes in on the next bar line; a bugle
-    // call here in the lead's own pulse used to play over its opening.
-    launch: [
-      [],
-      [r(1), n('E4', 1, 0.85)],
-      [r(1), n('A1', 1, 1)],
-      [d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('snare', 0.25, 0.7), d('snare', 0.25, 0.8), d('kick', 1, 1)]
-    ]
+    'launch-a': launch('A2'),
+    'launch-e': launch('E3')
   }
 };

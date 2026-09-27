@@ -114,6 +114,7 @@ export function makeRecordingContext(sampleRate = 44100): RecordingContext {
     createDelay: (max: number) => node('delay', ['delayTime'], [max]),
     createBiquadFilter: () => node('filter', ['frequency', 'Q', 'gain', 'detune']),
     createBufferSource: () => node('source', ['playbackRate', 'detune']),
+    createStereoPanner: () => node('panner', ['pan']),
     createBuffer: (channels: number, length: number, rate: number) => {
       const id = nextId('buffer');
       log.push(`create ${id}(${channels}, ${length}, ${rate})`);

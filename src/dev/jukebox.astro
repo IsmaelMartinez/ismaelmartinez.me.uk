@@ -26,7 +26,7 @@
     <h1>Arcade jukebox</h1>
     <p>
       Every score found in <code>src/games/*/music.ts</code>. Play runs the live engine; Render WAV
-      runs the same scheduler through an <code>OfflineAudioContext</code> and downloads 16-bit mono
+      runs the same scheduler through an <code>OfflineAudioContext</code> and downloads 16-bit stereo
       PCM. The default length is two full loops at the tempo shown, plus the intro once for a score
       that has one. The controls under a score are its adaptive ones, shown only where the score has
       them; a render starts from the voices, danger and section they are set to.
@@ -274,17 +274,21 @@
         music: GameAudioOptions,
         seconds: number,
         control: ControlState
-      ): Promise<Float32Array | null> {
+      ): Promise<Float32Array[] | null> {
         if (!(seconds > 0)) return null;
         const { parts, from } = renderParts(music, control);
-        // With every voice off the render is silence, at the length a render would have.
-        let mix = parts.length ? null : new Float32Array(Math.ceil(seconds * SAMPLE_RATE));
+        // Stereo, left then right, as `renderScore` renders it. With every
+        // voice off the render is silence, at the length a render would have.
+        const silence = () => new Float32Array(Math.ceil(seconds * SAMPLE_RATE));
+        let mix = parts.length ? null : [silence(), silence()];
         for (const voice of parts) {
           const part = await renderScore(voice, seconds, SAMPLE_RATE, from);
           if (!part) return null;
-          const samples = part.getChannelData(0);
-          if (!mix) mix = new Float32Array(samples.length);
-          for (let i = 0; i < mix.length; i++) mix[i] += samples[i];
+          const sides = [part.getChannelData(0), part.getChannelData(1)];
+          if (!mix) mix = sides.map(side => new Float32Array(side.length));
+          for (let c = 0; c < 2; c++) {
+            for (let i = 0; i < mix[c].length; i++) mix[c][i] += sides[c][i];
+          }
         }
         return mix;
       }
@@ -376,13 +380,13 @@
           renderBtn.disabled = true;
           status.textContent = 'rendering...';
           const control = extra.state();
-          const samples = await renderMix({ ...music, tempo: tempo() }, length, control);
+          const channels = await renderMix({ ...music, tempo: tempo() }, length, control);
           renderBtn.disabled = false;
-          if (!samples) {
+          if (!channels) {
             status.textContent = 'render failed (no OfflineAudioContext, or a zero length)';
             return;
           }
-          const wav = encodeWav(samples, SAMPLE_RATE);
+          const wav = encodeWav(channels, SAMPLE_RATE);
           const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
           const link = document.createElement('a');
           link.href = url;

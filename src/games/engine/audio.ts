@@ -25,8 +25,9 @@
  *
  * Beyond the four stock oscillator shapes the synth has three NES pulse duties,
  * three drums built from one shared noise buffer, per-note delayed vibrato and
- * slides. All of it is opt-in per track or per note: a score that uses none of
- * it builds exactly the graph it built before these existed, which
+ * slides, and a stereo pan per voice. All of it is opt-in per track or per
+ * note: a score that uses none of it builds exactly the graph it built before
+ * these existed, which
  * `tests/games/audio-graph.test.ts` checks call for call. The scheduler that
  * plays a score live is the same one `renderScore` runs into an
  * `OfflineAudioContext`, so a render is what the page would have played.
@@ -129,6 +130,17 @@ export interface Track {
    * scheduled while silent, so it enters in step with the others.
    */
   startsMuted?: boolean;
+  /**
+   * Where the voice sits in the stereo field, -1 hard left to 1 hard right,
+   * through an equal-power `StereoPannerNode`. Defaults to 0, the centre,
+   * which makes no panner at all, so an unpanned score builds the graph it
+   * always has and renders the same samples in both channels. Amiga Paula's
+   * two-left, two-right split is `pan: -1` and `pan: 1`. Each note gets its
+   * own panner between its envelope and wherever the voice plays to, so the
+   * pan follows the voice through a layer gain and into a stinger, which goes
+   * past the layers. Out of range clamps; anything not finite is the centre.
+   */
+  pan?: number;
 }
 
 /** Feedback-delay send applied to the whole music mix. */
@@ -524,6 +536,7 @@ interface NormTrack {
   vibrato: number;
   name: string | undefined;
   startsMuted: boolean;
+  pan: number;
 }
 
 /** Fills in per-track defaults. */
@@ -537,7 +550,8 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
     detune: t.detune ?? 0,
     vibrato: t.vibrato ?? 0,
     name: t.name,
-    startsMuted: t.startsMuted ?? false
+    startsMuted: t.startsMuted ?? false,
+    pan: t.pan !== undefined && Number.isFinite(t.pan) ? Math.min(Math.max(t.pan, -1), 1) : 0
   }));
 }
 
@@ -877,8 +891,9 @@ function playNote(
   dur: number
 ): void {
   const peak = VOICE_PEAK * track.volume * noteGain(note.gain);
+  const out = track.pan === 0 ? bus : panTo(ctx, bus, track.pan, at);
   if (note.drum) {
-    playDrum(ctx, note.drum, at, peak, bus);
+    playDrum(ctx, note.drum, at, peak, out);
     return;
   }
   // Pads play their full length so they sustain and connect; plucks trim
@@ -892,7 +907,15 @@ function playNote(
     slideFrom: shift(note.slideFrom),
     slideTo: note.slideNext && following && !following.drum ? shift(following.freq) : undefined
   };
-  playTone(ctx, freq, at, playDur, track.wave, peak, bus, track.envelope, track.detune, motion);
+  playTone(ctx, freq, at, playDur, track.wave, peak, out, track.envelope, track.detune, motion);
+}
+
+/** A panner at `pan` feeding `bus`, for one note of a panned voice. */
+function panTo(ctx: BaseAudioContext, bus: AudioNode, pan: number, at: number): StereoPannerNode {
+  const panner = ctx.createStereoPanner();
+  panner.pan.setValueAtTime(pan, at);
+  panner.connect(bus);
+  return panner;
 }
 
 /**
@@ -1145,7 +1168,7 @@ export interface RenderState {
 }
 
 /**
- * Renders the first `seconds` of a score, from the top, into a mono
+ * Renders the first `seconds` of a score, from the top, into a stereo
  * `AudioBuffer` through an `OfflineAudioContext`, using the same graph and the
  * same scheduler the live engine plays it with. For development tools (the
  * jukebox) that need to hear or compare a score without a game around it.
@@ -1163,7 +1186,10 @@ export async function renderScore(
   if (!Number.isFinite(sampleRate) || sampleRate <= 0) return null;
   let ctx: OfflineAudioContext;
   try {
-    ctx = new Ctor(1, Math.ceil(seconds * sampleRate), sampleRate);
+    // Stereo, for `Track.pan`. Every node before a panner is mono, and the
+    // destination up-mixes a mono input by copying it to both sides, so an
+    // unpanned score renders today's mono samples in each channel.
+    ctx = new Ctor(2, Math.ceil(seconds * sampleRate), sampleRate);
   } catch {
     // A rate the browser does not support is a RangeError from the constructor.
     return null;

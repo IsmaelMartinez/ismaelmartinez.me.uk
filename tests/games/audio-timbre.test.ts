@@ -1,6 +1,6 @@
 /**
- * The engine's opt-in instrument: drums, pulse duties, vibrato, slides, and
- * the offline render. Each is read off the recording context's graph log (see
+ * The engine's opt-in instrument: drums, pulse duties, vibrato, slides, pan,
+ * and the offline render. Each is read off the recording context's graph log (see
  * `audio-graph.ts`), so an assertion names the exact node call it expects.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -242,6 +242,48 @@ describe('slides', () => {
   });
 });
 
+describe('pan', () => {
+  it('puts a panned note through its own panner, set at the onset, into the bus', () => {
+    const log = playLine([{ freq: 440, beats: 1 }], { pan: -1 });
+    expect(log).toContain('create panner#1()');
+    expect(args(log, 'panner#1.pan', 'setValueAtTime')).toEqual([[-1, T0]]);
+    expect(log).toContain('panner#1.connect(gain#2)');
+    // The note's envelope feeds the panner, not the bus.
+    expect(log).toContain('gain#3.connect(panner#1)');
+    expect(log).not.toContain('gain#3.connect(gain#2)');
+  });
+
+  it('pans a drum the same way', () => {
+    const log = playLine([{ freq: REST, beats: 1, drum: 'kick' }], { pan: 0.5 });
+    expect(args(log, 'panner#1.pan', 'setValueAtTime')).toEqual([[0.5, T0]]);
+    expect(log).toContain('gain#3.connect(panner#1)');
+  });
+
+  it('makes no panner at the centre, and clamps or centres a bad value', () => {
+    for (const pan of [0, NaN, Infinity]) {
+      expect(playLine([{ freq: 440, beats: 1 }], { pan }).some(l => l.startsWith('create panner'))).toBe(false);
+    }
+    expect(args(playLine([{ freq: 440, beats: 1 }], { pan: 3 }), 'panner#1.pan', 'setValueAtTime')).toEqual([[1, T0]]);
+    expect(args(playLine([{ freq: 440, beats: 1 }], { pan: -3 }), 'panner#1.pan', 'setValueAtTime')).toEqual([[-1, T0]]);
+  });
+
+  it('pans through a layer gain, and a stinger past the layers straight to the bus', () => {
+    const log = drive(
+      {
+        tempo: 60,
+        tracks: [{ name: 'lead', pan: 1, melody: [{ freq: 440, beats: 4 }] }],
+        stingers: { win: [[{ freq: 880, beats: 1 }]] }
+      },
+      1,
+      [{ at: 0.5, run: a => a.playStinger('win') }]
+    ).split('\n');
+    // Master, bus, lane, then the voice's layer gain is gain#4.
+    expect(log).toContain('panner#1.connect(gain#4)');
+    expect(log).toContain('panner#2.connect(gain#2)');
+    expect(args(log, 'panner#2.pan', 'setValueAtTime')[0][0]).toBe(1);
+  });
+});
+
 describe('renderScore', () => {
   it('resolves to null where there is no OfflineAudioContext', async () => {
     await expect(renderScore(SNAKE_ROUND13_MUSIC, 1)).resolves.toBeNull();
@@ -264,7 +306,7 @@ describe('renderScore', () => {
       }
     });
     await expect(renderScore(SNAKE_ROUND13_MUSIC, seconds, 8000)).resolves.toBe(rendered);
-    expect(made).toEqual([1, 32000, 8000]);
+    expect(made).toEqual([2, 32000, 8000]);
     expect(ctx.log.slice(0, 2)).toEqual(['create gain#1()', `gain#1.gain.value = ${SNAKE_ROUND13_MUSIC.volume}`]);
 
     // Node numbering differs (live interleaves voices per 100 ms window, the

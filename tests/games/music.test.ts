@@ -9,6 +9,7 @@ import {
   lowestVoiceIndex,
   passLine,
   passSecondsAtFastest,
+  sceneScore,
   seamArrivals,
   unsyncopatedWindows
 } from './music-gates';
@@ -462,6 +463,21 @@ describe('the round 2 gates', () => {
       expect(Object.keys(PASS_FLOOR_SECONDS)).toContain(profile.session);
       if (profile.fastestTempo !== undefined) expect(profile.fastestTempo).toBeGreaterThanOrEqual(music.tempo!);
     }
+  });
+
+  it('finds a profile for every scene a score writes, and none for a scene it does not', () => {
+    for (const { name, music, profile } of DISCOVERED) {
+      expect(Object.keys(profile.scenes ?? {}).sort(), name).toEqual(Object.keys(music.form?.scenes ?? {}).sort());
+    }
+  });
+
+  const SCENES = DISCOVERED.flatMap(({ name, music, profile }) =>
+    Object.keys(music.form?.scenes ?? {}).map(scene => ({ name: `${name}:${scene}`, scene, music, profile }))
+  );
+
+  it.each(SCENES)('$name clears every gate on its own loop', ({ scene, music, profile }) => {
+    const failed = failedGates(sceneScore(music, scene), profile.scenes![scene]);
+    expect(failed, `fails ${failed.join(', ')}`).toEqual([]);
   });
 
   it.each(DISCOVERED)(

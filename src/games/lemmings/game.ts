@@ -266,8 +266,8 @@ export function initLemmingsGame(): void {
   const board = initScoreboard(document.getElementById('highscores'));
 
   // Each act has its own score and its own audio instance: the engine takes
-  // one score per createGameAudio, and a form's order runs on into its next
-  // section, so four acts sharing one form would play into each other. Only
+  // one score per createGameAudio, and the acts differ in tempo, key, lead
+  // wave, stingers and danger variant, which a form's scenes share. Only
   // the act in force exists, replaced when play crosses into another act
   // (see playActMusic); the mute preferences are global storage, which each
   // new instance reads when it is made.

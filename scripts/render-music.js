@@ -26,6 +26,7 @@
  * the feature a flag asks for is skipped, and the file is named after the
  * state the way the page names its downloads, e.g. cascade-danger-from-b.wav:
  *
+ *   --scene=<name>           start in this scene of the form
  *   --danger                 start in the form's danger variant
  *   --section=<name>         start at this section of the order
  *   --layer=<voice>=on|off   switch a voice, by name or index (repeatable)
@@ -66,16 +67,17 @@ const ARGS = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const LABEL = (ARGS[0] || defaultLabel()).replace(/[^\w.-]/g, '-');
 const ONLY = ARGS.slice(1);
 
-const STATE = { danger: false, section: '', layers: [] };
+const STATE = { scene: '', danger: false, section: '', layers: [] };
 for (const flag of FLAGS) {
   const [key, ...rest] = flag.slice(2).split('=');
   const value = rest.join('=');
-  if (key === 'danger' && !value) STATE.danger = true;
+  if (key === 'scene' && value) STATE.scene = value;
+  else if (key === 'danger' && !value) STATE.danger = true;
   else if (key === 'section' && value) STATE.section = value;
   else if (key === 'layer' && /^.+=(on|off)$/.test(value)) {
     const at = value.lastIndexOf('=');
     STATE.layers.push({ voice: value.slice(0, at), on: value.slice(at + 1) === 'on' });
-  } else throw new Error(`unknown flag ${flag} (have --danger, --section=<name>, --layer=<voice>=on|off)`);
+  } else throw new Error(`unknown flag ${flag} (have --scene=<name>, --danger, --section=<name>, --layer=<voice>=on|off)`);
 }
 const OUT = join(REPO, 'music-renders', LABEL);
 mkdirSync(OUT, { recursive: true });
@@ -98,6 +100,13 @@ try {
    * Returns null when the card is ready.
    */
   async function applyState(card) {
+    if (STATE.scene) {
+      const picker = card.locator('[data-scene]');
+      if (!(await picker.count())) return 'no scenes';
+      const names = await picker.locator('option').evaluateAll(opts => opts.map(o => o.value));
+      if (!names.includes(STATE.scene)) return `no scene ${STATE.scene}`;
+      await picker.selectOption(STATE.scene);
+    }
     if (STATE.danger) {
       const box = card.locator('[data-danger]');
       if (!(await box.count())) return 'no danger variant';

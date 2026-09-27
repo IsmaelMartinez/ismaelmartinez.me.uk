@@ -5,8 +5,8 @@
  * The page renders a score one voice at a time and sums the voices (see
  * `renderMix` in `jukebox.astro` for why), so the chosen state has to be
  * expressed per voice: a voice that is switched off is simply left out of the
- * sum, and each voice's render starts in the same danger variant and at the
- * same section as the whole score would.
+ * sum, and each voice's render starts in the same scene, danger variant and
+ * section as the whole score would.
  */
 import type { GameAudioOptions, Note, RenderState, Track } from '../games/engine/audio';
 
@@ -14,6 +14,8 @@ import type { GameAudioOptions, Note, RenderState, Track } from '../games/engine
 export interface ControlState {
   /** Whether each voice sounds, in the order of `tracks`. */
   layers: boolean[];
+  /** Play this scene of the form; empty for the form's `order`. */
+  scene: string;
   /** Start in the form's danger variant. */
   danger: boolean;
   /** Start at this section of the order; empty for the top (intro included). */
@@ -30,20 +32,27 @@ export function voiceLabel(track: Track, index: number): string {
   return track.name ?? String(index);
 }
 
+/** The scenes a picker can move to, as the form writes them. */
+export function sceneNames(music: GameAudioOptions): string[] {
+  return Object.keys(music.form?.scenes ?? {});
+}
+
 /**
  * The sections a picker can start from, in play order: the order's first,
- * then any the danger order adds, each name once.
+ * then those the scenes and the danger order add, each name once.
  */
 export function sectionNames(music: GameAudioOptions): string[] {
   const form = music.form;
   if (!form) return [];
-  return [...new Set([...form.order, ...(form.danger?.order ?? [])])];
+  const scenes = Object.values(form.scenes ?? {}).flatMap(scene => scene.order);
+  return [...new Set([...form.order, ...scenes, ...(form.danger?.order ?? [])])];
 }
 
 /** The controls as a score starts: each voice as its score says, outside danger, from the top. */
 export function defaultControls(music: GameAudioOptions): ControlState {
   return {
     layers: music.tracks.map(t => !t.startsMuted),
+    scene: '',
     danger: false,
     section: ''
   };
@@ -59,7 +68,8 @@ export function renderState(music: GameAudioOptions, control: ControlState): Ren
   if (hasLayers(music) || control.layers.some((on, t) => on !== !music.tracks[t]?.startsMuted)) {
     state.layers = Object.fromEntries(music.tracks.map((_, t) => [String(t), control.layers[t] ?? true]));
   }
-  if (control.danger && music.form?.danger) state.danger = true;
+  if (inDanger(music, control)) state.danger = true;
+  else if (inScene(music, control)) state.scene = control.scene;
   if (control.section) state.section = control.section;
   return state;
 }
@@ -106,7 +116,8 @@ export function renderParts(
  */
 export function renderFileName(name: string, music: GameAudioOptions, control: ControlState): string {
   const bits = [name];
-  if (control.danger && music.form?.danger) bits.push('danger');
+  if (inDanger(music, control)) bits.push('danger');
+  else if (inScene(music, control)) bits.push(`scene-${control.scene}`);
   if (control.section) bits.push(`from-${control.section}`);
   const differs = (on: boolean) =>
     music.tracks.flatMap((track, t) =>
@@ -126,6 +137,32 @@ export function loopBeats(music: GameAudioOptions): number {
   const form = music.form;
   if (!form) return lineBeats(music.tracks[0]?.melody);
   return form.order.reduce((sum, name) => sum + lineBeats(form.sections[name]?.[0]), 0);
+}
+
+/** Whether the controls start the score in its danger variant, which wins over a scene as it does live. */
+function inDanger(music: GameAudioOptions, control: ControlState): boolean {
+  return control.danger && !!music.form?.danger;
+}
+
+function inScene(music: GameAudioOptions, control: ControlState): boolean {
+  return !!control.scene && !!music.form?.scenes?.[control.scene];
+}
+
+/**
+ * The loop a render with these controls plays: the danger order or the scene
+ * when one is chosen, at its own tempo if it has one (null leaves the card's)
+ * and with no intro, since a render from either skips it; otherwise the
+ * order, after the intro.
+ */
+export function renderLoop(
+  music: GameAudioOptions,
+  control: ControlState
+): { beats: number; intro: number; tempo: number | null } {
+  const form = music.form;
+  const variant = inDanger(music, control) ? form!.danger! : inScene(music, control) ? form!.scenes![control.scene] : null;
+  if (!variant) return { beats: loopBeats(music), intro: introBeats(music), tempo: null };
+  const beats = variant.order.reduce((sum, name) => sum + lineBeats(form!.sections[name]?.[0]), 0);
+  return { beats, intro: 0, tempo: variant.tempo ?? null };
 }
 
 /** Beats in the form's once-only intro, 0 without one. */

@@ -1,57 +1,26 @@
 /**
- * CALCIO '90's score is four scenes in one form (see `src/games/football/music.ts`),
- * and `music.test.ts` only sees the whole order, which runs the menu, the match
- * and the shootout together and leaves the final's danger order out. These
- * tests hold each scene to the round 2 gates on its own, since each is what a
- * player hears on repeat while it is playing, and pin the one-bar turn the game
- * relies on to loop a scene.
+ * CALCIO '90's score is four scenes in one form (see `src/games/football/music.ts`):
+ * the menu is the form's `order` and the match, the final and the shootout are
+ * its `scenes`. `music.test.ts` gates each of them on its own loop against the
+ * profile `MUSIC_PROFILE` gives it; these tests pin how the scenes are laid out
+ * and the stingers the game fires.
  */
 import { describe, it, expect } from 'vitest';
-import type { GameAudioOptions, MusicProfile } from '../../src/games/engine/audio';
-import { failedGates } from './music-gates';
-import {
-  BASE_TEMPO,
-  FINAL_ORDER,
-  FINAL_TEMPO,
-  FOOTBALL_MUSIC,
-  SCENES,
-  type Scene
-} from '../../src/games/football/music';
+import { FINAL_TEMPO, FOOTBALL_MUSIC, SCENES } from '../../src/games/football/music';
 
 const form = FOOTBALL_MUSIC.form!;
-
-/** The score with only `order` as its loop: what a player hears while one scene holds. */
-function sceneScore(order: readonly string[]): GameAudioOptions {
-  return { ...FOOTBALL_MUSIC, form: { sections: form.sections, order: [...order] } };
-}
 
 const beats = (line: { beats: number }[]) => line.reduce((sum, n) => sum + n.beats, 0);
 
 describe("CALCIO '90's score, scene by scene", () => {
-  it('runs the scenes in one order and takes the final from the danger order', () => {
-    expect(form.order).toEqual([...SCENES.menu, ...SCENES.match, ...SCENES.shootout]);
-    expect(form.danger?.order).toEqual(FINAL_ORDER);
-    expect(form.danger?.tempo).toBe(FINAL_TEMPO);
-  });
-
-  it.each(Object.keys(SCENES) as Scene[])('ends the %s with a turn of exactly one bar', scene => {
-    // The game asks for the scene's top while the turn plays, and the jump lands
-    // on the next bar line: longer than a bar and the turn would be cut short.
-    const turn = form.sections[SCENES[scene].at(-1)!];
-    for (const line of turn) expect(beats(line)).toBe(4);
-  });
-
-  // The menus play at the base tempo (`game.ts` sets it on every menu screen);
-  // the match and the shootout are sized at the final's, the fastest either reaches.
-  const cases: { scene: string; order: readonly string[]; profile: MusicProfile }[] = [
-    { scene: 'menu', order: SCENES.menu, profile: { session: 'standard', fastestTempo: BASE_TEMPO } },
-    { scene: 'match', order: SCENES.match, profile: { session: 'long', fastestTempo: FINAL_TEMPO } },
-    { scene: 'final', order: FINAL_ORDER, profile: { session: 'long', fastestTempo: FINAL_TEMPO } },
-    { scene: 'shootout', order: SCENES.shootout, profile: { session: 'minimal', fastestTempo: FINAL_TEMPO } }
-  ];
-
-  it.each(cases)('clears every gate in the $scene on its own', ({ order, profile }) => {
-    expect(failedGates(sceneScore(order), profile)).toEqual([]);
+  it('plays the menu as the order and every other scene as a scene of its own, the final at its tempo', () => {
+    expect(form.order).toEqual(SCENES.menu);
+    expect(form.scenes).toEqual({
+      match: { order: SCENES.match },
+      final: { order: SCENES.final, tempo: FINAL_TEMPO },
+      shootout: { order: SCENES.shootout }
+    });
+    expect(form.danger).toBeUndefined();
   });
 
   it('writes every stinger one line per track, short enough to land inside a bar or so', () => {

@@ -266,6 +266,93 @@ describe('setDanger', () => {
   });
 });
 
+const SCENED: GameAudioOptions = {
+  tempo: 60,
+  tracks: [{ wave: 'triangle' }],
+  form: {
+    sections: { a: [run(8, 200)], b: [run(8, 300)], menu: [run(4, 500)], shoot: [run(4, 600)], fast: [run(4, 900)] },
+    order: ['a', 'b'],
+    scenes: { menu: { order: ['menu'] }, shoot: { order: ['shoot'], tempo: 120 } },
+    danger: { order: ['fast'], tempo: 120 }
+  }
+};
+
+type Where = Section & { scene: string | null };
+
+describe('setScene', () => {
+  it('holds a scene on a loop until released, then picks the order up where it left it', () => {
+    const seen: Where[] = [];
+    const log = drive(SCENED, 14, [
+      { at: 1.5, run: a => expect(a.setScene('menu')).toBe(true) },
+      { at: 9.5, run: a => seen.push(a.section() as Where) },
+      { at: 9.5, run: a => expect(a.setScene(null)).toBe(true) },
+      { at: 13, run: a => seen.push(a.section() as Where) }
+    ]);
+    expectTimes(timesOf(log, 200), [0.05, 1.05, 2.05, 3.05]);
+    // Two whole passes of the one-bar scene, where the order would have run on into b.
+    expectTimes(timesOf(log, 500), [4.05, 5.05, 6.05, 7.05, 8.05, 9.05, 10.05, 11.05]);
+    // Released at beat 2 of the second pass, it leaves on the bar line, for the b the scene interrupted.
+    expectTimes(timesOf(log, 300).slice(0, 2), [12.05, 13.05]);
+    expect(seen[0]).toMatchObject({ name: 'menu', scene: 'menu', danger: false });
+    expect(seen[1]).toMatchObject({ name: 'b', scene: null, danger: false });
+  });
+
+  it('plays a scene at its own tempo, and moves straight from one scene to another', () => {
+    const log = drive(SCENED, 8, [
+      { at: 1.5, run: a => a.setScene('shoot') },
+      { at: 6.2, run: a => a.setScene('menu') }
+    ]);
+    // At 6.2 the second pass has played 1 of its 4 beats, so the bar line is its end.
+    expectTimes(timesOf(log, 600), [4.05, 4.55, 5.05, 5.55, 6.05, 6.55, 7.05, 7.55]);
+    expectTimes(timesOf(log, 500).slice(0, 1), [8.05]);
+  });
+
+  it('comes back from danger to the scene danger interrupted', () => {
+    const seen: Where[] = [];
+    const log = drive(SCENED, 13, [
+      { at: 1.5, run: a => a.setScene('menu') },
+      { at: 5.5, run: a => a.setDanger(true) },
+      { at: 9, run: a => seen.push(a.section() as Where) },
+      { at: 10.2, run: a => a.setDanger(false) },
+      { at: 12.5, run: a => seen.push(a.section() as Where) }
+    ]);
+    expectTimes(timesOf(log, 900), [8.05, 8.55, 9.05, 9.55, 10.05, 10.55, 11.05, 11.55]);
+    expectTimes(timesOf(log, 500).slice(-2), [12.05, 13.05]);
+    expect(timesOf(log, 300)).toEqual([]);
+    expect(seen[0]).toMatchObject({ name: 'fast', scene: 'danger', danger: true });
+    expect(seen[1]).toMatchObject({ name: 'menu', scene: 'menu' });
+  });
+
+  it('stays put when asked for the scene it is in before a move lands', () => {
+    const log = drive(SCENED, 10, [
+      { at: 1.5, run: a => a.setScene('menu') },
+      { at: 2, run: a => a.setScene(null) }
+    ]);
+    expect(timesOf(log, 500)).toEqual([]);
+    expectTimes(timesOf(log, 300).slice(0, 1), [8.05]);
+  });
+
+  it('refuses a scene the form does not have, and a score that is not playing', () => {
+    const results: boolean[] = [];
+    const log = drive(SCENED, 6, [
+      { at: 0.5, run: a => results.push(a.setScene('nope')) },
+      { at: 1, run: a => a.stop() },
+      { at: 1.5, run: a => results.push(a.setScene('menu')) },
+      { at: 2, run: a => a.start() }
+    ]);
+    expect(results).toEqual([false, false]);
+    expect(timesOf(log, 500)).toEqual([]);
+    expect(createGameAudio(SECTIONS).setScene('menu')).toBe(false);
+  });
+
+  it('refuses danger written as a scene, with or without form.danger beside it', () => {
+    const asScene = { ...SCENED.form!, scenes: { danger: { order: ['fast'] } } };
+    expect(() => createGameAudio({ ...SCENED, form: asScene })).toThrow(/reserved/);
+    const { danger: _danger, ...withoutDanger } = asScene;
+    expect(() => createGameAudio({ ...SCENED, form: withoutDanger })).toThrow(/reserved/);
+  });
+});
+
 const STUNG: GameAudioOptions = {
   tempo: 120,
   tracks: [{ wave: 'triangle', melody: run(8, 440) }, { wave: 'triangle', envelope: 'pad', melody: [n(110, 4)] }],
@@ -393,5 +480,14 @@ describe('renderScore from a given state', () => {
     const log = await render(DANGER, 9, { section: 'b' });
     expectTimes(timesOf(log, 300).slice(0, 2), [0, 1]);
     expectTimes(timesOf(log, 200).slice(0, 1), [8]);
+  });
+
+  it('starts in a named scene at its tempo, and in danger when asked for both', async () => {
+    const log = await render(SCENED, 2, { scene: 'shoot' });
+    expectTimes(timesOf(log, 600), [0, 0.5, 1, 1.5]);
+    expect(timesOf(log, 200)).toEqual([]);
+    const both = await render(SCENED, 2, { scene: 'shoot', danger: true });
+    expectTimes(timesOf(both, 900), [0, 0.5, 1, 1.5]);
+    expect(timesOf(both, 600)).toEqual([]);
   });
 });

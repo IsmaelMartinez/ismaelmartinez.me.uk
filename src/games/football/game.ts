@@ -23,7 +23,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC, SCENES, type Scene } from './music';
+import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC, type Scene } from './music';
 import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
 import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
 import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
@@ -319,8 +319,8 @@ export function initFootballGame(): void {
    * AudioContext, so separate scores for the menus, the match and the shootout
    * would mean separate contexts and a mute toggle re-wired on every screen.
    * Instead `music.ts` writes each scene as a group of sections in one form,
-   * and `playScene` jumps between them at the next bar line; the final is the
-   * form's danger order, and the knockout rounds also lean on the tempo.
+   * the menu as its order and the rest as its scenes, and `playScene` moves
+   * between them at the next bar line; the knockout rounds also lean on the tempo.
    */
   const audio = createGameAudio(FOOTBALL_MUSIC);
   wireSoundToggles(audio);
@@ -338,10 +338,6 @@ export function initFootballGame(): void {
   let musicOn = false;
   /** Set once a player has pressed start, after which the title screen has its theme too. */
   let musicUnlocked = false;
-  /** The scene the score should be holding: the final is the danger order, the rest are `SCENES`. */
-  let scene: Scene | 'final' = 'menu';
-  /** The start time of the section `holdScene` last asked to loop from, so it asks once per section. */
-  let heldAt = -1;
   let clock = 0;
   let run: RunState | null = null;
   let match: MatchState | null = null;
@@ -666,38 +662,18 @@ export function initFootballGame(): void {
 
   /**
    * Moves the score to a scene, starting it first if nothing is playing yet
-   * (from the top, which is the menu theme). The jump lands on the next bar
-   * line; a scene already playing is left where it is. The menus play at the
-   * score's own tempo and the match and the shootout at the stage's.
+   * (from the top, which is the menu theme). The move lands on the next bar
+   * line and the scene then loops until the next one; a scene already playing
+   * is left where it is. The menus play at the score's own tempo and the match
+   * and the shootout at the stage's; the final has its own.
    */
-  function playScene(next: Scene | 'final', tempo = BASE_TEMPO): void {
-    scene = next;
+  function playScene(next: Scene, tempo = BASE_TEMPO): void {
     if (!musicOn) {
       audio.start();
       musicOn = true;
     }
     audio.setTempo(tempo);
-    audio.setDanger(next === 'final');
-    if (next === 'final') return;
-    const at = audio.section();
-    if (!at || at.danger || !SCENES[next].includes(at.name)) audio.setSection(SCENES[next][0]);
-  }
-
-  /**
-   * Keeps the scene looping inside the one order: while a scene's one-bar turn
-   * plays, ask for its first section, which lands on the turn's own end. A
-   * section from another scene (a turn missed while the tab was asleep) is
-   * brought back the same way, a bar late. The final needs none of this, since
-   * the danger order loops on its own.
-   */
-  function holdScene(): void {
-    if (!musicOn || scene === 'final') return;
-    const at = audio.section();
-    if (!at || at.danger || at.start === heldAt) return;
-    const group = SCENES[scene];
-    if (at.name !== group[group.length - 1] && group.includes(at.name)) return;
-    heldAt = at.start;
-    audio.setSection(group[0]);
+    audio.setScene(next === 'menu' ? null : next);
   }
 
   /* ---------------------------------------------------------------- */
@@ -988,9 +964,6 @@ export function initFootballGame(): void {
   function update(dt: number): void {
     clock += dt;
     const input = readInput();
-
-    // Before the pause check: a paused match keeps its scene looping too.
-    holdScene();
 
     const pauseDown = keys.has('p') || keys.has('Escape');
     if (tapped.pause || (pauseDown && !prevPause.down)) togglePause();

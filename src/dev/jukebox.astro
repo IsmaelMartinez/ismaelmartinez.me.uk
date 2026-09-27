@@ -63,8 +63,10 @@
         hasLayers,
         introBeats,
         loopBeats,
+        renderLoop,
         renderFileName,
         renderParts,
+        sceneNames,
         sectionNames,
         voiceLabel
       } from './jukeboxState';
@@ -129,14 +131,16 @@
        * Builds a card's adaptive controls into its `data-extra-controls` row,
        * each one only when the score has the feature: a toggle per voice for a
        * score with named or initially silent voices, a section picker and a
-       * readout for a score with a form, a Danger toggle for a form with a
+       * readout for a score with a form, a scene picker for a form with
+       * scenes, a Danger toggle for a form with a
        * danger variant, a button per stinger, and Pause for every score. The
        * live controls act on the card's GameAudio; the render reads `state()`.
        */
       function mountExtraControls(
         el: HTMLElement,
         music: GameAudioOptions,
-        audio: () => GameAudio
+        audio: () => GameAudio,
+        changed: () => void
       ): ExtraControls {
         const control = defaultControls(music);
         let playing = false;
@@ -154,6 +158,21 @@
             });
           });
           el.append(group);
+        }
+
+        const scenes = sceneNames(music);
+        if (scenes.length) {
+          const label = document.createElement('label');
+          const picker = document.createElement('select');
+          picker.setAttribute('data-scene', '');
+          picker.append(new Option('the order', ''), ...scenes.map(name => new Option(name, name)));
+          picker.addEventListener('change', () => {
+            control.scene = picker.value;
+            if (playing) audio().setScene(picker.value || null);
+            changed();
+          });
+          label.append('Scene ', picker);
+          el.append(label);
         }
 
         const sections = sectionNames(music);
@@ -178,6 +197,7 @@
           box.addEventListener('change', () => {
             control.danger = box.checked;
             if (playing) audio().setDanger(box.checked);
+            changed();
           });
         }
 
@@ -205,7 +225,8 @@
         const showSection = () => {
           if (!readout) return;
           const now = playing ? audio().section() : null;
-          readout.textContent = now ? `now: ${now.name}${now.danger ? ' (danger)' : ''}` : 'now: stopped';
+          const where = now?.danger ? ' (danger)' : now?.scene ? ` (${now.scene})` : '';
+          readout.textContent = now ? `now: ${now.name}${where}` : 'now: stopped';
         };
         showSection();
 
@@ -214,6 +235,7 @@
           started() {
             playing = true;
             const a = audio();
+            if (control.scene) a.setScene(control.scene);
             if (control.danger) a.setDanger(true);
             if (control.section) a.setSection(control.section);
             if (readout && timer === null) timer = setInterval(showSection, READOUT_MS);
@@ -292,6 +314,7 @@
           `${music.tracks.length} voices, ${beats} beats a loop${intro ? ` after ${intro} of intro` : ''}, ${baseTempo} bpm` +
           (music.echo ? ', echo' : '') +
           (music.form ? `, form ${music.form.order.join(' ')}` : '') +
+          Object.entries(music.form?.scenes ?? {}).map(([scene, s]) => `, ${scene} ${s.order.join(' ')}`).join('') +
           (music.form?.danger ? `, danger ${music.form.danger.order.join(' ')}` : '');
         tempoIn.value = String(baseTempo);
 
@@ -299,11 +322,15 @@
           const bpm = Number(tempoIn.value);
           return Number.isFinite(bpm) && bpm > 0 ? bpm : baseTempo;
         };
-        const seconds = () => ((Math.max(Number(loopsIn.value) || 0, 0) * beats + intro) * 60) / tempo();
+        // A render sizes itself to the loop it plays: a scene or the danger
+        // variant at its own tempo, without the intro it skips.
+        const seconds = () => {
+          const loop = renderLoop(music, extra.state());
+          return ((Math.max(Number(loopsIn.value) || 0, 0) * loop.beats + loop.intro) * 60) / (loop.tempo ?? tempo());
+        };
         const showSeconds = () => {
           secondsOut.textContent = `= ${seconds().toFixed(1)} s`;
         };
-        showSeconds();
 
         let audio: GameAudio | null = null;
         const getAudio = () => {
@@ -315,7 +342,8 @@
           }
           return audio;
         };
-        const extra = mountExtraControls(q<HTMLElement>('[data-extra-controls]'), music, getAudio);
+        const extra = mountExtraControls(q<HTMLElement>('[data-extra-controls]'), music, getAudio, () => showSeconds());
+        showSeconds();
         const stop = () => {
           audio?.stop();
           extra.stopped();

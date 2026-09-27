@@ -353,7 +353,9 @@ export const CASCADE_MUSIC: GameAudioOptions = {
     { name: 'harmony', wave: 'pulse25', volume: 0.55, adsr: { attack: 0.003, decay: 0.1, sustain: 0.45, release: 0.03 } },
     // The wave channel: a 32-step trapezoid (a square with its edges cut),
     // quantised to the Game Boy's 4 bits, held at one level as the channel's
-    // volume shift holds it.
+    // volume shift holds it. The ADSR is a gate, not a shape: full level for
+    // the whole note (sustain 1), with only a 2 ms onset and 20 ms release so
+    // the note edges do not click, where the default pluck would decay it.
     {
       name: 'bass',
       volume: 0.85,
@@ -364,7 +366,7 @@ export const CASCADE_MUSIC: GameAudioOptions = {
         ],
         bits: 4
       },
-      adsr: { attack: 0.002, decay: 0.05, sustain: 0.9, release: 0.02 }
+      adsr: { attack: 0.002, decay: 0.01, sustain: 1, release: 0.02 }
     },
     // The noise channel in its short (metallic) mode.
     { name: 'ticks', volume: 0.3, noise: 'short' }

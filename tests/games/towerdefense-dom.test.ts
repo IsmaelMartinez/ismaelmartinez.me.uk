@@ -29,6 +29,8 @@ import {
   mountHtml,
   pressKey
 } from './dom-helpers';
+import { makeRecordingContext, onsets } from './audio-graph';
+import { BASE_TEMPO, TOWERDEFENSE_MUSIC } from '../../src/games/towerdefense/music';
 
 vi.mock('../../src/games/engine/globalScores', async () =>
   (await import('./dom-helpers')).mockGlobalScores()
@@ -546,7 +548,7 @@ describe('Line Hold music', () => {
     expect(mockAudio.playStinger).not.toHaveBeenCalled();
   });
 
-  it('brings the wave layer in with a horn call when a wave launches', () => {
+  it('brings the wave layer in with a launch hit when a wave launches', () => {
     startRun();
     waveBtn().click();
     expect(layerState('lead')).toBe(true);
@@ -554,6 +556,88 @@ describe('Line Hold music', () => {
     expect(mockAudio.playStinger).toHaveBeenCalledWith('launch');
     // Wave 1 is nowhere near the finale.
     expect(mockAudio.setDanger).not.toHaveBeenCalledWith(true);
+  });
+
+  it('asks for the wave layer at the top of the march, not at once (#403)', () => {
+    startRun();
+    waveBtn().click();
+    const entries = mockAudio.setLayer.mock.calls.filter(([, on]) => on);
+    expect(entries.map(([track]) => track)).toEqual(['lead', 'drums']);
+    for (const call of entries) expect(call[3]).toBe('section');
+    expect(mockAudio.setSection).toHaveBeenCalledWith(TOWERDEFENSE_MUSIC.form!.order[0]);
+  });
+
+  it('plays the launch stinger nowhere near the lead’s voice or register (#403)', () => {
+    const { tracks, form, stingers } = TOWERDEFENSE_MUSIC;
+    const lead = tracks.findIndex(t => t.name === 'lead');
+    const leadNotes = [form!.order, form!.danger!.order].flat().flatMap(name => form!.sections[name][lead]);
+    const lowestLead = Math.min(...leadNotes.filter(n => n.freq > 0).map(n => n.freq));
+    const launch = stingers!.launch;
+    expect(launch[lead]).toEqual([]);
+    const pitched = launch.flat().filter(n => !n.drum && n.freq > 0);
+    expect(pitched.length).toBeGreaterThan(0);
+    for (const note of pitched) expect(note.freq).toBeLessThan(lowestLead);
+  });
+
+  it('brings the tune in on the first note of a section, whatever bar the launch lands in (#403)', async () => {
+    // The calls the game makes at a launch, replayed on the real engine
+    // playing the real score from a moment in the middle of a phrase.
+    startRun();
+    for (const fn of Object.values(mockAudio)) fn.mockClear();
+    waveBtn().click();
+    const calls = Object.entries(mockAudio)
+      .flatMap(([name, fn]) => fn.mock.calls.map((args, i) => ({ name, args, order: fn.mock.invocationCallOrder[i] })))
+      .sort((a, b) => a.order - b.order);
+    expect(calls.map(c => c.name)).toContain('setSection');
+    const engine = await vi.importActual<typeof import('../../src/games/engine/audio')>('../../src/games/engine/audio');
+    const lead = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'lead');
+    const top = TOWERDEFENSE_MUSIC.form!.sections[TOWERDEFENSE_MUSIC.form!.order[0]][lead][0].freq;
+    vi.useFakeTimers();
+    try {
+      // Bar 1 beat 2, bar 3 beat 3 and bar 6 beat 4 of the march's first section.
+      for (const launchAt of [0.6, 5.1, 11.7]) {
+        const ctx = makeRecordingContext();
+        (window as unknown as { AudioContext: unknown }).AudioContext = class {
+          constructor() {
+            return ctx;
+          }
+        };
+        const audio = engine.createGameAudio(TOWERDEFENSE_MUSIC);
+        audio.start();
+        let t = 0;
+        const play = (until: number) => {
+          while (t < until) {
+            t += 0.025;
+            ctx.currentTime = t;
+            vi.advanceTimersByTime(25);
+          }
+        };
+        play(launchAt);
+        for (const { name, args } of calls) (audio as unknown as Record<string, (...a: unknown[]) => void>)[name](...args);
+        play(launchAt + 3);
+        const landed = audio.section()!;
+        audio.dispose();
+        const log = ctx.log.join('\n');
+        // The lead's layer gain is the first voice gain on the lane, the gain feeding the bus.
+        const lane = /^(gain#\d+)\.connect\(gain#2\)$/m.exec(log)![1];
+        const leadGain = new RegExp(`^(gain#\\d+)\\.connect\\(${lane}\\)$`, 'm').exec(log)![1];
+        const opens = log.split('\n').filter(l => l.startsWith(`${leadGain}.gain.setTargetAtTime(1,`));
+        expect(opens).toHaveLength(1);
+        const opensAt = Number(/, ([^,]+), [^,]+\)$/.exec(opens[0])![1]);
+        // It opens where the section the jump landed on starts, within a bar
+        // of the launch, and that is the march's first section, whose first
+        // lead note is the one sounding there.
+        expect(landed.name).toBe(TOWERDEFENSE_MUSIC.form!.order[0]);
+        expect(opensAt).toBeCloseTo(landed.start, 9);
+        expect(opensAt).toBeGreaterThan(launchAt);
+        expect(opensAt - launchAt).toBeLessThanOrEqual((4 * 60) / BASE_TEMPO + 0.1);
+        const atOpen = onsets(log).filter(([, time]) => Math.abs(time - opensAt) < 1e-9).map(([f]) => f);
+        expect(atOpen).toContain(top);
+      }
+    } finally {
+      delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+      vi.useRealTimers();
+    }
   });
 
   it('launches with the layer too when the build countdown runs out on its own', () => {
@@ -587,7 +671,7 @@ describe('Line Hold music', () => {
     expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 
-  it('marches the finale and every wave after it to the horde, and releases it between waves', () => {
+  it('marches the finale and every wave after it to the horde, and holds it between waves (#403)', () => {
     keepStands.on = true;
     startRun();
     const dangerCalls = (on: boolean) => mockAudio.setDanger.mock.calls.filter(([was]) => was === on).length;
@@ -607,7 +691,11 @@ describe('Line Hold music', () => {
     // Waves 1 to 17 are the march; 18, the finale, and the endless waves
     // after it are the horde.
     expect(hordeLaunches).toEqual([18, 19, 20]);
-    // Every wave that ended, 18 and 19 among them, handed its lull back to the bed.
-    expect(dangerCalls(false)).toBe(19);
+    // Nothing ever releases it: the lulls after 18 and 19 stay in the horde,
+    // so tempo and register no longer flip twice a wave cycle.
+    expect(dangerCalls(false)).toBe(0);
+    // And each horde wave starts the horde's tune from its top.
+    const hordeTop = TOWERDEFENSE_MUSIC.form!.danger!.order[0];
+    expect(mockAudio.setSection.mock.calls.filter(call => (call as unknown[])[0] === hordeTop)).toHaveLength(3);
   });
 });

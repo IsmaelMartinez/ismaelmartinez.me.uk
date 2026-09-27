@@ -363,16 +363,24 @@ export function initTowerDefenseGame(): void {
   recordEl.textContent = `${board.best()}`;
 
   const audio = createGameAudio(TOWERDEFENSE_MUSIC);
+  /** Where a wave's tune starts: the top of the march, or of the horde. */
+  const MARCH_TOP = TOWERDEFENSE_MUSIC.form?.order[0] ?? '';
+  const HORDE_TOP = TOWERDEFENSE_MUSIC.form?.danger?.order[0] ?? '';
   wireSoundToggles(audio);
 
   /**
    * The score's wave layer (see music.ts): the lead and the march come in
-   * when marchers are on the field and leave for the build lull. `fade` 0 is
-   * for putting the layer back at a run's start, where nothing is sounding.
+   * when marchers are on the field and leave for the build lull. They come in
+   * on the next section's first note rather than at once, which is what used
+   * to drop the tune in mid-phrase at a different bar every wave; `launchWave`
+   * jumps the form to a section top on the next bar line so that is at most a
+   * bar away. They leave at once. `fade` 0 is for putting the layer back at a
+   * run's start, where nothing is sounding.
    */
   function waveLayer(on: boolean, fade?: number) {
-    audio.setLayer('lead', on, fade);
-    audio.setLayer('drums', on, fade);
+    const at = on ? 'section' : 'now';
+    audio.setLayer('lead', on, fade, at);
+    audio.setLayer('drums', on, fade, at);
   }
 
   function addFloater(tx: number, ty: number, text: string, color: string) {
@@ -453,10 +461,18 @@ export function initTowerDefenseGame(): void {
     bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
     bannerTimer = 1.8;
     showToast(`⚔️ ${bannerText}`);
-    waveLayer(true);
+    // The finale and every endless wave after it march to the horde, which
+    // then holds through the build lulls between them too: releasing it at
+    // each wave's end flipped tempo, section and register twice a cycle. It
+    // lasts until the run ends, since `start()` always begins outside danger.
+    const horde = waveIdx >= AUTHORED_WAVES - 1;
+    if (horde) audio.setDanger(true);
+    // Every wave's tune starts from its top on the next bar line, and the
+    // wave layer comes in there with it, quickly enough that the call's first
+    // note is heard at its full height.
+    audio.setSection(horde ? HORDE_TOP : MARCH_TOP);
+    waveLayer(true, 0.1);
     audio.playStinger('launch');
-    // The finale and every endless wave after it march to the horde.
-    if (waveIdx >= AUTHORED_WAVES - 1) audio.setDanger(true);
   }
 
   /**
@@ -513,9 +529,9 @@ export function initTowerDefenseGame(): void {
     // wave still moves the run on and still pays its interest, but scores
     // nothing. The economy counts the leaks itself, behind `leak`.
     const { held, interest } = clearWave(eco);
-    // Held or leaked, the field is empty and the lull begins: back to the bed.
+    // Held or leaked, the field is empty and the lull begins: back to the bed
+    // (the horde's own, once the finale has launched; see `launchWave`).
     waveLayer(false);
-    audio.setDanger(false);
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
     bankScore();

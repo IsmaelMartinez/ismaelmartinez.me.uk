@@ -42,15 +42,21 @@
  * run rather than a fixed loop:
  *
  * - `pad` and `bass` are the build bed and always play.
- * - `lead` and `drums` start muted and are the wave layer: `launchWave` fades
- *   them in and the end of a wave (held or leaked, both go back to building)
+ * - `lead` and `drums` start muted and are the wave layer: `launchWave` jumps
+ *   the form to the top of the march (or of the horde) on the next bar line
+ *   and brings them in there, so every wave hears the tune from its first
+ *   note, and the end of a wave (held or leaked, both go back to building)
  *   fades them out.
- * - The `launch` stinger is a horn call over a snare roll, played on every
- *   wave launch, so the moment the marchers start is heard as well as seen.
+ * - The `launch` stinger is a snare roll into a low hit on the tonic, played
+ *   on every wave launch, so the moment the marchers start is heard as well
+ *   as seen. It stays out of the lead's voice and register so it never plays
+ *   over the tune's opening.
  * - The `danger` order is the horde, a faster (138 bpm) section of driving
  *   eighth-note bass, repeated-note lead and a busier kit, switched on when
- *   the finale (wave 18) or any endless wave launches and released when that
- *   wave ends, so each build lull after it is still the calm bed.
+ *   the finale (wave 18) launches and held from then until the run ends, the
+ *   build lulls between the endless waves included. Releasing it at each
+ *   wave's end flipped tempo, section and register twice a cycle; the horde's
+ *   own pad and driving bass are the late game's lull instead.
  * - The stand-down prompt holds the run still, and the score is muffled with
  *   `setPaused` for as long as it is open rather than stopped and restarted.
  */
@@ -396,12 +402,15 @@ export const TOWERDEFENSE_MUSIC: GameAudioOptions = {
     danger: { order: ['horde', 'horde', 'horde-b'], tempo: HORDE_TEMPO }
   },
   stingers: {
-    // A bugle call on the tonic and fifth over a rising snare roll: the gate opens.
+    // The gate opens: a rising snare roll into one low hit on the tonic, in
+    // the bass and pad, half a bar long. Nothing in the lead's voice or
+    // register, since the tune itself comes in on the next bar line; a bugle
+    // call here in the lead's own pulse used to play over its opening.
     launch: [
-      [n('E5', 0.5, 0.85), n('E5', 0.25, 0.7), n('E5', 0.25, 0.75), n('A5', 1.5, 1), n('G5', 0.5, 0.8), n('A5', 1, 0.9)],
-      [n('A3', 1, 0.8), n('E4', 3, 0.85)],
-      [n('A2', 1, 0.9), r(3)],
-      [d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('snare', 0.25, 0.7), d('snare', 0.25, 0.8), d('kick', 1, 1), r(2)]
+      [],
+      [r(1), n('E4', 1, 0.85)],
+      [r(1), n('A1', 1, 1)],
+      [d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('snare', 0.25, 0.7), d('snare', 0.25, 0.8), d('kick', 1, 1)]
     ]
   }
 };

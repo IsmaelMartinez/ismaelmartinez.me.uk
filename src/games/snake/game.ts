@@ -18,7 +18,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { BASE_TEMPO, SNAKE_MUSIC, tempoForStep } from './music';
+import { BASE_TEMPO, BUZZER, SNAKE_MUSIC, stingerSeconds, tempoForStep } from './music';
 import {
   COLS,
   ROWS,
@@ -117,6 +117,35 @@ export function initSnakeGame(): void {
   const audio = createGameAudio(SNAKE_MUSIC);
   wireSoundToggles(audio);
 
+  // The buzzer is one voice, so a stinger takes it over: the tune is cut for
+  // as long as the stinger sounds, counted on the game clock, and `soloEnds`
+  // then hands the buzzer back (or, after the game-over phrase, stops it).
+  let soloLeft = 0;
+  let soloEnds: (() => void) | null = null;
+
+  /** Plays a stinger alone on the buzzer, then runs `then`; false, with the tune left on, when it did not play. */
+  function solo(name: string, then: () => void): boolean {
+    audio.setLayer(BUZZER, false, 0);
+    if (!audio.playStinger(name)) {
+      audio.setLayer(BUZZER, true, 0);
+      return false;
+    }
+    // playStinger starts its line 50 ms ahead of the audio clock.
+    soloLeft = 0.05 + stingerSeconds(name, tempoForStep(stepInterval(state.foodsEaten)));
+    // A later solo replaces an earlier one's ending: the game-over phrase
+    // must not hand the buzzer back to the tune halfway through.
+    soloEnds = then;
+    return true;
+  }
+
+  /** Ends a solo now, whatever is left of it. */
+  function settleSolo() {
+    const then = soloEnds;
+    soloEnds = null;
+    soloLeft = 0;
+    then?.();
+  }
+
   function burst(x: number, y: number, color: string, count: number) {
     // Snake's pops predate the shared radial burst: uniform 40–150 px/s
     // speeds, jittered lifetimes, drag instead of gravity, round dots —
@@ -163,6 +192,10 @@ export function initSnakeGame(): void {
     // Snake ignores bank()'s newRecord (no record toast here), but the
     // per-run baseline still has to reset for its stash gate to work.
     board.beginRun();
+    // A restart inside the game-over phrase stops the old run's music first,
+    // so the start below begins the ringtone from the top.
+    settleSolo();
+    audio.setLayer(BUZZER, true, 0);
     // The last run left the music wound up to wherever its snake got to.
     audio.setTempo(BASE_TEMPO);
     audio.setPaused(false);
@@ -175,8 +208,12 @@ export function initSnakeGame(): void {
     shake = 0.4;
     const head = state.snake[0];
     burst(px(head.x), px(head.y), '#f87171', 26);
-    audio.playSfx('gameover');
-    audio.stop();
+    // The buzzer's own crash, then silence; with the music muted the stinger
+    // does not play and the effect marks the death instead.
+    if (!solo('gameover', () => audio.stop())) {
+      audio.playSfx('gameover');
+      audio.stop();
+    }
   }
 
   function advance() {
@@ -197,7 +234,7 @@ export function initSnakeGame(): void {
       syncArena();
       // A rung only arrives on an apple, so the eat effect below already marks
       // it for a player with the music off; the stinger is the music's answer.
-      audio.playStinger('walls');
+      solo('walls', () => audio.setLayer(BUZZER, true, 0));
       addFloater(WIDTH / 2, HEIGHT / 2, arenaAdvanceText, '#7dd3fc');
       burst(WIDTH / 2, HEIGHT / 2, '#7dd3fc', 22);
     }
@@ -221,6 +258,7 @@ export function initSnakeGame(): void {
     shake = Math.max(0, shake - dt);
 
     fx.update(dt);
+    if (soloEnds && (soloLeft -= dt) <= 0) settleSolo();
 
     if (phase === 'play' && !paused) {
       moveTimer += dt;

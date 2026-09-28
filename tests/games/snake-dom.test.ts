@@ -13,7 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initSnakeGame } from '../../src/games/snake';
 import { stepInterval } from '../../src/games/snake/logic';
-import { BASE_TEMPO, tempoForStep } from '../../src/games/snake/music';
+import { BASE_TEMPO, BUZZER, stingerSeconds, tempoForStep } from '../../src/games/snake/music';
 import {
   createFrameDriver,
   installCanvasContext,
@@ -45,7 +45,8 @@ const mockAudio = vi.hoisted(() => ({
   playSfx: vi.fn(),
   setTempo: vi.fn(),
   setPaused: vi.fn(),
-  playStinger: vi.fn(() => true),
+  playStinger: vi.fn((_name: string) => true),
+  setLayer: vi.fn(),
   dispose: vi.fn()
 }));
 
@@ -214,7 +215,8 @@ describe('Snake music follows the snake (#380)', () => {
     feed.mode = 'ahead';
     document.getElementById('start-btn')!.click();
     advance(6);
-    expect(mockAudio.playStinger.mock.calls).toEqual([['walls']]);
+    // Then the wall at the end of the row, and the game-over phrase.
+    expect(mockAudio.playStinger.mock.calls).toEqual([['walls'], ['gameover']]);
     // It came on the eighth apple's step: after that step's tempo change (call 8) and before the ninth's.
     const order = (fn: { mock: { invocationCallOrder: number[] } }, i: number) => fn.mock.invocationCallOrder[i];
     expect(order(mockAudio.playStinger, 0)).toBeGreaterThan(order(mockAudio.setTempo, 8));
@@ -229,5 +231,82 @@ describe('Snake music follows the snake (#380)', () => {
     document.getElementById('restart-btn')!.click();
     expect(tempos()).toEqual([BASE_TEMPO]);
     expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe('Snake stingers take the one buzzer over (#416)', () => {
+  /**
+   * Steps the game a frame at a time until `playStinger` has been asked for
+   * `name`. The driver's frames are 250 ms, so the stinger may already be up
+   * to a frame old, which is why the timings below keep half a second clear
+   * of the phrase's end on either side.
+   */
+  const advanceUntilStinger = (name: string) => {
+    for (let i = 0; i < 100 && !mockAudio.playStinger.mock.calls.some(([n]) => n === name); i++) advance(0.001);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith(name);
+  };
+  const lastLayer = () => mockAudio.setLayer.mock.calls.at(-1);
+  const order = (fn: { mock: { invocationCallOrder: number[] } }) => fn.mock.invocationCallOrder.at(-1)!;
+
+  it('cuts the tune while the walls ring, and hands the buzzer back once they have', () => {
+    feed.mode = 'ahead';
+    document.getElementById('start-btn')!.click();
+    advanceUntilStinger('walls');
+    expect(lastLayer()).toEqual([BUZZER, false, 0]);
+    expect(order(mockAudio.setLayer)).toBeLessThan(order(mockAudio.playStinger));
+    // Paused, so the snake stops short of the wall; the ring still sounds, and is still counted.
+    press('p');
+    const ring = stingerSeconds('walls', tempoForStep(stepInterval(8)));
+    advance(ring - 0.5);
+    expect(lastLayer()).toEqual([BUZZER, false, 0]);
+    advance(0.5);
+    expect(lastLayer()).toEqual([BUZZER, true, 0]);
+  });
+
+  it('plays the game-over phrase alone on the buzzer, and stops the music only once it has sounded', () => {
+    feed.mode = 'away';
+    document.getElementById('start-btn')!.click();
+    advanceUntilStinger('gameover');
+    expect(lastLayer()).toEqual([BUZZER, false, 0]);
+    // The buzzer's phrase replaces the shared effect rather than sounding over it.
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+    advance(stingerSeconds('gameover', BASE_TEMPO) - 0.5);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    advance(0.5);
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the effect and stops at once when the music is muted', () => {
+    mockAudio.playStinger.mockImplementation(() => false);
+    try {
+      feed.mode = 'away';
+      document.getElementById('start-btn')!.click();
+      advanceUntilStinger('gameover');
+      expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
+      expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+      // A stinger that did not play leaves the tune switched on for the next start.
+      expect(lastLayer()).toEqual([BUZZER, true, 0]);
+    } finally {
+      mockAudio.playStinger.mockImplementation(() => true);
+    }
+  });
+
+  it('stops the old run before starting the next, when a restart cuts the phrase short', () => {
+    feed.mode = 'away';
+    document.getElementById('start-btn')!.click();
+    advanceUntilStinger('gameover');
+    advance(1);
+    expect(gameOverShown()).toBe(true);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    document.getElementById('restart-btn')!.click();
+    // start() does nothing while the music is running, so without this stop
+    // the new run would inherit a cut buzzer halfway through the pass.
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(order(mockAudio.stop)).toBeLessThan(order(mockAudio.start));
+    expect(lastLayer()).toEqual([BUZZER, true, 0]);
+    expect(order(mockAudio.setLayer)).toBeLessThan(order(mockAudio.start));
+    // Nor does the settled phrase stop the new run later.
+    advance(3);
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 });

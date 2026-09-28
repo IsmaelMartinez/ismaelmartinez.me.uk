@@ -204,10 +204,11 @@ describe('the arcade scores', () => {
     expect(passBeats(music)).toBeGreaterThanOrEqual(WAS_BEATS[cabinet] * 2);
   });
 
-  it.each(DISCOVERED)('$name has a playable tempo and at least two voices', ({ music }) => {
+  it.each(DISCOVERED)('$name has a playable tempo and at least two voices, or one where its brief is a buzzer', ({ cabinet, music }) => {
     expect(music.tempo).toBeGreaterThan(0);
     expect(Number.isFinite(music.tempo)).toBe(true);
-    expect(music.tracks.length).toBeGreaterThanOrEqual(2);
+    // ADR 003's round 3 amendment lets a brief argue for fewer voices; only Snake's single buzzer does.
+    expect(music.tracks.length).toBeGreaterThanOrEqual(cabinet === 'snake' ? 1 : 2);
   });
 
   it.each(DISCOVERED)('$name has no note the scheduler would have to skip', ({ music }) => {
@@ -283,10 +284,21 @@ describe('the arcade scores', () => {
     expect(FOOTBALL_MUSIC.tempo).toBe(FOOTBALL_BASE_TEMPO);
   });
 
-  it('keeps Snake to two voices, the cabinet that is deliberately minimal', () => {
-    expect(SNAKE_MUSIC.tracks).toHaveLength(2);
+  it('keeps Snake to one dry buzzer: a square switched on and off, with no vibrato, echo or dynamics (#416)', () => {
+    expect(SNAKE_MUSIC.tracks).toHaveLength(1);
+    const [buzzer] = SNAKE_MUSIC.tracks;
+    expect(buzzer.wave).toBe('square');
+    expect(buzzer.vibrato).toBeUndefined();
+    expect(buzzer.detune).toBeUndefined();
+    expect(buzzer.filter).toBeUndefined();
     expect(SNAKE_MUSIC.echo).toBeUndefined();
-    expect(SNAKE_MUSIC.tracks.every(t => t.envelope === undefined)).toBe(true);
+    // A switch, not a pluck: full level at once, held, and gone at once.
+    expect(buzzer.adsr).toMatchObject({ decay: 0, sustain: 1 });
+    expect(buzzer.adsr!.attack).toBeLessThanOrEqual(0.005);
+    expect(buzzer.adsr!.release).toBeLessThanOrEqual(0.005);
+    // The phone had one level for every note, in the loop and in the stingers.
+    const lines = [...Object.values(SNAKE_MUSIC.form!.sections), ...Object.values(SNAKE_MUSIC.stingers!)].flat(2);
+    expect(lines.some(note => note.gain !== undefined)).toBe(false);
   });
 });
 

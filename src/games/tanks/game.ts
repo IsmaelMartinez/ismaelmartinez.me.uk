@@ -294,14 +294,12 @@ export function initTanksGame(): void {
 
   /**
    * Match point is this cabinet's Sudden Death (see music.ts): with either
-   * side one round from the match, the score switches to its danger order and
-   * the drums, withheld until now, fade in with it. Read at every round start,
-   * so a new match (both tallies back at zero) takes both away again.
+   * side one round from the match, the arena's bed gives way to the danger
+   * order, the one place the score has a tune. Read at every round start, so
+   * a new match (both tallies back at zero) goes back to its arena's bed.
    */
   function syncMatchPoint() {
-    const matchPoint = match.wins.some(w => w === WINS_PER_MATCH - 1);
-    audio.setDanger(matchPoint);
-    audio.setLayer('drums', matchPoint);
+    audio.setDanger(match.wins.some(w => w === WINS_PER_MATCH - 1));
   }
 
   const playerName = (i: number) =>
@@ -406,6 +404,8 @@ export function initTanksGame(): void {
     startOverlay.style.display = 'none';
     roundOverlay.style.display = 'none';
     audio.start();
+    // Each arena has its own bed, a scene named as the arena is (see music.ts).
+    audio.setScene(match.arena);
     startRound(match);
   }
 
@@ -444,6 +444,7 @@ export function initTanksGame(): void {
       case 'roundStart':
         liftHush();
         syncMatchPoint();
+        audio.playStinger('roundStart');
         scene.rebuild();
         fx.clear();
         smoke = [];

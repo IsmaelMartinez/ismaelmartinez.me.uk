@@ -64,8 +64,7 @@ import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type 
 
 /** A run is eighteen waves and then endless, about thirteen and a half minutes, under one score. */
 export const MUSIC_PROFILE: MusicProfile = {
-  session: 'long',
-  palettePending: 'same instruments as Tank Duel, awaiting the round 3 rescores (#410, #415)'
+  session: 'long'
 };
 
 /** The score's tempo; the horde runs at its own `HORDE_TEMPO` rather than ramping this one. */

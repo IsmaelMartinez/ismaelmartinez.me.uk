@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initTanksGame } from '../../src/games/tanks';
-import { STINGER_SECONDS } from '../../src/games/tanks/music';
+import { STINGER_SECONDS, TANKS_MUSIC } from '../../src/games/tanks/music';
 import * as matchModule from '../../src/games/tanks/match';
 import {
   createFrameDriver,
@@ -44,6 +44,7 @@ const mockAudio = vi.hoisted(() => ({
   section: vi.fn(() => null),
   setLayer: vi.fn(),
   setSection: vi.fn(() => true),
+  setScene: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
   setPaused: vi.fn(),
@@ -69,6 +70,11 @@ const PAGE_HTML = `
       <canvas id="game-canvas"></canvas>
       <div id="toast-area"></div>
       <div id="start-overlay" class="game-overlay">
+        <button class="arena-btn active" data-arena="hills">Hills</button>
+        <button class="arena-btn" data-arena="canyon">Canyon</button>
+        <button class="arena-btn" data-arena="mesa">Mesa</button>
+        <button class="arena-btn" data-arena="ridges">Ridges</button>
+        <button class="arena-btn" data-arena="bunker">Bunker</button>
         <button id="vs-cpu-btn">vs CPU</button>
         <button id="two-player-btn">2P</button>
       </div>
@@ -174,15 +180,22 @@ function loseRound(loser: 0 | 1 | 'both'): void {
 
 const click = (id: string) => document.getElementById(id)!.click();
 const nextRound = () => click('next-round-btn');
+/** Starts a match and forgets its opening jingle, so a test sees only the round-end stingers after it. */
+const begin = (id: 'vs-cpu-btn' | 'two-player-btn') => {
+  click(id);
+  mockAudio.playStinger.mockClear();
+};
+const pickArena = (arena: string) =>
+  document.querySelector<HTMLButtonElement>(`.arena-btn[data-arena="${arena}"]`)!.click();
 
-describe('Tank Duel music answers the match (#379)', () => {
+describe('Tank Duel music answers the match (#379, #415)', () => {
   beforeEach(() => {
     // Only the timers: the frame driver owns the clock the game loop reads.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   });
 
   it('plays the won stinger when the player takes a round, then muffles the bed behind the overlay', () => {
-    click('vs-cpu-btn');
+    begin('vs-cpu-btn');
     loseRound(1);
 
     expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
@@ -199,7 +212,7 @@ describe('Tank Duel music answers the match (#379)', () => {
   });
 
   it('plays the lost stinger when the CPU takes a round', () => {
-    click('vs-cpu-btn');
+    begin('vs-cpu-btn');
     loseRound(0);
 
     expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
@@ -207,7 +220,7 @@ describe('Tank Duel music answers the match (#379)', () => {
   });
 
   it.each([0, 1] as const)('plays the neutral stinger whoever takes a two-player round (loser %i)', loser => {
-    click('two-player-btn');
+    begin('two-player-btn');
     loseRound(loser);
 
     expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
@@ -215,7 +228,7 @@ describe('Tank Duel music answers the match (#379)', () => {
   });
 
   it('plays the neutral stinger for a mutual destruction against the CPU', () => {
-    click('vs-cpu-btn');
+    begin('vs-cpu-btn');
     loseRound('both');
 
     expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
@@ -234,18 +247,17 @@ describe('Tank Duel music answers the match (#379)', () => {
   it.each([
     ['the player', 1],
     ['the CPU', 0]
-  ] as const)('switches to Sudden Death and brings the drums in when %s reaches match point', (_, loser) => {
+  ] as const)('switches to Sudden Death when %s reaches match point', (_, loser) => {
     click('vs-cpu-btn');
     loseRound(loser);
     nextRound();
-    // One round up is not match point: no danger, and the drums stay out.
+    // One round up is not match point: the arena's bed plays on.
     expect(mockAudio.setDanger).toHaveBeenLastCalledWith(false);
-    expect(mockAudio.setLayer).not.toHaveBeenCalledWith('drums', true);
+    expect(mockAudio.setDanger).not.toHaveBeenCalledWith(true);
 
     loseRound(loser);
     nextRound();
     expect(mockAudio.setDanger).toHaveBeenLastCalledWith(true);
-    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', true);
   });
 
   it('ends the match on the effects sting and a stop, with no round stinger and no muffle', () => {
@@ -265,17 +277,52 @@ describe('Tank Duel music answers the match (#379)', () => {
     expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
   });
 
-  it('takes Sudden Death and the drums away again for a new match', () => {
+  it('takes Sudden Death away again and goes back to an arena bed for a new match', () => {
     click('vs-cpu-btn');
     loseRound(1);
     nextRound();
     loseRound(1);
     nextRound();
+    expect(mockAudio.setDanger).toHaveBeenLastCalledWith(true);
     loseRound(1);
     click('play-again-btn');
+    pickArena('bunker');
     click('vs-cpu-btn');
 
     expect(mockAudio.setDanger).toHaveBeenLastCalledWith(false);
-    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', false);
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith('bunker');
+  });
+
+  it.each(['hills', 'canyon', 'mesa', 'ridges', 'bunker'])(
+    'moves the music to the %s bed when a match starts on that arena',
+    arena => {
+      pickArena(arena);
+      // Picking an arena on the start screen is silent: the bed waits for the match.
+      expect(mockAudio.start).not.toHaveBeenCalled();
+      expect(mockAudio.setScene).not.toHaveBeenCalled();
+
+      click('vs-cpu-btn');
+      expect(mockAudio.setScene).toHaveBeenCalledTimes(1);
+      expect(mockAudio.setScene).toHaveBeenCalledWith(arena);
+      // A scene move is refused while the music is stopped, so it has to follow start().
+      expect(mockAudio.setScene.mock.invocationCallOrder[0]).toBeGreaterThan(mockAudio.start.mock.invocationCallOrder[0]);
+      // And the score has a bed of that name to move to.
+      expect(TANKS_MUSIC.form?.scenes?.[arena]).toBeDefined();
+    }
+  );
+
+  it('opens every round on the round-start jingle, match point included', () => {
+    click('vs-cpu-btn');
+    expect(mockAudio.playStinger).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playStinger).toHaveBeenLastCalledWith('roundStart');
+
+    for (let round = 2; round <= 3; round++) {
+      loseRound(1);
+      expect(mockAudio.playStinger).toHaveBeenLastCalledWith('roundWon');
+      nextRound();
+      expect(mockAudio.playStinger).toHaveBeenLastCalledWith('roundStart');
+    }
+    expect(mockAudio.playStinger).toHaveBeenCalledTimes(5);
+    expect(TANKS_MUSIC.stingers?.roundStart).toBeDefined();
   });
 });

@@ -37,6 +37,8 @@ import {
 } from '../../src/games/lemmings/stall';
 import { translations, locales, type TranslationKey } from '../../src/i18n/translations';
 import { exitArrowAngle, rescueProgress } from '../../src/games/lemmings/hud';
+import { ACT_MUSIC } from '../../src/games/lemmings/music';
+import type { GameAudioOptions, Note } from '../../src/games/engine/audio';
 import {
   newCombo,
   comboOnRescue,
@@ -1846,5 +1848,63 @@ describe('score — end-of-level bonuses', () => {
     const b = levelBonuses({ ...base, saved: 10, ticks: 0 });
     expect(b.total).toBe(b.time + b.perfect + b.overQuota);
     expect(b.total).toBe(TIME_BONUS_MAX + PERFECT_BONUS + 5 * OVER_QUOTA_POINTS);
+  });
+});
+
+/**
+ * The Amiga palette (#414): every act is Paula's four channels, two hard left
+ * and two hard right, one of them a tracker kit and one an arpeggiated chord
+ * channel in place of a pad, with no echo. The gates in `music.test.ts` hold
+ * the scores to their length, rhythm and seam; this pins the sound the brief
+ * asks for, which those gates cannot see.
+ */
+describe('Critter Rescue music, the Amiga palette', () => {
+  const sounding = (line: Note[]) => line.filter(n => n.freq > 0 || n.drum);
+  const linesOf = (music: GameAudioOptions, t: number) => Object.values(music.form!.sections).map(lines => lines[t]);
+  const ACTS = ACT_MUSIC.map((music, act) => ({ act: act + 1, music }));
+
+  it.each(ACTS)('plays Act $act on four hard-panned channels, dry', ({ music }) => {
+    expect(music.tracks).toHaveLength(4);
+    expect(music.tracks.map(t => t.pan).sort()).toEqual([-1, -1, 1, 1]);
+    expect(music.echo).toBeUndefined();
+    for (const track of music.tracks) {
+      expect(track.envelope).toBeUndefined();
+      expect(track.detune ?? 0).toBe(0);
+      expect(track.vibrato ?? 0).toBe(0);
+    }
+  });
+
+  it.each(ACTS)('gives Act $act one tracker kit, sampled voices, and a chord channel of arpeggios', ({ music }) => {
+    const kits = music.tracks.filter((_, t) => linesOf(music, t).every(line => sounding(line).every(n => n.drum)));
+    expect(kits).toHaveLength(1);
+    for (const track of music.tracks.filter(t => !kits.includes(t))) {
+      expect(track.wavetable?.bits).toBe(8);
+      expect(track.adsr).toBeDefined();
+    }
+    const chords = music.tracks.findIndex(t => t.name === 'chords');
+    for (const line of linesOf(music, chords)) {
+      for (const note of sounding(line)) expect(note.arp?.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('gives every act its own tempo and key, and a danger variant only to the timed acts', () => {
+    expect(new Set(ACT_MUSIC.map(m => m.tempo)).size).toBe(4);
+    expect(new Set(ACT_MUSIC.map(m => ((Math.round(12 * Math.log2(m.tonic! / 440)) % 12) + 12) % 12)).size).toBe(4);
+    // A danger variant is only ever heard on a timed level, so it belongs to
+    // exactly the acts that hold one.
+    const timed = new Set(LEVELS.flatMap((level, i) => (level.timeLimit !== undefined ? [actOf(i)] : [])));
+    expect(ACT_MUSIC.map(m => m.form?.danger !== undefined)).toEqual(ACT_MUSIC.map((_, act) => timed.has(act)));
+    expect([...timed].sort()).toEqual([2, 3]);
+  });
+
+  it('writes both stingers on all four channels, the kit included', () => {
+    for (const music of ACT_MUSIC) {
+      const kit = music.tracks.findIndex(t => t.name === 'drums');
+      for (const name of ['cleared', 'perfect']) {
+        const lines = music.stingers![name];
+        expect(lines).toHaveLength(4);
+        expect(lines[kit].some(n => n.drum)).toBe(true);
+      }
+    }
   });
 });

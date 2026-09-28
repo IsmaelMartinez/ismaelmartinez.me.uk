@@ -99,7 +99,9 @@ function makeContext() {
     createBiquadFilter: vi.fn(node),
     createBufferSource: vi.fn(node),
     createBuffer: vi.fn((_channels: number, length: number) => ({ getChannelData: () => new Float32Array(length) })),
-    createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() }))
+    createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() })),
+    // A panned voice (Critter Rescue's Paula channels) gives each note one.
+    createStereoPanner: vi.fn(() => ({ pan: param(), connect: vi.fn() }))
   };
   vi.stubGlobal('window', {
     AudioContext: class {

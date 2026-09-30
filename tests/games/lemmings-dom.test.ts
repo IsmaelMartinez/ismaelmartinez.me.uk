@@ -77,6 +77,7 @@ vi.mock('../../src/games/engine/audio', async importOriginal => {
         setSection: vi.fn(() => false),
         setDanger: vi.fn(),
         playStinger: vi.fn(() => true),
+        playEnding: vi.fn(() => true),
         setPaused: vi.fn(),
         dispose: vi.fn()
       };
@@ -615,6 +616,8 @@ describe('the music follows the acts', () => {
     expect((document.getElementById('bonus-perfect-row') as HTMLElement).hidden).toBe(false);
     expect(act1.audio.playStinger).toHaveBeenCalledWith('perfect');
     expect(act1.audio.playStinger).not.toHaveBeenCalledWith('cleared');
+    // A mid-run clear is not an ending: the tune plays on under the stinger.
+    expect(act1.audio.playEnding).not.toHaveBeenCalled();
 
     nextBtn().click();
     expect(num('level-num')).toBe(2);
@@ -640,12 +643,14 @@ describe('the music follows the acts', () => {
     expect(act3.audio.start).toHaveBeenCalled();
   });
 
-  it("turns to danger for a timed level's last ten seconds, and a retry keeps its place", () => {
+  /** Plays level 14 (timed, Act III) to its clock, a missed quota. */
+  function timeUpOnLevel14(prepare?: (a: (typeof madeAudio)[number]) => void) {
     const level = LEVELS[13];
     expect(level.timeLimit).toBe(2700);
     startLevel(13);
     const act3 = playing();
     expect(act3.options).toBe(ACT_MUSIC[2]);
+    prepare?.(act3);
 
     // Up to 615 ticks left: not yet.
     step((level.timeLimit! - 600) / TICKS_PER_FRAME - 1);
@@ -656,16 +661,88 @@ describe('the music follows the acts', () => {
 
     expect(runUntilResult(900)).not.toBeNull();
     expect(document.getElementById('result-title')!.textContent).toBe('Time Up!');
-    // A lost level releases danger and muffles the music under the result.
     expect(dangerCalls(act3).at(-1)).toBe(false);
-    expect(act3.audio.setPaused).toHaveBeenLastCalledWith(true);
+    return act3;
+  }
+
+  it("turns to danger for a timed level's last ten seconds, and a missed quota ends the run on its phrase (#417)", () => {
+    const act3 = timeUpOnLevel14();
+    // The run is over, so the music closes on the sad trombone instead of the
+    // shared effect, and nothing is left to muffle.
+    expect(act3.audio.playEnding).toHaveBeenCalledWith('over');
+    expect(act3.audio.playSfx).not.toHaveBeenCalledWith('gameover');
+    expect(act3.audio.setPaused).not.toHaveBeenCalledWith(true);
     expect(act3.audio.playStinger).not.toHaveBeenCalled();
 
     retryBtn().click();
-    // The retry lifts the muffle on the same score rather than starting a new one.
+    // The retry is a new run on the same act's score, which the engine starts
+    // again from its intro because the ending stopped it.
+    expect(madeAudio.at(-1)).toBe(act3);
+    expect(act3.audio.dispose).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the effect and a muffle when the ending cannot play, and a retry lifts it', () => {
+    const act3 = timeUpOnLevel14(a => a.audio.playEnding.mockReturnValue(false));
+    expect(act3.audio.playEnding).toHaveBeenCalledWith('over');
+    expect(act3.audio.playSfx).toHaveBeenCalledWith('gameover');
+    expect(act3.audio.setPaused).toHaveBeenLastCalledWith(true);
+
+    retryBtn().click();
     expect(madeAudio.at(-1)).toBe(act3);
     expect(act3.audio.setPaused).toHaveBeenLastCalledWith(false);
     expect(act3.audio.stop).not.toHaveBeenCalled();
-    expect(act3.audio.dispose).not.toHaveBeenCalled();
+  });
+
+  it('takes a bow when the player ends a good run from a mid-run clear', () => {
+    startLevel(0);
+    const act1 = playing();
+    expect(runUntilResult(6000)).not.toBeNull();
+    expect(act1.audio.playEnding).not.toHaveBeenCalled();
+    (document.getElementById('end-run-btn') as HTMLButtonElement).click();
+    expect(act1.audio.playEnding).toHaveBeenCalledWith('curtain');
+  });
+});
+
+describe('the last level ends the game on its own phrase (#417)', () => {
+  /**
+   * The game with a one-level campaign: level 1 clears untouched, and as the
+   * last level its clear is the victory. A fresh module graph, so the mock is
+   * the only campaign this game instance ever sees.
+   */
+  async function winTheGame(prepare?: (a: (typeof madeAudio)[number]) => void) {
+    vi.resetModules();
+    vi.doMock('../../src/games/lemmings/levels', async importOriginal => {
+      const actual = await importOriginal<typeof import('../../src/games/lemmings/levels')>();
+      return { ...actual, LEVELS: actual.LEVELS.slice(0, 1) };
+    });
+    const { initLemmingsGame: init } = await import('../../src/games/lemmings/game');
+    mountHtml(GAME_HTML, { canvasSize: [LEVEL_W, LEVEL_H] });
+    localStorage.setItem('critter-cleared-levels', '1');
+    init();
+    frames.syncClock();
+    (document.getElementById('level-select-btn') as HTMLButtonElement).click();
+    (document.getElementById('level-grid')!.children[0] as HTMLButtonElement).click();
+    const act1 = madeAudio[madeAudio.length - 1];
+    prepare?.(act1);
+    expect(runUntilResult(6000)).not.toBeNull();
+    expect(document.getElementById('result-title')!.textContent).toBe('Every Critter Home!');
+    return act1;
+  }
+
+  afterEach(() => {
+    vi.doUnmock('../../src/games/lemmings/levels');
+    vi.resetModules();
+  });
+
+  it('plays the big finish as the ending, not a clear stinger over the tune', async () => {
+    const act1 = await winTheGame();
+    expect(act1.audio.playEnding).toHaveBeenCalledWith('victory');
+    expect(act1.audio.playStinger).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the level's clear stinger when the ending cannot play", async () => {
+    const act1 = await winTheGame(a => a.audio.playEnding.mockReturnValue(false));
+    expect(act1.audio.playEnding).toHaveBeenCalledWith('victory');
+    expect(act1.audio.playStinger).toHaveBeenCalledWith('perfect');
   });
 });

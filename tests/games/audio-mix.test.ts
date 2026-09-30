@@ -279,9 +279,9 @@ describe('effects in the score key', () => {
     }
   });
 
-  it('sets Line Hold in A', () => {
+  it('sets Line Hold in D, the key Kingdom Rush centres on', () => {
     const lineHold = SCORES.find(s => s.name === 'towerdefense');
-    expect(lineHold?.music.tonic).toBeCloseTo(p('A3'), 6);
+    expect(lineHold?.music.tonic).toBeCloseTo(p('D3'), 6);
   });
 });
 

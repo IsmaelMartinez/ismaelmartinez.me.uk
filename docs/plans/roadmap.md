@@ -41,7 +41,7 @@ open as the record of each piece; they close when #435 merges.
    Things to listen for, recorded by the agents: Critter Rescue's Act II is 3 to 4 dB quieter by
    RMS than the other acts; Tank Duel's match endings sit about 16 dB under the match-point bed
    they cut; Critter Rescue's failed quota now ends the music, so a retry restarts from the act's
-   intro rather than carrying on (a reversal of a #414 behaviour, the owner's call).
+   intro rather than carrying on (a reversal of a #414 behaviour, the owner's call). Tank Duel has no match intro of its own: its opening is the per-round `roundStart` jingle, which Copilot flagged on #436 as not the once-only intro #417 asks for (the owner's call whether to add one).
 3. Fix whatever the audition turns up on #436's branch (or a rescore's section of #435).
 4. Merge #436 into `integration/arcade-music-round-3` first (a leaf, so `--delete-branch` is safe),
    then #435 to `main`. Both merges are the owner's call, per PR.

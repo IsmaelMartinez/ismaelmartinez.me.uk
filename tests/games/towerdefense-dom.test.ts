@@ -534,7 +534,7 @@ describe('Line Hold stand-down confirmation', () => {
 /**
  * The score plays the defence (#374, #410): each arc of the campaign has a
  * preparation cue for its build lulls and a battle cue for its waves, the
- * battle's layers grow through the arc, a timpani stinger marks the launch,
+ * battle's layers grow through the arc, a low string stinger marks the launch,
  * the finale switches to the horde, and the stand-down prompt muffles the
  * music instead of stopping it. Everything here is driven by the game's own
  * buttons and clock, never by calling the audio directly.
@@ -582,7 +582,7 @@ describe('Line Hold music', () => {
     // No move: the order already is the cue, and a move would restart it a bar in.
     expect(mockAudio.setScene).not.toHaveBeenCalled();
     expect(layerState('horn')).toBe(true);
-    expect(layerState('pizz')).toBe(false);
+    expect(layerState('winds')).toBe(false);
     expect(layerState('drums')).toBe(false);
     expect(mockAudio.playStinger).not.toHaveBeenCalled();
   });
@@ -593,9 +593,9 @@ describe('Line Hold music', () => {
     expect(lastScene()).toBe(CUES[0].battle);
     expect(lastSection()).toBe(FORM.scenes![CUES[0].battle].order[0]);
     expect(layerState('drums')).toBe(true);
-    // The first wave of an arc is the kit alone over the riff.
+    // The first wave of an arc is the kit alone under the tune.
     expect(layerState('horn')).toBe(false);
-    expect(layerState('pizz')).toBe(false);
+    expect(layerState('winds')).toBe(false);
     expect(mockAudio.playStinger).toHaveBeenCalledWith(CUES[0].launch);
     expect(mockAudio.setDanger).not.toHaveBeenCalledWith(true);
   });
@@ -614,7 +614,7 @@ describe('Line Hold music', () => {
     expect(lastScene()).toBe(CUES[0].prep);
     expect(lastSection()).toBe(FORM.scenes![CUES[0].prep].order[0]);
     expect(layerState('drums')).toBe(false);
-    expect(layerState('pizz')).toBe(false);
+    expect(layerState('winds')).toBe(false);
     expect(layerState('horn')).toBe(true);
   });
 
@@ -632,28 +632,28 @@ describe('Line Hold music', () => {
     expect(new Set(CUES.flatMap(c => [c.prep, c.battle])).size).toBe(6);
   });
 
-  it('stacks the layers through an arc: the kit, then the horn, then the strings', () => {
+  it('stacks the layers through an arc: the kit, then the horn, then the fife', () => {
     const at: Record<number, string> = {};
     playWaves(12, (event, wave) => {
-      if (event === 'launch') at[wave] = ['horn', 'pizz', 'drums'].filter(v => layerState(v)).join(' ');
+      if (event === 'launch') at[wave] = ['horn', 'winds', 'drums'].filter(v => layerState(v)).join(' ');
     });
     expect(at).toEqual({
-      1: 'drums', 2: 'drums', 3: 'horn drums', 4: 'horn drums', 5: 'horn pizz drums', 6: 'horn pizz drums',
-      7: 'drums', 8: 'drums', 9: 'horn drums', 10: 'horn drums', 11: 'horn pizz drums', 12: 'horn pizz drums'
+      1: 'drums', 2: 'drums', 3: 'horn drums', 4: 'horn drums', 5: 'horn winds drums', 6: 'horn winds drums',
+      7: 'drums', 8: 'drums', 9: 'horn drums', 10: 'horn drums', 11: 'horn winds drums', 12: 'horn winds drums'
     });
   });
 
-  it('plays the launch stingers nowhere near the riff’s voice or register (#403)', () => {
+  it('plays the launch stingers nowhere near the tune’s voice or register (#403)', () => {
     const { tracks, stingers } = TOWERDEFENSE_MUSIC;
-    const riff = tracks.findIndex(t => t.name === 'riff');
-    const riffNotes = Object.values(FORM.sections).flatMap(lines => lines[riff]);
-    const lowestRiff = Math.min(...riffNotes.filter(n => n.freq > 0).map(n => n.freq));
+    const lead = tracks.findIndex(t => t.name === 'lead');
+    const leadNotes = Object.values(FORM.sections).flatMap(lines => lines[lead]);
+    const lowestLead = Math.min(...leadNotes.filter(n => n.freq > 0).map(n => n.freq));
     for (const name of [...CUES.map(c => c.launch), HORDE_LAUNCH]) {
       const launch = stingers![name];
-      expect(launch[riff]).toEqual([]);
+      expect(launch[lead]).toEqual([]);
       const pitched = launch.flat().filter(n => !n.drum && n.freq > 0);
       expect(pitched.length).toBeGreaterThan(0);
-      for (const note of pitched) expect(note.freq).toBeLessThan(lowestRiff);
+      for (const note of pitched) expect(note.freq).toBeLessThan(lowestLead);
     }
   });
 
@@ -669,9 +669,9 @@ describe('Line Hold music', () => {
     expect(calls.map(c => c.name)).toContain('setScene');
     const engine = await vi.importActual<typeof import('../../src/games/engine/audio')>('../../src/games/engine/audio');
     const drums = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'drums');
-    const riff = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'riff');
+    const lead = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'lead');
     const battleTop = FORM.scenes![CUES[0].battle].order[0];
-    const top = FORM.sections[battleTop][riff][0].freq;
+    const top = FORM.sections[battleTop][lead][0].freq;
     vi.useFakeTimers();
     try {
       // Bar 1 beat 2, bar 3 beat 3 and bar 6 beat 4 of the preparation.
@@ -705,7 +705,7 @@ describe('Line Hold music', () => {
         expect(opens).toHaveLength(1);
         const opensAt = Number(/, ([^,]+), [^,]+\)$/.exec(opens[0])![1]);
         // It opens where the section the move landed on starts, within a bar
-        // of the launch, and that is the battle cue's top, whose first riff
+        // of the launch, and that is the battle cue's top, whose first tune
         // note is the one sounding there.
         expect(landed.name).toBe(battleTop);
         expect(landed.scene).toBe(CUES[0].battle);
@@ -805,7 +805,7 @@ describe('Line Hold music', () => {
     const beats = (line: { beats: number }[]) => line.reduce((sum, note) => sum + note.beats, 0);
     for (const line of intro) expect(beats(line)).toBe(8);
     // The layers a build lull has out stay out of it.
-    for (const name of ['pizz', 'drums']) {
+    for (const name of ['winds', 'drums']) {
       const line = intro[TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === name)];
       expect(line.every(note => note.freq === 0 && !note.drum)).toBe(true);
     }

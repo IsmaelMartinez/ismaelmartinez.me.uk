@@ -21,6 +21,7 @@ import {
   FOOTBALL_MUSIC,
   BASE_TEMPO as FOOTBALL_BASE_TEMPO
 } from '../../src/games/football/music';
+import { TOWERDEFENSE_MUSIC } from '../../src/games/towerdefense/music';
 
 /**
  * Every cabinet's score, discovered rather than listed.
@@ -305,6 +306,69 @@ describe('the arcade scores', () => {
       const lead = CASCADE_MUSIC.stingers![name][0].filter(n => n.freq > 0);
       expect(semitonesFromD(lead[lead.length - 1].freq)).toBe(0);
     }
+  });
+
+  describe('Line Hold, after Kingdom Rush (#410)', () => {
+    const form = TOWERDEFENSE_MUSIC.form!;
+    const basses = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'basses');
+    const semitonesFromD = (freq: number) => ((Math.round(12 * Math.log2(freq / p('D4'))) % 12) + 12) % 12;
+    /** Every cue the game plays, the preparations, the battles and the horde, as its own pass. */
+    const cues = [
+      ...Object.keys(form.scenes!).map(scene => ({ scene, music: sceneScore(TOWERDEFENSE_MUSIC, scene) })),
+      { scene: 'danger', music: { ...TOWERDEFENSE_MUSIC, form: { sections: form.sections, order: [...form.danger!.order] } } }
+    ];
+    /** Sounding notes per bar of a line. */
+    const perBar = (line: Note[]) => {
+      const counts: number[] = [];
+      let at = 0;
+      for (const note of line) {
+        const bar = Math.floor(at / 4 + 1e-6);
+        counts[bar] = (counts[bar] ?? 0) + (note.freq > 0 ? 1 : 0);
+        at += note.beats;
+      }
+      return counts;
+    };
+
+    it('keeps every note inside one bar, so a cue change lands within a bar', () => {
+      const long = Object.entries(form.sections).flatMap(([name, lines]) =>
+        lines.flatMap((line, t) => line.filter(n => n.beats > 4).map(n => `${name}[${t}] ${n.beats}`))
+      );
+      expect(long).toEqual([]);
+    });
+
+    it('opens every cue on D in the basses and hands back to the top through A', () => {
+      for (const { scene, music } of cues) {
+        const line = passLine(music, basses).filter(n => n.freq > 0);
+        expect(semitonesFromD(line[0].freq), scene).toBe(0);
+        // The last bar's downbeat: the dominant, never home.
+        const whole = passLine(music, basses);
+        let at = 0;
+        const total = whole.reduce((s, n) => s + n.beats, 0);
+        const downbeat = whole.find(n => {
+          const hit = at >= total - 4 - 1e-6 && n.freq > 0;
+          at += n.beats;
+          return hit;
+        })!;
+        expect(semitonesFromD(downbeat.freq), scene).toBe(7);
+      }
+    });
+
+    it('plays a preparation under its battle, as Kingdom Rush sits its preparations 3 to 8 dB down', () => {
+      const lead = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'lead');
+      const meanGain = (scene: string) => {
+        const notes = passLine(sceneScore(TOWERDEFENSE_MUSIC, scene), lead).filter(n => n.freq > 0);
+        return notes.reduce((s, n) => s + (n.gain ?? 1), 0) / notes.length;
+      };
+      for (const arc of [1, 2, 3]) expect(meanGain(`prep-${arc}`) / meanGain(`battle-${arc}`), `arc ${arc}`).toBeLessThanOrEqual(0.75);
+    });
+
+    it('gallops the basses under a battle and only plucks them under a preparation', () => {
+      for (const { scene, music } of cues) {
+        const counts = perBar(passLine(music, basses));
+        if (scene.startsWith('prep')) expect(Math.max(...counts), scene).toBeLessThanOrEqual(2);
+        else expect(Math.min(...counts), scene).toBeGreaterThanOrEqual(8);
+      }
+    });
   });
 
   it('gives Football a base tempo its knockout ramp can wind up from', () => {

@@ -53,6 +53,7 @@ const mockAudio = vi.hoisted(() => ({
   setSection: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
+  playEnding: vi.fn(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -82,6 +83,7 @@ beforeEach(() => {
   for (const fn of Object.values(mockAudio)) fn.mockClear();
   mockAudio.section.mockImplementation(() => null);
   mockAudio.playStinger.mockImplementation(() => true);
+  mockAudio.playEnding.mockImplementation(() => true);
   installLocalStorage();
   installJsdomShims();
   installCanvasContext();
@@ -267,6 +269,7 @@ describe("CALCIO '90 attract mode is silent (#368)", () => {
 
     expect(mockAudio.playSfx).not.toHaveBeenCalled();
     expect(mockAudio.playStinger).not.toHaveBeenCalled();
+    expect(mockAudio.playEnding).not.toHaveBeenCalled();
     expect(mockAudio.setLayer).not.toHaveBeenCalled();
     expect(mockAudio.start).not.toHaveBeenCalled();
   });
@@ -289,6 +292,63 @@ describe("CALCIO '90 attract mode is silent (#368)", () => {
 
     frames.advance(13); // idle past ATTRACT_DELAY
     expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CALCIO '90 ends a run on its own phrase (#417)", () => {
+  /** Plays one match that finishes the run, `champion` or knocked out, and taps through to the end screen. */
+  function finishTheRun(champion: boolean): void {
+    const realRecord = tournamentModule.recordPlayerMatch;
+    vi.spyOn(tournamentModule, 'recordPlayerMatch').mockImplementation((run, result) => {
+      realRecord(run, result);
+      run.over = true;
+      run.champion = champion;
+    });
+    startAMatch();
+    nextTickRaises({ type: 'end', winner: champion ? 0 : 1, pendingShootout: false }, m => {
+      m.phase = 'over';
+      m.winner = champion ? 0 : 1;
+    });
+    tapCanvas(); // full time -> the end screen, which finishes the run
+  }
+
+  it('ends a knockout on the eliminated phrase in place of the game-over effect', () => {
+    finishTheRun(false);
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenLastCalledWith('eliminated');
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+  });
+
+  it('ends a won tournament on the champion phrase in place of the victory effect', () => {
+    finishTheRun(true);
+    expect(mockAudio.playEnding).toHaveBeenLastCalledWith('champion');
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('rescue');
+  });
+
+  it('falls back to the effect, with the menu theme still on, when the phrase cannot play', () => {
+    mockAudio.playEnding.mockImplementation(() => false);
+    finishTheRun(false);
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
+    tapCanvas(); // the end screen -> title
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts the music again, intro first, when the end screen goes back to the title', () => {
+    finishTheRun(true);
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+    tapCanvas(); // the end screen -> title
+    expect(mockAudio.start).toHaveBeenCalledTimes(2);
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith(null);
+  });
+
+  it('never ends a match that does not end the run', () => {
+    startAMatch();
+    nextTickRaises({ type: 'end', winner: 0, pendingShootout: false }, m => {
+      m.phase = 'over';
+      m.winner = 0;
+    });
+    tapCanvas(); // full time -> the tables
+    expect(mockAudio.playEnding).not.toHaveBeenCalled();
   });
 });
 

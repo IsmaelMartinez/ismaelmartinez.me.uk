@@ -96,6 +96,13 @@
  * kick-off, a goal for, a goal against, half-time and the final whistle, in
  * the same FM palette, with the crowd's roar written into the goal's. Pause
  * muffles the music with `setPaused`, and attract mode keeps it off.
+ *
+ * Beginnings and endings (#417). The form's `intro` is a two-bar title
+ * fanfare, heard each time the music starts from silence, which is where the
+ * cartridge played its title jingle; attract mode never starts the music, so
+ * the demo never hears it. A finished run ends through `playEnding` on one of
+ * `ENDINGS`: `eliminated`, two bars sinking through the borrowed iv, or
+ * `champion`, four bars of the final's fanfare, the score's one V to I.
  */
 import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
 
@@ -688,6 +695,32 @@ const SHOOTOUT_TURN: Note[][] = [
 ];
 
 /* ------------------------------------------------------------------ */
+/* intro: the title fanfare                                             */
+
+/**
+ * Two bars before the menu's first, played once each time the music starts
+ * from silence: the press of start, the return from attract mode, and the
+ * title screen after a run has ended. That is where a Mega Drive cartridge put
+ * its title jingle, between the Sega logo and the menu theme. A brass run up
+ * the F triad over the octave-bouncing slap bass, then C7 held, which hands
+ * the dominant to the menu's opening F. No drums or crowd: both voices are
+ * layers the match owns, and the menu they lead into has neither.
+ */
+const INTRO: Note[][] = [
+  [
+    n('F4', 0.5, 0.8), n('A4', 0.5, 0.85), n('C5', 0.5, 0.85), n('F5', 0.5, 0.9), n('A5', 1), r(0.5), n('G5', 0.5, 0.85),
+    n('E5', 0.5, 0.85), n('G5', 0.5, 0.9), n('Bb5', 1, 0.95), n('C6', 2)
+  ],
+  [
+    n('F2', 0.5), n('F3', 0.5, 0.8), n('F2', 0.5, 0.9), n('F3', 0.5, 0.8), n('F2', 1, 0.9), r(1),
+    n('C2', 0.5), n('C3', 0.5, 0.8), n('C2', 0.5, 0.9), n('C3', 0.5, 0.8), n('C2', 2, 0.85)
+  ],
+  [psg('F', 4, 0.85, MAJOR_OCT), psg('C', 4, 0.85, [0, 4, 7, 10])],
+  [r(8)],
+  hush(2)
+];
+
+/* ------------------------------------------------------------------ */
 /* stingers                                                             */
 
 /**
@@ -736,8 +769,38 @@ const STINGERS: Record<string, Note[][]> = {
     [r(2), psg('F', 2, 0.8)],
     [hit('snare', 0.5), r(0.5), hit('snare', 0.5), r(0.5), kick(2, 1)],
     [r(2), roar(1500, 2, 0.8)]
+  ],
+  // The run's two endings, played through `playEnding`: the loop stops under
+  // them and they sound alone, then the music is off until the title screen
+  // starts it again. An ending may land home, which a loop's seam may not.
+  //
+  // Knocked out: two bars sinking through the borrowed iv, F to Bbm to F, the
+  // bass bouncing its octaves more slowly each time, and the stand groaning.
+  eliminated: [
+    [n('C5', 1, 0.85), n('Bb4', 0.5, 0.8), n('A4', 0.5, 0.8), n('Db5', 2, 0.8), n('C5', 1, 0.75), n('A4', 1, 0.7), n('F4', 2, 0.7)],
+    [n('F2', 1, 0.85), n('F3', 1, 0.7), n('Bb1', 1, 0.8), n('Bb2', 1, 0.65), n('F2', 4, 0.7)],
+    [psg('F', 2, 0.7), psg('Bbm', 2, 0.7), psg('F', 4, 0.6)],
+    [kick(1, 0.6), r(3), kick(1, 0.5), r(3)],
+    [roar(450, 4, 0.6), roar(400, 4, 0.45)]
+  ],
+  // Champions: four bars of the final's fanfare, F Bb C F, the one V to I in
+  // the score, over its galloping bass and groove and the loudest roar.
+  champion: [
+    [
+      n('C5', 0.5, 0.85), n('F5', 0.5, 0.9), n('A5', 0.5, 0.95), n('C6', 1.5), n('A5', 0.5, 0.9), n('C6', 0.5),
+      n('Bb5', 1.5), n('A5', 0.5, 0.9), n('F5', 1, 0.9), n('Bb5', 1),
+      n('C6', 1), n('Bb5', 0.5, 0.9), n('A5', 0.5, 0.9), n('G5', 1, 0.9), n('E5', 0.5, 0.85), n('G5', 0.5, 0.9),
+      n('F5', 0.5), n('A5', 0.5, 0.95), n('C6', 3)
+    ],
+    [...over(gallop, ['F', 'Bb', 'C']), n('F2', 0.5), n('F3', 0.5, 0.85), n('F2', 0.5), n('F3', 2.5, 0.85)],
+    [...over(blaze, ['F', 'Bb', 'C']), psg('F', 4, 0.9, MAJOR_OCT)],
+    [...drive(), ...drive(), ...fill(), kick(1, 1), hit('snare', 0.5), hit('snare', 0.5), kick(2, 1)],
+    [roar(1800, 8, 0.85), roar(2400, 8)]
   ]
 };
+
+/** The stingers that end a run, through `playEnding`; every other one marks a moment in a match. */
+export const ENDINGS = ['eliminated', 'champion'] as const;
 
 export const FOOTBALL_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,
@@ -802,6 +865,7 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
     }
   ],
   form: {
+    intro: INTRO,
     sections: {
       'title-a': TITLE_A,
       'title-b': TITLE_B,

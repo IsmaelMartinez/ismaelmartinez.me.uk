@@ -7,8 +7,11 @@
  * which the profile takes off the shared gate because the DAC kick is the
  * lowest pitched note in the score.
  */
-import { describe, it, expect } from 'vitest';
-import { FINAL_TEMPO, FOOTBALL_MUSIC, MATCH_THEMES, MUSIC_PROFILE, SCENES } from '../../src/games/football/music';
+import { describe, it, expect, vi } from 'vitest';
+import { p, REST } from '../../src/games/engine';
+import { ENDINGS, FINAL_TEMPO, FOOTBALL_MUSIC, MATCH_THEMES, MUSIC_PROFILE, SCENES } from '../../src/games/football/music';
+import { drive } from './audio-graph';
+import { installLocalStorage } from './dom-helpers';
 import { seamArrivals, sceneScore } from './music-gates';
 
 const form = FOOTBALL_MUSIC.form!;
@@ -34,13 +37,42 @@ describe("CALCIO '90's score, scene by scene", () => {
     for (const [x, y] of [[a, b], [b, c], [a, c]]) expect([...x].filter(s => y.has(s))).toEqual([]);
   });
 
-  it('writes every stinger one line per track, short enough to land inside a bar or so', () => {
+  it('writes every stinger one line per track, a match moment inside a bar, an ending in two or four', () => {
     const names = Object.keys(FOOTBALL_MUSIC.stingers ?? {});
-    expect(names.sort()).toEqual(['full-time', 'goal-against', 'goal-for', 'half-time', 'kick-off']);
-    for (const lines of Object.values(FOOTBALL_MUSIC.stingers!)) {
+    expect(names.sort()).toEqual(['champion', 'eliminated', 'full-time', 'goal-against', 'goal-for', 'half-time', 'kick-off']);
+    for (const [name, lines] of Object.entries(FOOTBALL_MUSIC.stingers!)) {
       expect(lines).toHaveLength(FOOTBALL_MUSIC.tracks.length);
-      for (const line of lines) expect(beats(line)).toBeLessThanOrEqual(4);
+      const limit = name === 'champion' ? 16 : (ENDINGS as readonly string[]).includes(name) ? 8 : 4;
+      for (const line of lines) expect(beats(line)).toBeLessThanOrEqual(limit);
     }
+    expect([...ENDINGS]).toEqual(['eliminated', 'champion']);
+  });
+
+  it('opens on a two-bar intro that hands C, the dominant, to the menu’s first bar (#417)', () => {
+    const intro = form.intro!;
+    expect(intro).toHaveLength(FOOTBALL_MUSIC.tracks.length);
+    for (const line of intro) expect(beats(line)).toBe(8);
+    const bass = intro[FOOTBALL_MUSIC.tracks.findIndex(t => t.name === 'bass')];
+    expect(bass[bass.length - 1].freq).toBe(p('C2'));
+    // The drums and the crowd are the match's layers; the intro leaves them out.
+    for (const name of ['drums', 'crowd']) {
+      expect(intro[FOOTBALL_MUSIC.tracks.findIndex(t => t.name === name)].every(note => note.freq === REST)).toBe(true);
+    }
+  });
+
+  it('plays the intro on start and then the menu, through the menu request the game makes at once (#417)', () => {
+    installLocalStorage();
+    vi.useFakeTimers();
+    const seen: (string | undefined)[] = [];
+    drive(FOOTBALL_MUSIC, 6, [
+      // The game asks for the menu straight after starting, as `playScene` does.
+      { at: 0.01, run: a => a.setScene(null) },
+      { at: 1, run: a => seen.push(a.section()?.name) },
+      { at: 5, run: a => seen.push(a.section()?.name) }
+    ]);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    expect(seen).toEqual(['intro', 'title-a']);
   });
 
   it('keeps the drums and the crowd out until the match calls for them, and has no echo', () => {

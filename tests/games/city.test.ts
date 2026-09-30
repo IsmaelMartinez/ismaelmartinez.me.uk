@@ -94,7 +94,7 @@ import {
   type Tornado
 } from '../../src/games/city/disasters';
 import { seededRandom } from './seeded-random';
-import { musicTier, TIER_FLOORS, TIER_LAYERS, CITY_MUSIC } from '../../src/games/city/music';
+import { musicTier, TIER_FLOORS, TIER_SCENES, CITY_MUSIC } from '../../src/games/city/music';
 
 describe('engine grid2d', () => {
   it('respects grid edges for neighbours', () => {
@@ -1380,26 +1380,51 @@ describe('Microcity music tiers (#378)', () => {
     expect(musicTier(10, 2)).toBe(0);
   });
 
-  it('grows the arrangement tier by tier from voices the score has', () => {
-    const names = CITY_MUSIC.tracks.map(t => t.name);
-    for (const layers of TIER_LAYERS) expect(Object.keys(layers).sort()).toEqual([...names].sort());
-    // Every tier has the pad, and exactly one voice carries the tune.
-    for (const layers of TIER_LAYERS) {
-      expect(layers.pad).toBe(true);
-      expect(Number(layers.lead) + Number(layers.horn)).toBe(1);
+  const form = CITY_MUSIC.form!;
+  /** Every section a tier's piece plays: the order for the village, a scene's order otherwise. */
+  const piece = (tier: number) => {
+    const scene = TIER_SCENES[tier];
+    return (scene === null ? form.order : form.scenes![scene].order).map(name => form.sections[name]);
+  };
+  const perc = CITY_MUSIC.tracks.findIndex(t => t.name === 'perc');
+  /** The drum hits in each bar of one pass of a tier's piece. */
+  const hitsPerBar = (tier: number): number[] => {
+    const bars: number[] = [];
+    let at = 0;
+    for (const note of piece(tier).flatMap(lines => lines[perc])) {
+      const bar = Math.floor(at / 4 + 1e-9);
+      bars[bar] = (bars[bar] ?? 0) + (note.drum ? 1 : 0);
+      at += note.beats;
     }
-    // The bass enters with the town and stays; the horn is the metropolis's alone.
-    expect(TIER_LAYERS.map(l => l.bass)).toEqual([false, true, true]);
-    expect(TIER_LAYERS.map(l => l.horn)).toEqual([false, false, true]);
-    // The score starts silent exactly where the village is.
-    for (const track of CITY_MUSIC.tracks) {
-      expect(Boolean(track.startsMuted)).toBe(!TIER_LAYERS[0][track.name as keyof (typeof TIER_LAYERS)[0]]);
+    return Array.from(bars, b => b ?? 0);
+  };
+
+  it('plays a piece of its own in each tier: the village as the order, the others as scenes', () => {
+    expect(TIER_SCENES).toHaveLength(TIER_FLOORS.length);
+    expect(TIER_SCENES[0]).toBeNull();
+    expect(TIER_SCENES.slice(1)).toEqual(Object.keys(form.scenes!));
+    // No two tiers share a section: a separate piece, not one tune gaining layers.
+    const used = TIER_SCENES.map((_, tier) => new Set(piece(tier)));
+    for (let a = 0; a < used.length; a++) {
+      for (let b = a + 1; b < used.length; b++) expect([...used[a]].filter(s => used[b].has(s))).toEqual([]);
     }
   });
 
-  it('writes the metropolis horn as the lead line itself, one motif in two voices', () => {
-    const lead = CITY_MUSIC.tracks.findIndex(t => t.name === 'lead');
-    const horn = CITY_MUSIC.tracks.findIndex(t => t.name === 'horn');
-    for (const lines of Object.values(CITY_MUSIC.form!.sections)) expect(lines[horn]).toBe(lines[lead]);
+  it('rises in tempo and in percussion as the city grows, the village with none', () => {
+    const tempi = TIER_SCENES.map(scene => (scene === null ? CITY_MUSIC.tempo : form.scenes![scene].tempo));
+    expect(tempi.every((t, i) => i === 0 || t! > tempi[i - 1]!)).toBe(true);
+    expect(Math.max(...hitsPerBar(0))).toBe(0);
+    expect(Math.min(...hitsPerBar(1))).toBeGreaterThan(0);
+    // The metropolis's sparest bar is busier than the town's busiest.
+    expect(Math.min(...hitsPerBar(2))).toBeGreaterThan(Math.max(...hitsPerBar(1)));
+  });
+
+  it('rests after every so many passes of every piece, so a long city is not constant music', () => {
+    expect(form.rest?.after).toBeGreaterThan(0);
+    expect(form.rest?.beats).toBeGreaterThan(0);
+    for (const scene of TIER_SCENES.slice(1)) {
+      expect(form.scenes![scene!].rest?.after, scene!).toBeGreaterThan(0);
+      expect(form.scenes![scene!].rest?.beats, scene!).toBeGreaterThan(0);
+    }
   });
 });

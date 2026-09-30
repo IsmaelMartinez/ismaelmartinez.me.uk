@@ -71,6 +71,7 @@ function makeContext() {
       frequency: param(),
       detune: param(),
       Q: param(),
+      pan: param(),
       type: 'square',
       buffer: null as unknown,
       target: null as unknown,
@@ -97,6 +98,8 @@ function makeContext() {
     // Pulse duties, drums and the pause filter, for scores that use them.
     createPeriodicWave: vi.fn(() => ({})),
     createBiquadFilter: vi.fn(node),
+    // A voice's pan, for scores that place one off centre.
+    createStereoPanner: vi.fn(node),
     createBufferSource: vi.fn(node),
     createBuffer: vi.fn((_channels: number, length: number) => ({ getChannelData: () => new Float32Array(length) })),
     createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() }))

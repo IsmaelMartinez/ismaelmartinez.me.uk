@@ -418,6 +418,51 @@ describe('setScene', () => {
     expect(createGameAudio(SECTIONS).setScene('menu')).toBe(false);
   });
 
+  /** SCENED with a rest written on the menu scene: after every second pass, three beats of nothing. */
+  const RESTING: GameAudioOptions = {
+    ...SCENED,
+    form: { ...SCENED.form!, scenes: { ...SCENED.form!.scenes, menu: { order: ['menu'], rest: { after: 2, beats: 3 } } } }
+  };
+
+  it('rests a scene that writes a rest, counting its passes from when it was entered', () => {
+    const log = drive(RESTING, 22, [{ at: 1.5, run: a => a.setScene('menu') }]);
+    // Entered at 4.05; two passes, three beats of nothing, two passes, and again.
+    expectTimes(timesOf(log, 500).filter(t => t < 22), [
+      4.05, 5.05, 6.05, 7.05, 8.05, 9.05, 10.05, 11.05, 15.05, 16.05, 17.05, 18.05, 19.05, 20.05, 21.05
+    ]);
+    // The order, which rests only by its own rest, is unchanged before the scene.
+    expectTimes(timesOf(log, 200), [0.05, 1.05, 2.05, 3.05]);
+  });
+
+  it('rests a scene at its own tempo, and leaves a rest on the bar line it ends on', () => {
+    const fast: GameAudioOptions = {
+      ...SCENED,
+      form: { ...SCENED.form!, scenes: { ...SCENED.form!.scenes, shoot: { order: ['shoot'], tempo: 120, rest: { after: 1, beats: 2 } } } }
+    };
+    // Four beats at 120 bpm, then two beats (one second) of rest, then four more.
+    expectTimes(timesOf(drive(fast, 9, [{ at: 1.5, run: a => a.setScene('shoot') }]), 600), [
+      4.05, 4.55, 5.05, 5.55, 7.05, 7.55, 8.05, 8.55
+    ]);
+    const seen: Where[] = [];
+    const log = drive(fast, 12, [
+      { at: 1.5, run: a => a.setScene('shoot') },
+      { at: 6.3, run: a => seen.push(a.section() as Where) },
+      { at: 6.3, run: a => a.setScene(null) }
+    ]);
+    expect(seen[0]).toMatchObject({ name: 'shoot', scene: 'shoot' });
+    expect(seen[0].start).toBeCloseTo(7.05, 9);
+    // Released during the rest, the order comes back where the rest ends rather than cutting into it.
+    expectTimes(timesOf(log, 600), [4.05, 4.55, 5.05, 5.55]);
+    expectTimes(timesOf(log, 300).slice(0, 1), [7.05]);
+  });
+
+  it('plays a scene without a rest exactly as before', () => {
+    const plain: GameAudioOptions = { ...SCENED, form: { ...SCENED.form!, scenes: { ...SCENED.form!.scenes, menu: { order: ['menu'] } } } };
+    const moves: Cue[] = [{ at: 1.5, run: a => a.setScene('menu') }];
+    expect(drive(RESTING, 8, moves)).toBe(drive(plain, 8, moves));
+    expect(drive(RESTING, 22, moves)).not.toBe(drive(plain, 22, moves));
+  });
+
   it('refuses danger written as a scene, with or without form.danger beside it', () => {
     const asScene = { ...SCENED.form!, scenes: { danger: { order: ['fast'] } } };
     expect(() => createGameAudio({ ...SCENED, form: asScene })).toThrow(/reserved/);

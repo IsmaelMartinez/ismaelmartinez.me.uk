@@ -1427,4 +1427,33 @@ describe('Microcity music tiers (#378)', () => {
       expect(form.scenes![scene!].rest?.beats, scene!).toBeGreaterThan(0);
     }
   });
+
+  const beats = (line: { beats: number }[]) => line.reduce((sum, note) => sum + note.beats, 0);
+  const sounding = (line: { freq: number }[]) => line.filter(note => note.freq > 0);
+  const semitone = (freq: number) => Math.round(12 * Math.log2(freq / 440)) + 69;
+  const lead = CITY_MUSIC.tracks.findIndex(t => t.name === 'lead');
+  const bass = CITY_MUSIC.tracks.findIndex(t => t.name === 'bass');
+
+  it('founds every city on a short intro that steps into the village hook (#417)', () => {
+    const intro = form.intro!;
+    expect(intro).toHaveLength(CITY_MUSIC.tracks.length);
+    const length = beats(intro[lead]);
+    expect(length).toBeGreaterThanOrEqual(4);
+    expect(length).toBeLessThanOrEqual(8);
+    // Its last note sits a step above the statement's first, so the hook follows on.
+    const last = sounding(intro[lead]).at(-1)!.freq;
+    const first = sounding(form.sections[form.order[0]][lead])[0].freq;
+    expect(semitone(last) - semitone(first)).toBeGreaterThanOrEqual(1);
+    expect(semitone(last) - semitone(first)).toBeLessThanOrEqual(2);
+  });
+
+  it('ends a run on a phrase of its own for each way gameOver ends one, both home on F (#417)', () => {
+    for (const reason of ['bankrupt', 'retired']) {
+      const phrase = CITY_MUSIC.stingers![reason];
+      expect(phrase, reason).toHaveLength(CITY_MUSIC.tracks.length);
+      expect(beats(phrase[lead]), reason).toBeLessThanOrEqual(8);
+      // A pitch class of 5 is F, the cabinet's tonic.
+      expect(semitone(sounding(phrase[bass]).at(-1)!.freq) % 12, reason).toBe(5);
+    }
+  });
 });

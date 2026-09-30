@@ -59,6 +59,7 @@ const mockAudio = vi.hoisted(() => ({
   setScene: vi.fn<(name: string | null) => boolean>(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn<(name: string) => boolean>(() => true),
+  playEnding: vi.fn<(name: string) => boolean>(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -760,7 +761,7 @@ describe('Microcity music', () => {
 
     foundCity();
     retire();
-    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
     expect(lastPause()).toBe(false);
     speed('0');
     expect(lastPause()).toBe(false);
@@ -777,6 +778,55 @@ describe('Microcity music', () => {
     advance(20);
     expect(toasted(IN_THE_RED)).toBe(true);
     expect(stingers('red')).toBe(1);
+  });
+
+  describe('the ending (#417)', () => {
+    const endings = () => mockAudio.playEnding.mock.calls.map(c => c[0]);
+    const effects = () => mockAudio.playSfx.mock.calls.map(c => c[0]);
+
+    it('ends a retired city on its own phrase, in place of the effect and the stop', () => {
+      foundCity();
+      retire();
+      expect(endings()).toEqual(['retired']);
+      expect(effects()).not.toContain('score');
+      expect(mockAudio.stop).not.toHaveBeenCalled();
+    });
+
+    it('lifts the retire prompt’s muffle before the phrase, so it is not played through it', () => {
+      foundCity();
+      retire();
+      const lift = mockAudio.setPaused.mock.calls.findIndex(c => c[0] === false);
+      expect(lift).toBeGreaterThanOrEqual(0);
+      expect(mockAudio.setPaused.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+        mockAudio.playEnding.mock.invocationCallOrder[0]
+      );
+    });
+
+    it('ends a bankrupt city on the other phrase', () => {
+      foundCity();
+      overspend();
+      advance(70);
+      expect(overlayShown()).toBe(true);
+      expect(endings()).toEqual(['bankrupt']);
+      expect(effects()).not.toContain('gameover');
+      expect(mockAudio.stop).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the effect and a stop when the phrase cannot play (muted music)', () => {
+      foundCity();
+      mockAudio.playEnding.mockReturnValueOnce(false);
+      retire();
+      expect(effects()).toContain('score');
+      expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+
+      document.getElementById('restart-btn')!.click();
+      foundCity();
+      overspend();
+      mockAudio.playEnding.mockReturnValueOnce(false);
+      advance(70);
+      expect(effects()).toContain('gameover');
+      expect(mockAudio.stop).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('marks a fire breaking out with a stinger', () => {

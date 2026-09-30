@@ -43,6 +43,7 @@ import { seededRandom } from './seeded-random';
 import { meanT } from './paired-stats';
 import {
   TANKS_MUSIC,
+  MATCH_END_BEATS,
   ROUND_START_BEATS,
   STINGER_BEATS,
   SUDDEN_DEATH_TEMPO
@@ -899,11 +900,19 @@ describe('Tank Duel score', () => {
   const lead = TANKS_MUSIC.tracks.findIndex(t => t.name === 'lead');
   const stingers = TANKS_MUSIC.stingers!;
 
-  it('makes every round-end stinger STINGER_BEATS long, and the round start ROUND_START_BEATS, in every voice', () => {
-    expect(Object.keys(stingers).sort()).toEqual(['round', 'roundLost', 'roundStart', 'roundWon']);
+  it('makes every round-end stinger STINGER_BEATS long, the round start ROUND_START_BEATS and each match ending MATCH_END_BEATS, in every voice', () => {
+    expect(Object.keys(stingers).sort()).toEqual([
+      'matchLost',
+      'matchOver',
+      'matchWon',
+      'round',
+      'roundLost',
+      'roundStart',
+      'roundWon'
+    ]);
     for (const [name, lines] of Object.entries(stingers)) {
       expect(lines, name).toHaveLength(TANKS_MUSIC.tracks.length);
-      const want = name === 'roundStart' ? ROUND_START_BEATS : STINGER_BEATS;
+      const want = name === 'roundStart' ? ROUND_START_BEATS : name.startsWith('match') ? MATCH_END_BEATS : STINGER_BEATS;
       expect(new Set(lines.map(beats)), name).toEqual(new Set([want]));
     }
   });

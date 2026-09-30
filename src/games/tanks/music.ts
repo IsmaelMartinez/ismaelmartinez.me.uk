@@ -95,8 +95,18 @@
  *   to D, against the CPU; the neutral `round`, an open fifth, in two-player
  *   and for a mutual destruction. After it (`STINGER_SECONDS`) the bed is
  *   muffled behind the overlay with `setPaused`, and the next round lifts it.
- * - The match end keeps its effects sting (`score`, or `gameover` when the CPU
- *   takes it) and stops the music.
+ * - The match ends on its own phrase through `playEnding` (#417), which cuts
+ *   the bed and lets the beeper finish alone before the music stops: against
+ *   the CPU `matchWon`, the round flourish grown into a fanfare to D6, or
+ *   `matchLost`, the round's sag carried on down to D4; in two-player
+ *   `matchOver`, open fifths up to the octave, since that ending names no
+ *   loser. With the music muted the effects sting stands in (`score`, or
+ *   `gameover` when the CPU takes it), then the stop.
+ *
+ * Beginnings (#417): the first round's `roundStart` is the match's intro. It is
+ * Gorillas' opening in kind, a few stepwise beeper quarters before play, and a
+ * separate once-only opening in front of it would put two beeper jingles back
+ * to back over the same silent intro bar.
  */
 import { p, REST, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
 import type { FormScene } from '../engine/audio';
@@ -131,6 +141,8 @@ export const STINGER_BEATS = 4;
 export const STINGER_SECONDS = (STINGER_BEATS * 60) / BASE_TEMPO;
 /** The round-start jingle's length in beats. */
 export const ROUND_START_BEATS = 6;
+/** Every match ending's length in beats: two bars, the last thing the match says. */
+export const MATCH_END_BEATS = 8;
 
 /** A pitched note, by name. */
 const n = (name: string, beats: number, gain?: number): Note => ({ freq: p(name), beats, gain });
@@ -347,6 +359,44 @@ export const TANKS_MUSIC: GameAudioOptions = {
       ...silence(STINGER_BEATS).slice(1)
     ],
     // An open fifth, neither major nor minor: a two-player round, or a draw.
-    round: [[...beep('D5', 1), ...beep('A4', 1), ...beep('D5', 1), r(1)], ...silence(STINGER_BEATS).slice(1)]
+    round: [[...beep('D5', 1), ...beep('A4', 1), ...beep('D5', 1), r(1)], ...silence(STINGER_BEATS).slice(1)],
+    // The match endings, played through `playEnding` with the bed cut under
+    // them, so the PC speaker has the last word alone, as Gorillas' did.
+    // The player takes the match: the round's flourish grown to a fanfare,
+    // a run up two octaves of D major in 32nds, the fifth and octave twice, a held D6.
+    matchWon: [
+      [
+        ...['D4', 'F#4', 'A4', 'D5', 'F#5', 'A5', 'B5', 'C#6'].map(name => n(name, 0.125)),
+        ...['D6', 'A5', 'D6', 'A5', 'D6', 'E6', 'F#6', 'E6'].map(name => n(name, 0.125)),
+        ...beep('A5', 0.5),
+        ...beep('D6', 0.5),
+        ...beep('A5', 0.5),
+        ...beep('D6', 0.5),
+        n('D6', 3),
+        r(1)
+      ],
+      ...silence(MATCH_END_BEATS).slice(1)
+    ],
+    // The CPU takes it: the round's chromatic sag carried on down through the
+    // leading note to the low tonic, in D minor, slowing as it falls.
+    matchLost: [
+      [
+        ...beep('F5', 1),
+        ...beep('E5', 1),
+        ...beep('Eb5', 1),
+        ...beep('D5', 1),
+        ...beep('C#5', 1),
+        ...beep('A4', 1),
+        n('D4', 1.5),
+        r(0.5)
+      ],
+      ...silence(MATCH_END_BEATS).slice(1)
+    ],
+    // A two-player match names no loser, so it ends on the round's open
+    // fifths climbing to the octave, still neither major nor minor.
+    matchOver: [
+      [...beep('D5', 1), ...beep('A4', 1), ...beep('D5', 1), ...beep('A5', 1), n('D6', 3), r(1)],
+      ...silence(MATCH_END_BEATS).slice(1)
+    ]
   }
 };

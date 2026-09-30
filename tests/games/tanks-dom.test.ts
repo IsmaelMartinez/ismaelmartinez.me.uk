@@ -47,6 +47,7 @@ const mockAudio = vi.hoisted(() => ({
   setScene: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
+  playEnding: vi.fn(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -132,13 +133,41 @@ function forceMatchOver(winner: 0 | 1): void {
   frames.step(1);
 }
 
-describe('Tank Duel match-end sound (#368)', () => {
+describe('Tank Duel match-end phrase (#417)', () => {
+  it.each([
+    ['the player takes a vs-CPU match', 'vs-cpu-btn', 0, 'matchWon'],
+    ['the CPU takes the match', 'vs-cpu-btn', 1, 'matchLost'],
+    ['player one takes a two-player match', 'two-player-btn', 0, 'matchOver'],
+    ['player two takes a two-player match', 'two-player-btn', 1, 'matchOver']
+  ] as const)('ends on its own phrase when %s, and leaves the stop to it', (_, mode, winner, ending) => {
+    document.getElementById(mode)!.click();
+    forceMatchOver(winner);
+
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledWith(ending);
+    expect(TANKS_MUSIC.stingers?.[ending]).toBeDefined();
+    // playEnding stops the music once the phrase has sounded; a stop here would cut it.
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('score');
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+  });
+});
+
+describe('Tank Duel match-end sound with the music muted (#368)', () => {
+  beforeEach(() => {
+    mockAudio.playEnding.mockReturnValue(false);
+  });
+  afterEach(() => {
+    mockAudio.playEnding.mockReturnValue(true);
+  });
+
   it('plays the win chime, not the loss sting, when the player takes a vs-CPU match', () => {
     document.getElementById('vs-cpu-btn')!.click();
     forceMatchOver(0);
 
     expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the loss sting when the CPU actually takes the match', () => {
@@ -147,6 +176,7 @@ describe('Tank Duel match-end sound (#368)', () => {
 
     expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('score');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 
   it('plays the win chime for a decided two-player match either way', () => {
@@ -155,6 +185,7 @@ describe('Tank Duel match-end sound (#368)', () => {
 
     expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -260,7 +291,7 @@ describe('Tank Duel music answers the match (#379, #415)', () => {
     expect(mockAudio.setDanger).toHaveBeenLastCalledWith(true);
   });
 
-  it('ends the match on the effects sting and a stop, with no round stinger and no muffle', () => {
+  it('ends a played-out match on its ending phrase, with no round stinger and no muffle (#417)', () => {
     click('vs-cpu-btn');
     loseRound(1);
     nextRound();
@@ -271,8 +302,9 @@ describe('Tank Duel music answers the match (#379, #415)', () => {
 
     loseRound(1);
     vi.advanceTimersByTime(STINGER_SECONDS * 1000);
-    expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
-    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledWith('matchWon');
+    expect(mockAudio.stop).not.toHaveBeenCalled();
     expect(mockAudio.playStinger).not.toHaveBeenCalled();
     expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
   });

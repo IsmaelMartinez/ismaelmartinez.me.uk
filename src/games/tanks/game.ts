@@ -496,8 +496,13 @@ export function initTanksGame(): void {
     // decided either way, is a win for whoever is watching it end.
     const cpuTookMatch = matchOver && match.mode === 'cpu' && winner === 1;
     if (matchOver) {
-      audio.playSfx(cpuTookMatch ? 'gameover' : 'score');
-      audio.stop();
+      // The match's last word is the beeper's (see music.ts): a two-player
+      // ending names no loser. Muted, the effects sting marks it instead.
+      const ending = match.mode === '2p' ? 'matchOver' : cpuTookMatch ? 'matchLost' : 'matchWon';
+      if (!audio.playEnding(ending)) {
+        audio.playSfx(cpuTookMatch ? 'gameover' : 'score');
+        audio.stop();
+      }
     } else {
       roundCue(winner);
     }

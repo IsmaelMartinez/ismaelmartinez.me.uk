@@ -43,6 +43,7 @@ import { seededRandom } from './seeded-random';
 import { meanT } from './paired-stats';
 import {
   TANKS_MUSIC,
+  ROUND_START_BEATS,
   STINGER_BEATS,
   SUDDEN_DEATH_TEMPO
 } from '../../src/games/tanks/music';
@@ -883,28 +884,41 @@ describe('headless playthrough (seeded, deterministic)', () => {
 });
 
 /**
- * The score facts `game.ts` leans on (#379). The round-over muffle waits
- * `STINGER_SECONDS`, so every stinger must be that long in every voice; the
- * drums are a layer for match point, so the bed must carry none of its own;
- * and Sudden Death can last a round or two, so its own order is held to the
- * same floor as the bed, at its own tempo.
+ * The score facts `game.ts` and the brief lean on (#379, #415). The round-over
+ * muffle waits `STINGER_SECONDS`, so every round-end stinger must be that long
+ * in every voice. The brief is near-silence under the aim with the tune kept
+ * for match point, so the beeper that plays the jingles is silent in every
+ * arena's bed and sounds only in Sudden Death, and a jingle is the beeper
+ * alone. And Sudden Death can last a round or two, so its own order is held to
+ * the same floor as the beds, at its own tempo.
  */
 describe('Tank Duel score', () => {
   const beats = (line: { beats: number }[]) => line.reduce((sum, note) => sum + note.beats, 0);
+  const sounding = (line: { freq: number }[]) => line.filter(note => note.freq > 0).length;
   const form = TANKS_MUSIC.form!;
-  const drums = TANKS_MUSIC.tracks.findIndex(t => t.name === 'drums');
+  const lead = TANKS_MUSIC.tracks.findIndex(t => t.name === 'lead');
+  const stingers = TANKS_MUSIC.stingers!;
 
-  it('makes every stinger STINGER_BEATS long in every voice', () => {
-    const lengths = Object.values(TANKS_MUSIC.stingers!).flatMap(lines => lines.map(beats));
-    expect(lengths).toHaveLength(Object.keys(TANKS_MUSIC.stingers!).length * TANKS_MUSIC.tracks.length);
-    expect(new Set(lengths)).toEqual(new Set([STINGER_BEATS]));
+  it('makes every round-end stinger STINGER_BEATS long, and the round start ROUND_START_BEATS, in every voice', () => {
+    expect(Object.keys(stingers).sort()).toEqual(['round', 'roundLost', 'roundStart', 'roundWon']);
+    for (const [name, lines] of Object.entries(stingers)) {
+      expect(lines, name).toHaveLength(TANKS_MUSIC.tracks.length);
+      const want = name === 'roundStart' ? ROUND_START_BEATS : STINGER_BEATS;
+      expect(new Set(lines.map(beats)), name).toEqual(new Set([want]));
+    }
   });
 
-  it('keeps percussion out of the bed and brings it in only with Sudden Death', () => {
-    const hits = (section: string) => form.sections[section][drums].filter(note => note.drum).length;
-    expect(TANKS_MUSIC.tracks[drums].startsMuted).toBe(true);
-    expect(form.order.map(hits)).toEqual(form.order.map(() => 0));
-    for (const section of form.danger!.order) expect(hits(section)).toBeGreaterThan(0);
+  it('plays every jingle on the beeper alone', () => {
+    for (const [name, lines] of Object.entries(stingers)) {
+      lines.forEach((line, t) => expect(sounding(line) > 0, `${name} voice ${t}`).toBe(t === lead));
+    }
+  });
+
+  it('keeps the tune out of every arena bed and plays it only in Sudden Death', () => {
+    const beds = [...new Set([...form.order, ...Object.values(form.scenes!).flatMap(scene => scene.order)])];
+    expect(beds).toHaveLength(5);
+    for (const bed of beds) expect(sounding(form.sections[bed][lead]), bed).toBe(0);
+    for (const section of form.danger!.order) expect(sounding(form.sections[section][lead]), section).toBeGreaterThan(0);
   });
 
   it('lasts at least the standard floor per pass of Sudden Death, at its own tempo', () => {

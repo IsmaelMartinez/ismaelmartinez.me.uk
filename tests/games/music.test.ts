@@ -288,6 +288,25 @@ describe('the arcade scores', () => {
     expect(long).toEqual([]);
   });
 
+  it("opens Cascade on a pickup into the folk tune, and ends each run on D (#417)", () => {
+    const form = CASCADE_MUSIC.form!;
+    const beats = (line: Note[]) => line.reduce((sum, n) => sum + n.beats, 0);
+    // Two 2/4 bars on every channel, inside one form bar, so a jump asked for
+    // during it waits no longer than the loop's own bar would make it.
+    expect(form.intro!.map(beats)).toEqual([4, 4, 4, 4]);
+    // The lead lands a semitone under the tune's first note: a leading tone
+    // the folk tune's opening D answers, not a second tonic before it.
+    const introLead = form.intro![0].filter(n => n.freq > 0);
+    const tuneLead = form.sections[form.order[0]][0].find(n => n.freq > 0)!;
+    expect(Math.round(12 * Math.log2(tuneLead.freq / introLead[introLead.length - 1].freq))).toBe(1);
+    // Both endings arrive home on the lead, as the loop seam may not.
+    const semitonesFromD = (freq: number) => ((Math.round(12 * Math.log2(freq / p('D4'))) % 12) + 12) % 12;
+    for (const name of ['topOut', 'timeUp']) {
+      const lead = CASCADE_MUSIC.stingers![name][0].filter(n => n.freq > 0);
+      expect(semitonesFromD(lead[lead.length - 1].freq)).toBe(0);
+    }
+  });
+
   it('gives Football a base tempo its knockout ramp can wind up from', () => {
     // Same split as Cascade: the pace the score was written at belongs to the
     // arrangement, the stage ramp in `game.ts` belongs to the game.

@@ -30,7 +30,7 @@ import {
   pressKey
 } from './dom-helpers';
 import { makeRecordingContext, onsets } from './audio-graph';
-import { BASE_TEMPO, CUES, HORDE_LAUNCH, TOWERDEFENSE_MUSIC } from '../../src/games/towerdefense/music';
+import { BASE_TEMPO, CUES, ENDINGS, HORDE_LAUNCH, TOWERDEFENSE_MUSIC } from '../../src/games/towerdefense/music';
 
 vi.mock('../../src/games/engine/globalScores', async () =>
   (await import('./dom-helpers')).mockGlobalScores()
@@ -60,6 +60,7 @@ const mockAudio = vi.hoisted(() => ({
   setScene: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
+  playEnding: vi.fn(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -737,11 +738,80 @@ describe('Line Hold music', () => {
     expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
   });
 
-  it('clears the pause when the prompt ends the run, so the next run is not muffled', () => {
+  it('clears the pause when the prompt ends the run, before the ending plays, so neither is muffled', () => {
     holdFirstWave();
     standDown();
     expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    const unpaused = mockAudio.setPaused.mock.invocationCallOrder.at(-1)!;
+    expect(unpaused).toBeLessThan(mockAudio.playEnding.mock.invocationCallOrder[0]);
+  });
+
+  /** The one ending the run played, by stinger name. */
+  const ending = () => {
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    return (mockAudio.playEnding.mock.calls[0] as unknown[])[0];
+  };
+
+  it('ends a stand-down on the held phrase, which takes the place of the effect and the stop (#417)', () => {
+    holdFirstWave();
+    // The wave's bounties play the same effect; only the ending's is in question.
+    mockAudio.playSfx.mockClear();
+    standDown();
+    expect(ending()).toBe(ENDINGS.held);
+    // The phrase is the ending: the engine stops the music behind it itself.
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('score');
+  });
+
+  it('ends a breach on the fallen phrase (#417)', () => {
+    // No towers: the waves auto-launch until the keep falls.
+    startRun();
+    advanceUntil(overlayShown, 600);
+    expect(document.getElementById('over-title')!.textContent).toBe('The Line Has Fallen');
+    expect(ending()).toBe(ENDINGS.fallen);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+  });
+
+  it('ends a breach after the whole campaign has held on the held phrase, as the trophy screen does (#417)', () => {
+    // Eighteen launches with the keep standing, then let it fall in the assault.
+    playWaves(19, () => {});
+    keepStands.on = false;
+    advanceUntil(overlayShown, 3000);
+    expect(document.getElementById('over-icon')!.textContent).toBe('🏆');
+    expect(ending()).toBe(ENDINGS.held);
+    // Nineteen waves of wall time: a couple of seconds alone, far more beside other suites.
+  }, 30_000);
+
+  it('falls back to the effect and a stop when the ending cannot play, music muted', () => {
+    mockAudio.playEnding.mockReturnValueOnce(false);
+    holdFirstWave();
+    mockAudio.playSfx.mockClear();
+    standDown();
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
     expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+
+    mockAudio.playEnding.mockReturnValueOnce(false);
+    document.getElementById('again-btn')!.click();
+    advanceUntil(overlayShown, 600);
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens a run on a two-bar call to arms that hands its last note to the preparation (#417)', () => {
+    const horn = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'horn');
+    const intro = FORM.intro!;
+    const beats = (line: { beats: number }[]) => line.reduce((sum, note) => sum + note.beats, 0);
+    for (const line of intro) expect(beats(line)).toBe(8);
+    // The layers a build lull has out stay out of it.
+    for (const name of ['pizz', 'drums']) {
+      const line = intro[TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === name)];
+      expect(line.every(note => note.freq === 0 && !note.drum)).toBe(true);
+    }
+    const lastCall = intro[horn].at(-1)!;
+    const prepHorn = FORM.sections[FORM.order[0]][horn].find(note => note.freq > 0)!;
+    expect(lastCall.freq).toBe(prepHorn.freq);
   });
 
   it('marches the finale and every wave after it to the horde, and holds it between waves (#403)', () => {

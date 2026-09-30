@@ -487,9 +487,38 @@ describe('playStinger', () => {
     expectTimes(timesOf(log, 770), [2.05]);
     const loop = (l: string) => onsets(l).filter(([f]) => f === 440 || f === 110);
     expect(loop(log)).toEqual(loop(drive(STUNG, 6)));
-    // Straight to the bus, past the lane it ducks.
-    expect(routeOf(log, 880)).toEqual(new Set(['gain#2']));
+    // Through its own gate straight to the bus, past the lane it ducks.
+    const gates = routeOf(log, 880);
+    expect(gates.size).toBe(1);
+    const [gate] = gates;
+    expect(routeOf(log, 770)).toEqual(gates);
+    expect(log).toContain(`${gate}.connect(gain#2)`);
     expect(routeOf(log, 440)).toEqual(new Set(['gain#4']));
+  });
+
+  /** The gate each playStinger call opened, in call order. */
+  const gatesOf = (log: string): string[] =>
+    [...routeOf(log, 880)].sort((a, b) => Number(a.slice(5)) - Number(b.slice(5)));
+
+  it('cuts a stinger still sounding when the next one starts, and leaves the new one open (#416)', () => {
+    const log = drive(STUNG, 5, [
+      { at: 2, run: a => a.playStinger('horn') },
+      { at: 2.2, run: a => a.playStinger('horn') }
+    ]);
+    const [first, second] = gatesOf(log);
+    expect(writes(log, `${first}.gain`)).toEqual([`${first}.gain.setTargetAtTime(0, 2.2, 0.005)`]);
+    // Untouched until the drive disposes the engine at the end.
+    expect(writes(log, `${second}.gain`)).toEqual([`${second}.gain.setTargetAtTime(0, 5, 0.005)`]);
+  });
+
+  it('cuts a sounding stinger on stop(), so a later start() cannot bring the rest of it back (#416)', () => {
+    const log = drive(STUNG, 5, [
+      { at: 2, run: a => a.playStinger('horn') },
+      { at: 2.3, run: a => a.stop() },
+      { at: 3, run: a => a.start() }
+    ]);
+    const [gate] = gatesOf(log);
+    expect(writes(log, `${gate}.gain`)).toEqual([`${gate}.gain.setTargetAtTime(0, 2.3, 0.005)`]);
   });
 
   it('ducks the lane under the phrase and lifts it when the phrase ends, never touching the master', () => {

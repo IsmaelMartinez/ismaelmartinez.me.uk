@@ -38,8 +38,13 @@
  *     is a little cheeky: it climbs by step, turns back and answers itself
  *     with a single low D and a rest.
  *
- * Form, four four-bar phrases of 16 bars (64 beats), no intro, each phrase a
- * ringtone in length and each ending on a rest:
+ * Form, a two-bar intro once per run, then four four-bar phrases of 16 bars
+ * (64 beats), each phrase a ringtone in length and each ending on a rest:
+ *   intro  the phone picking up (#417): the G major chord climbed D5 G5 B5 D6
+ *       to the top G6 and a rest, then phrase b's stutter on D6 twice, and
+ *       B5 A5 down to the hook's own low D and a rest, so the run's first
+ *       hook lands on the downbeat as the dominant's answer. It stays inside
+ *       the loop's D5 to G6, so it is the same buzzer in the same register;
  *   a   the hook over G, the same climb pushed on to E6 and left hanging, a
  *       run down over C from the E6, and a half cadence on A over D;
  *   a2  the hook again, answered: a run down to F sharp, then home on G with
@@ -73,9 +78,10 @@
  *     cuts the tune while it rings (`BUZZER`) and brings it back after;
  *   - the `gameover` stinger in place of the shared effect: a run down to G5
  *     and a low G4 trilling on the semitone above for two beats, the buzzer's
- *     stand-in for Blockade's crash. The game cuts the tune, plays it, and
- *     stops the music when it has sounded; with the music muted it falls back
- *     to the `gameover` effect, as before;
+ *     stand-in for Blockade's crash. It is the run's ending, so the game plays
+ *     it through `playEnding` (#417), which stops the tune under it and closes
+ *     the music once it has sounded; with the music muted it falls back to the
+ *     `gameover` effect and a stop, as before;
  *   - pause muffles the score with `setPaused` rather than stopping it.
  */
 import { p, REST, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
@@ -175,6 +181,9 @@ export const SNAKE_MUSIC: GameAudioOptions = {
     }
   ],
   form: {
+    // The phone picking up, once per run: the chord climbed to the top, the
+    // stutter, and down to the low D the hook answers (see above).
+    intro: [ring('8D5 8G5 8B5 8D6 4G6 4p   16D6 16D6 8p 16D6 16D6 8p 8B5 8A5 8D5 8p')],
     sections: {
       a: [ring(`${hook}   8C6 16D6 16E6 8D6 8C6 8B5 8C6 8A5 8p   8B5 8A5 8G5 8F#5 4A5 4p`)],
       a2: [ring(`${hook}   8E6 16D6 16C6 8A5 8C6 8B5 16A5 16G5 8F#5 8A5   8G5 8p 8D5 8p 4G5 4p`)],

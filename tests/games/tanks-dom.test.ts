@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initTanksGame } from '../../src/games/tanks';
-import { STINGER_SECONDS, TANKS_MUSIC } from '../../src/games/tanks/music';
+import { BASE_TEMPO, INTRO_BEATS, STINGER_SECONDS, TANKS_MUSIC } from '../../src/games/tanks/music';
 import * as matchModule from '../../src/games/tanks/match';
 import {
   createFrameDriver,
@@ -342,6 +342,51 @@ describe('Tank Duel music answers the match (#379, #415)', () => {
       expect(TANKS_MUSIC.form?.scenes?.[arena]).toBeDefined();
     }
   );
+
+  describe('the match intro (#415)', () => {
+    const introPlaying = () =>
+      mockAudio.section.mockReturnValue({ name: 'intro', start: 0, danger: false, scene: null } as never);
+    afterEach(() => mockAudio.section.mockReturnValue(null));
+
+    it('holds the arena scene for the intro, then asks for it in the intro’s last beat', () => {
+      introPlaying();
+      pickArena('canyon');
+      click('vs-cpu-btn');
+      expect(mockAudio.setScene).not.toHaveBeenCalled();
+      const lastBeat = ((INTRO_BEATS - 1) * 60 * 1000) / BASE_TEMPO;
+      vi.advanceTimersByTime(lastBeat - 1);
+      expect(mockAudio.setScene).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(mockAudio.setScene).toHaveBeenCalledTimes(1);
+      expect(mockAudio.setScene).toHaveBeenCalledWith('canyon');
+    });
+
+    it('lets the intro open the first round, so only the later rounds play the round-start call', () => {
+      introPlaying();
+      click('vs-cpu-btn');
+      expect(mockAudio.playStinger).not.toHaveBeenCalledWith('roundStart');
+      loseRound(1);
+      nextRound();
+      expect(mockAudio.playStinger).toHaveBeenLastCalledWith('roundStart');
+    });
+
+    it('drops a scene still waiting on the intro when a new match starts', () => {
+      introPlaying();
+      pickArena('mesa');
+      click('vs-cpu-btn');
+      loseRound(1);
+      nextRound();
+      loseRound(1);
+      nextRound();
+      loseRound(1);
+      click('play-again-btn');
+      pickArena('bunker');
+      click('vs-cpu-btn');
+      vi.advanceTimersByTime(((INTRO_BEATS - 1) * 60 * 1000) / BASE_TEMPO);
+      expect(mockAudio.setScene).toHaveBeenCalledTimes(1);
+      expect(mockAudio.setScene).toHaveBeenCalledWith('bunker');
+    });
+  });
 
   it('opens every round on the round-start jingle, match point included', () => {
     click('vs-cpu-btn');

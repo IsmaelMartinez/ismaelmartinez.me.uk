@@ -22,7 +22,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { TANKS_MUSIC, STINGER_SECONDS } from './music';
+import { TANKS_MUSIC, STINGER_SECONDS, INTRO_BEATS, BASE_TEMPO } from './music';
 import { markDone } from '../engine/progress';
 import type { ArenaType } from './terrain';
 import { submitsToBoard, type TankMode } from './scoring';
@@ -269,7 +269,7 @@ export function initTanksGame(): void {
   wireSoundToggles(audio);
 
   // The round-over overlay's hush: the round's stinger plays over the ducked
-  // bed, then the bed is muffled behind the overlay until the next round. The
+  // march, then the march is muffled behind the overlay until the next round. The
   // muffle waits for the stinger, because the pause filter sits after the
   // whole music mix and would muffle the stinger too.
   let hush: ReturnType<typeof setTimeout> | null = null;
@@ -292,11 +292,35 @@ export function initTanksGame(): void {
     audio.setPaused(false);
   }
 
+  // The match's opening (see music.ts): while the intro plays, the arena's
+  // scene waits for the intro's last beat, so the move lands on its last bar
+  // line, and the first round plays no `roundStart` of its own.
+  let arenaCue: ReturnType<typeof setTimeout> | null = null;
+  let introOpens = false;
+
+  function openMusic(arena: ArenaType) {
+    if (arenaCue !== null) clearTimeout(arenaCue);
+    arenaCue = null;
+    audio.start();
+    introOpens = audio.section()?.name === 'intro';
+    if (!introOpens) {
+      audio.setScene(arena);
+      return;
+    }
+    arenaCue = setTimeout(
+      () => {
+        arenaCue = null;
+        audio.setScene(arena);
+      },
+      ((INTRO_BEATS - 1) * 60 * 1000) / BASE_TEMPO
+    );
+  }
+
   /**
    * Match point is this cabinet's Sudden Death (see music.ts): with either
-   * side one round from the match, the arena's bed gives way to the danger
-   * order, the one place the score has a tune. Read at every round start, so
-   * a new match (both tallies back at zero) goes back to its arena's bed.
+   * side one round from the match, the arena's march gives way to the danger
+   * order, the quickstep. Read at every round start, so a new match (both
+   * tallies back at zero) goes back to its arena's march.
    */
   function syncMatchPoint() {
     audio.setDanger(match.wins.some(w => w === WINS_PER_MATCH - 1));
@@ -403,9 +427,8 @@ export function initTanksGame(): void {
     bestItem.hidden = match.mode === '2p';
     startOverlay.style.display = 'none';
     roundOverlay.style.display = 'none';
-    audio.start();
-    // Each arena has its own bed, a scene named as the arena is (see music.ts).
-    audio.setScene(match.arena);
+    // Each arena has its own march, a scene named as the arena is (see music.ts).
+    openMusic(match.arena);
     startRound(match);
   }
 
@@ -444,7 +467,9 @@ export function initTanksGame(): void {
       case 'roundStart':
         liftHush();
         syncMatchPoint();
-        audio.playStinger('roundStart');
+        // The intro is the first round's opening; every later round has the bugle call.
+        if (introOpens) introOpens = false;
+        else audio.playStinger('roundStart');
         scene.rebuild();
         fx.clear();
         smoke = [];

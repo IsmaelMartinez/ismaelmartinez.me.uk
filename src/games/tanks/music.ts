@@ -1,124 +1,102 @@
 /**
- * Tank Duel's score: an artillery duel's near-silence, one ambience bed per
- * arena, PC-speaker jingles at the edges of a round, and a tune kept back for
- * match point.
+ * Tank Duel's score: a PC-speaker field march, one tune per arena, a quickstep
+ * for match point, a bugle call and drum roll-off to open the match, and
+ * band endings.
  *
- * Reference and brief (round 3, #415; ADR 003's round 3 amendment). Kee Games'
- * Tank (1974) had effects and no music, so the reference is the artillery
- * games the cabinet actually plays like, and they were nearly silent while
- * aiming. QBasic Gorillas (1991) had a short PC-speaker intro of stepwise
- * quarter notes in a narrow range and a fast 32nd-note victory flourish, and
- * nothing at all during play. Worms (1995, Bjorn Lynne) had a title theme and
- * one long ambience bed per landscape, wind and distant tones rather than a
- * tune. The brief takes the silence and the beds from Worms and the jingles
- * from Gorillas, and saves the melody for match point, which is this cabinet's
- * Sudden Death. Nothing here quotes either game: the jingles evoke Gorillas by
- * instrument, articulation, range and rhythm, never by its PLAY strings.
+ * Reference (round 3, #415, rescored after the owner's audition of #436, who
+ * asked for "everything" to change and for the original games as the model):
+ *
+ * - Kee Games' Tank (1974) had no music, only an explosion sound
+ *   (https://en.wikipedia.org/wiki/Tank_(video_game)).
+ * - QBasic Gorillas (1991) played the PC speaker through `PLAY` strings in MML:
+ *   a 14 s through-composed intro at 120 bpm in 16ths and 32nds that ends on a
+ *   bass figure repeated eight times at 160, and a victory dance that is one
+ *   32nd-note figure played four times; its tunes bounce on repeated staccato
+ *   16ths with 16th rests between them (https://www.vgmpf.com/Wiki/index.php?title=Introduction_-_QBasic_Gorillas_%28DOS%29,
+ *   https://gist.github.com/paulera/2525813cc3e5314c5932e1212a1d811b).
+ * - Scorched Earth (1991) had the PC speaker and nothing else; its AdLib
+ *   support was planned and never shipped (https://tcrf.net/Scorched_Earth).
+ * - Worms (1995, Bjorn Lynne) played no music in a match, only an ambience per
+ *   landscape (wind, insects) with the odd sting, and its song is "a heroic
+ *   military march" (https://www.hardcoregaming101.net/worms/,
+ *   https://drawesome.bandcamp.com/album/worms-original-game-soundtrack).
+ *
+ * Brief. The lineage was silent while aiming, which is the score the owner
+ * rejected, so the tune under the aim takes the two things that lineage did
+ * have: Worms' heroic march and the Gorillas PC-speaker voice, at Gorillas'
+ * 120 bpm. Worms' one ambience per landscape becomes one march per arena, each
+ * in its own key and mode over a quiet bed of that landscape's air, and
+ * Gorillas' jump to 160 becomes match point's quickstep. The match opens the
+ * way a band does, a bugle call and then the drums' roll-off; the victory is
+ * Gorillas' form (one quick figure, repeated) and every ending has the whole
+ * band at the march's level. Nothing quotes either game: no `PLAY` string, no
+ * Wormsong phrase, only the instrument, articulation, tempi and forms.
  *
  * Voices, and the trait each serves:
  *
- * - `lead`, the beeper: a plain square with an instant gate and no decay, no
- *   vibrato and no echo, which is a PC speaker (one square wave switched on
- *   and off, at one level). Every jingle is written through `beep`, which
- *   sounds 7/8 of each note and leaves the rest silent, the articulation QBasic
- *   PLAY uses unless told otherwise. It is silent in every bed.
- * - `drone`: a sawtooth under a low-pass, swelling in over a second and
- *   releasing slowly, in the bass. The "low filtered drone" of the brief; it
- *   holds each root for bars at a time, so a bed's harmony changes slowly.
- * - `tone`: a sine ping that decays to nothing, for the sparse distant tones
- *   of a Worms landscape (a call on the hills, drips off the canyon walls, a
- *   radar ping in the bunker). The canyon and bunker echoes are written as
- *   quieter repeats, because the score is dry. At match point the same voice
- *   plays low with a pitch drop, a distant gun.
- * - `wind`: sustained noise through a low-pass whose cutoff is the note's
- *   frequency, written in Hz (`gust`), swelling and dying like air moving.
+ * - `lead`, the beeper: a plain square with an instant gate and no decay, a
+ *   PC speaker. Every lead note goes through `beep`, sounding for 7/8 of its
+ *   length, `PLAY`'s normal articulation, so repeated notes stay separate.
+ * - `horn`: a triangle with a soft attack in the middle register, the band's
+ *   inner voice, holding the chord's third and fifth in half notes.
+ * - `bass`: a filtered sawtooth tuba in half notes, root then fifth, walking
+ *   up through the chord into every fourth bar's turn.
+ * - `drums`: the march cadence, bass drum on one and three, snare on two and
+ *   four with ruffs into them, a roll at every phrase end.
+ * - `wind`: the arena's air, filtered noise far under the band, after Worms:
+ *   a breeze on the hills, a whistle in the canyon, warm air on the mesa,
+ *   gusts on the ridges, a vent's hiss in the bunker.
  *
- * The mix is mono and dry: no pan, because a PC speaker is one channel and a
- * Worms bed is heard as a place rather than a stereo image, and no echo send,
- * because neither reference had one. Three pitched voices and a noise voice.
+ * Dry and mono: a PC speaker is one channel and none of the references had
+ * an echo.
  *
- * Key, tempo and form. Everything runs at `BASE_TEMPO` (120), so a jingle is
- * the same speed wherever it plays, and each bed's rhythm is written in long
- * values. The form's `order` is the hills bed after a silent one-bar intro;
- * every arena, hills included, is a scene of the same name, which the game
- * selects at the start of a match, so the choice on the start screen is what you hear.
- * Each bed is in its own mode and has its own rhythmic cell:
+ * Form. Every bed is 16 bars at `BASE_TEMPO` (120), 32 s, four four-bar
+ * phrases whose fourth bar turns to the dominant, so the loop hands back to
+ * its top through V (the seam gate):
  *
- * - hills, D Dorian, 24 bars (48 s): the drone breathes every two bars (six
- *   beats held, two off) through D, C, G and Bb; a two-note call every four.
- * - canyon, E Phrygian, 20 bars (40 s): the drone never breathes, E leaning
- *   on F, the flat second; a single drip every four bars with three repeats
- *   falling away, and a high whistle of wind.
- * - mesa, A Aeolian, 24 bars (48 s): the stillest, four-bar roots, one ping
- *   every eight bars, and a low warm wind.
- * - ridges, G Mixolydian, 24 bars (48 s): the drone steps between two notes
- *   every half bar, a ridge line; a rising three-note figure every four bars
- *   and short gusts.
- * - bunker, C Phrygian, 24 bars (48 s): a mains-hum drone on C, Db and Ab, a
- *   radar ping every two bars with one echo, and a constant vent hiss.
+ * - hills, D major, the home march, bright and square.
+ * - canyon, E minor with the Phrygian F, darker, the same march in the shade.
+ * - mesa, A Mixolydian, a loping dotted march with the flat seventh of the West.
+ * - ridges, G major, the jauntiest, dotted 16ths climbing the crests.
+ * - bunker, C minor, low and nervous, Gorillas' repeated staccato 16ths.
  *
- * The danger order, `sudden`, is the only place a melody plays: 16 bars at
- * `SUDDEN_DEATH_TEMPO` (126), 30.5 s, in D minor on the beeper. Its hook is the
- * jingles' stepwise quarters grown into an arch: a scale climbing from D to G,
- * over the top to Bb and down to D (bars 1 to 4), answered a third higher up
- * to D6 and down to a half close on A (5 to 8); a sequence of turning eighths
- * falls a step a bar (9 to 12), and the hook comes back and stops on A, so
- * the loop hands back through V. Under it the drone moves a bar at a time and
- * the tone voice fires a gun on the downbeat and the off-beat after two, the
- * one rhythmic cell in the score, over a low rumble.
+ * Match point, `sudden`, is a D minor quickstep of 24 bars at
+ * `SUDDEN_DEATH_TEMPO` (160, Gorillas' second tempo), 36 s, driven by
+ * repeated-note eighths. The intro is four bars: a bugle call on D over a held
+ * chord (bars 1 and 2), then the snare's roll-off alone (3 and 4), which leads
+ * into any arena's march whatever its key.
  *
- * Gates. `gates` switches all three style gates off, which ADR 003's round 3
- * amendment allows for exactly this cabinet. `rhythms` and `syncopation` read
- * the lead, and in the beds the lead is silent by design: near-silence under
- * the aim is the brief, so a bed has one lead rhythm, the empty bar. `seam`
- * forbids arriving home at the loop's top, and a drone has no cadence to
- * avoid; the hills and canyon beds hold their tonic pedal into the top. The
- * seconds floor stays on, and every bed clears the standard 30 s.
- *
- * Session and load. A match is first to three rounds, three to eight minutes,
- * and most of it is the held breath of aiming: reading the wind, setting angle
- * and power, waiting on a shell. High attention with nothing moving, which is
- * why the beds carry no tune (ADR 003 asked for structural rests here) and
- * why the melody arrives only when one shot may end the match.
+ * Gates: all three are on. Every bed syncopates at least once in each eight
+ * bars (a note pushed onto an off-beat and held over the beat), has more than
+ * three bar rhythms, and ends its pass on V.
  *
  * Adaptive hooks, wired in `game.ts`:
  *
- * - A match starts the music and moves it to the arena's scene
- *   (`setScene(arena)`), under the silent intro, so the bed that swells in is
- *   the one for the ground picked on the start screen.
- * - Every round opens on `roundStart`, the Gorillas-style intro: six stepwise
- *   beeper quarters in the range of a fifth over the ducked bed.
- * - Match point (either side one round from winning) switches to the danger
- *   order as the round starts, and a new match starts again from its arena.
- * - A round that does not end the match plays a stinger: `roundWon`, a
- *   flourish of 32nd notes up to D6, or `roundLost`, a chromatic sag from F
- *   to D, against the CPU; the neutral `round`, an open fifth, in two-player
- *   and for a mutual destruction. After it (`STINGER_SECONDS`) the bed is
- *   muffled behind the overlay with `setPaused`, and the next round lifts it.
- * - The match ends on its own phrase through `playEnding` (#417), which cuts
- *   the bed and lets the beeper finish alone before the music stops: against
- *   the CPU `matchWon`, the round flourish grown into a fanfare to D6, or
- *   `matchLost`, the round's sag carried on down to D4; in two-player
- *   `matchOver`, open fifths up to the octave, since that ending names no
- *   loser. With the music muted the effects sting stands in (`score`, or
- *   `gameover` when the CPU takes it), then the stop.
- *
- * Beginnings (#417): the first round's `roundStart` is the match's intro. It is
- * Gorillas' opening in kind, a few stepwise beeper quarters before play, and a
- * separate once-only opening in front of it would put two beeper jingles back
- * to back over the same silent intro bar.
+ * - A match starts the music, whose intro opens it. The arena's scene is asked
+ *   for one beat before the intro ends (`INTRO_BEATS`), so the move lands on
+ *   the intro's last bar line and the march that follows is that arena's.
+ *   The intro is the first round's opening, so that round plays no
+ *   `roundStart`; every later round opens on it, a short bugle call.
+ * - Match point switches to `sudden` as the round starts.
+ * - A round that does not end the match plays a stinger on the beeper and the
+ *   drums: `roundWon`, the victory figure twice onto D6; `roundLost`, a
+ *   chromatic sag from F to D; `round`, an open fifth, in two-player and for a
+ *   mutual destruction. After it (`STINGER_SECONDS`) the march is muffled
+ *   behind the overlay, and the next round lifts it.
+ * - The match ends on its phrase through `playEnding` (#417), the whole band:
+ *   `matchWon`, the victory figure four times through D, G and A to a held
+ *   D; `matchLost`, the bugle falling to D minor over a muffled drum;
+ *   `matchOver`, in two-player, open fifths with no third, naming no loser.
+ *   Muted, the effect stands in (`score`, or `gameover` when the CPU takes
+ *   it), then the stop.
  */
-import { p, REST, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
+import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
 import type { FormScene } from '../engine/audio';
 import type { ArenaType } from './terrain';
 
-/** Every arena is a scene, gated as its own loop; the bed plays for a whole match. */
+/** Every arena is a scene, gated as its own loop; its march plays for a whole match. */
 export const MUSIC_PROFILE: MusicProfile = {
   session: 'standard',
-  // Near-silence under the aim: the lead is silent in every bed, so the lead's
-  // rhythm and syncopation gates have nothing to read, and a drone has no
-  // cadence for the seam gate to forbid. See the docstring.
-  gates: { seam: false, syncopation: false, rhythms: false },
   scenes: {
     hills: { session: 'standard' },
     canyon: { session: 'standard' },
@@ -128,19 +106,21 @@ export const MUSIC_PROFILE: MusicProfile = {
   }
 };
 
-/** The beds' tempo, and so every jingle's outside match point. */
+/** The marches' tempo, and so every jingle's outside match point. */
 export const BASE_TEMPO = 120;
-/** Match point's tempo, the danger order's own. */
-export const SUDDEN_DEATH_TEMPO = 126;
+/** Match point's tempo, the danger order's own: Gorillas' second tempo. */
+export const SUDDEN_DEATH_TEMPO = 160;
+/** The match intro's length in beats: a bugle call and the drums' roll-off. */
+export const INTRO_BEATS = 16;
 /** Every round-end stinger's length in beats. */
 export const STINGER_BEATS = 4;
 /**
- * How long a round-end stinger lasts at the beds' tempo. Match point is faster,
- * so a stinger there ends sooner; this is the longest one can take.
+ * How long a round-end stinger lasts at the marches' tempo. Match point is
+ * faster, so a stinger there ends sooner; this is the longest one can take.
  */
 export const STINGER_SECONDS = (STINGER_BEATS * 60) / BASE_TEMPO;
-/** The round-start jingle's length in beats. */
-export const ROUND_START_BEATS = 6;
+/** The round-start bugle call's length in beats. */
+export const ROUND_START_BEATS = 4;
 /** Every match ending's length in beats: two bars, the last thing the match says. */
 export const MATCH_END_BEATS = 8;
 
@@ -148,183 +128,327 @@ export const MATCH_END_BEATS = 8;
 const n = (name: string, beats: number, gain?: number): Note => ({ freq: p(name), beats, gain });
 /** Silence. */
 const r = (beats: number): Note => ({ freq: REST, beats });
+/** A pitched note a number of semitones from a named one. */
+const at = (name: string, semitones: number, beats: number, gain?: number): Note => ({
+  freq: p(name) * 2 ** (semitones / 12),
+  beats,
+  gain
+});
+/** A drum hit. */
+const d = (drum: DrumName, beats: number, gain?: number): Note => ({ freq: REST, beats, drum, gain });
 /** A breath of wind: the noise voice's cutoff in Hz, which is its brightness. */
 const gust = (hz: number, beats: number, gain?: number): Note => ({ freq: hz, beats, gain });
-/**
- * A beeper note, QBasic PLAY's normal articulation: sounding for 7/8 of its
- * length and silent for the last eighth, so repeated and stepwise notes stay
- * separate, as a PC speaker switched off between them does.
- */
+/** A beeper note, sounding for 7/8 of its length as `PLAY` plays one. */
 const beep = (name: string, beats: number, gain?: number): Note[] => [n(name, (beats * 7) / 8, gain), r(beats / 8)];
-/** A distant gun: the tone voice low, dropping an octave onto its pitch. */
-const gun = (name: string, beats: number, gain?: number): Note => ({
-  ...n(name, beats, gain),
-  pitchEnv: { semitones: 12, time: 0.06 }
-});
 
-/** Every voice silent for this many beats. */
-const silence = (beats: number): Note[][] => [[r(beats)], [r(beats)], [r(beats)], [r(beats)]];
+/**
+ * The beeper's line from bars in short hand, `NAME:beats` tokens split on
+ * spaces and `-` for a rest, e.g. `'A4:.5 D5:.5 -:1'`. The downbeat is
+ * accented and the half bar next, so the line is shaped as a player would
+ * phrase it rather than sounding at one level.
+ */
+function lead(bars: string[]): Note[] {
+  return bars.flatMap(bar => {
+    let pos = 0;
+    return bar
+      .trim()
+      .split(' ')
+      .filter(Boolean)
+      .flatMap(token => {
+        const [name, len] = token.split(':');
+        const beats = Number(len);
+        const gain = pos === 0 ? 1 : pos === 2 ? 0.9 : 0.78;
+        pos += beats;
+        return name === '-' ? [r(beats)] : beep(name, beats, gain);
+      });
+  });
+}
 
-// --- hills: D Dorian, the drone breathing every two bars -------------------
+/** A bar's chord: its root in the bass octave, and whether its third is minor. */
+interface Chord {
+  root: string;
+  third: 3 | 4;
+  /** The fifth's distance, 6 for a diminished chord. */
+  fifth?: 6 | 7;
+}
 
-const HILLS_DRONE: Note[] = ['D2', 'D2', 'C2', 'D2', 'D2', 'G1', 'D2', 'D2', 'Bb1', 'C2', 'D2', 'A1'].flatMap(
-  (root, i) => [n(root, 6, i % 2 === 0 ? 0.9 : 0.8), r(2)]
+/** Chords from short names, `D`, `Em`, `A7` (a seventh sounds as its triad here) and `Do` for diminished. */
+function chords(names: string[]): Chord[] {
+  return names.map(name => {
+    const dim = name.endsWith('o');
+    const minor = !dim && name.replace('7', '').endsWith('m');
+    const letter = name.replace(/[m7o]/g, '');
+    // Every root sits in the second octave, which keeps the tuba between A1 and G#2.
+    const low = ['A', 'Bb', 'B'].includes(letter) ? `${letter}1` : `${letter}2`;
+    return { root: low, third: minor || dim ? 3 : 4, fifth: dim ? 6 : 7 };
+  });
+}
+
+/**
+ * The tuba: root then fifth in half notes, and every fourth bar a walk up the
+ * chord (root, third, fifth, sixth) into the next phrase, as a band's bass
+ * turns the corner. The last bar of a pass is always a V bar, so the walk
+ * there never lands on the tonic.
+ */
+function bassLine(harmony: Chord[]): Note[] {
+  return harmony.flatMap((c, bar) =>
+    bar % 4 === 3
+      ? [at(c.root, 0, 1, 1), at(c.root, c.third, 1, 0.8), at(c.root, c.fifth ?? 7, 1, 0.85), at(c.root, 9, 1, 0.8)]
+      : [at(c.root, 0, 2, 1), at(c.root, c.fifth ?? 7, 2, 0.85)]
+  );
+}
+
+/** The horn: the chord's third, then its fifth, in half notes, two octaves up. */
+function hornLine(harmony: Chord[]): Note[] {
+  return harmony.flatMap(c => [at(c.root, 24 + c.third, 2, 0.9), at(c.root, 24 + (c.fifth ?? 7), 2, 0.8)]);
+}
+
+/** The march cadence: bass drum on one and three, snare on two and four with a ruff into four. */
+const MARCH_BAR: Note[] = [d('kick', 1, 1), d('snare', 1, 0.8), d('kick', 1, 0.9), d('snare', 0.5, 0.45), d('snare', 0.5, 0.85)];
+/** A phrase's last bar: the snare rolls into the next phrase. */
+const ROLL_BAR: Note[] = [
+  d('kick', 1, 1),
+  d('snare', 1, 0.8),
+  ...[0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.65, 0.75].map(g => d('snare', 0.25, g))
+];
+
+/** The drums under a pass, a march bar and a roll at each phrase end. */
+function drumLine(bars: number): Note[] {
+  return Array.from({ length: bars }, (_, bar) => (bar % 4 === 3 ? ROLL_BAR : MARCH_BAR)).flat();
+}
+
+/** An arena's air: gusts of `beats` at the given cutoffs, cycled to fill the pass. */
+function air(bars: number, cutoffs: number[], beats: number, gain: number): Note[] {
+  const count = (bars * 4) / beats;
+  return Array.from({ length: count }, (_, i) => gust(cutoffs[i % cutoffs.length], beats, gain));
+}
+
+/** A section: the lead and harmony written, the band and the air derived. */
+function march(bars: string[], harmony: string[], wind: Note[]): Note[][] {
+  const h = chords(harmony);
+  return [lead(bars), hornLine(h), bassLine(h), drumLine(bars.length), wind];
+}
+
+// --- hills: D major, the home march -----------------------------------------
+
+const HILLS = march(
+  [
+    'A4:.5 D5:.5 D5:.75 E5:.25 F#5:1 D5:1',
+    'A5:1.5 F#5:.5 D5:1 -:1',
+    'B5:.75 A5:.25 G5:.5 F#5:.5 E5:1 D5:1',
+    'C#5:.5 E5:1 A5:1.5 -:1',
+    'A4:.5 D5:.5 D5:.75 E5:.25 F#5:1 A5:1',
+    'B5:1.5 A5:.5 F#5:1 D5:1',
+    'E5:.5 G#5:.5 B5:1 D6:1 B5:1',
+    'A5:2 -:.5 A4:.5 B4:.5 C#5:.5',
+    'D5:1 B4:.5 G4:.5 B4:1 D5:1',
+    'F#5:1.5 E5:.5 D5:2',
+    'G5:.5 G5:.5 B5:1 E5:1.5 -:.5',
+    'C#5:.5 E5:1 G5:1 A5:1.5',
+    'A4:.5 D5:.5 D5:.75 E5:.25 F#5:1 D5:1',
+    'G5:1 B5:.5 A5:.5 G5:1 D5:1',
+    'E5:1 G5:.5 B5:1.5 A5:1',
+    'G5:.5 F#5:.5 E5:1 C#5:1 A4:1'
+  ],
+  ['D', 'D', 'G', 'A7', 'D', 'Bm', 'E7', 'A', 'G', 'D', 'Em', 'A7', 'D', 'G', 'Em', 'A7'],
+  air(16, [520, 640, 480, 700], 8, 0.35)
 );
-/** A two-note call every four bars, falling or rising by a step or a fourth. */
-const HILLS_TONE: Note[] = [
-  ['A4', 'D5'],
-  ['E5', 'D5'],
-  ['D5', 'B4'],
-  ['A4', 'D5'],
-  ['D5', 'C5'],
-  ['E5', 'A4']
-].flatMap(([a, b]) => [r(6), n(a, 1, 0.6), n(b, 1.5, 0.5), r(7.5)]);
-const HILLS_WIND: Note[] = Array.from({ length: 12 }, (_, i) => [
-  gust([420, 560, 380, 640][i % 4], 6, [0.6, 0.8, 0.55, 0.9][i % 4]),
-  r(2)
-]).flat();
 
-// --- canyon: E Phrygian, a drone that never breathes -----------------------
+// --- canyon: E minor with the Phrygian F --------------------------------------
 
-const CANYON_DRONE: Note[] = [
-  n('E2', 16, 0.9),
-  n('F2', 8, 0.85),
-  n('E2', 16, 0.9),
-  n('D2', 8, 0.8),
-  n('E2', 8, 0.9),
-  n('F2', 8, 0.85),
-  n('E2', 8, 0.9),
-  n('D2', 8, 0.8)
+const CANYON = march(
+  [
+    'E5:1 -:.5 E5:.5 G5:1 F5:1',
+    'E5:1.5 B4:.5 E5:1 -:1',
+    'F5:.5 A5:1 C6:1 A5:1.5',
+    'G5:.5 F5:.5 E5:1 B4:2',
+    'A5:1 C6:.5 B5:.5 A5:1 E5:1',
+    'G5:1.5 F#5:.5 E5:1 B4:1',
+    'A5:.5 C6:.5 F5:1 A5:1 C6:1',
+    'B5:2 D#5:.5 F#5:.5 A5:1',
+    'G5:1 E5:.5 G5:.5 B5:1.5 -:.5',
+    'A5:.5 F#5:1 D5:1 A4:1.5',
+    'G5:1 E5:1 C5:1 G4:1',
+    'F#4:.5 A4:.5 B4:1 D#5:1 F#5:1',
+    'E5:1 -:.5 E5:.5 G5:1 F5:1',
+    'E5:.5 A5:1 C6:1.5 A5:1',
+    'F5:1 A5:.5 G5:.5 F5:1 E5:1',
+    'D#5:1.5 F#5:.5 A5:1 B5:1'
+  ],
+  ['Em', 'Em', 'F', 'Em', 'Am', 'Em', 'F', 'B7', 'Em', 'D', 'C', 'B7', 'Em', 'Am', 'F', 'B7'],
+  air(16, [1900, 2400, 1700, 2200], 4, 0.22)
+);
+
+// --- mesa: A Mixolydian, a loping march with the flat seventh -----------------
+
+const MESA = march(
+  [
+    'E5:.75 A5:.25 A5:1 C#6:1 A5:1',
+    'G5:.5 E5:.5 C#5:1 E5:2',
+    'D5:.5 G5:1 B5:1 D6:1.5',
+    'C#6:1 A5:.5 G5:.5 E5:1 -:1',
+    'F#5:.75 A5:.25 D6:1 A5:1 F#5:1',
+    'E5:1.5 C#5:.5 A4:1 C#5:1',
+    'D5:.5 B4:.5 G4:1 B4:1 D5:1',
+    'E5:2 G#5:.5 B5:.5 E5:1',
+    'A5:.75 G5:.25 E5:1 C#5:.5 E5:1.5',
+    'A5:2 -:1 E5:1',
+    'G5:.5 B5:1 D6:1 B5:1.5',
+    'A5:1 F#5:1 D5:1 A4:1',
+    'C#5:.75 E5:.25 A5:1 E5:1 C#5:1',
+    'D5:1 G5:.5 B5:.5 D6:2',
+    'F#5:1.5 D5:.5 A4:1 F#5:1',
+    'E5:.5 G#5:1 B5:1 E5:1.5'
+  ],
+  ['A', 'A', 'G', 'A', 'D', 'A', 'G', 'E', 'A', 'A', 'G', 'D', 'A', 'G', 'D', 'E'],
+  air(16, [260, 320, 240, 300], 16, 0.4)
+);
+
+// --- ridges: G major, the jauntiest ------------------------------------------
+
+const RIDGES = march(
+  [
+    'D5:.5 G5:.75 A5:.25 B5:1 G5:1 D5:.5',
+    'E5:.75 G5:.25 C6:1 E5:.5 G5:1.5',
+    'F#5:1 A5:.5 D6:.5 C6:1 A5:1',
+    'B5:1.5 A5:.5 G5:1 -:1',
+    'D5:.5 G5:.75 A5:.25 B5:1 D6:1 B5:.5',
+    'G5:1 E5:.5 G5:.5 B5:1 E5:1',
+    'C#5:.5 E5:.5 A5:1 G5:1 E5:1',
+    'F#5:2 -:.5 D5:.5 E5:.5 F#5:.5',
+    'G5:.75 E5:.25 C5:1 E5:1 G5:1',
+    'B4:.5 D5:1 G5:1 B5:1.5',
+    'C6:1 A5:.5 E5:.5 C5:1 E5:1',
+    'F#5:.75 A5:.25 D6:1 C6:1 A5:1',
+    'B5:.5 G5:.5 D5:1 G5:.5 B5:1.5',
+    'C6:1 E5:.5 G5:.5 C6:1 E6:1',
+    'D6:1.5 B5:.5 G5:1 D5:1',
+    'C5:.5 D5:.5 F#5:1 A5:1 C6:1'
+  ],
+  ['G', 'C', 'D', 'G', 'G', 'Em', 'A7', 'D', 'C', 'G', 'Am', 'D', 'G', 'C', 'G', 'D7'],
+  Array.from({ length: 16 }, (_, i) => [gust(i % 2 === 0 ? 900 : 1150, 2, 0.32), r(1), gust(700, 1, 0.22)]).flat()
+);
+
+// --- bunker: C minor, low and nervous ----------------------------------------
+
+const BUNKER = march(
+  [
+    'C5:.25 C5:.25 -:.25 C5:.25 Eb5:.5 G5:.5 C5:.25 C5:.25 -:.25 C5:.25 Eb5:1',
+    'D5:.5 Eb5:.5 G5:1 Eb5:.5 C5:1.5',
+    'Ab4:.25 Ab4:.25 -:.25 Ab4:.25 C5:.5 Eb5:.5 Ab5:1 G5:1',
+    'G5:.5 F5:.5 Eb5:.5 D5:.5 B4:2',
+    'C5:.25 C5:.25 -:.25 C5:.25 Eb5:.5 G5:.5 C6:1 Bb5:1',
+    'Ab5:1.5 F5:.5 C5:1 Ab4:1',
+    'G4:.5 B4:.5 D5:1 F5:1 D5:1',
+    'B4:.5 D5:1 G5:2.5',
+    'Ab5:1 Eb5:.5 C5:.5 Ab4:1 C5:1',
+    'F5:.25 F5:.25 -:.25 F5:.25 Ab5:.5 C6:.5 F5:1 Ab5:1',
+    'G5:1.5 Eb5:.5 C5:1 G4:1',
+    'D5:.5 F5:.5 B4:1 D5:.5 G5:1.5',
+    'C5:.25 C5:.25 -:.25 C5:.25 Eb5:.5 Ab5:.5 C6:1.5 Ab5:.5',
+    'C6:.5 Ab5:1 F5:1 C5:1.5',
+    'Ab4:.5 D5:.5 F5:1 Ab5:1 F5:1',
+    'G5:.5 D5:.5 B4:1 G4:1 D5:1'
+  ],
+  ['Cm', 'Cm', 'Ab', 'G', 'Cm', 'Fm', 'G7', 'G', 'Ab', 'Fm', 'Cm', 'G', 'Ab', 'Fm', 'Do', 'G'],
+  air(16, [150, 170], 8, 0.4)
+);
+
+// --- match point: the D minor quickstep ---------------------------------------
+
+const SUDDEN = march(
+  [
+    'D5:.5 D5:.5 A5:.5 D5:.5 F5:1 E5:.5 D5:.5',
+    'A5:1.5 G5:.5 F5:1 E5:1',
+    'F5:.5 Bb5:1 D6:1 Bb5:1.5',
+    'A5:.5 G5:.5 F5:.5 E5:.5 C#5:2',
+    'D5:.5 D5:.5 A5:.5 D5:.5 F5:1 A5:1',
+    'Bb5:1 G5:.5 D5:.5 Bb4:1 D5:1',
+    'C#5:.5 E5:.5 A5:1 G5:.5 E5:1.5',
+    'A5:2 -:1 A4:1',
+    'D5:.5 F5:.5 A5:.5 D6:.5 C6:1 A5:1',
+    'F5:1.5 E5:.5 D5:1 A4:1',
+    'Bb4:.5 D5:.5 F5:1 Bb5:1 A5:1',
+    'G5:.5 E5:1 C5:1 G5:1.5',
+    'A5:1 F5:.5 C5:.5 A4:1 C5:1',
+    'D5:.5 G5:.5 Bb5:1 D6:1 Bb5:1',
+    'A5:.5 C#6:1 E6:1 C#6:1.5',
+    'A5:2 E5:1 C#5:1',
+    'G5:.5 Bb5:.5 D6:1 Bb5:.5 G5:1.5',
+    'F5:1 A5:.5 F5:.5 D5:1 A4:1',
+    'Bb4:.5 D5:.5 F5:.5 Bb5:.5 D6:1 Bb5:1',
+    'A5:1.5 G5:.5 E5:1 C#5:1',
+    'G5:.5 G5:.5 Bb5:.5 G5:.5 D6:1 Bb5:1',
+    'A5:.5 F5:1 D5:1 F5:1.5',
+    'G#5:1 B5:.5 G#5:.5 E5:1 D5:1',
+    'C#5:.5 E5:.5 A5:1 E5:1 C#5:1'
+  ],
+  [
+    'Dm', 'Dm', 'Bb', 'A', 'Dm', 'Gm', 'A', 'A',
+    'Dm', 'Dm', 'Bb', 'C', 'F', 'Gm', 'A', 'A',
+    'Gm', 'Dm', 'Bb', 'A', 'Gm', 'Dm', 'E7', 'A'
+  ],
+  air(24, [170], 16, 0.3)
+);
+
+// --- the match intro: a bugle call, then the roll-off -------------------------
+
+const INTRO: Note[][] = [
+  [...lead(['A4:.5 A4:.25 A4:.25 D5:1 F#5:.5 F#5:.25 F#5:.25 A5:1', 'F#5:.5 A5:.5 D6:2 -:1']), r(8)],
+  [n('F#4', 4, 0.8), n('A4', 4, 0.85), r(8)],
+  [n('D2', 4, 0.9), n('A1', 2, 0.8), n('D2', 2, 0.85), r(8)],
+  [
+    d('kick', 1, 0.9),
+    r(3),
+    d('kick', 1, 0.9),
+    r(3),
+    ...Array.from({ length: 16 }, (_, i) => d('snare', 0.25, 0.2 + i * 0.04)),
+    d('kick', 0.5, 1),
+    d('snare', 0.5, 0.8),
+    d('snare', 0.25, 0.5),
+    d('snare', 0.25, 0.6),
+    d('snare', 0.5, 0.85),
+    d('kick', 0.5, 1),
+    d('snare', 0.5, 0.8),
+    d('snare', 0.25, 0.5),
+    d('snare', 0.25, 0.6),
+    d('snare', 0.5, 0.9)
+  ],
+  [r(INTRO_BEATS)]
 ];
-/** One drip every four bars, its three repeats falling away off the walls. */
-const CANYON_TONE: Note[] = ['B4', 'C5', 'G4', 'B4', 'E5'].flatMap(drip => [
-  r(5),
-  n(drip, 0.5, 0.7),
-  n(drip, 0.5, 0.35),
-  n(drip, 0.5, 0.18),
-  n(drip, 0.5, 0.09),
-  r(9)
-]);
-/** A high whistle through the gorge, and a thinner one after it. */
-const CANYON_WIND: Note[] = [
-  [1800, 2400],
-  [1500, 2100],
-  [2000, 2600],
-  [1600, 2200],
-  [1900, 2500]
-].flatMap(([low, high]) => [gust(low, 10, 0.5), r(2), gust(high, 3, 0.3), r(1)]);
 
-// --- mesa: A Aeolian, the stillest --------------------------------------
+/** Every voice but the beeper and the drums silent for this many beats, for the round cues. */
+const cue = (beats: number, beeper: Note[], drums: Note[]): Note[][] => [beeper, [r(beats)], [r(beats)], drums, [r(beats)]];
 
-const MESA_DRONE: Note[] = ['A2', 'A2', 'G2', 'A2', 'F2', 'E2'].flatMap(root => [n(root, 15, 0.85), r(1)]);
-/** One ping every eight bars, in the middle of the stretch. */
-const MESA_TONE: Note[] = ['E5', 'D5', 'C5'].flatMap(ping => [r(12), n(ping, 2, 0.45), r(18)]);
-const MESA_WIND: Note[] = [240, 300, 220, 280, 260, 200].flatMap((hz, i) => [gust(hz, 14, i % 2 === 0 ? 0.7 : 0.6), r(2)]);
-
-// --- ridges: G Mixolydian, the drone stepping every half bar -----------------
-
-const RIDGES_DRONE: Note[] = [
-  ['G2', 'A2'],
-  ['G2', 'A2'],
-  ['F2', 'G2'],
-  ['G2', 'A2'],
-  ['C2', 'D2'],
-  ['F2', 'G2']
-].flatMap(([low, high]) => Array.from({ length: 4 }, () => [n(low, 2, 0.9), n(high, 2, 0.7)]).flat());
-/** A rising three-note figure at the end of every four bars. */
-const RIDGES_TONE: Note[] = [
-  ['D5', 'E5', 'G5'],
-  ['D5', 'E5', 'A5'],
-  ['C5', 'D5', 'F5'],
-  ['D5', 'E5', 'G5'],
-  ['G4', 'A4', 'D5'],
-  ['C5', 'D5', 'F5']
-].flatMap(([a, b, c]) => [r(12), n(a, 0.5, 0.5), n(b, 0.5, 0.55), n(c, 1, 0.6), r(2)]);
-/** Short gusts over the crests, two to every two bars. */
-const RIDGES_WIND: Note[] = Array.from({ length: 12 }, (_, i) => [
-  r(2),
-  gust(i % 2 === 0 ? 900 : 1100, 2, 0.6),
-  r(1),
-  gust(i % 2 === 0 ? 650 : 700, 3, 0.45)
-]).flat();
-
-// --- bunker: C Phrygian, a hum and a radar ----------------------------------
-
-const BUNKER_DRONE: Note[] = ['C2', 'C2', 'Db2', 'C2', 'Ab1', 'G1'].map(root => n(root, 16, 0.9));
-/** A ping every two bars with one echo off the concrete. */
-const BUNKER_TONE: Note[] = ['G5', 'G5', 'G5', 'G5', 'Ab5', 'Ab5', 'G5', 'G5', 'Eb5', 'Eb5', 'D5', 'D5'].flatMap(ping => [
-  n(ping, 0.5, 0.6),
-  n(ping, 0.5, 0.22),
-  r(7)
-]);
-const BUNKER_WIND: Note[] = [160, 140, 160, 140, 160, 140].map(hz => gust(hz, 16, 0.55));
-
-// --- match point: the one tune -------------------------------------------
-
-/** The melody, a bar to a row: quarters and eighths through `beep`. */
-const SUDDEN_BARS: [string, number][][] = [
-  // 1-4, the hook: up the scale, over the top to Bb, down to D
-  [['D5', 1], ['E5', 1], ['F5', 1], ['G5', 1]],
-  [['A5', 1.5], ['Bb5', 1], ['A5', 1.5]],
-  [['G5', 1], ['F5', 1], ['E5', 1], ['C5', 1]],
-  [['D5', 3], ['', 1]],
-  // 5-8, the answer a third higher, to a half close on A
-  [['F5', 1], ['G5', 1], ['A5', 1], ['C6', 1]],
-  [['D6', 1.5], ['C6', 1], ['Bb5', 1.5]],
-  [['A5', 1], ['G5', 1], ['F5', 1], ['E5', 1]],
-  [['A5', 3], ['', 1]],
-  // 9-12, turning eighths falling a step a bar
-  [['Bb5', 0.5], ['A5', 0.5], ['G5', 0.5], ['A5', 0.5], ['Bb5', 2]],
-  [['A5', 0.5], ['G5', 0.5], ['F5', 0.5], ['G5', 0.5], ['A5', 2]],
-  [['G5', 0.5], ['F5', 0.5], ['E5', 0.5], ['F5', 0.5], ['G5', 1], ['E5', 1]],
-  [['C#5', 2], ['E5', 1], ['A4', 1]],
-  // 13-16, the hook again, stopping on A so the loop hands back through V
-  [['D5', 1], ['E5', 1], ['F5', 1], ['G5', 1]],
-  [['A5', 1.5], ['Bb5', 1], ['A5', 1.5]],
-  [['G5', 1], ['F5', 1], ['E5', 1], ['G5', 1]],
-  [['E5', 2], ['C#5', 1], ['', 1]]
-];
-const SUDDEN_LEAD: Note[] = SUDDEN_BARS.flat().flatMap(([name, beats]) => (name ? beep(name, beats) : [r(beats)]));
-/** The root under each bar of the tune. */
-const SUDDEN_ROOTS = ['D2', 'D2', 'C2', 'D2', 'F2', 'Bb1', 'A1', 'A1', 'Bb1', 'F2', 'C2', 'A1', 'D2', 'D2', 'C2', 'A1'];
-const SUDDEN_DRONE: Note[] = SUDDEN_ROOTS.map(root => n(root, 4, 0.85));
-/** A gun on the downbeat and the off-beat after two, an octave over the root; a quicker volley into the top. */
-const SUDDEN_GUNS: Note[] = SUDDEN_ROOTS.flatMap((root, bar) => {
-  const up = root.replace(/\d$/, d => String(Number(d) + 1));
-  return bar === SUDDEN_ROOTS.length - 1
-    ? [gun(up, 1, 0.9), gun(up, 0.5, 0.6), gun(up, 0.5, 0.7), gun(up, 2, 0.95)]
-    : [gun(up, 1.5, 0.9), gun(up, 2.5, 0.65)];
-});
-const SUDDEN_WIND: Note[] = Array.from({ length: 4 }, () => gust(170, 16, 0.55));
+/** The victory figure, one beat of 32nds up and back through a chord from `root`. */
+const figure = (root: string, major = true): Note[] =>
+  [0, major ? 4 : 3, 7, 12, 7, major ? 4 : 3, 0, major ? 4 : 3].map(s => at(root, s, 0.125, s === 12 ? 1 : 0.85));
 
 export const TANKS_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,
-  volume: 0.1,
+  volume: 0.13,
   tonic: p('D3'),
   tracks: [
-    { name: 'lead', wave: 'square', adsr: { attack: 0.002, decay: 0.01, sustain: 1, release: 0.006 }, volume: 0.15 },
+    { name: 'lead', wave: 'square', adsr: { attack: 0.002, decay: 0.01, sustain: 1, release: 0.006 }, volume: 0.2 },
     {
-      name: 'drone',
-      wave: 'sawtooth',
-      filter: { cutoff: 380, q: 2 },
-      adsr: { attack: 1, decay: 0.6, sustain: 0.8, release: 0.8 },
-      volume: 0.2
+      name: 'horn',
+      wave: 'triangle',
+      adsr: { attack: 0.04, decay: 0.3, sustain: 0.7, release: 0.12 },
+      volume: 0.55
     },
-    { name: 'tone', wave: 'sine', adsr: { attack: 0.005, decay: 1.2, sustain: 0, release: 0.4 }, volume: 0.8 },
-    { name: 'wind', wave: 'noise', adsr: { attack: 1.5, decay: 0.5, sustain: 0.7, release: 2 }, volume: 1 }
+    {
+      name: 'bass',
+      wave: 'sawtooth',
+      filter: { cutoff: 520, q: 1.5 },
+      adsr: { attack: 0.01, decay: 0.25, sustain: 0.55, release: 0.08 },
+      volume: 0.6
+    },
+    { name: 'drums', volume: 0.7 },
+    { name: 'wind', wave: 'noise', adsr: { attack: 1.5, decay: 0.5, sustain: 0.7, release: 2 }, volume: 0.6 }
   ],
   form: {
-    // A silent bar the match moves out of into its arena's scene: the round
-    // start jingle plays over nothing, and the bed swells in after it.
-    intro: silence(4),
-    sections: {
-      hills: [[r(96)], HILLS_DRONE, HILLS_TONE, HILLS_WIND],
-      canyon: [[r(80)], CANYON_DRONE, CANYON_TONE, CANYON_WIND],
-      mesa: [[r(96)], MESA_DRONE, MESA_TONE, MESA_WIND],
-      ridges: [[r(96)], RIDGES_DRONE, RIDGES_TONE, RIDGES_WIND],
-      bunker: [[r(96)], BUNKER_DRONE, BUNKER_TONE, BUNKER_WIND],
-      sudden: [SUDDEN_LEAD, SUDDEN_DRONE, SUDDEN_GUNS, SUDDEN_WIND]
-    },
+    intro: INTRO,
+    sections: { hills: HILLS, canyon: CANYON, mesa: MESA, ridges: RIDGES, bunker: BUNKER, sudden: SUDDEN },
     order: ['hills'],
     // One scene per arena, named as the arena is, so `game.ts` selects it with `match.arena`.
     scenes: {
@@ -337,66 +461,55 @@ export const TANKS_MUSIC: GameAudioOptions = {
     danger: { order: ['sudden'], tempo: SUDDEN_DEATH_TEMPO }
   },
   stingers: {
-    // The Gorillas-style intro: stepwise quarters inside a fifth, up to A.
-    roundStart: [
-      [...beep('D5', 1), ...beep('E5', 1), ...beep('F#5', 1), ...beep('E5', 1), ...beep('F#5', 1), ...beep('A5', 1)],
-      ...silence(ROUND_START_BEATS).slice(1)
-    ],
-    // The victory flourish: two beats of 32nd notes, a run and a trill, onto D6.
-    roundWon: [
-      [
-        ...['D5', 'E5', 'F#5', 'G5', 'A5', 'B5', 'C#6', 'D6', 'A5', 'B5', 'C#6', 'D6', 'C#6', 'D6', 'C#6', 'D6'].map(name =>
-          n(name, 0.125)
-        ),
-        n('D6', 1.5),
-        r(0.5)
-      ],
-      ...silence(STINGER_BEATS).slice(1)
-    ],
+    // A bugle call up the D triad, the round's "ready", over a snare ruff.
+    roundStart: cue(
+      ROUND_START_BEATS,
+      lead(['A4:.5 D5:.5 F#5:.5 A5:.5 D6:1.5 -:.5']),
+      [d('snare', 0.25, 0.5), d('snare', 0.25, 0.6), d('snare', 0.5, 0.8), d('snare', 0.5, 0.8), d('snare', 0.5, 0.85), d('kick', 1.5, 1), r(0.5)]
+    ),
+    // Gorillas' victory form: one quick figure, twice, onto a held D6.
+    roundWon: cue(
+      STINGER_BEATS,
+      [...figure('D5'), ...figure('D5'), ...beep('A5', 0.5), n('D6', 1.5)],
+      [d('kick', 1, 1), d('kick', 1, 0.9), d('snare', 0.25, 0.6), d('snare', 0.25, 0.7), d('snare', 0.5, 0.9), d('kick', 1, 1)]
+    ),
     // A chromatic sag, F to D: a round lost with the match still open.
-    roundLost: [
+    roundLost: cue(
+      STINGER_BEATS,
       [...beep('F5', 1), ...beep('E5', 1), ...beep('Eb5', 1), ...beep('D5', 1)],
-      ...silence(STINGER_BEATS).slice(1)
-    ],
+      [r(3), d('kick', 1, 0.8)]
+    ),
     // An open fifth, neither major nor minor: a two-player round, or a draw.
-    round: [[...beep('D5', 1), ...beep('A4', 1), ...beep('D5', 1), r(1)], ...silence(STINGER_BEATS).slice(1)],
-    // The match endings, played through `playEnding` with the bed cut under
-    // them, so the PC speaker has the last word alone, as Gorillas' did.
-    // The player takes the match: the round's flourish grown to a fanfare,
-    // a run up two octaves of D major in 32nds, the fifth and octave twice, a held D6.
+    round: cue(STINGER_BEATS, [...beep('D5', 1), ...beep('A4', 1), ...beep('D5', 1), r(1)], [d('kick', 1, 0.9), r(1), d('kick', 1, 0.9), r(1)]),
+    // The match endings, the whole band, played through `playEnding`.
+    // The player takes the match: the victory figure through D, G and A, home to D.
     matchWon: [
+      [...figure('D5'), ...figure('D5'), ...figure('G5'), ...figure('A4'), n('D6', 3), r(1)],
+      [n('F#4', 1, 0.9), n('F#4', 1, 0.9), n('B4', 1, 0.9), n('C#5', 1, 0.9), n('F#4', 3, 1), r(1)],
+      [n('D2', 1), n('D2', 1, 0.9), n('G2', 1), n('A1', 1), n('D2', 3), r(1)],
       [
-        ...['D4', 'F#4', 'A4', 'D5', 'F#5', 'A5', 'B5', 'C#6'].map(name => n(name, 0.125)),
-        ...['D6', 'A5', 'D6', 'A5', 'D6', 'E6', 'F#6', 'E6'].map(name => n(name, 0.125)),
-        ...beep('A5', 0.5),
-        ...beep('D6', 0.5),
-        ...beep('A5', 0.5),
-        ...beep('D6', 0.5),
-        n('D6', 3),
+        ...Array.from({ length: 4 }, () => [d('kick', 0.5, 1), d('snare', 0.5, 0.8)]).flat(),
+        ...[0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8, 0.9].map(g => d('snare', 0.25, g)),
+        d('kick', 1, 1),
         r(1)
       ],
-      ...silence(MATCH_END_BEATS).slice(1)
+      [r(MATCH_END_BEATS)]
     ],
-    // The CPU takes it: the round's chromatic sag carried on down through the
-    // leading note to the low tonic, in D minor, slowing as it falls.
+    // The CPU takes it: the bugle falling into D minor over a muffled drum.
     matchLost: [
-      [
-        ...beep('F5', 1),
-        ...beep('E5', 1),
-        ...beep('Eb5', 1),
-        ...beep('D5', 1),
-        ...beep('C#5', 1),
-        ...beep('A4', 1),
-        n('D4', 1.5),
-        r(0.5)
-      ],
-      ...silence(MATCH_END_BEATS).slice(1)
+      [...beep('A5', 1), ...beep('F5', 1), ...beep('E5', 1), ...beep('C#5', 1), ...beep('D5', 1.5), ...beep('A4', 0.5), n('D4', 2)],
+      [n('F4', 2, 0.85), n('E4', 2, 0.8), n('F4', 2, 0.8), n('D4', 2, 0.75)],
+      [n('D2', 2), n('A1', 2, 0.85), n('Bb1', 1, 0.85), n('A1', 1, 0.8), n('D2', 2, 0.9)],
+      [d('kick', 1, 0.8), r(1), d('kick', 1, 0.7), r(1), d('kick', 0.25, 0.6), d('kick', 0.25, 0.6), d('kick', 0.5, 0.7), r(1), d('kick', 2, 0.9)],
+      [r(MATCH_END_BEATS)]
     ],
-    // A two-player match names no loser, so it ends on the round's open
-    // fifths climbing to the octave, still neither major nor minor.
+    // A two-player match names no loser: open fifths climbing to the octave, no third.
     matchOver: [
-      [...beep('D5', 1), ...beep('A4', 1), ...beep('D5', 1), ...beep('A5', 1), n('D6', 3), r(1)],
-      ...silence(MATCH_END_BEATS).slice(1)
+      [...beep('D5', 1), ...beep('A5', 1), ...beep('D5', 1), ...beep('A5', 1), n('D6', 3), r(1)],
+      [n('A4', 4, 0.85), n('A4', 3, 0.9), r(1)],
+      [n('D2', 4), n('D2', 3), r(1)],
+      [d('kick', 1, 1), d('snare', 0.5, 0.7), d('snare', 0.5, 0.8), d('kick', 1, 1), ...[0.5, 0.6, 0.7, 0.8].map(g => d('snare', 0.25, g)), d('kick', 3, 1), r(1)],
+      [r(MATCH_END_BEATS)]
     ]
   }
 };

@@ -534,6 +534,15 @@ export interface GameAudio {
    */
   playStinger(name: string): boolean;
   /**
+   * Ends the music on a stinger: the loop stops under it at once (a sustained
+   * note in flight included) and the phrase plays alone, after which the music
+   * is stopped as `stop()` leaves it. A cabinet's game-over or victory phrase
+   * goes through here rather than `playStinger` then `stop()`, which would cut
+   * the phrase it had just started. Same refusals as `playStinger`, and on a
+   * false the music is untouched, so the caller plays its effect and stops.
+   */
+  playEnding(name: string): boolean;
+  /**
    * Muffles the music behind a low-pass and a lower level while the game is
    * paused, instead of stopping it: the score keeps its place, so unpausing
    * neither restarts it nor replays the intro, which `stop()` then `start()`
@@ -1832,6 +1841,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   // The sounding stinger's own gate into musicBus, so the next stinger or a
   // stop() can silence the notes it has already handed to the audio graph.
   let stingerGate: GainNode | null = null;
+  // Set by playEnding until the next start(), which has its cut and close to undo.
+  let ending = false;
   // One scheduling cursor per track: they advance independently on their own
   // note lengths so a slow bass and a busy lead stay locked to the same clock.
   const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
@@ -2008,6 +2019,17 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // Resuming is needed when the context starts suspended (autoplay policy).
     if (context.state === 'suspended') void context.resume();
     running = true;
+    if (ending) {
+      // A restart inside an ending phrase: the phrase goes, and the lane cut
+      // and the master's close still waiting at the phrase's end are undone.
+      ending = false;
+      cutStinger();
+      musicMaster.gain.cancelScheduledValues(context.currentTime);
+      if (lane) {
+        lane.gain.cancelScheduledValues(context.currentTime);
+        lane.gain.setTargetAtTime(1, context.currentTime, ADAPT_RAMP / 2);
+      }
+    }
     // Ramped rather than assigned, because stop() ducks this same gain and a
     // scheduled ramp outranks a later write to `.value`.
     musicMaster.gain.setTargetAtTime(musicMuted ? 0 : volume, context.currentTime, 0.02);
@@ -2034,6 +2056,32 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // The duck lifts again on start(), which would bring back the rest of a
     // stinger still queued behind it (Snake's game-over phrase on a restart).
     cutStinger();
+  }
+
+  /**
+   * Schedules a stinger's lines from `at` on a fresh gate into the bus,
+   * replacing one still sounding, and returns the time its last line ends.
+   */
+  function soundStinger(lines: Note[][], at: number): number {
+    const context = ctx as AudioContext;
+    const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
+    // A new stinger replaces one still sounding, as the duck already assumes:
+    // the caller re-times the lift to this phrase's end alone.
+    cutStinger();
+    const gate = context.createGain();
+    gate.connect(musicBus as GainNode);
+    stingerGate = gate;
+    let end = at;
+    lines.forEach((line, t) => {
+      let time = at;
+      line.forEach((note, i) => {
+        const dur = note.beats * spb;
+        if (dur > 0) playNote(context, gate, tracks[t], note, line[i + 1], time, dur);
+        time += dur > 0 ? dur : spb;
+      });
+      end = Math.max(end, time);
+    });
+    return end;
   }
 
   /** Silences the sounding stinger's remaining notes, if any. */
@@ -2302,31 +2350,35 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     },
     playStinger(name: string) {
       const lines = stingers.get(name);
-      if (!lines || !running || musicMuted || !ctx || !musicBus) return false;
+      if (!lines || !running || musicMuted || !ctx) return false;
       const duck = ensureLayers();
       if (!duck) return false;
       const now = ctx.currentTime;
-      const at = now + 0.05;
-      const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
-      // A new stinger replaces one still sounding, as the duck below already
-      // assumes: it re-times the lift to this phrase's end alone.
-      cutStinger();
-      const gate = ctx.createGain();
-      gate.connect(musicBus);
-      stingerGate = gate;
-      let end = at;
-      lines.forEach((line, t) => {
-        let time = at;
-        line.forEach((note, i) => {
-          const dur = note.beats * spb;
-          if (dur > 0) playNote(ctx as AudioContext, gate, tracks[t], note, line[i + 1], time, dur);
-          time += dur > 0 ? dur : spb;
-        });
-        end = Math.max(end, time);
-      });
+      const end = soundStinger(lines, now + 0.05);
       duck.gain.cancelScheduledValues(now);
       duck.gain.setTargetAtTime(STINGER_DUCK, now, ADAPT_RAMP / 2);
       duck.gain.setTargetAtTime(1, end, ADAPT_RAMP);
+      return true;
+    },
+    playEnding(name: string) {
+      const lines = stingers.get(name);
+      if (!lines || !running || musicMuted || !ctx || !musicMaster) return false;
+      const lane = ensureLayers();
+      if (!lane) return false;
+      const now = ctx.currentTime;
+      const end = soundStinger(lines, now + 0.05);
+      // The loop stops under the phrase: the scheduler for new notes, the lane
+      // for the ones already handed over (a pad note would drone through it).
+      lane.gain.cancelScheduledValues(now);
+      lane.gain.setTargetAtTime(0, now, ADAPT_RAMP / 2);
+      running = false;
+      if (scheduler !== null) {
+        clearInterval(scheduler);
+        scheduler = null;
+      }
+      // What stop() does at once waits for the phrase, which is music too.
+      musicMaster.gain.setTargetAtTime(0, end, 0.02);
+      ending = true;
       return true;
     },
     setPaused(on: boolean) {

@@ -459,9 +459,14 @@ export function initCityGame(): void {
     // Confirming leaves the prompt without going through its cancel path, so
     // the overlay and the key trap are torn down here too.
     retirePrompt.dismiss();
-    audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
-    audio.stop();
+    // Lifted before the ending, so a retire's phrase is not played through the
+    // muffle its own prompt put on the score.
     syncMusicPause();
+    // The band's own last bars; with the music muted the effect marks the end.
+    if (!audio.playEnding(reason)) {
+      audio.playSfx(reason === 'retired' ? 'score' : 'gameover');
+      audio.stop();
+    }
     const retired = reason === 'retired';
     overIconEl.textContent = retired ? '🏁' : bankruptIcon;
     overTitleEl.textContent = retired ? strings.retired : bankruptTitle;

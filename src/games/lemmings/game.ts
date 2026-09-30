@@ -620,13 +620,21 @@ export function initLemmingsGame(): void {
     // always has a door to the shared board that is not "fail the next level".
     endRunBtn.style.display = won && !victory ? 'inline-block' : 'none';
     resultOverlay.style.display = 'flex';
-    audio.playSfx(won ? 'score' : 'gameover');
-    // The music is not stopped: a win lands its stinger over the running
-    // score, and a loss muffles it behind the result so a retry carries on
-    // from where it is rather than from bar 1.
+    if (won) audio.playSfx('score');
     audio.setDanger(false);
-    if (won) audio.playStinger(bonuses.perfect > 0 ? 'perfect' : 'cleared');
-    else audio.setPaused(true);
+    // A mid-run clear lands its stinger over the running score, which carries
+    // on into the next level. A run's end closes the music on its own phrase
+    // (see music.ts); with the music muted it cannot play, and the game falls
+    // back to the effect and a muffle behind the result.
+    const clearedStinger = bonuses.perfect > 0 ? 'perfect' : 'cleared';
+    if (victory) {
+      if (!audio.playEnding('victory')) audio.playStinger(clearedStinger);
+    } else if (won) {
+      audio.playStinger(clearedStinger);
+    } else if (!audio.playEnding('over')) {
+      audio.playSfx('gameover');
+      audio.setPaused(true);
+    }
     // A run ends on the final victory or a failed quota; either way the run's
     // points face the table. Mid-run level clears keep the board out of the way.
     if (victory || !won) board.show(runScore);
@@ -1208,6 +1216,8 @@ export function initLemmingsGame(): void {
     endRunBtn.style.display = 'none';
     nextBtn.textContent = nextBtn.dataset.playAgain || 'Play Again';
     board.show(runScore);
+    // The run's bow; muted, the music stays as it was, as it always did here.
+    audio.playEnding('curtain');
   });
   // A failed level already ended the run (and banked its score), so a retry
   // begins a new run from the same level.

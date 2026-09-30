@@ -39,6 +39,7 @@ import { translations, locales, type TranslationKey } from '../../src/i18n/trans
 import { exitArrowAngle, rescueProgress } from '../../src/games/lemmings/hud';
 import { ACT_MUSIC } from '../../src/games/lemmings/music';
 import type { GameAudioOptions, Note } from '../../src/games/engine/audio';
+import { p } from '../../src/games/engine/pitch';
 import {
   newCombo,
   comboOnRescue,
@@ -1897,14 +1898,43 @@ describe('Critter Rescue music, the Amiga palette', () => {
     expect([...timed].sort()).toEqual([2, 3]);
   });
 
-  it('writes both stingers on all four channels, the kit included', () => {
+  it('writes every stinger and ending on all four channels, the kit included', () => {
     for (const music of ACT_MUSIC) {
       const kit = music.tracks.findIndex(t => t.name === 'drums');
-      for (const name of ['cleared', 'perfect']) {
+      for (const name of ['cleared', 'perfect', 'over', 'victory', 'curtain']) {
         const lines = music.stingers![name];
         expect(lines).toHaveLength(4);
         expect(lines[kit].some(n => n.drum)).toBe(true);
       }
     }
   });
+
+  /** Semitones above C, 0-11. */
+  const pitchClass = (hz: number) => ((Math.round(12 * Math.log2(hz / p('C4'))) % 12) + 12) % 12;
+
+  it.each(ACTS)(
+    "opens Act $act on a two-bar vamp: its dominant under the kit, then a pickup that steps into the tune (#417)",
+    ({ music }) => {
+      const intro = music.form!.intro!;
+      expect(intro).toHaveLength(4);
+      const beats = (l: Note[]) => l.reduce((sum, n) => sum + n.beats, 0);
+      for (const l of intro) expect(beats(l)).toBe(8);
+      const at = (name: string) => music.tracks.findIndex(t => t.name === name);
+      // The chord channel stays arpeggios, on the dominant seventh.
+      const fifth = (pitchClass(music.tonic!) + 7) % 12;
+      for (const n of sounding(intro[at('chords')])) {
+        expect(n.arp).toEqual([0, 4, 7, 10]);
+        expect(pitchClass(n.freq)).toBe(fifth);
+      }
+      expect(intro[at('drums')].some(n => n.drum)).toBe(true);
+      // The lead waits a bar, and its last note is a step (or the Can-Can's
+      // fourth) from the tune's first, never the tonic itself.
+      const lead = intro[at('lead')];
+      expect(sounding(lead.slice(0, 1))).toEqual([]);
+      const last = sounding(lead).at(-1)!;
+      const first = sounding(music.form!.sections[music.form!.order[0]][at('lead')])[0];
+      expect(pitchClass(last.freq)).not.toBe(pitchClass(music.tonic!));
+      expect(Math.abs(12 * Math.log2(first.freq / last.freq))).toBeLessThanOrEqual(5);
+    }
+  );
 });

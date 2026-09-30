@@ -82,7 +82,10 @@
  * each one starts the cue from its top, so its first four bars (8 to 9
  * seconds) are a complete call and answer, and the rest is heard only while
  * the stand-down prompt holds the lull. The form's `order` is the teaching
- * arc's preparation, which is what a run opens on.
+ * arc's preparation, which is what a run opens on, after a two-bar `intro`
+ * (#417): Kingdom Rush opens a level on a brass call to arms, so the horn
+ * sounds one up the minor triad over a swelling timpani roll, handing its E
+ * to the preparation's held E. It is 4.4 seconds of the first 12 second lull.
  *
  * Gates. All three stay on. The riff is the lead the gates read (track 0), and
  * each riff pushes one note over a beat (the syncopation), turns its phrase
@@ -110,6 +113,12 @@
  *   tempo, section and register twice a cycle.
  * - The stand-down prompt muffles the score with `setPaused` rather than
  *   stopping it.
+ * - A run ends on one of two phrases through `playEnding`, each two bars in
+ *   the palette (#417): `fallen` when the keep falls, the horn sinking down
+ *   half steps to A over a dying roll, and `held` for a line that held, a
+ *   bugle call in A major, the Picardy third. A stand-down is held, not lost,
+ *   and so is a breach once all eighteen waves have been held, which the
+ *   results screen already crowns with the trophy.
  */
 import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
 
@@ -481,6 +490,60 @@ const STORM: Note[] = [
 ];
 const HORDE_DRUMS: Note[] = [...again(7, STORM), d('kick', 0.5, 1), ...snareRoll(3.5, 0.45, 0.95)];
 
+// --- the intro and the two endings (#417) ----------------------------------
+
+/**
+ * The call to arms, two bars at the teaching tempo before the first
+ * preparation: a horn fanfare up the A minor triad to E5 and back down to the
+ * E the preparation's horn then holds, over a timpani roll swelling into a
+ * stroke on A and the fifth after it; the marimba answers with the
+ * preparation's own quartal pickup. The strings and the kit are the layers a
+ * build lull has out, so they rest.
+ */
+const INTRO: Note[][] = [
+  [r(4), r(2), n('B3', 0.5, 0.55), n('D4', 0.5, 0.6), n('E4', 1, 0.7)],
+  [n('A4', 0.75, 0.85), n('A4', 0.25, 0.6), n('C5', 1, 0.9), n('E5', 2, 1), n('D5', 1, 0.85), n('B4', 1, 0.8), n('E4', 2, 0.75)],
+  [r(4), r(4)],
+  [...roll('A2', 3, 0.3, 0.85), n('A2', 1, 1), n('E3', 1, 0.8), r(1), n('A2', 1, 0.7), r(1)],
+  [r(4), r(4)]
+];
+
+/** The endings' stinger names, for `game.ts`'s `playEnding`. */
+export const ENDINGS = {
+  /** The keep falls: the line broken before the campaign was held. */
+  fallen: 'fallen',
+  /** A held line: the garrison stood down, or the keep fell only after all eighteen waves had held. */
+  held: 'held'
+} as const;
+
+/**
+ * The keep falls, two bars: the horn sinks down the half steps Shigihara's
+ * minor leans on, C to B to B flat to A, and past the leading tone home; the
+ * timpani strike the pedal once and roll away to nothing under it, and one
+ * dry marimba A and a single bass drum are all that is left of the band.
+ */
+const FALLEN: Note[][] = [
+  [r(4), n('A3', 1, 0.7), r(3)],
+  [n('C5', 1, 0.9), n('B4', 1, 0.85), n('Bb4', 1, 0.8), n('A4', 1, 0.8), n('G#4', 1, 0.75), n('A4', 3, 0.7)],
+  [],
+  [n('A2', 1, 1), r(1), n('E3', 1, 0.8), n('A2', 1, 0.75), ...roll('A2', 2, 0.7, 0.2), n('A2', 1, 0.4), r(1)],
+  [d('kick', 1, 0.9), r(3), r(4)]
+];
+
+/**
+ * The line held, two bars in the tonic major, the Picardy third a minor-key
+ * march ends a campaign on: a bugle's dotted call up A major to E5 and down
+ * onto A, the marimba running up the chord under it, a snare ruff into the
+ * last bar and every section landing together on A, strings plucked high.
+ */
+const HELD: Note[][] = [
+  [r(4), n('A3', 0.5, 0.7), n('C#4', 0.5, 0.7), n('E4', 0.5, 0.75), n('A4', 1.5, 0.9), r(1)],
+  [n('E4', 0.75, 0.85), n('E4', 0.25, 0.6), n('A4', 1, 0.9), n('C#5', 1, 0.9), n('E5', 1, 0.95), n('C#5', 1, 0.85), n('A4', 3, 0.9)],
+  [r(4), n('E5', 0.5, 0.75), n('A5', 0.5, 0.85), r(3)],
+  [n('A2', 1, 0.95), r(1), n('E3', 1, 0.8), n('E3', 1, 0.7), ...roll('A2', 2, 0.4, 0.9), n('A2', 1, 1), r(1)],
+  [r(3), d('snare', 0.25, 0.45), d('snare', 0.25, 0.55), d('snare', 0.5, 0.7), d('kick', 1, 0.9), r(3)]
+];
+
 /** The launch: a timpani roll into a low stroke on the arc's tonic, a snare roll beside it, half a bar. */
 const launch = (root: string): Note[][] => [
   [],
@@ -532,6 +595,7 @@ export const TOWERDEFENSE_MUSIC: GameAudioOptions = {
     { name: 'drums', volume: 0.55, startsMuted: true }
   ],
   form: {
+    intro: INTRO,
     sections: {
       'p1': [PREP_RIFF_1, PREP_HORN_1, TACET, PREP_TIMP_1, TACET],
       'b1a': [RIFF_1, HORN_1A, PIZZ_1A, TIMP_1, DRUMS_1],
@@ -558,6 +622,8 @@ export const TOWERDEFENSE_MUSIC: GameAudioOptions = {
   },
   stingers: {
     'launch-a': launch('A2'),
-    'launch-e': launch('E3')
+    'launch-e': launch('E3'),
+    [ENDINGS.fallen]: FALLEN,
+    [ENDINGS.held]: HELD
   }
 };

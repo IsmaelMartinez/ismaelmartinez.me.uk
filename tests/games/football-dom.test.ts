@@ -325,12 +325,13 @@ describe("CALCIO '90 ends a run on its own phrase (#417)", () => {
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('rescue');
   });
 
-  it('falls back to the effect, with the menu theme still on, when the phrase cannot play', () => {
+  it('falls back to the effect and a stop when the phrase cannot play, so the title still opens on the intro', () => {
     mockAudio.playEnding.mockImplementation(() => false);
     finishTheRun(false);
     expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
     tapCanvas(); // the end screen -> title
-    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+    expect(mockAudio.start).toHaveBeenCalledTimes(2);
   });
 
   it('starts the music again, intro first, when the end screen goes back to the title', () => {

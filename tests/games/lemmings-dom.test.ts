@@ -681,16 +681,17 @@ describe('the music follows the acts', () => {
     expect(act3.audio.dispose).not.toHaveBeenCalled();
   });
 
-  it('falls back to the effect and a muffle when the ending cannot play, and a retry lifts it', () => {
+  it('falls back to the effect and a stop when the ending cannot play, so a retry opens on the intro', () => {
     const act3 = timeUpOnLevel14(a => a.audio.playEnding.mockReturnValue(false));
     expect(act3.audio.playEnding).toHaveBeenCalledWith('over');
     expect(act3.audio.playSfx).toHaveBeenCalledWith('gameover');
-    expect(act3.audio.setPaused).toHaveBeenLastCalledWith(true);
+    expect(act3.audio.stop).toHaveBeenCalledTimes(1);
+    expect(act3.audio.setPaused).not.toHaveBeenCalledWith(true);
 
+    const starts = act3.audio.start.mock.calls.length;
     retryBtn().click();
     expect(madeAudio.at(-1)).toBe(act3);
-    expect(act3.audio.setPaused).toHaveBeenLastCalledWith(false);
-    expect(act3.audio.stop).not.toHaveBeenCalled();
+    expect(act3.audio.start).toHaveBeenCalledTimes(starts + 1);
   });
 
   it('takes a bow when the player ends a good run from a mid-run clear', () => {
@@ -700,6 +701,17 @@ describe('the music follows the acts', () => {
     expect(act1.audio.playEnding).not.toHaveBeenCalled();
     (document.getElementById('end-run-btn') as HTMLButtonElement).click();
     expect(act1.audio.playEnding).toHaveBeenCalledWith('curtain');
+    expect(act1.audio.stop).not.toHaveBeenCalled();
+  });
+
+  it('stops the score when the bow cannot play, so Play Again still opens on the intro', () => {
+    startLevel(0);
+    const act1 = playing();
+    act1.audio.playEnding.mockReturnValue(false);
+    expect(runUntilResult(6000)).not.toBeNull();
+    (document.getElementById('end-run-btn') as HTMLButtonElement).click();
+    expect(act1.audio.playEnding).toHaveBeenCalledWith('curtain');
+    expect(act1.audio.stop).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -740,9 +752,11 @@ describe('the last level ends the game on its own phrase (#417)', () => {
     expect(act1.audio.playStinger).not.toHaveBeenCalled();
   });
 
-  it("falls back to the level's clear stinger when the ending cannot play", async () => {
+  it('falls back to the clear effect and a stop when the ending cannot play', async () => {
     const act1 = await winTheGame(a => a.audio.playEnding.mockReturnValue(false));
     expect(act1.audio.playEnding).toHaveBeenCalledWith('victory');
-    expect(act1.audio.playStinger).toHaveBeenCalledWith('perfect');
+    expect(act1.audio.playSfx).toHaveBeenCalledWith('score');
+    expect(act1.audio.stop).toHaveBeenCalledTimes(1);
+    expect(act1.audio.playStinger).not.toHaveBeenCalled();
   });
 });

@@ -794,9 +794,13 @@ export function initFootballGame(): void {
     submitted = true;
     bank();
     // The run's own ending phrase, after which the music is off until the title
-    // screen starts it again; with the music muted, the effect marks the end.
-    if (audio.playEnding(run.champion ? 'champion' : 'eliminated')) musicOn = false;
-    else audio.playSfx(run.champion ? 'rescue' : 'gameover');
+    // screen starts it again; with the music muted, the effect marks the end and
+    // the score stops all the same, so the next title opens on its intro.
+    if (!audio.playEnding(run.champion ? 'champion' : 'eliminated')) {
+      audio.playSfx(run.champion ? 'rescue' : 'gameover');
+      audio.stop();
+    }
+    musicOn = false;
     board.show(runScore(run));
   }
 

@@ -625,15 +625,16 @@ export function initLemmingsGame(): void {
     // A mid-run clear lands its stinger over the running score, which carries
     // on into the next level. A run's end closes the music on its own phrase
     // (see music.ts); with the music muted it cannot play, and the game falls
-    // back to the effect and a muffle behind the result.
+    // back to the effect and a plain stop, so the next run still opens on its
+    // intro. The victory's effect is the `score` above.
     const clearedStinger = bonuses.perfect > 0 ? 'perfect' : 'cleared';
     if (victory) {
-      if (!audio.playEnding('victory')) audio.playStinger(clearedStinger);
+      if (!audio.playEnding('victory')) audio.stop();
     } else if (won) {
       audio.playStinger(clearedStinger);
     } else if (!audio.playEnding('over')) {
       audio.playSfx('gameover');
-      audio.setPaused(true);
+      audio.stop();
     }
     // A run ends on the final victory or a failed quota; either way the run's
     // points face the table. Mid-run level clears keep the board out of the way.
@@ -1216,8 +1217,9 @@ export function initLemmingsGame(): void {
     endRunBtn.style.display = 'none';
     nextBtn.textContent = nextBtn.dataset.playAgain || 'Play Again';
     board.show(runScore);
-    // The run's bow; muted, the music stays as it was, as it always did here.
-    audio.playEnding('curtain');
+    // The run's bow; muted, the score stops all the same, so Play Again opens
+    // the next run on its intro.
+    if (!audio.playEnding('curtain')) audio.stop();
   });
   // A failed level already ended the run (and banked its score), so a retry
   // begins a new run from the same level.

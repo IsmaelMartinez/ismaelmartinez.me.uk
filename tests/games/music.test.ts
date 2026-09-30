@@ -308,8 +308,24 @@ describe('the arcade scores', () => {
     expect(buzzer.adsr!.attack).toBeLessThanOrEqual(0.005);
     expect(buzzer.adsr!.release).toBeLessThanOrEqual(0.005);
     // The phone had one level for every note, in the loop and in the stingers.
-    const lines = [...Object.values(SNAKE_MUSIC.form!.sections), ...Object.values(SNAKE_MUSIC.stingers!)].flat(2);
+    const lines = [
+      SNAKE_MUSIC.form!.intro!,
+      ...Object.values(SNAKE_MUSIC.form!.sections),
+      ...Object.values(SNAKE_MUSIC.stingers!)
+    ].flat(2);
     expect(lines.some(note => note.gain !== undefined)).toBe(false);
+  });
+
+  it("opens Snake on a two-bar intro in the loop's own register, ending on a rest so the hook takes the downbeat (#417)", () => {
+    const [intro] = SNAKE_MUSIC.form!.intro!;
+    expect(trackBeats(intro)).toBe(8);
+    const pitched = (line: Note[]) => line.filter(note => note.freq > 0).map(note => note.freq);
+    const loop = Object.values(SNAKE_MUSIC.form!.sections).flatMap(([line]) => pitched(line));
+    expect(Math.min(...pitched(intro))).toBeGreaterThanOrEqual(Math.min(...loop));
+    expect(Math.max(...pitched(intro))).toBeLessThanOrEqual(Math.max(...loop));
+    // At least a quaver of silence at the end, more than any note's own staccato tail.
+    const lastSounding = intro.findLastIndex(note => note.freq > 0);
+    expect(trackBeats(intro.slice(lastSounding + 1))).toBeGreaterThanOrEqual(0.5);
   });
 });
 

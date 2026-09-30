@@ -19,7 +19,9 @@ import { initFootballGame } from '../../src/games/football';
 import * as matchModule from '../../src/games/football/match';
 import * as tournamentModule from '../../src/games/football/tournament';
 import type { MatchEvent } from '../../src/games/football/match';
-import { BASE_TEMPO, FINAL_TEMPO } from '../../src/games/football/music';
+import { BASE_TEMPO, FINAL_TEMPO, SEMI_TEMPO } from '../../src/games/football/music';
+import { CROWD_CHANCE_HOLD, CROWD_GOAL_HOLD } from '../../src/games/football/game';
+import * as shootoutModule from '../../src/games/football/shootout';
 import {
   createFrameDriver,
   installCanvasContext,
@@ -192,7 +194,8 @@ describe("CALCIO '90 match music", () => {
     frames.advance(1); // kick-off: drums in
     nextTickRaises({ type: 'halfTime' });
     expect(mockAudio.playStinger).toHaveBeenLastCalledWith('half-time');
-    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('drums', false);
+    expect(mockAudio.setLayer).toHaveBeenCalledWith('drums', false);
+    expect(mockAudio.setLayer).not.toHaveBeenLastCalledWith('drums', true);
   });
 
   it('blows the final whistle and goes back to the menu theme at full time', () => {
@@ -286,5 +289,131 @@ describe("CALCIO '90 attract mode is silent (#368)", () => {
 
     frames.advance(13); // idle past ATTRACT_DELAY
     expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Starts a match on a run doctored first, e.g. to a later matchday or stage. */
+function startAMatchWith(doctor: (run: tournamentModule.RunState) => void): void {
+  const realCreateRun = tournamentModule.createRun;
+  vi.spyOn(tournamentModule, 'createRun').mockImplementation((rng, code) => {
+    const run = realCreateRun(rng, code);
+    doctor(run);
+    return run;
+  });
+  startAMatch();
+}
+
+describe("CALCIO '90 rotates its three match themes (#413)", () => {
+  it('plays the first theme for the first group match', () => {
+    startAMatch();
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith('match');
+  });
+
+  it.each([
+    [1, 'match-2'],
+    [2, 'match-3']
+  ])('plays the right theme after %i matches', (played, theme) => {
+    startAMatchWith(run => {
+      run.matchesPlayed = played;
+    });
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith(theme);
+    expect(mockAudio.setTempo).toHaveBeenLastCalledWith(BASE_TEMPO);
+  });
+
+  it('comes round to the first theme for the semi, at the semi tempo', () => {
+    startAMatchWith(run => {
+      run.matchesPlayed = 3;
+      run.stage = 'semi';
+    });
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith('match');
+    expect(mockAudio.setTempo).toHaveBeenLastCalledWith(SEMI_TEMPO);
+  });
+
+  it('keeps the final on its own theme whatever the count', () => {
+    startAMatchWith(run => {
+      run.matchesPlayed = 4;
+      run.stage = 'final';
+    });
+    expect(mockAudio.setScene).toHaveBeenLastCalledWith('final');
+  });
+});
+
+describe("CALCIO '90's crowd swells on a chance (#413)", () => {
+  const crowdCalls = () =>
+    mockAudio.setLayer.mock.calls.filter(call => (call as unknown[])[0] === 'crowd').map(call => (call as unknown[])[1]);
+  /** Lets play run with nothing happening on the pitch. */
+  const quietPitch = () => vi.spyOn(matchModule, 'tickMatch').mockImplementation(() => []);
+  const shot: MatchEvent = { type: 'shot', side: 0, onTarget: true, contact: 'ground' };
+
+  it('starts every match with the crowd down', () => {
+    startAMatch();
+    expect(crowdCalls()).toEqual([false]);
+  });
+
+  it('rises on a shot, holds, and falls away once the hold runs out', () => {
+    startAMatch();
+    mockAudio.setLayer.mockClear();
+    nextTickRaises(shot);
+    expect(mockAudio.setLayer).toHaveBeenLastCalledWith('crowd', true, expect.any(Number));
+    quietPitch();
+    frames.advance(CROWD_CHANCE_HOLD - 0.3);
+    expect(crowdCalls()).toEqual([true]);
+    frames.advance(0.6);
+    expect(crowdCalls()).toEqual([true, false]);
+  });
+
+  it('holds longer for a goal than for a chance', () => {
+    startAMatch();
+    mockAudio.setLayer.mockClear();
+    nextTickRaises(goal(1));
+    quietPitch();
+    frames.advance(CROWD_CHANCE_HOLD + 0.5);
+    expect(crowdCalls()).toEqual([true]);
+    frames.advance(CROWD_GOAL_HOLD - CROWD_CHANCE_HOLD);
+    expect(crowdCalls()).toEqual([true, false]);
+  });
+
+  it('extends a swell already up rather than raising it again', () => {
+    startAMatch();
+    mockAudio.setLayer.mockClear();
+    nextTickRaises(shot);
+    const quiet = quietPitch();
+    frames.advance(CROWD_CHANCE_HOLD - 0.5);
+    quiet.mockRestore();
+    nextTickRaises({ type: 'save', side: 1, caught: false });
+    quietPitch();
+    frames.advance(1);
+    // The first hold would have run out by now; the save carried it on.
+    expect(crowdCalls()).toEqual([true]);
+    frames.advance(CROWD_CHANCE_HOLD);
+    expect(crowdCalls()).toEqual([true, false]);
+  });
+
+  it('does not count paused time against the hold', () => {
+    startAMatch();
+    mockAudio.setLayer.mockClear();
+    nextTickRaises(shot);
+    quietPitch();
+    document.getElementById('btn-pause')!.click();
+    frames.advance(CROWD_CHANCE_HOLD + 1);
+    expect(crowdCalls()).toEqual([true]);
+  });
+
+  it('goes down with the half-time whistle', () => {
+    startAMatch();
+    nextTickRaises(shot);
+    nextTickRaises({ type: 'halfTime' });
+    expect(crowdCalls().at(-1)).toBe(false);
+  });
+
+  it('rises for each penalty in a shootout', () => {
+    startAMatch();
+    endLevelWithShootout();
+    mockAudio.setLayer.mockClear();
+    vi.spyOn(shootoutModule, 'tickShootout').mockImplementationOnce(() => [
+      { type: 'kick', kick: { side: 0, zone: 0, keeperZone: 2, result: 'scored' } }
+    ]);
+    frames.step(1);
+    expect(crowdCalls()).toEqual([true]);
   });
 });

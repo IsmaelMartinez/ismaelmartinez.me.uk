@@ -23,7 +23,7 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC, type Scene } from './music';
+import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC, MATCH_THEMES, SEMI_TEMPO, type Scene } from './music';
 import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
 import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
 import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
@@ -109,6 +109,18 @@ const KONAMI_BUTTONS = 8;
 
 /** Seconds the unlock banner holds over the select grid. */
 const UNLOCK_FLASH = 2.4;
+
+/**
+ * Seconds the crowd layer holds after a chance (a shot, a save, the post, a
+ * penalty kick) before it falls away, and after a goal, which a stand keeps
+ * shouting about for longer. A new swell while one is holding extends it
+ * rather than re-fading it.
+ */
+export const CROWD_CHANCE_HOLD = 2.5;
+export const CROWD_GOAL_HOLD = 5;
+/** The crowd's rise, and its slower fall once the hold runs out, in seconds. */
+const CROWD_RISE = 0.4;
+const CROWD_FALL = 1.8;
 
 export function initFootballGame(): void {
   const mounted = mountCabinet('football-root');
@@ -338,6 +350,8 @@ export function initFootballGame(): void {
   let musicOn = false;
   /** Set once a player has pressed start, after which the title screen has its theme too. */
   let musicUnlocked = false;
+  /** Seconds of match time the crowd layer has left to hold; 0 while it is down. */
+  let crowdHold = 0;
   let clock = 0;
   let run: RunState | null = null;
   let match: MatchState | null = null;
@@ -676,6 +690,40 @@ export function initFootballGame(): void {
     audio.setScene(next === 'menu' ? null : next);
   }
 
+  /**
+   * The stand reacts: the crowd layer rises on a chance and holds for `hold`
+   * seconds of play (paused time does not count), then `tickCrowd` lets it
+   * fall. A swell while it is already up only extends the hold, so a scramble
+   * of shots is one long roar rather than a pumping one.
+   */
+  function swellCrowd(hold: number): void {
+    if (demo) return;
+    if (crowdHold <= 0) audio.setLayer('crowd', true, CROWD_RISE);
+    crowdHold = Math.max(crowdHold, hold);
+  }
+
+  function tickCrowd(dt: number): void {
+    if (crowdHold <= 0) return;
+    crowdHold -= dt;
+    if (crowdHold <= 0) audio.setLayer('crowd', false, CROWD_FALL);
+  }
+
+  /** The crowd down at once, for a whistle or a change of screen. */
+  function hushCrowd(): void {
+    crowdHold = 0;
+    audio.setLayer('crowd', false);
+  }
+
+  /**
+   * The match theme for the match about to be played: the final has its own,
+   * and every other match takes the next of the three in turn, as the Mega
+   * Drive game rotated its in-match music, so the semi comes round to the first.
+   */
+  function matchScene(state: RunState): Scene {
+    if (state.stage === 'final') return 'final';
+    return MATCH_THEMES[state.matchesPlayed % MATCH_THEMES.length];
+  }
+
   /* ---------------------------------------------------------------- */
   /* screen flow                                                       */
 
@@ -693,14 +741,14 @@ export function initFootballGame(): void {
    *
    * The ramp is policy about the game and stays here; the pace the score was
    * written at is a property of the arrangement and comes from `music.ts` as
-   * `BASE_TEMPO`, the same split Cascade uses. Changing stage mid-loop is safe:
-   * the engine's `setTempo` rescales every pending voice cursor by the tempo
-   * ratio, so the sustained choir re-times with the plucked voices instead of
-   * sliding behind them.
+   * `BASE_TEMPO`, the same split Cascade uses, and so do the steps, because
+   * each scene's loop is sized at the fastest tempo it is played at. Changing
+   * stage mid-loop is safe: the engine's `setTempo` rescales every pending
+   * voice cursor by the tempo ratio, so the voices re-time together.
    */
   function stageTempo(state: RunState): number {
     if (state.stage === 'final') return FINAL_TEMPO;
-    if (state.stage === 'semi') return 143;
+    if (state.stage === 'semi') return SEMI_TEMPO;
     return BASE_TEMPO;
   }
 
@@ -719,15 +767,18 @@ export function initFootballGame(): void {
     screen = 'match';
     paused = false;
     audio.setPaused(false);
-    // The drums wait for the kick-off; the final has its own theme.
+    // The drums wait for the kick-off and the crowd for a chance; the match
+    // theme rotates and the final has its own.
     audio.setLayer('drums', false);
-    playScene(run.stage === 'final' ? 'final' : 'match', stageTempo(run));
+    hushCrowd();
+    playScene(matchScene(run), stageTempo(run));
   }
 
   /** Fold the finished match into the run and move to the full-time screen. */
   function settleMatch(wonOnPenalties: boolean): void {
     if (!run || !match) return;
     audio.setLayer('drums', false);
+    hushCrowd();
     playScene('menu');
     recordPlayerMatch(run, {
       goalsFor: match.score[0],
@@ -927,16 +978,20 @@ export function initFootballGame(): void {
             bank();
           }
           celebrate(event.side, m);
+          swellCrowd(CROWD_GOAL_HOLD);
           break;
         }
         case 'save':
           if (!demo) audio.playSfx('blip');
+          swellCrowd(CROWD_CHANCE_HOLD);
           break;
         case 'post':
           if (!demo) audio.playSfx('blip');
+          swellCrowd(CROWD_CHANCE_HOLD);
           break;
         case 'shot':
           if (!demo && !event.onTarget) audio.playSfx('hit');
+          swellCrowd(CROWD_CHANCE_HOLD);
           break;
         case 'kickoff':
           renderer.resetCamera(m);
@@ -950,6 +1005,7 @@ export function initFootballGame(): void {
         case 'end':
           if (!demo) {
             audio.setLayer('drums', false);
+            hushCrowd();
             if (!audio.playStinger(event.type === 'halfTime' ? 'half-time' : 'full-time')) audio.playSfx('blip');
           }
           break;
@@ -978,6 +1034,7 @@ export function initFootballGame(): void {
 
     if (paused) return;
     fx.update(dt);
+    tickCrowd(dt);
 
     if (screen === 'select') {
       unlockFlash = Math.max(0, unlockFlash - dt);
@@ -1025,6 +1082,7 @@ export function initFootballGame(): void {
       for (const event of tickShootout(shootout, dt, kick)) {
         if (event.type === 'kick') {
           audio.playSfx(event.kick.result === 'scored' ? 'score' : 'blip');
+          swellCrowd(event.kick.result === 'scored' ? CROWD_GOAL_HOLD : CROWD_CHANCE_HOLD);
         } else {
           // The tie is settled: the same whistle that ends a match.
           audio.setLayer('drums', false);

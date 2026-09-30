@@ -1781,6 +1781,9 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   // musicBus is the dry sum of every voice and the echo send's input.
   let musicMaster: GainNode | null = null;
   let musicBus: GainNode | null = null;
+  // The sounding stinger's own gate into musicBus, so the next stinger or a
+  // stop() can silence the notes it has already handed to the audio graph.
+  let stingerGate: GainNode | null = null;
   // One scheduling cursor per track: they advance independently on their own
   // note lengths so a slow bass and a busy lead stay locked to the same clock.
   const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
@@ -1980,6 +1983,15 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     if (musicMaster && ctx) {
       musicMaster.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
     }
+    // The duck lifts again on start(), which would bring back the rest of a
+    // stinger still queued behind it (Snake's game-over phrase on a restart).
+    cutStinger();
+  }
+
+  /** Silences the sounding stinger's remaining notes, if any. */
+  function cutStinger(): void {
+    if (stingerGate && ctx) stingerGate.gain.setTargetAtTime(0, ctx.currentTime, 0.005);
+    stingerGate = null;
   }
 
   function applyMusicMute(): void {
@@ -2131,6 +2143,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       ctx = null;
       musicMaster = null;
       musicBus = null;
+      stingerGate = null;
       lane = null;
       layerGains = null;
       pauseFilter = null;
@@ -2247,12 +2260,18 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       const now = ctx.currentTime;
       const at = now + 0.05;
       const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
+      // A new stinger replaces one still sounding, as the duck below already
+      // assumes: it re-times the lift to this phrase's end alone.
+      cutStinger();
+      const gate = ctx.createGain();
+      gate.connect(musicBus);
+      stingerGate = gate;
       let end = at;
       lines.forEach((line, t) => {
         let time = at;
         line.forEach((note, i) => {
           const dur = note.beats * spb;
-          if (dur > 0) playNote(ctx as AudioContext, musicBus as GainNode, tracks[t], note, line[i + 1], time, dur);
+          if (dur > 0) playNote(ctx as AudioContext, gate, tracks[t], note, line[i + 1], time, dur);
           time += dur > 0 ? dur : spb;
         });
         end = Math.max(end, time);

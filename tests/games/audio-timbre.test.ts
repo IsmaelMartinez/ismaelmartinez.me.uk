@@ -274,7 +274,7 @@ describe('pan', () => {
     expect(args(playLine([{ freq: 440, beats: 1 }], { pan: -3 }), 'panner#1.pan', 'setValueAtTime')).toEqual([[-1, T0]]);
   });
 
-  it('pans through a layer gain, and a stinger past the layers straight to the bus', () => {
+  it('pans through a layer gain, and a stinger past the layers through its own gate to the bus', () => {
     const log = drive(
       {
         tempo: 60,
@@ -286,7 +286,9 @@ describe('pan', () => {
     ).split('\n');
     // Master, bus, lane, then the voice's layer gain is gain#4.
     expect(log).toContain('panner#1.connect(gain#4)');
-    expect(log).toContain('panner#2.connect(gain#2)');
+    const gate = log.map(l => /^panner#2\.connect\((gain#\d+)\)$/.exec(l)?.[1]).find(Boolean);
+    expect(gate).toBeDefined();
+    expect(log).toContain(`${gate}.connect(gain#2)`);
     expect(args(log, 'panner#2.pan', 'setValueAtTime')[0][0]).toBe(1);
   });
 });

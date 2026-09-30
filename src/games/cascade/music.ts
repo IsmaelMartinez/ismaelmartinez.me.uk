@@ -78,7 +78,10 @@
  *     waits until it recovers;
  *   - the `levelUp` stinger, a D major arpeggio in thirds on the two pulses,
  *     and the `hurry` stinger, a semitone alarm on both pulses, when a
- *     countdown enters its final 20 seconds, with the tempo lift.
+ *     countdown enters its final 20 seconds, with the tempo lift;
+ *   - a two-bar intro on every run's start, a pickup on the dominant into the
+ *     folk tune, and the run's end through `playEnding`: `topOut` falling in D
+ *     minor, `timeUp` closing in D major (#417).
  *
  * Gates. The originals are held to all three style gates. The menuet scene
  * switches two off, because the brief is Bach's piece as written: a Baroque
@@ -340,6 +343,40 @@ const RUSH_THIRDS = `
 const RUSH_BASS = `${Array.from({ length: 14 }, () => 'A2:.5 A2 A2 A2 |').join(' ')} Bb2:.5 Bb2 Bb2 Bb2 | A2:.5 A2 A2 A2 |`;
 const RUSH_TICK = 'h:.25 h h h s h h h';
 
+// ---------------------------------------------------------------------------
+// The beginning and the endings (#417), each two 2/4 bars on the same four
+// channels. The intro is a pickup on the folk tune's dominant: the pulses run
+// up an A major arpeggio in thirds and fall back to the leading tone, which the
+// tune's first D answers, over the wave bass bouncing on A and a tick roll.
+// Every run opens on the folk tune (level 1's band), so this is the only tune
+// the intro ever has to lead into.
+
+const INTRO = [
+  'A4:.5 C#5 E5 A5 | G5:.5 F5 E5 C#5 |',
+  'E4:.5 A4 C#5 E5 | E5:.5 D5 C#5 A4 |',
+  bounce('A1 A1'),
+  'h:.5 h h h | h:.25 h h h s:1 |'
+];
+
+// Topping out: D minor falling by step down the octave onto the low tonic, the
+// Game Boy's game-over manner (a short descending figure, then silence). A
+// run's ending is not the loop seam, so it may arrive home.
+const TOP_OUT = [
+  'F5:.5 E5 D5 C#5 | D5:.5 A4 D4:1 |',
+  'D5:.5 C#5 Bb4 A4 | A4:.5 E4 F4:1 |',
+  'Bb1:.5 Bb2 A1 A2 | D2:.5 D3 D2:1 |',
+  'r:.5 h r h | s:.5 r r:1 |'
+];
+
+// A countdown's clock running out is a finished run rather than a defeat, so
+// it closes in D major on the tonic, held, instead of falling.
+const TIME_UP = [
+  'E5:.5 G5 F#5 E5 | D5:1.5 r:.5 |',
+  'C#5:.5 E5 D5 C#5 | A4:1.5 r:.5 |',
+  'A1:.5 A2 A1 A2 | D2:1.5 r:.5 |',
+  'h:.5 h h h | s:.5 r:1.5 |'
+];
+
 
 export const CASCADE_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,
@@ -373,6 +410,7 @@ export const CASCADE_MUSIC: GameAudioOptions = {
   ],
   form: {
     beatsPerBar: 6,
+    intro: INTRO.map(text => line(text, 2)),
     sections: {
       // The folk tune: lead and bass with offbeat ticks, then the pulses in thirds, then the close.
       fa: [
@@ -443,6 +481,9 @@ export const CASCADE_MUSIC: GameAudioOptions = {
       line('C#5:.25 D5 C#5 D5 C#5 D5 E5:1'),
       line('A2:.5 A2 A2 A2:1'),
       line('h:.25 h h h h h s:1')
-    ]
+    ],
+    // The run's endings, played through `playEnding` by reason (`endRun`).
+    topOut: TOP_OUT.map(text => line(text, 2)),
+    timeUp: TIME_UP.map(text => line(text, 2))
   }
 };

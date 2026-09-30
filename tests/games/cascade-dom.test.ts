@@ -41,6 +41,7 @@ const mockAudio = vi.hoisted(() => ({
   setSection: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
+  playEnding: vi.fn(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -284,5 +285,39 @@ describe('Cascade score following the game (#375, #412)', () => {
     start();
     frames.step(8);
     expect(mockAudio.playStinger).not.toHaveBeenCalledWith('hurry');
+  });
+});
+
+describe("Cascade's run endings (#417)", () => {
+  /** Fills the well but the last column, so no row clears and the next piece cannot spawn. */
+  function topOut(): void {
+    const run = liveRun();
+    for (let y = 0; y < WELL_H; y++) run.well.fill(1, y * WELL_W, y * WELL_W + WELL_W - 1);
+    hardDrop();
+    expect(run.phase).toBe('over');
+  }
+
+  it('ends a topped-out run on the score’s own falling phrase, which stops the music itself', () => {
+    start();
+    topOut();
+    expect(mockAudio.playEnding.mock.calls).toEqual([['topOut']]);
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+  });
+
+  it('ends a countdown whose clock runs out on the time-up phrase instead', () => {
+    start('countdown');
+    liveRun().timeLeft = 0.01;
+    frames.step(1);
+    expect(mockAudio.playEnding.mock.calls).toEqual([['timeUp']]);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the shared effect and a stop when the ending cannot play', () => {
+    mockAudio.playEnding.mockReturnValueOnce(false);
+    start();
+    topOut();
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 });

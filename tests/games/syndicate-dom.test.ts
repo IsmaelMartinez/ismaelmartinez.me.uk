@@ -18,6 +18,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initSyndicateGame } from '../../src/games/syndicate';
+import { MISSIONS, missionStatus } from '../../src/games/syndicate/missions';
 import {
   createFrameDriver,
   installCanvasContext,
@@ -42,6 +43,8 @@ const mockAudio = vi.hoisted(() => ({
   isSfxMuted: vi.fn(() => false),
   setSfxMuted: vi.fn(),
   playSfx: vi.fn(),
+  playStinger: vi.fn(() => true),
+  playEnding: vi.fn(() => false),
   setTempo: vi.fn(),
   dispose: vi.fn()
 }));
@@ -102,6 +105,12 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   mockAudio.playSfx.mockClear();
+  mockAudio.stop.mockClear();
+  mockAudio.playStinger.mockClear();
+  mockAudio.playEnding.mockReset();
+  mockAudio.playEnding.mockReturnValue(false);
+  vi.mocked(missionStatus).mockReturnValue('won');
+  MISSIONS.length = 1;
 });
 
 describe('Syndicate campaign-end sound (#368)', () => {
@@ -112,5 +121,39 @@ describe('Syndicate campaign-end sound (#368)', () => {
     expect(document.getElementById('over-title')!.textContent).toBe('Campaign complete');
     expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalled();
+  });
+});
+
+describe("Syndicate's score at a mission's and a campaign's end", () => {
+  it("ends a won campaign on the score's victory, which stops the music itself", () => {
+    mockAudio.playEnding.mockReturnValue(true);
+    document.getElementById('start-btn')!.click();
+    frames.step(1);
+
+    expect(mockAudio.playEnding).toHaveBeenCalledWith('victory');
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('score');
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+  });
+
+  it('ends a lost campaign on the fallen phrase, and on the loss sting with the music muted', () => {
+    vi.mocked(missionStatus).mockReturnValue('lost');
+    document.getElementById('start-btn')!.click();
+    frames.step(1);
+
+    expect(mockAudio.playEnding).toHaveBeenCalledWith('fallen');
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalled();
+  });
+
+  it('plays the extraction over the running music on a mid-campaign clear, and no ending', () => {
+    MISSIONS.push(MISSIONS[0]);
+    document.getElementById('start-btn')!.click();
+    frames.step(1);
+
+    expect(document.getElementById('over-title')!.textContent).toContain('+£');
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('extracted');
+    expect(mockAudio.playEnding).not.toHaveBeenCalled();
+    expect(mockAudio.stop).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,7 @@ import {
   BASE_TEMPO as FOOTBALL_BASE_TEMPO
 } from '../../src/games/football/music';
 import { TOWERDEFENSE_MUSIC } from '../../src/games/towerdefense/music';
+import { SYNDICATE_MUSIC } from '../../src/games/syndicate/music';
 
 /**
  * Every cabinet's score, discovered rather than listed.
@@ -367,6 +368,50 @@ describe('the arcade scores', () => {
         const counts = perBar(passLine(music, basses));
         if (scene.startsWith('prep')) expect(Math.max(...counts), scene).toBeLessThanOrEqual(2);
         else expect(Math.min(...counts), scene).toBeGreaterThanOrEqual(8);
+      }
+    });
+  });
+
+  describe('Syndicate, after Blade Runner and Russell Shaw', () => {
+    const form = SYNDICATE_MUSIC.form!;
+    const track = (name: string) => SYNDICATE_MUSIC.tracks.findIndex(t => t.name === name);
+    const semitonesFromE = (freq: number) => ((Math.round(12 * Math.log2(freq / p('E4'))) % 12) + 12) % 12;
+    const pitched = (line: Note[]) => line.filter(n => n.freq > 0);
+
+    it('opens the pass on E in the bass and hands back to the top through B', () => {
+      const line = passLine(SYNDICATE_MUSIC, track('bass'));
+      expect(semitonesFromE(pitched(line)[0].freq)).toBe(0);
+      const total = trackBeats(line);
+      let at = 0;
+      const downbeat = line.find(n => {
+        const hit = at >= total - 4 - 1e-6 && n.freq > 0;
+        at += n.beats;
+        return hit;
+      })!;
+      expect(semitonesFromE(downbeat.freq)).toBe(7);
+    });
+
+    it('drives every section on a sixteenth-note arpeggiator', () => {
+      for (const [name, lines] of Object.entries(form.sections)) {
+        expect(new Set(lines[track('arp')].map(n => n.beats)), name).toEqual(new Set([0.25]));
+      }
+    });
+
+    it('lands both campaign endings home on E in the lead, and turns the extraction major', () => {
+      const lastLead = (stinger: string) => pitched(SYNDICATE_MUSIC.stingers![stinger][track('lead')]).at(-1)!.freq;
+      expect(semitonesFromE(lastLead('victory'))).toBe(0);
+      expect(semitonesFromE(lastLead('fallen'))).toBe(0);
+      expect(semitonesFromE(lastLead('extracted'))).toBe(4);
+    });
+
+    it("plays its endings at the loop's level rather than under it", () => {
+      const meanGain = (line: Note[]) => {
+        const notes = pitched(line);
+        return notes.reduce((s, n) => s + (n.gain ?? 1), 0) / notes.length;
+      };
+      const loop = meanGain(passLine(SYNDICATE_MUSIC, track('lead')));
+      for (const name of ['victory', 'fallen']) {
+        expect(meanGain(SYNDICATE_MUSIC.stingers![name][track('lead')]) / loop, name).toBeGreaterThanOrEqual(0.9);
       }
     });
   });

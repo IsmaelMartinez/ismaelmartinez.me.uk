@@ -29,6 +29,8 @@ import {
   mountHtml,
   pressKey
 } from './dom-helpers';
+import { makeRecordingContext, onsets } from './audio-graph';
+import { BASE_TEMPO, CUES, ENDINGS, HORDE_LAUNCH, TOWERDEFENSE_MUSIC } from '../../src/games/towerdefense/music';
 
 vi.mock('../../src/games/engine/globalScores', async () =>
   (await import('./dom-helpers')).mockGlobalScores()
@@ -55,8 +57,10 @@ const mockAudio = vi.hoisted(() => ({
   section: vi.fn(() => null),
   setLayer: vi.fn(),
   setSection: vi.fn(() => true),
+  setScene: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
+  playEnding: vi.fn(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -526,48 +530,202 @@ describe('Line Hold stand-down confirmation', () => {
   });
 });
 
+
 /**
- * The score plays the defence (#374): the lead and the march are a layer that
- * comes in when a wave launches and goes when it ends, a horn stinger marks
- * the launch, the finale switches to the horde, and the stand-down prompt
- * muffles the music instead of stopping it. Everything here is driven by the
- * game's own buttons and clock, never by calling the audio directly.
+ * The score plays the defence (#374, #410): each arc of the campaign has a
+ * preparation cue for its build lulls and a battle cue for its waves, the
+ * battle's layers grow through the arc, a low string stinger marks the launch,
+ * the finale switches to the horde, and the stand-down prompt muffles the
+ * music instead of stopping it. Everything here is driven by the game's own
+ * buttons and clock, never by calling the audio directly.
  */
 describe('Line Hold music', () => {
+  const FORM = TOWERDEFENSE_MUSIC.form!;
   /** The last `on` each named layer was set to. */
   const layerState = (name: string): boolean | undefined =>
     mockAudio.setLayer.mock.calls.filter(([track]) => track === name).at(-1)?.[1];
+  const lastScene = () => (mockAudio.setScene.mock.calls.at(-1) as unknown[] | undefined)?.[0];
+  const lastSection = () => (mockAudio.setSection.mock.calls.at(-1) as unknown[] | undefined)?.[0];
+  const lastStinger = () => (mockAudio.playStinger.mock.calls.at(-1) as unknown[] | undefined)?.[0];
+  const launches = () => mockAudio.playStinger.mock.calls.length;
 
-  it('starts a run on the build bed alone', () => {
+  /**
+   * Plays waves with the keep held up, clicking each launch as soon as it is
+   * offered, and hands `each` the state at every launch (1-based) and at the
+   * lull that follows each one, until `count` launches have happened.
+   */
+  function playWaves(count: number, each: (event: 'launch' | 'lull', wave: number) => void): void {
+    keepStands.on = true;
+    startRun();
+    let seen = 0;
+    let lulled = 0;
+    advanceUntil(() => {
+      if (launches() > seen) {
+        seen = launches();
+        each('launch', seen);
+      }
+      if (!waveBtn().disabled) {
+        if (lulled < seen) {
+          lulled = seen;
+          each('lull', seen);
+        }
+        if (seen < count) waveBtn().click();
+      }
+      return seen === count;
+    }, 3000);
+  }
+
+  it('starts a run on the teaching preparation, which is the form’s order', () => {
     startRun();
     expect(mockAudio.start).toHaveBeenCalledTimes(1);
-    expect(layerState('lead')).toBe(false);
+    expect(FORM.order).toEqual(FORM.scenes![CUES[0].prep].order);
+    // No move: the order already is the cue, and a move would restart it a bar in.
+    expect(mockAudio.setScene).not.toHaveBeenCalled();
+    expect(layerState('horn')).toBe(true);
+    expect(layerState('winds')).toBe(false);
     expect(layerState('drums')).toBe(false);
     expect(mockAudio.playStinger).not.toHaveBeenCalled();
   });
 
-  it('brings the wave layer in with a horn call when a wave launches', () => {
+  it('moves to the arc’s battle cue from its top when a wave launches, with the kit and a launch stinger', () => {
     startRun();
     waveBtn().click();
-    expect(layerState('lead')).toBe(true);
+    expect(lastScene()).toBe(CUES[0].battle);
+    expect(lastSection()).toBe(FORM.scenes![CUES[0].battle].order[0]);
     expect(layerState('drums')).toBe(true);
-    expect(mockAudio.playStinger).toHaveBeenCalledWith('launch');
-    // Wave 1 is nowhere near the finale.
+    // The first wave of an arc is the kit alone under the tune.
+    expect(layerState('horn')).toBe(false);
+    expect(layerState('winds')).toBe(false);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith(CUES[0].launch);
     expect(mockAudio.setDanger).not.toHaveBeenCalledWith(true);
   });
 
-  it('launches with the layer too when the build countdown runs out on its own', () => {
+  it('lands every layer change on the bar line the cue moves on, not at once (#403)', () => {
     startRun();
-    advanceUntil(() => mockAudio.playStinger.mock.calls.length > 0, 20);
-    expect(layerState('lead')).toBe(true);
-    expect(layerState('drums')).toBe(true);
+    mockAudio.setLayer.mockClear();
+    waveBtn().click();
+    expect(mockAudio.setLayer.mock.calls.length).toBeGreaterThan(0);
+    for (const call of mockAudio.setLayer.mock.calls) expect(call[3]).toBe('section');
   });
 
-  it('takes the wave layer out again once the wave is held', () => {
+  it('goes back to the arc’s preparation once the wave is held', () => {
     holdFirstWave();
     expect(num('lives')).toBe(20);
-    expect(layerState('lead')).toBe(false);
+    expect(lastScene()).toBe(CUES[0].prep);
+    expect(lastSection()).toBe(FORM.scenes![CUES[0].prep].order[0]);
     expect(layerState('drums')).toBe(false);
+    expect(layerState('winds')).toBe(false);
+    expect(layerState('horn')).toBe(true);
+  });
+
+  it('gives each arc its own preparation and battle, switching at every phase change', () => {
+    const log: string[] = [];
+    playWaves(18, (event, wave) => {
+      log.push(`${event} ${wave}: ${lastScene()} ${lastStinger()}`);
+    });
+    const arc = (wave: number) => CUES[Math.floor((wave - 1) / 6)];
+    for (let wave = 1; wave <= 17; wave++) {
+      expect(log).toContain(`launch ${wave}: ${arc(wave).battle} ${arc(wave).launch}`);
+      // The lull after a wave is the next wave's arc: after the sixth, the pressure arc's.
+      expect(log).toContain(`lull ${wave}: ${arc(wave + 1).prep} ${arc(wave).launch}`);
+    }
+    expect(new Set(CUES.flatMap(c => [c.prep, c.battle])).size).toBe(6);
+  });
+
+  it('stacks the layers through an arc: the kit, then the horn, then the fife', () => {
+    const at: Record<number, string> = {};
+    playWaves(12, (event, wave) => {
+      if (event === 'launch') at[wave] = ['horn', 'winds', 'drums'].filter(v => layerState(v)).join(' ');
+    });
+    expect(at).toEqual({
+      1: 'drums', 2: 'drums', 3: 'horn drums', 4: 'horn drums', 5: 'horn winds drums', 6: 'horn winds drums',
+      7: 'drums', 8: 'drums', 9: 'horn drums', 10: 'horn drums', 11: 'horn winds drums', 12: 'horn winds drums'
+    });
+  });
+
+  it('plays the launch stingers nowhere near the tune’s voice or register (#403)', () => {
+    const { tracks, stingers } = TOWERDEFENSE_MUSIC;
+    const lead = tracks.findIndex(t => t.name === 'lead');
+    const leadNotes = Object.values(FORM.sections).flatMap(lines => lines[lead]);
+    const lowestLead = Math.min(...leadNotes.filter(n => n.freq > 0).map(n => n.freq));
+    for (const name of [...CUES.map(c => c.launch), HORDE_LAUNCH]) {
+      const launch = stingers![name];
+      expect(launch[lead]).toEqual([]);
+      const pitched = launch.flat().filter(n => !n.drum && n.freq > 0);
+      expect(pitched.length).toBeGreaterThan(0);
+      for (const note of pitched) expect(note.freq).toBeLessThan(lowestLead);
+    }
+  });
+
+  it('brings the kit in on the battle cue’s first note, whatever bar of the lull the launch lands in (#403)', async () => {
+    // The calls the game makes at a launch, replayed on the real engine
+    // playing the real score from a moment in the middle of a phrase.
+    startRun();
+    for (const fn of Object.values(mockAudio)) fn.mockClear();
+    waveBtn().click();
+    const calls = Object.entries(mockAudio)
+      .flatMap(([name, fn]) => fn.mock.calls.map((args, i) => ({ name, args, order: fn.mock.invocationCallOrder[i] })))
+      .sort((a, b) => a.order - b.order);
+    expect(calls.map(c => c.name)).toContain('setScene');
+    const engine = await vi.importActual<typeof import('../../src/games/engine/audio')>('../../src/games/engine/audio');
+    const drums = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'drums');
+    const lead = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'lead');
+    const battleTop = FORM.scenes![CUES[0].battle].order[0];
+    const top = FORM.sections[battleTop][lead][0].freq;
+    vi.useFakeTimers();
+    try {
+      // Bar 1 beat 2, bar 3 beat 3 and bar 6 beat 4 of the preparation.
+      for (const launchAt of [0.7, 5.8, 13.2]) {
+        const ctx = makeRecordingContext();
+        (window as unknown as { AudioContext: unknown }).AudioContext = class {
+          constructor() {
+            return ctx;
+          }
+        };
+        const audio = engine.createGameAudio(TOWERDEFENSE_MUSIC);
+        audio.start();
+        let t = 0;
+        const play = (until: number) => {
+          while (t < until) {
+            t += 0.025;
+            ctx.currentTime = t;
+            vi.advanceTimersByTime(25);
+          }
+        };
+        play(launchAt);
+        for (const { name, args } of calls) (audio as unknown as Record<string, (...a: unknown[]) => void>)[name](...args);
+        play(launchAt + 3);
+        const landed = audio.section()!;
+        audio.dispose();
+        const log = ctx.log.join('\n');
+        // Each voice's layer gain feeds the lane into the bus, in track order.
+        const lane = /^(gain#\d+)\.connect\(gain#2\)$/m.exec(log)![1];
+        const layerGains = [...log.matchAll(new RegExp(`^(gain#\\d+)\\.connect\\(${lane}\\)$`, 'gm'))].map(m => m[1]);
+        const opens = log.split('\n').filter(l => l.startsWith(`${layerGains[drums]}.gain.setTargetAtTime(1,`));
+        expect(opens).toHaveLength(1);
+        const opensAt = Number(/, ([^,]+), [^,]+\)$/.exec(opens[0])![1]);
+        // It opens where the section the move landed on starts, within a bar
+        // of the launch, and that is the battle cue's top, whose first tune
+        // note is the one sounding there.
+        expect(landed.name).toBe(battleTop);
+        expect(landed.scene).toBe(CUES[0].battle);
+        expect(opensAt).toBeCloseTo(landed.start, 9);
+        expect(opensAt).toBeGreaterThan(launchAt);
+        expect(opensAt - launchAt).toBeLessThanOrEqual((4 * 60) / BASE_TEMPO + 0.1);
+        const atOpen = onsets(log).filter(([, time]) => Math.abs(time - opensAt) < 1e-9).map(([f]) => f);
+        expect(atOpen).toContain(top);
+      }
+    } finally {
+      delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+      vi.useRealTimers();
+    }
+  });
+
+  it('launches with the battle cue too when the build countdown runs out on its own', () => {
+    startRun();
+    advanceUntil(() => mockAudio.playStinger.mock.calls.length > 0, 20);
+    expect(lastScene()).toBe(CUES[0].battle);
+    expect(layerState('drums')).toBe(true);
   });
 
   it('muffles the music while the stand-down prompt holds the run, and clears it on cancel', () => {
@@ -580,34 +738,122 @@ describe('Line Hold music', () => {
     expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
   });
 
-  it('clears the pause when the prompt ends the run, so the next run is not muffled', () => {
+  it('clears the pause when the prompt ends the run, before the ending plays, so neither is muffled', () => {
     holdFirstWave();
     standDown();
     expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
-    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    const unpaused = mockAudio.setPaused.mock.invocationCallOrder.at(-1)!;
+    expect(unpaused).toBeLessThan(mockAudio.playEnding.mock.invocationCallOrder[0]);
   });
 
-  it('marches the finale and every wave after it to the horde, and releases it between waves', () => {
-    keepStands.on = true;
+  /** The one ending the run played, by stinger name. */
+  const ending = () => {
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    return (mockAudio.playEnding.mock.calls[0] as unknown[])[0];
+  };
+
+  it('ends a stand-down on the held phrase, which takes the place of the effect and the stop (#417)', () => {
+    holdFirstWave();
+    // The wave's bounties play the same effect; only the ending's is in question.
+    mockAudio.playSfx.mockClear();
+    standDown();
+    expect(ending()).toBe(ENDINGS.held);
+    // The phrase is the ending: the engine stops the music behind it itself.
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('score');
+  });
+
+  it('ends a breach on the fallen phrase (#417)', () => {
+    // No towers: the waves auto-launch until the keep falls.
     startRun();
+    advanceUntil(overlayShown, 600);
+    expect(document.getElementById('over-title')!.textContent).toBe('The Line Has Fallen');
+    expect(ending()).toBe(ENDINGS.fallen);
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+  });
+
+  it('ends a breach after the whole campaign has held on the held phrase, as the trophy screen does (#417)', () => {
+    // Eighteen launches with the keep standing, then let it fall in the assault.
+    playWaves(19, () => {});
+    keepStands.on = false;
+    advanceUntil(overlayShown, 3000);
+    expect(document.getElementById('over-icon')!.textContent).toBe('🏆');
+    expect(ending()).toBe(ENDINGS.held);
+    // Nineteen waves of wall time: a couple of seconds alone, far more beside other suites.
+  }, 30_000);
+
+  it('falls back to the effect and a stop when the ending cannot play, music muted', () => {
+    mockAudio.playEnding.mockReturnValueOnce(false);
+    holdFirstWave();
+    mockAudio.playSfx.mockClear();
+    standDown();
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+
+    mockAudio.playEnding.mockReturnValueOnce(false);
+    document.getElementById('again-btn')!.click();
+    advanceUntil(overlayShown, 600);
+    expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens a run on a two-bar call to arms that hands its last note to the preparation (#417)', () => {
+    const horn = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'horn');
+    const intro = FORM.intro!;
+    const beats = (line: { beats: number }[]) => line.reduce((sum, note) => sum + note.beats, 0);
+    for (const line of intro) expect(beats(line)).toBe(8);
+    // The layers a build lull has out stay out of it.
+    for (const name of ['winds', 'drums']) {
+      const line = intro[TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === name)];
+      expect(line.every(note => note.freq === 0 && !note.drum)).toBe(true);
+    }
+    const lastCall = intro[horn].at(-1)!;
+    const prepHorn = FORM.sections[FORM.order[0]][horn].find(note => note.freq > 0)!;
+    expect(lastCall.freq).toBe(prepHorn.freq);
+  });
+
+  it('marches the finale and every wave after it to the horde, and holds it between waves (#403)', () => {
     const dangerCalls = (on: boolean) => mockAudio.setDanger.mock.calls.filter(([was]) => was === on).length;
-    /** The launches (1-based) that switched the horde on. */
+    const hordeTop = FORM.danger!.order[0];
+    /** The launches (1-based) that switched the horde on, and the lulls that stayed in it. */
     const hordeLaunches: number[] = [];
-    let launches = 0;
+    const hordeLulls: number[] = [];
+    /** The layers each horde lull leaves up, which must be the horde's whole set. */
+    const lullLayers: Record<string, boolean | undefined>[] = [];
     let dangerSeen = 0;
-    advanceUntil(() => {
-      if (!waveBtn().disabled) waveBtn().click();
-      launches = mockAudio.playStinger.mock.calls.length;
-      if (dangerCalls(true) > dangerSeen) {
-        dangerSeen = dangerCalls(true);
-        hordeLaunches.push(launches);
+    let scenesSeen = 0;
+    playWaves(20, (event, wave) => {
+      if (event === 'lull' && wave >= 18) {
+        lullLayers.push({ horn: layerState('horn'), winds: layerState('winds'), drums: layerState('drums') });
       }
-      return launches === 20;
-    }, 3000);
-    // Waves 1 to 17 are the march; 18, the finale, and the endless waves
-    // after it are the horde.
+      if (event === 'launch' && dangerCalls(true) > dangerSeen) {
+        dangerSeen = dangerCalls(true);
+        hordeLaunches.push(wave);
+      }
+      if (event === 'lull' && mockAudio.setScene.mock.calls.length === scenesSeen && lastSection() === hordeTop) {
+        hordeLulls.push(wave);
+      }
+      scenesSeen = mockAudio.setScene.mock.calls.length;
+    });
+    // Waves 1 to 17 are the arcs' battles; 18, the finale, and the endless
+    // waves after it are the horde.
     expect(hordeLaunches).toEqual([18, 19, 20]);
-    // Every wave that ended, 18 and 19 among them, handed its lull back to the bed.
-    expect(dangerCalls(false)).toBe(19);
+    // Nothing ever releases it: the lulls after 18 and 19 stay in the horde,
+    // restarting it at a bar line rather than moving to a preparation cue.
+    expect(hordeLulls).toEqual([18, 19]);
+    // And its lulls keep the whole band, rather than dropping to the
+    // preparation mix and bringing the winds and kit back at every launch.
+    const everything = { horn: true, winds: true, drums: true };
+    expect(lullLayers).toEqual([everything, everything]);
+    expect(dangerCalls(false)).toBe(0);
+    // Three launches and two lulls start the horde's tune from its top, and every horde launch is in A.
+    expect(mockAudio.setSection.mock.calls.filter(call => (call as unknown[])[0] === hordeTop)).toHaveLength(5);
+    expect(mockAudio.playStinger.mock.calls.slice(17).map(call => (call as unknown[])[0])).toEqual([
+      HORDE_LAUNCH,
+      HORDE_LAUNCH,
+      HORDE_LAUNCH
+    ]);
   });
 });

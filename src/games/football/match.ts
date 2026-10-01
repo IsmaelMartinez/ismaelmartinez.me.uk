@@ -522,8 +522,17 @@ export interface GoalRecord {
   fromCross: boolean;
 }
 
+/**
+ * What a strike of the ball was, for the cabinet's sound: the verb that struck
+ * it, except that a ball met in the air is a `header` whatever the verb, and
+ * anything taken from a throw-in is a `throw`. A goal kick and a keeper's
+ * punt are a `clear`, as a hoof up the pitch is.
+ */
+export type StrikeKind = 'pass' | 'loft' | 'shot' | 'header' | 'clear' | 'throw';
+
 export type MatchEvent =
   | { type: 'kickoff'; side: Side }
+  | { type: 'strike'; side: Side; kind: StrikeKind }
   | { type: 'goal'; side: Side; record: GoalRecord }
   | { type: 'shot'; side: Side; onTarget: boolean; contact: ContactType }
   | { type: 'save'; side: Side; caught: boolean }
@@ -876,10 +885,23 @@ function takePossession(m: MatchState, side: Side, idx: number, won: boolean): v
   m.noScore = false;
 }
 
-/** Kick the ball loose from the current carrier, arming the re-capture grace. */
-function kick(m: MatchState, vx: number, vy: number, vz: number): void {
+/**
+ * Kick the ball loose from the current carrier, arming the re-capture grace.
+ *
+ * Every strike in the game comes through here, so this is where one is
+ * written to the log as a `strike`; `tickMatch` hands the tick's strikes out
+ * with its other events. It reads state and draws nothing from `m.rng`.
+ */
+function kick(m: MatchState, vx: number, vy: number, vz: number, verb: StrikeKind): void {
   const owner = m.owner;
   if (!owner) return;
+  const kind: StrikeKind =
+    m.restart?.kind === 'throwIn'
+      ? 'throw'
+      : resolveContact(m.ball.z) === 'header' && (verb === 'shot' || verb === 'clear')
+        ? 'header'
+        : verb;
+  m.log.push({ type: 'strike', side: owner.side, kind });
   const p = playerAt(m, owner);
   m.ball.x = p.x + p.fx * DRIBBLE_OFFSET;
   m.ball.y = p.y + p.fy * DRIBBLE_OFFSET;
@@ -1059,7 +1081,7 @@ export function shoot(
   p.fy = dy / len;
   const fromCross = m.lastFromCross;
   const lift = skyLift(m, rush);
-  kick(m, (dx / len) * speed, (dy / len) * speed, lift);
+  kick(m, (dx / len) * speed, (dy / len) * speed, lift, 'shot');
   m.lastContact = contact;
   m.lastFromCross = fromCross;
   m.passInFlight = null;
@@ -1098,7 +1120,7 @@ function clearUpfield(m: MatchState, side: Side, power: number, aim: number): vo
   p.fy = (dir as number) / len;
   p.strike =
     STRIKE_RECOVER_MIN + (STRIKE_RECOVER_MAX - STRIKE_RECOVER_MIN) * clamp(rush / RUSH_MAX, 0, 1);
-  kick(m, (lateral / len) * speed, ((dir as number) / len) * speed, 150);
+  kick(m, (lateral / len) * speed, ((dir as number) / len) * speed, 150, 'clear');
   m.lastContact = 'ground';
   m.lastFromCross = false;
   // A hoof is nobody's pass. `shoot` says the same thing about a shot and `kick`
@@ -1188,7 +1210,7 @@ function groundPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   const len = Math.hypot(dx, dy) || 1;
   p.fx = dx / len;
   p.fy = dy / len;
-  kick(m, (dx / len) * speed, (dy / len) * speed, 0);
+  kick(m, (dx / len) * speed, (dy / len) * speed, 0, 'pass');
   m.lastContact = 'ground';
   m.lastFromCross = false;
   m.passInFlight = side;
@@ -1276,7 +1298,7 @@ function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power
     // band twice inside a tenth of a second and at a distance nobody had asked
     // for, so the header 7.4 wants a share of the goals from never happened.
     const w = loftWeight(range);
-    kick(m, (dx / len) * w.pace, (dy / len) * w.pace, w.vz);
+    kick(m, (dx / len) * w.pace, (dy / len) * w.pace, w.vz, 'loft');
     m.lastContact = 'ground';
     m.lastFromCross = true;
     m.passInFlight = side;
@@ -1294,7 +1316,7 @@ function loftedPass(m: MatchState, side: Side, aimX: number, aimY: number, power
   // simply did not exist. At this lift the ball spends two thirds of its
   // flight inside the heading band while still clearing every outfielder's
   // 6 px trap ceiling, so it is a cross rather than a rolled pass.
-  kick(m, (dx / len) * speed, (dy / len) * speed, LOFT_LIFT + 45 * clamp(power, 0, 1));
+  kick(m, (dx / len) * speed, (dy / len) * speed, LOFT_LIFT + 45 * clamp(power, 0, 1), 'loft');
   m.lastContact = 'ground';
   m.lastFromCross = true;
   m.passInFlight = side;
@@ -1343,7 +1365,7 @@ function crossTo(m: MatchState, side: Side, target: { x: number; y: number }): v
   const w = loftWeight(len);
   p.fx = dx / len;
   p.fy = dy / len;
-  kick(m, (dx / len) * w.pace, (dy / len) * w.pace, w.vz);
+  kick(m, (dx / len) * w.pace, (dy / len) * w.pace, w.vz, 'loft');
   m.lastContact = 'ground';
   m.lastFromCross = true;
   m.passInFlight = side;
@@ -1917,7 +1939,7 @@ function humanAction(m: MatchState, input: MatchInput, dt: number): void {
       const p = m.players[0][0];
       p.fx = aim.x;
       p.fy = aim.y;
-      kick(m, aim.x * GOAL_KICK_SPEED, aim.y * GOAL_KICK_SPEED, GOAL_KICK_LIFT);
+      kick(m, aim.x * GOAL_KICK_SPEED, aim.y * GOAL_KICK_SPEED, GOAL_KICK_LIFT, 'clear');
       m.lastFromCross = true;
       m.restart = null;
       armKeeper(m, 0, 'ground');
@@ -2646,9 +2668,9 @@ function autoRelease(m: MatchState): void {
     const aim = goalKickAim(0, 0, dir);
     p.fx = aim.x;
     p.fy = aim.y;
-    kick(m, aim.x * GOAL_KICK_SPEED, aim.y * GOAL_KICK_SPEED, GOAL_KICK_LIFT);
+    kick(m, aim.x * GOAL_KICK_SPEED, aim.y * GOAL_KICK_SPEED, GOAL_KICK_LIFT, 'clear');
   } else {
-    kick(m, p.fx * AUTO_THROW_SPEED, p.fy * AUTO_THROW_SPEED, AUTO_THROW_LIFT);
+    kick(m, p.fx * AUTO_THROW_SPEED, p.fy * AUTO_THROW_SPEED, AUTO_THROW_LIFT, 'loft');
   }
   m.lastFromCross = true;
   m.passInFlight = r.side;
@@ -2711,7 +2733,7 @@ function keeperDistribution(m: MatchState): void {
   const len = Math.hypot(lateral, 1);
   p.fx = lateral / len;
   p.fy = (dir as number) / len;
-  kick(m, (lateral / len) * GOAL_KICK_SPEED, ((dir as number) / len) * GOAL_KICK_SPEED, GOAL_KICK_LIFT);
+  kick(m, (lateral / len) * GOAL_KICK_SPEED, ((dir as number) / len) * GOAL_KICK_SPEED, GOAL_KICK_LIFT, 'clear');
   m.lastFromCross = true;
   m.passInFlight = owner.side;
   m.passLofted = true;
@@ -2726,6 +2748,7 @@ export function tickMatch(
 ): MatchEvent[] {
   const events: MatchEvent[] = [];
   if (m.phase === 'over') return events;
+  const logged = m.log.length;
 
   if (m.phase !== 'play') {
     m.phaseTimer -= dt;
@@ -2750,6 +2773,7 @@ export function tickMatch(
       }
     }
     m.prev = { a: input.a, b: input.b, c: input.c };
+    forwardLogged(m, logged, events);
     return events;
   }
 
@@ -2796,7 +2820,21 @@ export function tickMatch(
   m.prev = { a: input.a, b: input.b, c: input.c };
 
   if (m.phase === 'play' && m.halfElapsed >= m.halfSeconds) finishHalf(m, events);
+  forwardLogged(m, logged, events);
   return events;
+}
+
+/**
+ * The strikes and shots logged since `from`, appended to the tick's events.
+ * Both are written where no event list reaches (`kick` and `shoot` sit under
+ * every verb in the game), so the log is their channel and this is the one
+ * place they leave it.
+ */
+function forwardLogged(m: MatchState, from: number, events: MatchEvent[]): void {
+  for (let i = from; i < m.log.length; i++) {
+    const e = m.log[i];
+    if (e.type === 'strike' || e.type === 'shot') events.push(e);
+  }
 }
 
 /** Up to three scorers per side with the minute, for the full-time screen. */

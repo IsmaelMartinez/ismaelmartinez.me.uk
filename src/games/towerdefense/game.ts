@@ -36,7 +36,7 @@ import {
   mountCabinet,
   createConfirmPrompt
 } from '../engine';
-import { TOWERDEFENSE_MUSIC } from './music';
+import { CUES, ENDINGS, HORDE_LAUNCH, TOWERDEFENSE_MUSIC } from './music';
 import { GRID_W, GRID_H, createTdMap, routePosition, type TdMap } from './path';
 import { spawnEnemy, stepEnemies, type Enemy, type EnemyKind } from './enemies';
 import {
@@ -50,7 +50,7 @@ import {
   type Tower,
   type TowerKind
 } from './towers';
-import { waveDef, AUTHORED_WAVES, hpScale, createSpawner, spawnerDone, stepSpawner, type Spawner, type WaveEntry } from './waves';
+import { waveDef, waveArc, ARC_WAVES, AUTHORED_WAVES, hpScale, createSpawner, spawnerDone, stepSpawner, type Spawner, type WaveEntry } from './waves';
 import {
   WAVE_BASE,
   createEconomy,
@@ -363,16 +363,49 @@ export function initTowerDefenseGame(): void {
   recordEl.textContent = `${board.best()}`;
 
   const audio = createGameAudio(TOWERDEFENSE_MUSIC);
+  const form = TOWERDEFENSE_MUSIC.form!;
+  /** Where the horde's tune starts. */
+  const HORDE_TOP = form.danger!.order[0];
   wireSoundToggles(audio);
 
   /**
-   * The score's wave layer (see music.ts): the lead and the march come in
-   * when marchers are on the field and leave for the build lull. `fade` 0 is
-   * for putting the layer back at a run's start, where nothing is sounding.
+   * The voices a phase of wave `wave` plays over the always-on violins and
+   * basses (see music.ts). A lull is the preparation cue's horn; a battle
+   * brings the kit in and grows through its arc, Plants vs. Zombies' way,
+   * the horn joining from the arc's third wave and the fife from its fifth;
+   * the horde has everything.
    */
-  function waveLayer(on: boolean, fade?: number) {
-    audio.setLayer('lead', on, fade);
-    audio.setLayer('drums', on, fade);
+  function cueLayers(battle: boolean, wave: number): Record<'horn' | 'winds' | 'drums', boolean> {
+    if (!battle) return { horn: true, winds: false, drums: false };
+    const into = wave >= AUTHORED_WAVES - 1 ? ARC_WAVES : wave % ARC_WAVES;
+    return { drums: true, horn: into >= 2, winds: into >= 4 };
+  }
+
+  /**
+   * Moves the score to the cue for a phase of wave `wave`: its arc's
+   * preparation or battle scene, or the horde from the finale's launch on,
+   * which then holds through every lull after it (releasing it each wave
+   * flipped tempo, section and register twice a cycle). The move lands on the
+   * next bar line at the cue's top, and every layer change waits for that
+   * same bar line, so a wave hears its tune from the first note and a layer
+   * never enters mid-phrase. The `setSection` after the `setScene` is what
+   * makes that hold even when a launch comes before a lull's move has landed,
+   * which cancels the move and would leave the layers waiting for the next
+   * section of the battle still playing.
+   */
+  function cue(battle: boolean, wave: number) {
+    const horde = wave >= (battle ? AUTHORED_WAVES - 1 : AUTHORED_WAVES);
+    if (horde) {
+      audio.setDanger(true);
+      audio.setSection(HORDE_TOP);
+    } else {
+      const scene = CUES[waveArc(wave)][battle ? 'battle' : 'prep'];
+      audio.setScene(scene);
+      audio.setSection(form.scenes![scene].order[0]);
+    }
+    // A horde lull keeps the horde's whole band, as its scene holds.
+    for (const [voice, on] of Object.entries(cueLayers(battle || horde, wave))) audio.setLayer(voice, on, on ? 0.1 : 0.5, 'section');
+    if (battle) audio.playStinger(horde ? HORDE_LAUNCH : CUES[waveArc(wave)].launch);
   }
 
   function addFloater(tx: number, ty: number, text: string, color: string) {
@@ -416,9 +449,10 @@ export function initTowerDefenseGame(): void {
     board.beginRun();
     standDownPrompt.dismiss();
     phase = 'build';
-    // A run starts in the build lull, so on the bed alone, whatever the last
-    // run ended on.
-    waveLayer(false, 0);
+    // A run starts in the teaching arc's build lull, which is the form's
+    // `order`, so it needs no move: only its layers put back at once,
+    // whatever the last run ended on.
+    for (const [voice, on] of Object.entries(cueLayers(false, 0))) audio.setLayer(voice, on, 0);
     audio.start();
   }
 
@@ -453,10 +487,10 @@ export function initTowerDefenseGame(): void {
     bannerText = strings.waveNow.replace('{n}', String(waveIdx + 1));
     bannerTimer = 1.8;
     showToast(`⚔️ ${bannerText}`);
-    waveLayer(true);
-    audio.playStinger('launch');
-    // The finale and every endless wave after it march to the horde.
-    if (waveIdx >= AUTHORED_WAVES - 1) audio.setDanger(true);
+    // The arc's battle cue from its top, and the launch stinger over the bar
+    // it waits for; the horde from the finale on, until the run ends, since
+    // `start()` always begins outside danger.
+    cue(true, waveIdx);
   }
 
   /**
@@ -478,10 +512,16 @@ export function initTowerDefenseGame(): void {
     // which is already 'over'.
     standDownPrompt.dismiss();
     const stoodDown = reason === 'standdown';
-    audio.playSfx(stoodDown ? 'score' : 'gameover');
-    // A stand-down confirms from the paused prompt; the next run starts clear.
+    // A stand-down confirms from the paused prompt: the phrase must not play
+    // muffled, and the next run starts clear.
     audio.setPaused(false);
-    audio.stop();
+    // A line that held ends in the major, whichever door it took out; with the
+    // music off the effect marks the ending instead, and stops what is left.
+    const held = stoodDown || clearedCampaign;
+    if (!audio.playEnding(held ? ENDINGS.held : ENDINGS.fallen)) {
+      audio.playSfx(stoodDown ? 'score' : 'gameover');
+      audio.stop();
+    }
     bankScore();
     // Clearing the whole authored campaign earns the trophy screen for how far
     // the line held, whichever way the run then ended.
@@ -513,9 +553,10 @@ export function initTowerDefenseGame(): void {
     // wave still moves the run on and still pays its interest, but scores
     // nothing. The economy counts the leaks itself, behind `leak`.
     const { held, interest } = clearWave(eco);
-    // Held or leaked, the field is empty and the lull begins: back to the bed.
-    waveLayer(false);
-    audio.setDanger(false);
+    // Held or leaked, the field is empty and the lull begins: the next wave's
+    // preparation cue (or the horde's own lull, once the finale has
+    // launched), which is a new arc's the moment an arc is done.
+    cue(false, waveIdx + 1);
     // A defence can run long — bank the run's score at every wave boundary
     // so a closed tab never loses a record (same guarantee as the sims).
     bankScore();

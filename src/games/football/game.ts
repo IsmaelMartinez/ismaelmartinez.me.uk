@@ -23,9 +23,10 @@ import {
   mountCabinet,
   listenUntilSwap
 } from '../engine';
-import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC, type Scene } from './music';
+import { BASE_TEMPO, FINAL_TEMPO, FOOTBALL_MUSIC, MATCH_THEMES, SEMI_TEMPO, type Scene } from './music';
 import { CROWD_COLOURS, PALETTE, createRenderer, integerScale, FB_H, FB_W, type Renderer } from './render';
 import { createMatch, tickMatch, type MatchEvent, type MatchInput, type MatchState } from './match';
+import { createMatchSound, playTension } from './sound';
 import { attackGoalY, CENTRE_X, VIEW_H, VIEW_W } from './pitch';
 import { ALL_TEAMS, TEAMS, teamByCode, type Team } from './teams';
 import {
@@ -109,6 +110,23 @@ const KONAMI_BUTTONS = 8;
 
 /** Seconds the unlock banner holds over the select grid. */
 const UNLOCK_FLASH = 2.4;
+
+/**
+ * Seconds the stand stays worked up after a chance (a shot, a save, the post,
+ * a penalty kick) before it settles back to following the ball, and after a
+ * goal, which a stand keeps shouting about for longer. A new swell while one
+ * is holding extends it rather than starting it again.
+ */
+export const CROWD_CHANCE_HOLD = 2.5;
+export const CROWD_GOAL_HOLD = 5;
+/** The stand's tension while a swell holds, and through a shootout. */
+export const CROWD_HELD_TENSION = 0.85;
+export const CROWD_SHOOTOUT_TENSION = 0.6;
+/** A shot that goes behind within this many seconds is a near miss, and the stand says "ooh". */
+export const NEAR_MISS_WINDOW = 1.5;
+/** How long the stand takes to fall silent at full time, and when the game is paused. */
+const CROWD_FULL_TIME_FADE = 1.5;
+const CROWD_PAUSE_FADE = 0.25;
 
 export function initFootballGame(): void {
   const mounted = mountCabinet('football-root');
@@ -324,6 +342,11 @@ export function initFootballGame(): void {
    */
   const audio = createGameAudio(FOOTBALL_MUSIC);
   wireSoundToggles(audio);
+  /**
+   * The match's own sound, the stand and the ball, on the effects channel (see
+   * `sound.ts`). Driven from the match's events below, never in attract mode.
+   */
+  const sound = createMatchSound(audio);
 
   /* ---------------------------------------------------------------- */
   /* state                                                             */
@@ -338,6 +361,10 @@ export function initFootballGame(): void {
   let musicOn = false;
   /** Set once a player has pressed start, after which the title screen has its theme too. */
   let musicUnlocked = false;
+  /** Seconds of play the stand has left to stay worked up; 0 while it is following the ball. */
+  let crowdHold = 0;
+  /** `clock` at the last shot, so a ball that then goes behind reads as a near miss. */
+  let lastShotAt = -Infinity;
   let clock = 0;
   let run: RunState | null = null;
   let match: MatchState | null = null;
@@ -658,6 +685,9 @@ export function initFootballGame(): void {
     // The score keeps its place behind a low-pass, so unpausing neither
     // restarts the pass nor brings back a scene the game has moved on from.
     audio.setPaused(paused);
+    // The stand is not music: it goes quiet for a pause and comes back after.
+    if (paused) sound.crowd.stop(CROWD_PAUSE_FADE);
+    else sound.crowd.start();
   }
 
   /**
@@ -674,6 +704,43 @@ export function initFootballGame(): void {
     }
     audio.setTempo(tempo);
     audio.setScene(next === 'menu' ? null : next);
+  }
+
+  /**
+   * The stand reacts: on a chance it stays worked up for `hold` seconds of
+   * play (paused time does not count), then `tickCrowd` lets it settle back to
+   * following the ball. A swell while one holds only extends it, so a
+   * scramble of shots is one long rise rather than a pumping one.
+   */
+  function swellCrowd(hold: number): void {
+    if (demo) return;
+    crowdHold = Math.max(crowdHold, hold);
+  }
+
+  /**
+   * Each frame of play: the stand's tension follows the ball (`playTension`),
+   * held up while a swell lasts; through a shootout it is nervous throughout.
+   */
+  function tickCrowd(dt: number): void {
+    crowdHold = Math.max(0, crowdHold - dt);
+    const following =
+      screen === 'match' && match ? playTension(match) : screen === 'shootout' ? CROWD_SHOOTOUT_TENSION : 0;
+    sound.crowd.tension(Math.max(following, crowdHold > 0 ? CROWD_HELD_TENSION : 0));
+  }
+
+  /** The stand back to following the ball, for a whistle or a new match. */
+  function hushCrowd(): void {
+    crowdHold = 0;
+  }
+
+  /**
+   * The match theme for the match about to be played: the final has its own,
+   * and every other match takes the next of the three in turn, as the Mega
+   * Drive game rotated its in-match music, so the semi comes round to the first.
+   */
+  function matchScene(state: RunState): Scene {
+    if (state.stage === 'final') return 'final';
+    return MATCH_THEMES[state.matchesPlayed % MATCH_THEMES.length];
   }
 
   /* ---------------------------------------------------------------- */
@@ -693,14 +760,14 @@ export function initFootballGame(): void {
    *
    * The ramp is policy about the game and stays here; the pace the score was
    * written at is a property of the arrangement and comes from `music.ts` as
-   * `BASE_TEMPO`, the same split Cascade uses. Changing stage mid-loop is safe:
-   * the engine's `setTempo` rescales every pending voice cursor by the tempo
-   * ratio, so the sustained choir re-times with the plucked voices instead of
-   * sliding behind them.
+   * `BASE_TEMPO`, the same split Cascade uses, and so do the steps, because
+   * each scene's loop is sized at the fastest tempo it is played at. Changing
+   * stage mid-loop is safe: the engine's `setTempo` rescales every pending
+   * voice cursor by the tempo ratio, so the voices re-time together.
    */
   function stageTempo(state: RunState): number {
     if (state.stage === 'final') return FINAL_TEMPO;
-    if (state.stage === 'semi') return 143;
+    if (state.stage === 'semi') return SEMI_TEMPO;
     return BASE_TEMPO;
   }
 
@@ -719,15 +786,20 @@ export function initFootballGame(): void {
     screen = 'match';
     paused = false;
     audio.setPaused(false);
-    // The drums wait for the kick-off; the final has its own theme.
+    // The drums wait for the kick-off; the match theme rotates and the final
+    // has its own. The stand is murmuring before a ball is kicked.
     audio.setLayer('drums', false);
-    playScene(run.stage === 'final' ? 'final' : 'match', stageTempo(run));
+    hushCrowd();
+    sound.crowd.start();
+    playScene(matchScene(run), stageTempo(run));
   }
 
   /** Fold the finished match into the run and move to the full-time screen. */
   function settleMatch(wonOnPenalties: boolean): void {
     if (!run || !match) return;
     audio.setLayer('drums', false);
+    hushCrowd();
+    sound.crowd.stop(CROWD_FULL_TIME_FADE);
     playScene('menu');
     recordPlayerMatch(run, {
       goalsFor: match.score[0],
@@ -742,7 +814,14 @@ export function initFootballGame(): void {
     if (!run || submitted) return;
     submitted = true;
     bank();
-    audio.playSfx(run.champion ? 'rescue' : 'gameover');
+    // The run's own ending phrase, after which the music is off until the title
+    // screen starts it again; with the music muted, the effect marks the end and
+    // the score stops all the same, so the next title opens on its intro.
+    if (!audio.playEnding(run.champion ? 'champion' : 'eliminated')) {
+      audio.playSfx(run.champion ? 'rescue' : 'gameover');
+      audio.stop();
+    }
+    musicOn = false;
     board.show(runScore(run));
   }
 
@@ -918,39 +997,84 @@ export function initFootballGame(): void {
     }
   }
 
+  /**
+   * The match's events, as sound and celebration. Every sound is gated on
+   * `live`: attract mode drives this same function so the demo looks like a
+   * match, and plays it in silence.
+   */
   function handleMatchEvents(events: MatchEvent[], m: MatchState): void {
+    const live = !demo;
     for (const event of events) {
       switch (event.type) {
+        case 'strike':
+          if (live) sound.play(event.kind);
+          break;
         case 'goal': {
           if (event.side === 0 && run) {
             run.liveGoals = m.score[0];
             bank();
           }
           celebrate(event.side, m);
+          if (live) {
+            if (event.side === 0) sound.crowd.roar();
+            else sound.crowd.groan();
+          }
+          swellCrowd(CROWD_GOAL_HOLD);
           break;
         }
         case 'save':
-          if (!demo) audio.playSfx('blip');
+          if (live) {
+            sound.play(event.caught ? 'catch' : 'save');
+            sound.crowd.ooh();
+          }
+          swellCrowd(CROWD_CHANCE_HOLD);
           break;
         case 'post':
-          if (!demo) audio.playSfx('blip');
+          if (live) {
+            sound.play('post');
+            sound.crowd.ooh();
+          }
+          swellCrowd(CROWD_CHANCE_HOLD);
           break;
         case 'shot':
-          if (!demo && !event.onTarget) audio.playSfx('hit');
+          lastShotAt = clock;
+          swellCrowd(CROWD_CHANCE_HOLD);
+          break;
+        case 'tackle':
+          if (live && event.won) sound.play('tackle');
+          break;
+        case 'restart':
+          // The referee stops play for a corner or a goal kick; a throw-in is
+          // the linesman's flag. A shot that has just gone behind is a near miss.
+          if (live && event.kind !== 'throwIn') {
+            sound.play('whistle');
+            if (clock - lastShotAt < NEAR_MISS_WINDOW) sound.crowd.ooh();
+          }
           break;
         case 'kickoff':
           renderer.resetCamera(m);
           // The ball is live: the whistle, and the drums come in.
-          if (!demo) {
+          if (live) {
+            sound.play('whistle');
             audio.playStinger('kick-off');
             audio.setLayer('drums', true);
           }
           break;
         case 'halfTime':
-        case 'end':
-          if (!demo) {
+          if (live) {
             audio.setLayer('drums', false);
-            if (!audio.playStinger(event.type === 'halfTime' ? 'half-time' : 'full-time')) audio.playSfx('blip');
+            hushCrowd();
+            sound.play('whistle-half');
+            audio.playStinger('half-time');
+          }
+          break;
+        case 'end':
+          // The full-time stinger is the three blasts written in the score's
+          // own brass, so the real whistle stands in only when it cannot play.
+          if (live) {
+            audio.setLayer('drums', false);
+            hushCrowd();
+            if (!audio.playStinger('full-time')) sound.play('whistle-full');
           }
           break;
         default:
@@ -1007,6 +1131,7 @@ export function initFootballGame(): void {
 
     if (screen === 'match' && match && run) {
       handleMatchEvents(tickMatch(match, dt, input), match);
+      tickCrowd(dt);
       if (match.phase === 'over') {
         if (match.pendingShootout) {
           shootout = createShootout({ difficulty: difficultyFor(run) });
@@ -1024,14 +1149,22 @@ export function initFootballGame(): void {
       const kick: ShootoutInput = { x: input.x, y: input.y, a: input.a };
       for (const event of tickShootout(shootout, dt, kick)) {
         if (event.type === 'kick') {
-          audio.playSfx(event.kick.result === 'scored' ? 'score' : 'blip');
+          const { side, result } = event.kick;
+          sound.play('shot');
+          if (result === 'saved') sound.play('save');
+          // The stand is the player's: his goals are cheered and the CPU's groaned at.
+          if (result !== 'scored') sound.crowd.ooh();
+          else if (side === 0) sound.crowd.roar();
+          else sound.crowd.groan();
+          swellCrowd(result === 'scored' ? CROWD_GOAL_HOLD : CROWD_CHANCE_HOLD);
         } else {
           // The tie is settled: the same whistle that ends a match.
           audio.setLayer('drums', false);
-          if (!audio.playStinger('full-time')) audio.playSfx('blip');
+          if (!audio.playStinger('full-time')) sound.play('whistle-full');
           settleMatch(event.winner === 0);
         }
       }
+      if (screen === 'shootout') tickCrowd(dt);
       return;
     }
 

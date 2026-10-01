@@ -56,8 +56,10 @@ const mockAudio = vi.hoisted(() => ({
   section: vi.fn(() => null),
   setLayer: vi.fn(),
   setSection: vi.fn(() => true),
+  setScene: vi.fn<(name: string | null) => boolean>(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn<(name: string) => boolean>(() => true),
+  playEnding: vi.fn<(name: string) => boolean>(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -285,6 +287,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   mockAudio.start.mockClear();
   mockAudio.stop.mockClear();
+  mockAudio.setScene.mockClear();
 });
 
 describe('Microcity retire control', () => {
@@ -655,14 +658,14 @@ describe('Microcity retire confirmation', () => {
 });
 
 /**
- * The score answers the city (#378): its arrangement follows the population
- * through `musicTier`, disasters and the grace month land stingers, and every
+ * The score answers the city (#378, #411): its piece follows the population
+ * through `musicTier` and `setScene`, disasters and the grace month land stingers, and every
  * way a live run is held still muffles the music with `setPaused` instead of
  * stopping it, which would start the pass over on resume.
  */
 describe('Microcity music', () => {
-  /** The last `setLayer` call for a voice, as `[voice, on, fade]`. */
-  const lastLayer = (voice: string) => mockAudio.setLayer.mock.calls.filter(c => c[0] === voice).at(-1);
+  /** Every piece the game has asked the score for, in order. */
+  const scenes = () => mockAudio.setScene.mock.calls.map(c => c[0]);
   const stingers = (name: string) => mockAudio.playStinger.mock.calls.filter(c => c[0] === name).length;
   const lastPause = () => mockAudio.setPaused.mock.calls.at(-1)?.[0];
   const speed = (value: string) =>
@@ -687,32 +690,36 @@ describe('Microcity music', () => {
     for (let x = 10; x <= 13; x++) buildAt('ind', x, 9);
   }
 
-  it('opens every city on the village arrangement, before the music starts', () => {
+  it('opens every city on the village piece, the order that start() plays from its top', () => {
     foundCity();
-    expect(lastLayer('lead')).toEqual(['lead', true, 0]);
-    expect(lastLayer('pad')).toEqual(['pad', true, 0]);
-    expect(lastLayer('bass')).toEqual(['bass', false, 0]);
-    expect(lastLayer('horn')).toEqual(['horn', false, 0]);
-    // Set ahead of `start()`, so the first bar is already the village's.
-    const firstLayer = Math.min(...mockAudio.setLayer.mock.invocationCallOrder);
-    expect(firstLayer).toBeLessThan(mockAudio.start.mock.invocationCallOrder[0]);
+    expect(mockAudio.start).toHaveBeenCalledTimes(1);
+    expect(scenes()).toEqual([]);
   });
 
-  it('brings the bass in as the city becomes a town, and takes it out when the town is torn down', () => {
+  it('moves to the town piece as the city becomes a town, and back to the village when it is torn down', () => {
     foundTown();
-    expect(lastLayer('bass')).toEqual(['bass', false, 0]);
+    expect(scenes()).toEqual([]);
 
     advance(2);
     expect(population()).toBeGreaterThanOrEqual(120);
-    expect(lastLayer('bass')).toEqual(['bass', true, 3]);
-    // The town keeps the bell: the horn is the metropolis's.
-    expect(lastLayer('lead')?.[1]).toBe(true);
-    expect(lastLayer('horn')?.[1]).toBe(false);
+    // Asked once, however many growth ticks the town then lives through.
+    expect(scenes()).toEqual(['town']);
 
     for (let x = 5; x <= 12; x++) buildAt('bulldoze', x, 7);
     advance(0.25); // the population readout is painted by the loop, not the click
     expect(population()).toBeLessThan(96);
-    expect(lastLayer('bass')).toEqual(['bass', false, 3]);
+    expect(scenes()).toEqual(['town', null]);
+  });
+
+  it('starts a new city on the village piece after a town, without asking for a scene', () => {
+    foundTown();
+    advance(2);
+    expect(scenes()).toEqual(['town']);
+    retire();
+    mockAudio.setScene.mockClear();
+    document.getElementById('restart-btn')!.click();
+    expect(mockAudio.start).toHaveBeenCalledTimes(2);
+    expect(scenes()).toEqual([]);
   });
 
   it('muffles the music at the pause speed and lifts it again, without stopping the score', () => {
@@ -754,7 +761,7 @@ describe('Microcity music', () => {
 
     foundCity();
     retire();
-    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
     expect(lastPause()).toBe(false);
     speed('0');
     expect(lastPause()).toBe(false);
@@ -771,6 +778,55 @@ describe('Microcity music', () => {
     advance(20);
     expect(toasted(IN_THE_RED)).toBe(true);
     expect(stingers('red')).toBe(1);
+  });
+
+  describe('the ending (#417)', () => {
+    const endings = () => mockAudio.playEnding.mock.calls.map(c => c[0]);
+    const effects = () => mockAudio.playSfx.mock.calls.map(c => c[0]);
+
+    it('ends a retired city on its own phrase, in place of the effect and the stop', () => {
+      foundCity();
+      retire();
+      expect(endings()).toEqual(['retired']);
+      expect(effects()).not.toContain('score');
+      expect(mockAudio.stop).not.toHaveBeenCalled();
+    });
+
+    it('lifts the retire prompt’s muffle before the phrase, so it is not played through it', () => {
+      foundCity();
+      retire();
+      const lift = mockAudio.setPaused.mock.calls.findIndex(c => c[0] === false);
+      expect(lift).toBeGreaterThanOrEqual(0);
+      expect(mockAudio.setPaused.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+        mockAudio.playEnding.mock.invocationCallOrder[0]
+      );
+    });
+
+    it('ends a bankrupt city on the other phrase', () => {
+      foundCity();
+      overspend();
+      advance(70);
+      expect(overlayShown()).toBe(true);
+      expect(endings()).toEqual(['bankrupt']);
+      expect(effects()).not.toContain('gameover');
+      expect(mockAudio.stop).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the effect and a stop when the phrase cannot play (muted music)', () => {
+      foundCity();
+      mockAudio.playEnding.mockReturnValueOnce(false);
+      retire();
+      expect(effects()).toContain('score');
+      expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+
+      document.getElementById('restart-btn')!.click();
+      foundCity();
+      overspend();
+      mockAudio.playEnding.mockReturnValueOnce(false);
+      advance(70);
+      expect(effects()).toContain('gameover');
+      expect(mockAudio.stop).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('marks a fire breaking out with a stinger', () => {

@@ -25,8 +25,11 @@
  *
  * Beyond the four stock oscillator shapes the synth has three NES pulse duties,
  * three drums built from one shared noise buffer, per-note delayed vibrato and
- * slides. All of it is opt-in per track or per note: a score that uses none of
- * it builds exactly the graph it built before these existed, which
+ * slides, and a stereo pan per voice; round 3 added an ADSR envelope, a swept
+ * filter, wavetables, the NES short noise and a sustained noise voice,
+ * two-operator FM, pitch envelopes and arpeggios. All of it is opt-in per
+ * track or per note: a score that uses none of it builds exactly the graph it
+ * built before these existed, which
  * `tests/games/audio-graph.test.ts` checks call for call. The scheduler that
  * plays a score live is the same one `renderScore` runs into an
  * `OfflineAudioContext`, so a render is what the page would have played.
@@ -79,6 +82,57 @@ export interface Note {
    * rest or a drum, or when a form's rest comes between them.
    */
   slideNext?: boolean;
+  /**
+   * This note's pitch envelope, in place of the track's `pitchEnv`. Ignored
+   * when the note has a `slideFrom`, which is the same scoop written in Hz.
+   */
+  pitchEnv?: PitchEnv;
+  /**
+   * A chord in one voice, the tracker and PSG way: semitone offsets from
+   * `freq` (e.g. `[0, 4, 7]` for a major triad) that the note cycles through
+   * at the track's `arpRate`, starting on the first, for its whole length. The
+   * steps are in seconds, not beats, so a tempo change alters how many fit in
+   * a note but never how fast they go. The note's slides and pitch envelope
+   * are dropped, as a tracker's arpeggio overrides its portamento.
+   */
+  arp?: number[];
+}
+
+/**
+ * A pitch envelope: the note starts `semitones` away from its pitch (above
+ * when positive) and glides into it over `time` seconds, or the whole note if
+ * that is shorter. A few semitones over 30 ms is a DAC-style kick or a tom
+ * punch, a couple over 100 ms a timpani, an octave or more over a beat a sweep.
+ * It is a `slideFrom` measured from the note, so on a noise voice it moves the cutoff.
+ */
+export interface PitchEnv {
+  semitones: number;
+  time: number;
+}
+
+/**
+ * Two-operator FM, the Mega Drive's YM2612 cut down to one modulator: a sine
+ * at `ratio` times the note's frequency swings the carrier's frequency by
+ * `index` times the note's frequency either side of it. Ratio 1 with an index
+ * falling from 3 or so is brass; ratio 1 or 2 with a fast fall is a slap
+ * bass; a ratio like 3.5 is a bell. The carrier is the voice's own wave, so
+ * a pulse or a wavetable can be modulated too. Each note costs one more
+ * oscillator and one more gain than it would without FM (a detuned twin
+ * shares them). Measured on 2026-09-27 in Chrome's offline render, four
+ * voices of eighth notes took 6.4 s to render a minute as FM sines against
+ * 6.2 s as plain squares, while a detuned twin doubled it, so FM is the
+ * cheap way to a rich voice and a twin on top of it the expensive one.
+ */
+export interface FmOptions {
+  /** Modulator frequency over the note's; a whole number keeps the tone harmonic. */
+  ratio: number;
+  /** Peak frequency swing over the note's frequency; 0 is a plain tone, 5 is harsh. */
+  index: number;
+  /**
+   * Seconds the index takes to fall to 5% of itself from onset, the bright
+   * attack that settles into a rounder tone. Left out, it holds.
+   */
+  indexDecay?: number;
 }
 
 /** The three drum instruments a percussion track can play. */
@@ -91,8 +145,47 @@ export type DrumName = 'kick' | 'snare' | 'hat';
  */
 export type PulseWave = 'pulse12' | 'pulse25' | 'pulse50';
 
-/** A voice's timbre: a stock oscillator shape or a pulse duty. */
-export type Wave = OscillatorType | PulseWave;
+/**
+ * A voice's timbre: a stock oscillator shape, a pulse duty, or 'noise', which
+ * plays the voice's `noise` for the whole note through a low-pass whose cutoff
+ * is the note's frequency in Hz, so a higher note is a brighter hiss: a crowd,
+ * wind, surf. The envelope, `adsr`, `filter`, pan and levels apply to it and
+ * a slide moves its cutoff; `detune`, `vibrato` and `wavetable` do not.
+ */
+export type Wave = OscillatorType | PulseWave | 'noise';
+
+/**
+ * The noise a voice's drums and noise notes use. 'white' is the shared seeded
+ * buffer; 'short' is the NES noise channel's short mode, a 15-bit LFSR fed
+ * back from bit 6 that repeats every 93 steps, which through the hat's
+ * high-pass is a metallic ring rather than a hiss. Both are levelled to the
+ * same RMS, so a kit keeps its balance whichever it uses.
+ */
+export type NoiseKind = 'white' | 'short';
+
+/**
+ * A single-cycle wavetable, the Game Boy wave channel's 32 steps or a Namco
+ * or Amiga-style custom cycle, played through a `PeriodicWave` built once per
+ * context. Give `samples` or `harmonics`.
+ */
+export interface Wavetable {
+  /**
+   * One cycle as levels in -1..1, any number of steps, held flat between them
+   * as a wave RAM plays them: the steps are part of the sound, so the wave is
+   * built from the stepped shape's own series (64 harmonics), not a smoothed one.
+   */
+  samples?: number[];
+  /**
+   * Levels of the sine partials 1, 2, 3 and so on, used when `samples` is
+   * left out. With `bits` they are first drawn into a 32-step cycle.
+   */
+  harmonics?: number[];
+  /**
+   * Quantises the cycle to 2^bits levels across -1..1 before it is built, 4
+   * for the Game Boy's wave channel. Left out, the levels are kept as written.
+   */
+  bits?: number;
+}
 
 /** One simultaneous voice of the music. */
 export interface Track {
@@ -101,8 +194,22 @@ export interface Track {
    * form instead and leaves this out.
    */
   melody?: Note[];
-  /** Oscillator type or pulse duty. Defaults to 'square'. */
+  /** Oscillator type, pulse duty or 'noise'. Defaults to 'square'. */
   wave?: Wave;
+  /** A custom single-cycle wave in place of `wave`, which it overrides for pitched notes. */
+  wavetable?: Wavetable;
+  /** The noise this voice's snares, hats and noise notes use. Defaults to 'white'. */
+  noise?: NoiseKind;
+  /** Two-operator FM on every pitched note of the voice; ignored by drums and noise notes. */
+  fm?: FmOptions;
+  /** A pitch envelope for every note of the voice that does not carry its own. */
+  pitchEnv?: PitchEnv;
+  /**
+   * Steps a second for this voice's `Note.arp`, capped at 1000. Defaults to
+   * 50, a PAL tracker's tick; 60 is the NES frame, and slower rates read as a
+   * broken chord rather than a buzzing one.
+   */
+  arpRate?: number;
   /** Relative mix level 0–1 within the music bus. Defaults to 1. */
   volume?: number;
   /**
@@ -129,6 +236,65 @@ export interface Track {
    * scheduled while silent, so it enters in step with the others.
    */
   startsMuted?: boolean;
+  /**
+   * Where the voice sits in the stereo field, -1 hard left to 1 hard right,
+   * through an equal-power `StereoPannerNode`. Defaults to 0, the centre,
+   * which makes no panner at all, so an unpanned score builds the graph it
+   * always has and renders the same samples in both channels. Amiga Paula's
+   * two-left, two-right split is `pan: -1` and `pan: 1`. Each note gets its
+   * own panner between its envelope and wherever the voice plays to, so the
+   * pan follows the voice through a layer gain and into a stinger, which goes
+   * past the layers. Out of range clamps; anything not finite is the centre.
+   */
+  pan?: number;
+  /**
+   * An attack, decay, sustain, release envelope in place of `envelope`'s two
+   * fixed shapes, which it overrides. The note holds its sustain for its whole
+   * length (no pluck's trimmed gap) and then releases, so a release longer
+   * than the gap to the next note overlaps it, as a synth's does.
+   */
+  adsr?: Adsr;
+  /**
+   * A filter on every note of the voice, between its oscillators and its
+   * envelope, with its own sweep: SNES softness, brass that opens as it
+   * speaks, a bass that closes after the pluck. Drums ignore it.
+   */
+  filter?: VoiceFilter;
+}
+
+/**
+ * A voice's amplitude envelope, in seconds except `sustain`. A note shorter
+ * than `attack` never reaches the peak: it gets the share of it its length
+ * allows, then releases. One shorter than `attack + decay` releases from part
+ * way down the decay. Negative or non-finite times are 0.
+ */
+export interface Adsr {
+  /** Linear rise from silence to the note's peak. */
+  attack: number;
+  /** Exponential fall from the peak to the sustain level. */
+  decay: number;
+  /** The level held until the note ends, 0–1 of the peak. */
+  sustain: number;
+  /** Exponential fall to silence after the note ends; at least 5 ms, so it never clicks. */
+  release: number;
+}
+
+/** A voice's per-note filter; see `Track.filter`. */
+export interface VoiceFilter {
+  /** Defaults to 'lowpass'. */
+  type?: 'lowpass' | 'highpass' | 'bandpass';
+  /** Where the filter settles, in Hz, clamped to the audible range. */
+  cutoff: number;
+  /** Web Audio's own `Q`: resonance in dB for a low- or high-pass, the width for a band-pass. Defaults to 1. */
+  q?: number;
+  /**
+   * How far above the cutoff the note starts, in octaves, falling back to the
+   * cutoff over `envDecay`; negative starts below and opens up. Defaults to 0,
+   * a fixed filter.
+   */
+  envAmount?: number;
+  /** Seconds the sweep takes from note onset. Defaults to 0.1. */
+  envDecay?: number;
 }
 
 /** Feedback-delay send applied to the whole music mix. */
@@ -187,7 +353,8 @@ export interface ScoreForm {
    * state lasts, a menu theme, a shootout bed, a final, instead of running on
    * into the next part of `order`. `setScene(name)` moves to one at the next
    * bar line and `setScene(null)` comes back to `order` where it left off.
-   * A scene loops with no rest, and plays at its own tempo if it has one.
+   * A scene loops with no rest unless it writes its own, and plays at its own
+   * tempo if it has one.
    * `danger` is reserved for `ScoreForm.danger` and throws here.
    */
   scenes?: Record<string, FormScene>;
@@ -198,6 +365,15 @@ export interface FormScene {
   order: string[];
   /** Beats per minute while the scene plays, clamped like any other; left out, the score's. */
   tempo?: number;
+  /**
+   * Silence between passes of this scene, as `ScoreForm.rest` is for `order`:
+   * after every `after` passes of the scene's order, `beats` of nothing at the
+   * scene's tempo, then the scene resumes from its top. The count starts when
+   * the scene is entered. For a scene a player can stay in for a long session
+   * (Microcity's tiers), which would otherwise be constant music. Left out,
+   * the scene loops with no rest, as every scene did before it.
+   */
+  rest?: { after: number; beats: number };
 }
 
 export interface GameAudioOptions {
@@ -228,7 +404,8 @@ export interface GameAudioOptions {
 /**
  * What a cabinet's score is measured against, exported beside it from its
  * `music.ts` as `MUSIC_PROFILE`; `tests/games/music.test.ts` holds each score
- * to the floors ADR 003's round 2 amendment sets for its session.
+ * to the floors ADR 003's round 2 amendment sets for its session, and to the
+ * round 3 amendment's rule that no two cabinets share an instrument set.
  */
 export interface MusicProfile {
   /**
@@ -245,15 +422,45 @@ export interface MusicProfile {
    */
   gatePending?: string;
   /**
+   * Which of the style gates this cabinet's brief keeps (ADR 003's round 3
+   * amendment). Each is on unless set to false, so a profile without `gates`
+   * is held to all three; the seconds floor is not a choice and has no switch.
+   * `seam` bans arriving home on the last bar, `syncopation` wants a push in
+   * every eight bars of the lead, and `rhythms` wants three bar rhythms in it:
+   * right for a pop-song loop, wrong for a buzzer tune or an artillery drone.
+   */
+  gates?: MusicGates;
+  /**
+   * Why this cabinet still shares its instrument set (each voice's wave,
+   * envelope and register band, plus echo) with another cabinet, naming the
+   * rescore that will change it. While it is set the test asserts the
+   * collision still exists, so the rescore that ends it removes the flag.
+   */
+  palettePending?: string;
+  /**
    * A profile for each of the form's `scenes`, since each one is what a player
    * hears on repeat while it holds; the top-level fields then measure `order`.
    * Every scene needs one, and `danger` none (it is a short variant, not a
-   * loop a player lives in).
+   * loop a player lives in). A scene's `gates` override the cabinet's key by key.
    */
-  scenes?: Record<string, Pick<MusicProfile, 'session' | 'fastestTempo'>>;
+  scenes?: Record<string, Pick<MusicProfile, 'session' | 'fastestTempo' | 'gates'>>;
+}
+
+/** The style gates a cabinet may switch off; see `MusicProfile.gates`. */
+export interface MusicGates {
+  seam?: boolean;
+  syncopation?: boolean;
+  rhythms?: boolean;
 }
 
 export type SfxName = 'blip'| 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';
+
+/** What `GameAudio.effectsBus` hands a cabinet: see there. */
+export interface EffectsBus {
+  ctx: BaseAudioContext;
+  out: AudioNode;
+  level: number;
+}
 
 export interface GameAudio {
   /** Begin (or resume) the looping music. Safe to call repeatedly. */
@@ -270,6 +477,17 @@ export interface GameAudio {
   setSfxMuted(muted: boolean): void;
   /** Play a one-shot sound effect. No-op when effects are muted or audio is unavailable. */
   playSfx(name: SfxName): void;
+  /**
+   * The effects channel, for a cabinet that synthesises sounds of its own (a
+   * crowd bed, a ball strike) rather than picking from `SfxName`: the context,
+   * and a bus into the speakers that follows the effects mute live, so a
+   * sustained sound routed through it falls silent on the toggle and comes back
+   * on the next one. `level` is the peak a built-in effect is scaled to, the
+   * reference to set a custom sound against so it sits where the stock ones do
+   * over the music. Builds the context on first use, so call it from a
+   * gesture's aftermath; null when audio is unavailable or disposed.
+   */
+  effectsBus(): EffectsBus | null;
   /**
    * Change the loop's tempo on the fly (already-scheduled notes keep their
    * old length; the ~100ms lookahead means the shift lands almost at once).
@@ -290,8 +508,17 @@ export interface GameAudio {
    * has stingers routes every voice through its own gain from the first note;
    * any other score gets them on its first `setLayer`, so a note already in
    * flight at that moment plays out at full level.
+   *
+   * `at` is when the fade starts: 'now' (the default), or 'section', the start
+   * of the next part of a playing score's form, so a voice that enters comes in
+   * on the first note of a section rather than mid-phrase. With a
+   * `setSection`, `setScene` or `setDanger` waiting, that is the bar line it
+   * lands on, which is how a caller brings a voice in within a bar at the top
+   * of a section. A later call for the same voice replaces one still waiting,
+   * and a score without a form, or one that is not playing, takes 'section'
+   * as 'now'.
    */
-  setLayer(track: number | string, on: boolean, fadeSeconds?: number): void;
+  setLayer(track: number | string, on: boolean, fadeSeconds?: number, at?: 'now' | 'section'): void;
   /**
    * Moves a playing score with a form into the scene `name` from its top, or
    * with null back to `order` where the score left it, at the next bar line or
@@ -324,6 +551,15 @@ export interface GameAudio {
    * own gain, so it never lifts a mute or a stop. False when it did not play.
    */
   playStinger(name: string): boolean;
+  /**
+   * Ends the music on a stinger: the loop stops under it at once (a sustained
+   * note in flight included) and the phrase plays alone, after which the music
+   * is stopped as `stop()` leaves it. A cabinet's game-over or victory phrase
+   * goes through here rather than `playStinger` then `stop()`, which would cut
+   * the phrase it had just started. Same refusals as `playStinger`, and on a
+   * false the music is untouched, so the caller plays its effect and stops.
+   */
+  playEnding(name: string): boolean;
   /**
    * Muffles the music behind a low-pass and a lower level while the game is
    * paused, instead of stopping it: the score keeps its place, so unpausing
@@ -411,6 +647,10 @@ const VOICE_PEAK = 0.8;
 /** How long a `slideFrom` scoop or a `slideNext` glide takes, in seconds. */
 const SLIDE_TIME = 0.06;
 
+/** `Track.arpRate` when a voice does not set one, and the most it may. */
+const ARP_RATE = 50;
+const MAX_ARP_RATE = 1000;
+
 /** Vibrato LFO rate in Hz. */
 const VIBRATO_RATE = 5.5;
 /** Seconds after onset that a note starts to waver. */
@@ -448,8 +688,9 @@ const DRUMS: Record<DrumName, { decay: number; level: number }> = {
  * context that made it, and both are worth making once rather than per note,
  * so they are keyed on the context and go when it does.
  */
-const noiseBuffers = new WeakMap<BaseAudioContext, AudioBuffer>();
-const pulseWaves = new WeakMap<BaseAudioContext, Map<PulseWave, PeriodicWave>>();
+const noiseBuffers = new WeakMap<BaseAudioContext, Map<NoiseKind, AudioBuffer>>();
+/** Pulse duties by name, wavetables by the object a score wrote. */
+const periodicWaves = new WeakMap<BaseAudioContext, Map<PulseWave | Wavetable, PeriodicWave>>();
 
 function isPulse(wave: Wave): wave is PulseWave {
   return wave in PULSE_DUTY;
@@ -460,35 +701,140 @@ function isPulse(wave: Wave): wave is PulseWave {
  * train's Fourier series: cosine terms (2 / n pi) sin(n pi d), no sine terms.
  */
 function pulseWave(ctx: BaseAudioContext, wave: PulseWave): PeriodicWave {
-  let cache = pulseWaves.get(ctx);
-  if (!cache) {
-    cache = new Map();
-    pulseWaves.set(ctx, cache);
-  }
-  let built = cache.get(wave);
-  if (!built) {
+  return cachedWave(ctx, wave, () => {
     const d = PULSE_DUTY[wave];
     const real = new Float32Array(PULSE_HARMONICS + 1);
     const imag = new Float32Array(PULSE_HARMONICS + 1);
     for (let n = 1; n <= PULSE_HARMONICS; n++) {
       real[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * d);
     }
+    return [real, imag];
+  });
+}
+
+/** The context's `PeriodicWave` for `key`, built from `build`'s coefficients on first use. */
+function cachedWave(
+  ctx: BaseAudioContext,
+  key: PulseWave | Wavetable,
+  build: () => [Float32Array, Float32Array]
+): PeriodicWave {
+  let cache = periodicWaves.get(ctx);
+  if (!cache) {
+    cache = new Map();
+    periodicWaves.set(ctx, cache);
+  }
+  let built = cache.get(key);
+  if (!built) {
+    const [real, imag] = build();
     built = ctx.createPeriodicWave(real, imag);
-    cache.set(wave, built);
+    cache.set(key, built);
   }
   return built;
 }
 
-/** The context's one second of seeded white noise, built on first use. */
-function noiseBuffer(ctx: BaseAudioContext): AudioBuffer {
-  let buffer = noiseBuffers.get(ctx);
+/** Steps a `harmonics` table is drawn into before it is quantised: the Game Boy's wave RAM. */
+const TABLE_STEPS = 32;
+
+/**
+ * The stepped cycle a table plays, quantised if it asks to be, or null for a
+ * `harmonics` table played smooth.
+ */
+function tableCycle(table: Wavetable): number[] | null {
+  let cycle = table.samples?.length ? table.samples : null;
+  const bits = table.bits !== undefined && Number.isFinite(table.bits) ? Math.floor(table.bits) : 0;
+  if (!cycle && bits >= 1 && table.harmonics?.length) {
+    const partials = table.harmonics;
+    const drawn = Array.from({ length: TABLE_STEPS }, (_, k) =>
+      partials.reduce((sum, level, i) => sum + level * Math.sin((2 * Math.PI * (i + 1) * k) / TABLE_STEPS), 0)
+    );
+    const top = Math.max(...drawn.map(Math.abs));
+    cycle = top > 0 ? drawn.map(v => v / top) : drawn;
+  }
+  if (!cycle || bits < 1) return cycle;
+  const top = 2 ** bits - 1;
+  return cycle.map(v => (Math.round(((Math.min(Math.max(v, -1), 1) + 1) / 2) * top) * 2) / top - 1);
+}
+
+/**
+ * The context's wave for a wavetable, built on first use. A stepped cycle of N
+ * levels v_k is the series of the flat-topped shape itself: harmonic n has
+ * cosine term sum v_k (sin(2 pi n (k+1) / N) - sin(2 pi n k / N)) / (pi n) and
+ * sine term sum v_k (cos(2 pi n k / N) - cos(2 pi n (k+1) / N)) / (pi n),
+ * taken to the same 64 harmonics as a pulse duty. A smooth `harmonics` table
+ * is its partials as sine terms.
+ */
+function tableWave(ctx: BaseAudioContext, table: Wavetable): PeriodicWave {
+  return cachedWave(ctx, table, () => {
+    const cycle = tableCycle(table);
+    if (!cycle) {
+      const partials = table.harmonics ?? [];
+      const imag = new Float32Array(partials.length + 1);
+      partials.forEach((level, i) => (imag[i + 1] = level));
+      return [new Float32Array(partials.length + 1), imag];
+    }
+    const real = new Float32Array(PULSE_HARMONICS + 1);
+    const imag = new Float32Array(PULSE_HARMONICS + 1);
+    const steps = cycle.length;
+    for (let n = 1; n <= PULSE_HARMONICS; n++) {
+      const w = (2 * Math.PI * n) / steps;
+      for (let k = 0; k < steps; k++) {
+        real[n] += (cycle[k] * (Math.sin(w * (k + 1)) - Math.sin(w * k))) / (Math.PI * n);
+        imag[n] += (cycle[k] * (Math.cos(w * k) - Math.cos(w * (k + 1)))) / (Math.PI * n);
+      }
+    }
+    return [real, imag];
+  });
+}
+
+/**
+ * How fast the short noise's LFSR steps, in Hz, whatever the context's rate:
+ * one step a sample at 44.1 kHz, so its 93-step cycle buzzes at about 474 Hz.
+ */
+const SHORT_NOISE_CLOCK = 44100;
+
+/**
+ * One cycle of the NES noise channel's short mode: a 15-bit shift register
+ * from 1, fed back from bits 0 and 6, read on bit 0, until it comes round.
+ */
+function shortNoiseCycle(): number[] {
+  const cycle: number[] = [];
+  let reg = 1;
+  do {
+    cycle.push(reg & 1);
+    reg = (reg >> 1) | (((reg ^ (reg >> 6)) & 1) << 14);
+  } while (reg !== 1);
+  return cycle;
+}
+
+/**
+ * The context's one second of a noise, built on first use: seeded white noise,
+ * or the short mode's cycle with its DC offset taken out (it is mostly zeros)
+ * and scaled to white noise's RMS.
+ */
+export function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): AudioBuffer {
+  let cache = noiseBuffers.get(ctx);
+  if (!cache) {
+    cache = new Map();
+    noiseBuffers.set(ctx, cache);
+  }
+  let buffer = cache.get(kind);
   if (!buffer) {
     const length = Math.ceil(ctx.sampleRate * NOISE_SECONDS);
     buffer = ctx.createBuffer(1, length, ctx.sampleRate);
     const data = buffer.getChannelData(0);
-    const rng = seededRng(NOISE_SEED);
-    for (let i = 0; i < length; i++) data[i] = rng() * 2 - 1;
-    noiseBuffers.set(ctx, buffer);
+    if (kind === 'short') {
+      const cycle = shortNoiseCycle();
+      const mean = cycle.reduce((a, b) => a + b, 0) / cycle.length;
+      const rms = Math.sqrt(cycle.reduce((sum, bit) => sum + (bit - mean) ** 2, 0) / cycle.length);
+      const scale = 1 / Math.sqrt(3) / rms;
+      for (let i = 0; i < length; i++) {
+        data[i] = (cycle[Math.floor((i * SHORT_NOISE_CLOCK) / ctx.sampleRate) % cycle.length] - mean) * scale;
+      }
+    } else {
+      const rng = seededRng(NOISE_SEED);
+      for (let i = 0; i < length; i++) data[i] = rng() * 2 - 1;
+    }
+    cache.set(kind, buffer);
   }
   return buffer;
 }
@@ -524,6 +870,14 @@ interface NormTrack {
   vibrato: number;
   name: string | undefined;
   startsMuted: boolean;
+  pan: number;
+  adsr: Adsr | undefined;
+  filter: VoiceFilter | undefined;
+  wavetable: Wavetable | undefined;
+  noise: NoiseKind;
+  fm: FmOptions | undefined;
+  pitchEnv: PitchEnv | undefined;
+  arpRate: number;
 }
 
 /** Fills in per-track defaults. */
@@ -537,7 +891,15 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
     detune: t.detune ?? 0,
     vibrato: t.vibrato ?? 0,
     name: t.name,
-    startsMuted: t.startsMuted ?? false
+    startsMuted: t.startsMuted ?? false,
+    pan: t.pan !== undefined && Number.isFinite(t.pan) ? Math.min(Math.max(t.pan, -1), 1) : 0,
+    adsr: t.adsr,
+    filter: t.filter,
+    wavetable: t.wavetable,
+    noise: t.noise ?? 'white',
+    fm: t.fm,
+    pitchEnv: t.pitchEnv,
+    arpRate: t.arpRate !== undefined && Number.isFinite(t.arpRate) && t.arpRate > 0 ? Math.min(t.arpRate, MAX_ARP_RATE) : ARP_RATE
   }));
 }
 
@@ -545,16 +907,87 @@ function normalizeTracks(options: GameAudioOptions): NormTrack[] {
 interface ToneMotion {
   /** Frequency the tone starts at and glides from into its own. */
   slideFrom?: number;
+  /** How long that glide takes, in seconds; left out, `SLIDE_TIME`. */
+  slideFromTime?: number;
   /** Frequency the tone glides into over its tail. */
   slideTo?: number;
   /** Vibrato depth in cents. */
   vibrato?: number;
+  /** A `Note.arp` to cycle through, and its steps a second. */
+  arp?: number[];
+  arpRate?: number;
+}
+
+/** The optional shaping of one tone's sound, from its voice's fields of the same names. */
+interface ToneColour {
+  adsr?: Adsr;
+  filter?: VoiceFilter;
+  wavetable?: Wavetable;
+  noise?: NoiseKind;
+  fm?: FmOptions;
+}
+
+/** Shortest release an `Adsr` gets, in seconds; an instant drop to silence clicks. */
+const MIN_RELEASE = 0.005;
+/** How long a filter's sweep takes when `envDecay` is left out, in seconds. */
+const FILTER_ENV_DECAY = 0.1;
+
+/** A time in seconds from an authored value: 0 for anything negative or not finite. */
+function authoredSeconds(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * Schedules an `Adsr` on a tone's level for a note held `duration` seconds,
+ * and returns how long its release rings on after that. A note cut short in
+ * its attack or decay stops at the level the envelope had reached, which for
+ * the exponential decay is `peak * (level / peak) ^ fraction`.
+ */
+function shapeAdsr(level: AudioParam, start: number, duration: number, peak: number, adsr: Adsr): number {
+  const attack = authoredSeconds(adsr.attack);
+  const decay = authoredSeconds(adsr.decay);
+  const release = Math.max(authoredSeconds(adsr.release), MIN_RELEASE);
+  const sustain = Math.max(peak * Math.min(Math.max(Number.isFinite(adsr.sustain) ? adsr.sustain : 1, 0), 1), 0.0001);
+  const end = start + duration;
+  level.setValueAtTime(0, start);
+  let held: number;
+  if (attack >= duration) {
+    held = peak * (attack > 0 ? duration / attack : 1);
+    level.linearRampToValueAtTime(held, end);
+  } else {
+    level.linearRampToValueAtTime(peak, start + attack);
+    const reach = Math.min(decay, duration - attack);
+    held = decay > 0 ? peak * Math.pow(sustain / peak, reach / decay) : sustain;
+    level.exponentialRampToValueAtTime(held, start + attack + reach);
+    level.setValueAtTime(held, end);
+  }
+  level.exponentialRampToValueAtTime(0.0001, end + release);
+  return release;
+}
+
+/** A tone's filter from its voice's `filter`, swept from onset, feeding `into`. */
+function toneFilter(ctx: BaseAudioContext, spec: VoiceFilter, start: number, into: AudioNode): BiquadFilterNode {
+  const nyquist = ctx.sampleRate / 2;
+  const clamp = (hz: number) => Math.min(Math.max(hz, 20), nyquist);
+  const cutoff = clamp(Number.isFinite(spec.cutoff) ? spec.cutoff : nyquist);
+  const filter = ctx.createBiquadFilter();
+  filter.type = spec.type ?? 'lowpass';
+  filter.Q.setValueAtTime(spec.q !== undefined && Number.isFinite(spec.q) ? spec.q : 1, start);
+  const octaves = spec.envAmount !== undefined && Number.isFinite(spec.envAmount) ? spec.envAmount : 0;
+  const from = clamp(cutoff * Math.pow(2, octaves));
+  filter.frequency.setValueAtTime(from, start);
+  if (from !== cutoff) {
+    const sweep = spec.envDecay === undefined ? FILTER_ENV_DECAY : authoredSeconds(spec.envDecay);
+    filter.frequency.exponentialRampToValueAtTime(cutoff, start + sweep);
+  }
+  filter.connect(into);
+  return filter;
 }
 
 /**
  * Schedules one enveloped tone. The order and values of the graph calls for a
- * tone with no `motion` are the ones the engine has always made; the motion
- * adds calls after them and never changes them.
+ * tone with no `motion` and no `colour` are the ones the engine has always
+ * made; either adds calls and never changes the ones a tone without it makes.
  */
 function playTone(
   ctx: BaseAudioContext,
@@ -566,23 +999,70 @@ function playTone(
   destination: AudioNode,
   envelope: 'pluck' | 'pad' = 'pluck',
   detune = 0,
-  motion: ToneMotion = {}
+  motion: ToneMotion = {},
+  colour: ToneColour = {}
 ): void {
   if (freq <= 0) return;
   const gain = ctx.createGain();
-  // A pad swells slowly then decays across the whole note, a soft sustained
-  // bed; a pluck has a short attack then an exponential decay, the chiptune
-  // envelope. Either attack is capped to a fraction of the note so a very
-  // short note never schedules the decay ramp before the attack peak (which
-  // glitches Web Audio).
-  const attack = envelope === 'pad' ? Math.min(duration * 0.4, 0.25) : Math.min(0.01, duration * 0.5);
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(peak, start + attack);
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  // How long the tone sounds past `duration`: an ADSR's release, else none.
+  let ring = 0;
+  if (colour.adsr) {
+    ring = shapeAdsr(gain.gain, start, duration, peak, colour.adsr);
+  } else {
+    // A pad swells slowly then decays across the whole note, a soft sustained
+    // bed; a pluck has a short attack then an exponential decay, the chiptune
+    // envelope. Either attack is capped to a fraction of the note so a very
+    // short note never schedules the decay ramp before the attack peak (which
+    // glitches Web Audio).
+    const attack = envelope === 'pad' ? Math.min(duration * 0.4, 0.25) : Math.min(0.01, duration * 0.5);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak, start + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  }
   gain.connect(destination);
+  // The oscillators feed the filter when the voice has one, else the envelope.
+  const input: AudioNode = colour.filter ? toneFilter(ctx, colour.filter, start, gain) : gain;
+  const stopAt = start + duration + ring + 0.02;
   const slide = Math.min(SLIDE_TIME, duration / 2);
   const slideFrom = motion.slideFrom ?? 0;
   const scoop = slideFrom > 0;
+  const scoopTime = motion.slideFromTime === undefined ? slide : Math.min(motion.slideFromTime, duration);
+  // A tone's frequency, or a noise note's cutoff, after its onset value: the
+  // scoop into it and the glide out of it, all times `scale` for an FM
+  // modulator, which follows the carrier at its ratio.
+  const glide = (f: AudioParam, scale = 1): void => {
+    if (scoop) f.exponentialRampToValueAtTime(freq * scale, start + scoopTime);
+    if (motion.slideTo !== undefined && motion.slideTo > 0) {
+      f.setValueAtTime(freq * scale, start + duration - slide);
+      f.exponentialRampToValueAtTime(motion.slideTo * scale, start + duration);
+    }
+  };
+  // An arpeggio holds each step until the next, so it starts on its first
+  // offset and moves on at every step that begins inside the note.
+  const arp = motion.arp?.length ? motion.arp : null;
+  const arpRate = motion.arpRate ?? ARP_RATE;
+  const arpFreq = (i: number): number => (arp ? freq * Math.pow(2, arp[i % arp.length] / 12) : freq);
+  const onset = scoop ? slideFrom : arpFreq(0);
+  const arpeggiate = (f: AudioParam, scale = 1): void => {
+    if (!arp) return;
+    for (let i = 1; i / arpRate < duration; i++) f.setValueAtTime(arpFreq(i) * scale, start + i / arpRate);
+  };
+  if (type === 'noise') {
+    const source = ctx.createBufferSource();
+    source.buffer = noiseBuffer(ctx, colour.noise);
+    // The buffer is a second long; a longer note loops it.
+    source.loop = true;
+    const cutoff = ctx.createBiquadFilter();
+    cutoff.type = 'lowpass';
+    cutoff.frequency.setValueAtTime(onset, start);
+    glide(cutoff.frequency);
+    arpeggiate(cutoff.frequency);
+    source.connect(cutoff);
+    cutoff.connect(input);
+    source.start(start);
+    source.stop(stopAt);
+    return;
+  }
   // One LFO per note, shared by the twin so the two waver together. It feeds
   // `detune`, which is in cents, so the depth gain is the depth in cents.
   let depth: GainNode | null = null;
@@ -597,30 +1077,50 @@ function playTone(
     depth.gain.linearRampToValueAtTime(vibrato, start + VIBRATO_FULL);
     lfo.connect(depth);
     lfo.start(start);
-    lfo.stop(start + duration + 0.02);
+    lfo.stop(stopAt);
+  }
+  // One modulator per note, shared by the twin, into the carriers' frequency
+  // through a gain whose level is the swing in Hz.
+  let swing: GainNode | null = null;
+  const fm = colour.fm;
+  if (fm && Number.isFinite(fm.ratio) && fm.ratio > 0 && Number.isFinite(fm.index)) {
+    const modulator = ctx.createOscillator();
+    modulator.type = 'sine';
+    modulator.frequency.setValueAtTime(onset * fm.ratio, start);
+    glide(modulator.frequency, fm.ratio);
+    arpeggiate(modulator.frequency, fm.ratio);
+    swing = ctx.createGain();
+    swing.gain.setValueAtTime(fm.index * freq, start);
+    if (fm.indexDecay !== undefined && authoredSeconds(fm.indexDecay) > 0) {
+      swing.gain.setTargetAtTime(0, start, fm.indexDecay / 3);
+    }
+    modulator.connect(swing);
+    modulator.start(start);
+    modulator.stop(stopAt);
+    // The vibrato moves the modulator with the carrier, so the ratio holds.
+    if (depth) depth.connect(modulator.detune);
   }
   const spawn = (cents: number): void => {
     const osc = ctx.createOscillator();
-    if (isPulse(type)) osc.setPeriodicWave(pulseWave(ctx, type));
+    if (colour.wavetable) osc.setPeriodicWave(tableWave(ctx, colour.wavetable));
+    else if (isPulse(type)) osc.setPeriodicWave(pulseWave(ctx, type));
     else osc.type = type;
-    osc.frequency.setValueAtTime(scoop ? slideFrom : freq, start);
+    osc.frequency.setValueAtTime(onset, start);
     if (cents) osc.detune.setValueAtTime(cents, start);
-    osc.connect(gain);
+    osc.connect(input);
     osc.start(start);
-    osc.stop(start + duration + 0.02);
-    if (scoop) osc.frequency.exponentialRampToValueAtTime(freq, start + slide);
-    if (motion.slideTo !== undefined && motion.slideTo > 0) {
-      osc.frequency.setValueAtTime(freq, start + duration - slide);
-      osc.frequency.exponentialRampToValueAtTime(motion.slideTo, start + duration);
-    }
+    osc.stop(stopAt);
+    glide(osc.frequency);
+    arpeggiate(osc.frequency);
     if (depth) depth.connect(osc.detune);
+    if (swing) swing.connect(osc.frequency);
   };
   spawn(0);
   // A slightly detuned twin thickens the voice into a warm chorus.
   if (detune > 0) spawn(detune);
 }
 
-/** A burst of the shared noise through a filter, decaying to silence. */
+/** A burst of a shared noise through a filter, decaying to silence. */
 function noiseHit(
   ctx: BaseAudioContext,
   start: number,
@@ -628,10 +1128,11 @@ function noiseHit(
   peak: number,
   filterType: BiquadFilterType,
   cutoff: number,
-  destination: AudioNode
+  destination: AudioNode,
+  noise: NoiseKind
 ): void {
   const source = ctx.createBufferSource();
-  source.buffer = noiseBuffer(ctx);
+  source.buffer = noiseBuffer(ctx, noise);
   const filter = ctx.createBiquadFilter();
   filter.type = filterType;
   filter.frequency.setValueAtTime(cutoff, start);
@@ -672,9 +1173,16 @@ function toneHit(
  * The three drums. The kick is a triangle dropping from 150 to 45 Hz in 60 ms,
  * the NES's own trick for a kick on a channel with no noise in it; the snare
  * is band-passed noise over a short 200 Hz triangle body; the hat is noise
- * high-passed at 7 kHz.
+ * high-passed at 7 kHz. The noise is the voice's own (`Track.noise`).
  */
-function playDrum(ctx: BaseAudioContext, name: DrumName, start: number, peak: number, destination: AudioNode): void {
+function playDrum(
+  ctx: BaseAudioContext,
+  name: DrumName,
+  start: number,
+  peak: number,
+  destination: AudioNode,
+  noise: NoiseKind = 'white'
+): void {
   const { decay, level } = DRUMS[name];
   const p = peak * level;
   switch (name) {
@@ -682,11 +1190,11 @@ function playDrum(ctx: BaseAudioContext, name: DrumName, start: number, peak: nu
       toneHit(ctx, start, decay, p, 150, 45, destination);
       break;
     case 'snare':
-      noiseHit(ctx, start, decay, p, 'bandpass', 1500, destination);
+      noiseHit(ctx, start, decay, p, 'bandpass', 1500, destination, noise);
       toneHit(ctx, start, 0.08, p * 0.6, 200, 200, destination);
       break;
     case 'hat':
-      noiseHit(ctx, start, decay, p, 'highpass', 7000, destination);
+      noiseHit(ctx, start, decay, p, 'highpass', 7000, destination, noise);
       break;
   }
 }
@@ -716,8 +1224,18 @@ interface NormForm {
   restAfter: number;
   restBeats: number;
   beatsPerBar: number;
-  /** Each scene's order and its seconds per beat (null keeps the score's); `danger` among them. */
-  scenes: Map<string, { order: Part[]; spb: number | null }>;
+  /**
+   * Each scene's order, its seconds per beat (null keeps the score's) and its
+   * rest (0 for none, as for the order); `danger` among them.
+   */
+  scenes: Map<string, NormScene>;
+}
+
+interface NormScene {
+  order: Part[];
+  spb: number | null;
+  restAfter: number;
+  restBeats: number;
 }
 
 /** The scene `form.danger` becomes and `setDanger` drives. */
@@ -735,6 +1253,8 @@ interface FormPosition {
   start: number;
   /** The scene whose order `step` indexes, or null for the form's `order`. */
   scene: string | null;
+  /** Completed passes of the scene's order since it was entered, which its rest counts; 0 in the order. */
+  loops: number;
 }
 
 /** A requested move (`setSection`, `setScene`, `setDanger`) and the bar line it lands on. */
@@ -755,6 +1275,8 @@ interface FormState {
   resume: { step: number; pass: number } | null;
   /** The scene danger was entered from, which releasing it returns to. */
   beforeDanger: string | null;
+  /** Called with its start each time a new part begins, for the layer changes that wait for one. */
+  onMove?: (at: number) => void;
 }
 
 /** The beats a line lasts as the scheduler plays it: a non-positive length still steps one beat. */
@@ -765,6 +1287,14 @@ function lineBeats(line: Note[]): number {
 /** How long a part lasts: its longest line. */
 function partBeats(part: Part): number {
   return Math.max(0, ...part.lines.map(lineBeats));
+}
+
+/** A written rest as passes between rests and its beats, both 0 for none or for one that could not sound. */
+function normRest(rest: { after: number; beats: number } | undefined): { restAfter: number; restBeats: number } {
+  const after = Math.floor(rest?.after ?? 0);
+  const beats = rest?.beats ?? 0;
+  const resting = after >= 1 && Number.isFinite(beats) && beats > 0;
+  return { restAfter: resting ? after : 0, restBeats: resting ? beats : 0 };
 }
 
 /** Resolves a score's form, or null for a score without one. */
@@ -788,28 +1318,28 @@ function normalizeForm(options: GameAudioOptions): NormForm | null {
   if (form.scenes && Object.hasOwn(form.scenes, DANGER)) {
     throw new Error('score form: "danger" is reserved; write the danger variant as form.danger');
   }
-  const scenes = new Map<string, { order: Part[]; spb: number | null }>();
+  const scenes = new Map<string, NormScene>();
   const written: Record<string, FormScene> = { ...form.scenes, ...(form.danger && { [DANGER]: form.danger }) };
   for (const [name, scene] of Object.entries(written)) {
     const parts = resolve(scene.order);
     // A scene with no notes would loop without moving the clock; it is left
     // out, so asking for it is refused rather than hanging the scheduler.
     if (parts.some(part => partBeats(part) > 0)) {
-      scenes.set(name, { order: parts, spb: scene.tempo === undefined ? null : beatSeconds(scene.tempo) });
+      scenes.set(name, {
+        order: parts,
+        spb: scene.tempo === undefined ? null : beatSeconds(scene.tempo),
+        ...normRest(scene.rest)
+      });
     }
   }
   const bar = form.beatsPerBar ?? 4;
   const intro = form.intro ? fit('intro', form.intro) : null;
-  const after = Math.floor(form.rest?.after ?? 0);
-  const beats = form.rest?.beats ?? 0;
-  const resting = after >= 1 && Number.isFinite(beats) && beats > 0;
   return {
     intro: intro && partBeats(intro) > 0 ? intro : null,
     // An order with no notes anywhere would advance forever without moving
     // the clock, so it plays as silence instead.
     order: order.some(part => partBeats(part) > 0) ? order : [],
-    restAfter: resting ? after : 0,
-    restBeats: resting ? beats : 0,
+    ...normRest(form.rest),
     beatsPerBar: Number.isFinite(bar) && bar > 0 ? bar : 4,
     scenes
   };
@@ -817,7 +1347,7 @@ function normalizeForm(options: GameAudioOptions): NormForm | null {
 
 /** The top of a form: the intro if it has one, else the first section. */
 function formTop(form: NormForm, at: number): FormPosition {
-  return { step: form.intro ? -1 : 0, pass: 0, start: at, scene: null };
+  return { step: form.intro ? -1 : 0, pass: 0, start: at, scene: null, loops: 0 };
 }
 
 function orderOf(form: NormForm, scene: string | null): Part[] {
@@ -836,16 +1366,32 @@ function formBeatSeconds(form: NormForm, scene: string | null, spb: number): num
 /**
  * What follows the current part, and whether a rest comes first: the one place
  * the form's next move is decided. A pending jump takes the place of the
- * order's next step; a scene loops its own order without rests.
+ * order's next step; a scene loops its own order, resting only if it writes a
+ * rest of its own.
  */
-function nextStep(state: FormState): { step: number; pass: number; scene: string | null; rest: boolean } {
+function nextStep(state: FormState): { step: number; pass: number; scene: string | null; loops: number; rest: boolean } {
   const { form, pos, pending } = state;
-  if (pending) return { step: pending.step, pass: pending.pass, scene: pending.scene, rest: false };
+  if (pending) {
+    // A jump inside the scene keeps its count; entering one starts it.
+    const loops = pending.scene !== null && pending.scene === pos.scene ? pos.loops : 0;
+    return { step: pending.step, pass: pending.pass, scene: pending.scene, loops, rest: false };
+  }
   const order = orderOf(form, pos.scene);
-  if (pos.step + 1 < order.length) return { step: pos.step + 1, pass: pos.pass, scene: pos.scene, rest: false };
-  if (pos.scene !== null) return { step: 0, pass: pos.pass, scene: pos.scene, rest: false };
+  if (pos.step + 1 < order.length) {
+    return { step: pos.step + 1, pass: pos.pass, scene: pos.scene, loops: pos.loops, rest: false };
+  }
+  if (pos.scene !== null) {
+    const loops = pos.loops + 1;
+    const every = form.scenes.get(pos.scene)?.restAfter ?? 0;
+    return { step: 0, pass: pos.pass, scene: pos.scene, loops, rest: every > 0 && loops % every === 0 };
+  }
   const pass = pos.pass + 1;
-  return { step: 0, pass, scene: null, rest: form.restAfter > 0 && pass % form.restAfter === 0 };
+  return { step: 0, pass, scene: null, loops: 0, rest: form.restAfter > 0 && pass % form.restAfter === 0 };
+}
+
+/** The beats of the rest before the next pass of a scene, or of the order for null. */
+function restBeatsOf(form: NormForm, scene: string | null): number {
+  return scene === null ? form.restBeats : (form.scenes.get(scene)?.restBeats ?? 0);
 }
 
 /**
@@ -877,13 +1423,17 @@ function playNote(
   dur: number
 ): void {
   const peak = VOICE_PEAK * track.volume * noteGain(note.gain);
+  // A rest makes no nodes, so it gets no panner either.
+  const sounds = !!note.drum || note.freq > 0;
+  const out = track.pan === 0 || !sounds ? bus : panTo(ctx, bus, track.pan, at);
   if (note.drum) {
-    playDrum(ctx, note.drum, at, peak, bus);
+    playDrum(ctx, note.drum, at, peak, out, track.noise);
     return;
   }
-  // Pads play their full length so they sustain and connect; plucks trim
-  // to leave the terse gap that reads as chiptune.
-  const playDur = track.envelope === 'pad' ? dur : dur * 0.9;
+  // Pads and ADSR voices play their full length so they sustain and connect
+  // (an ADSR's release then rings past it); plucks trim to leave the terse
+  // gap that reads as chiptune.
+  const playDur = track.envelope === 'pad' || track.adsr ? dur : dur * 0.9;
   const shift = (f: number | undefined): number | undefined =>
     f !== undefined && f > 0 ? f * Math.pow(2, track.octaveShift) : f;
   const freq = note.freq > 0 ? note.freq * Math.pow(2, track.octaveShift) : note.freq;
@@ -892,7 +1442,34 @@ function playNote(
     slideFrom: shift(note.slideFrom),
     slideTo: note.slideNext && following && !following.drum ? shift(following.freq) : undefined
   };
-  playTone(ctx, freq, at, playDur, track.wave, peak, bus, track.envelope, track.detune, motion);
+  const env = note.pitchEnv ?? track.pitchEnv;
+  if (motion.slideFrom === undefined && env && freq > 0 && Number.isFinite(env.semitones) && env.semitones !== 0) {
+    motion.slideFrom = freq * Math.pow(2, env.semitones / 12);
+    motion.slideFromTime = authoredSeconds(env.time);
+  }
+  if (note.arp?.length) {
+    // The arpeggio owns the pitch for the whole note.
+    motion.slideFrom = undefined;
+    motion.slideTo = undefined;
+    motion.arp = note.arp;
+    motion.arpRate = track.arpRate;
+  }
+  const colour: ToneColour = {
+    adsr: track.adsr,
+    filter: track.filter,
+    wavetable: track.wavetable,
+    noise: track.noise,
+    fm: track.fm
+  };
+  playTone(ctx, freq, at, playDur, track.wave, peak, out, track.envelope, track.detune, motion, colour);
+}
+
+/** A panner at `pan` feeding `bus`, for one note of a panned voice. */
+function panTo(ctx: BaseAudioContext, bus: AudioNode, pan: number, at: number): StereoPannerNode {
+  const panner = ctx.createStereoPanner();
+  panner.pan.setValueAtTime(pan, at);
+  panner.connect(bus);
+  return panner;
 }
 
 /**
@@ -1019,12 +1596,15 @@ function scheduleForm(
     pos.step = after.step;
     pos.pass = after.pass;
     pos.scene = after.scene;
-    pos.start = end + (after.rest ? form.restBeats * spb : 0);
+    pos.loops = after.loops;
+    // A rest only ever comes before a scene's own next pass, so `spb` is its tempo.
+    pos.start = end + (after.rest ? restBeatsOf(form, after.scene) * spb : 0);
     for (const v of cursors) {
       v.next = pos.start;
       v.idx = 0;
       v.beat = 0;
     }
+    state.onMove?.(pos.start);
   }
 }
 
@@ -1145,7 +1725,7 @@ export interface RenderState {
 }
 
 /**
- * Renders the first `seconds` of a score, from the top, into a mono
+ * Renders the first `seconds` of a score, from the top, into a stereo
  * `AudioBuffer` through an `OfflineAudioContext`, using the same graph and the
  * same scheduler the live engine plays it with. For development tools (the
  * jukebox) that need to hear or compare a score without a game around it.
@@ -1163,7 +1743,10 @@ export async function renderScore(
   if (!Number.isFinite(sampleRate) || sampleRate <= 0) return null;
   let ctx: OfflineAudioContext;
   try {
-    ctx = new Ctor(1, Math.ceil(seconds * sampleRate), sampleRate);
+    // Stereo, for `Track.pan`. Every node before a panner is mono, and the
+    // destination up-mixes a mono input by copying it to both sides, so an
+    // unpanned score renders today's mono samples in each channel.
+    ctx = new Ctor(2, Math.ceil(seconds * sampleRate), sampleRate);
   } catch {
     // A rate the browser does not support is a RangeError from the constructor.
     return null;
@@ -1273,18 +1856,32 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   // musicBus is the dry sum of every voice and the echo send's input.
   let musicMaster: GainNode | null = null;
   let musicBus: GainNode | null = null;
+  // The sounding stinger's own gate into musicBus, so the next stinger or a
+  // stop() can silence the notes it has already handed to the audio graph.
+  let stingerGate: GainNode | null = null;
+  // Set by playEnding until the next start(), which has its cut and close to undo.
+  let ending = false;
   // One scheduling cursor per track: they advance independently on their own
   // note lengths so a slow bass and a busy lead stay locked to the same clock.
   const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
   // A score with a form also carries where in the form it is; null without one.
   const formPlan = normalizeForm(options);
-  const form: FormState | null = formPlan && { form: formPlan, pos: formTop(formPlan, 0), pending: null, resume: null, beforeDanger: null };
+  const form: FormState | null = formPlan && {
+    form: formPlan,
+    pos: formTop(formPlan, 0),
+    pending: null,
+    resume: null,
+    beforeDanger: null,
+    onMove: at => applyWaitingLayers(at)
+  };
   let scheduler: ReturnType<typeof setInterval> | null = null;
   // Where each voice's notes go: the bus, until layers exist, then its own gain.
   let buses: AudioNode[] = [];
   let lane: GainNode | null = null;
   let layerGains: GainNode[] | null = null;
   const layerOn = tracks.map(t => !t.startsMuted);
+  // Layer changes asked for at the next part's start, by voice; see `setLayer`.
+  const waitingLayers = new Map<number, { on: boolean; fade: number }>();
   const stingers = new Map(
     Object.entries(options.stingers ?? {}).map(([name, lines]) => [
       name,
@@ -1294,6 +1891,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   let paused = false;
   let pauseFilter: BiquadFilterNode | null = null;
   let pauseGain: GainNode | null = null;
+  // The effects channel's bus for `effectsBus`, built on first ask.
+  let effectsOut: GainNode | null = null;
 
   /** Lazily create the AudioContext + music graph on first gesture. Returns null if unsupported. */
   function ensureContext(): AudioContext | null {
@@ -1356,6 +1955,25 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     pauseGain.gain.setTargetAtTime(paused ? PAUSE_GAIN : 1, now, ADAPT_RAMP);
   }
 
+  /** Fades voice `t`'s layer gain towards `on`, starting at `at`. */
+  function fadeLayer(t: number, on: boolean, fadeSeconds: number, at: number): void {
+    layerOn[t] = on;
+    if (!ctx || !layerGains) return;
+    const g = layerGains[t].gain;
+    g.cancelScheduledValues(at);
+    // A time constant of a quarter of the fade is within 2% of the target by
+    // its end; a linear ramp would need the level it starts from, which a
+    // fade already in progress does not report.
+    if (Number.isFinite(fadeSeconds) && fadeSeconds > 0) g.setTargetAtTime(on ? 1 : 0, at, fadeSeconds / 4);
+    else g.setValueAtTime(on ? 1 : 0, at);
+  }
+
+  /** Starts the layer changes waiting for a part to begin, at its start. */
+  function applyWaitingLayers(at: number): void {
+    for (const [t, { on, fade }] of waitingLayers) fadeLayer(t, on, fade, at);
+    waitingLayers.clear();
+  }
+
   function scheduleAhead(): void {
     if (!ctx || !musicBus || tracks.length === 0) return;
     // Schedule every track's notes due within the next ~100ms window.
@@ -1409,6 +2027,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         // lands at once rather than a bar into a section it is leaving.
         if (form.pending) form.pending.cut = t0;
       }
+      // Either way a part starts again at t0, which is what a waiting layer waits for.
+      applyWaitingLayers(t0);
     }
   }
 
@@ -1419,6 +2039,17 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // Resuming is needed when the context starts suspended (autoplay policy).
     if (context.state === 'suspended') void context.resume();
     running = true;
+    if (ending) {
+      // A restart inside an ending phrase: the phrase goes, and the lane cut
+      // and the master's close still waiting at the phrase's end are undone.
+      ending = false;
+      cutStinger();
+      musicMaster.gain.cancelScheduledValues(context.currentTime);
+      if (lane) {
+        lane.gain.cancelScheduledValues(context.currentTime);
+        lane.gain.setTargetAtTime(1, context.currentTime, ADAPT_RAMP / 2);
+      }
+    }
     // Ramped rather than assigned, because stop() ducks this same gain and a
     // scheduled ramp outranks a later write to `.value`.
     musicMaster.gain.setTargetAtTime(musicMuted ? 0 : volume, context.currentTime, 0.02);
@@ -1442,6 +2073,41 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     if (musicMaster && ctx) {
       musicMaster.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
     }
+    // The duck lifts again on start(), which would bring back the rest of a
+    // stinger still queued behind it (Snake's game-over phrase on a restart).
+    cutStinger();
+  }
+
+  /**
+   * Schedules a stinger's lines from `at` on a fresh gate into the bus,
+   * replacing one still sounding, and returns the time its last line ends.
+   */
+  function soundStinger(lines: Note[][], at: number): number {
+    const context = ctx as AudioContext;
+    const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
+    // A new stinger replaces one still sounding, as the duck already assumes:
+    // the caller re-times the lift to this phrase's end alone.
+    cutStinger();
+    const gate = context.createGain();
+    gate.connect(musicBus as GainNode);
+    stingerGate = gate;
+    let end = at;
+    lines.forEach((line, t) => {
+      let time = at;
+      line.forEach((note, i) => {
+        const dur = note.beats * spb;
+        if (dur > 0) playNote(context, gate, tracks[t], note, line[i + 1], time, dur);
+        time += dur > 0 ? dur : spb;
+      });
+      end = Math.max(end, time);
+    });
+    return end;
+  }
+
+  /** Silences the sounding stinger's remaining notes, if any. */
+  function cutStinger(): void {
+    if (stingerGate && ctx) stingerGate.gain.setTargetAtTime(0, ctx.currentTime, 0.005);
+    stingerGate = null;
   }
 
   function applyMusicMute(): void {
@@ -1473,6 +2139,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   function setSfxMuted(value: boolean): void {
     sfxMuted = value;
     saveScore(SFX_MUTED_KEY, value ? 1 : 0);
+    if (effectsOut && ctx) effectsOut.gain.setTargetAtTime(value ? 0 : 1, ctx.currentTime, 0.02);
   }
 
   function toggleSfxMute(): boolean {
@@ -1569,6 +2236,18 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     }
   }
 
+  function effectsBus(): EffectsBus | null {
+    const context = ensureContext();
+    if (!context) return null;
+    if (context.state === 'suspended') void context.resume();
+    if (!effectsOut) {
+      effectsOut = context.createGain();
+      effectsOut.gain.value = sfxMuted ? 0 : 1;
+      effectsOut.connect(context.destination);
+    }
+    return { ctx: context, out: effectsOut, level: sfxLevel };
+  }
+
   // Background tabs throttle timers, which would starve the ~100ms lookahead and
   // make the music stutter. Suspend the context while hidden and resume on return.
   function onVisibilityChange(): void {
@@ -1593,10 +2272,12 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       ctx = null;
       musicMaster = null;
       musicBus = null;
+      stingerGate = null;
       lane = null;
       layerGains = null;
       pauseFilter = null;
       pauseGain = null;
+      effectsOut = null;
     }
   }
 
@@ -1618,6 +2299,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     isSfxMuted: () => sfxMuted,
     setSfxMuted,
     playSfx,
+    effectsBus,
     setTempo(bpm: number) {
       // Finite-positive only, capped at MAX_BPM: Infinity would zero
       // secondsPerBeat and spin scheduleAhead's lookahead loop forever, and
@@ -1662,21 +2344,18 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
         scene: form.pos.scene
       };
     },
-    setLayer(track: number | string, on: boolean, fadeSeconds = LAYER_FADE) {
+    setLayer(track: number | string, on: boolean, fadeSeconds = LAYER_FADE, at: 'now' | 'section' = 'now') {
       const t = trackIndex(tracks, track);
       if (t < 0) return;
       // Built at the level the voice had, so that a first fade is a fade.
       const ready = ensureLayers();
-      layerOn[t] = on;
-      if (!ready || !ctx || !layerGains) return;
-      const g = layerGains[t].gain;
-      const now = ctx.currentTime;
-      g.cancelScheduledValues(now);
-      // A time constant of a quarter of the fade is within 2% of the target by
-      // its end; a linear ramp would need the level it starts from, which a
-      // fade already in progress does not report.
-      if (Number.isFinite(fadeSeconds) && fadeSeconds > 0) g.setTargetAtTime(on ? 1 : 0, now, fadeSeconds / 4);
-      else g.setValueAtTime(on ? 1 : 0, now);
+      waitingLayers.delete(t);
+      // The scheduler starts it when the form moves on (`onMove`).
+      if (at === 'section' && form && running && ready) {
+        waitingLayers.set(t, { on, fade: fadeSeconds });
+        return;
+      }
+      fadeLayer(t, on, fadeSeconds, ctx ? ctx.currentTime : 0);
     },
     setScene(name: string | null) {
       if (!form || !running || !ctx) return false;
@@ -1706,25 +2385,35 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     },
     playStinger(name: string) {
       const lines = stingers.get(name);
-      if (!lines || !running || musicMuted || !ctx || !musicBus) return false;
+      if (!lines || !running || musicMuted || !ctx) return false;
       const duck = ensureLayers();
       if (!duck) return false;
       const now = ctx.currentTime;
-      const at = now + 0.05;
-      const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
-      let end = at;
-      lines.forEach((line, t) => {
-        let time = at;
-        line.forEach((note, i) => {
-          const dur = note.beats * spb;
-          if (dur > 0) playNote(ctx as AudioContext, musicBus as GainNode, tracks[t], note, line[i + 1], time, dur);
-          time += dur > 0 ? dur : spb;
-        });
-        end = Math.max(end, time);
-      });
+      const end = soundStinger(lines, now + 0.05);
       duck.gain.cancelScheduledValues(now);
       duck.gain.setTargetAtTime(STINGER_DUCK, now, ADAPT_RAMP / 2);
       duck.gain.setTargetAtTime(1, end, ADAPT_RAMP);
+      return true;
+    },
+    playEnding(name: string) {
+      const lines = stingers.get(name);
+      if (!lines || !running || musicMuted || !ctx || !musicMaster) return false;
+      const lane = ensureLayers();
+      if (!lane) return false;
+      const now = ctx.currentTime;
+      const end = soundStinger(lines, now + 0.05);
+      // The loop stops under the phrase: the scheduler for new notes, the lane
+      // for the ones already handed over (a pad note would drone through it).
+      lane.gain.cancelScheduledValues(now);
+      lane.gain.setTargetAtTime(0, now, ADAPT_RAMP / 2);
+      running = false;
+      if (scheduler !== null) {
+        clearInterval(scheduler);
+        scheduler = null;
+      }
+      // What stop() does at once waits for the phrase, which is music too.
+      musicMaster.gain.setTargetAtTime(0, end, 0.02);
+      ending = true;
       return true;
     },
     setPaused(on: boolean) {

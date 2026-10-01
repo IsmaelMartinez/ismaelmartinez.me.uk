@@ -43,8 +43,11 @@ import { seededRandom } from './seeded-random';
 import { meanT } from './paired-stats';
 import {
   TANKS_MUSIC,
+  MATCH_END_BEATS,
+  ROUND_START_BEATS,
   STINGER_BEATS,
-  SUDDEN_DEATH_TEMPO
+  SUDDEN_DEATH_TEMPO,
+  INTRO_BEATS
 } from '../../src/games/tanks/music';
 import { scoreSeconds } from '../../src/games/engine/audio';
 import { PASS_FLOOR_SECONDS } from './music-gates';
@@ -883,28 +886,78 @@ describe('headless playthrough (seeded, deterministic)', () => {
 });
 
 /**
- * The score facts `game.ts` leans on (#379). The round-over muffle waits
- * `STINGER_SECONDS`, so every stinger must be that long in every voice; the
- * drums are a layer for match point, so the bed must carry none of its own;
- * and Sudden Death can last a round or two, so its own order is held to the
- * same floor as the bed, at its own tempo.
+ * The score facts `game.ts` and the brief lean on (#379, #415). The round-over
+ * muffle waits `STINGER_SECONDS`, so every round-end stinger must be that long
+ * in every voice. The brief is a PC-speaker field march, one tune per arena,
+ * so every arena's pass has the beeper playing and no two arenas share a tune;
+ * a round cue is the beeper over the drums, and a match ending is the whole
+ * band, so it sits at the march's level. The intro is what `game.ts` times the
+ * arena's scene against, so it lasts `INTRO_BEATS` and ends on the drums alone,
+ * which lead into any arena's key. And Sudden Death can last a round or two, so
+ * its own order is held to the same floor as the marches, at its own tempo.
  */
 describe('Tank Duel score', () => {
+  type Line = { beats: number; freq: number; drum?: string }[];
   const beats = (line: { beats: number }[]) => line.reduce((sum, note) => sum + note.beats, 0);
+  const sounding = (line: Line) => line.filter(note => note.freq > 0 || note.drum).length;
   const form = TANKS_MUSIC.form!;
-  const drums = TANKS_MUSIC.tracks.findIndex(t => t.name === 'drums');
+  const voice = (name: string) => TANKS_MUSIC.tracks.findIndex(t => t.name === name);
+  const lead = voice('lead');
+  const drums = voice('drums');
+  const wind = voice('wind');
+  const stingers = TANKS_MUSIC.stingers!;
 
-  it('makes every stinger STINGER_BEATS long in every voice', () => {
-    const lengths = Object.values(TANKS_MUSIC.stingers!).flatMap(lines => lines.map(beats));
-    expect(lengths).toHaveLength(Object.keys(TANKS_MUSIC.stingers!).length * TANKS_MUSIC.tracks.length);
-    expect(new Set(lengths)).toEqual(new Set([STINGER_BEATS]));
+  it('makes every round-end stinger STINGER_BEATS long, the round start ROUND_START_BEATS and each match ending MATCH_END_BEATS, in every voice', () => {
+    expect(Object.keys(stingers).sort()).toEqual([
+      'matchLost',
+      'matchOver',
+      'matchWon',
+      'round',
+      'roundLost',
+      'roundStart',
+      'roundWon'
+    ]);
+    for (const [name, lines] of Object.entries(stingers)) {
+      expect(lines, name).toHaveLength(TANKS_MUSIC.tracks.length);
+      const want = name === 'roundStart' ? ROUND_START_BEATS : name.startsWith('match') ? MATCH_END_BEATS : STINGER_BEATS;
+      expect(new Set(lines.map(beats)), name).toEqual(new Set([want]));
+    }
   });
 
-  it('keeps percussion out of the bed and brings it in only with Sudden Death', () => {
-    const hits = (section: string) => form.sections[section][drums].filter(note => note.drum).length;
-    expect(TANKS_MUSIC.tracks[drums].startsMuted).toBe(true);
-    expect(form.order.map(hits)).toEqual(form.order.map(() => 0));
-    for (const section of form.danger!.order) expect(hits(section)).toBeGreaterThan(0);
+  it('plays every round cue on the beeper over the drums, and every match ending on the band', () => {
+    for (const [name, lines] of Object.entries(stingers)) {
+      const band = name.startsWith('match');
+      lines.forEach((line, t) => {
+        const want = t !== wind && (band || t === lead || t === drums);
+        expect(sounding(line) > 0, `${name} voice ${t}`).toBe(want);
+      });
+    }
+  });
+
+  it('plays a tune of its own in every arena, and one in Sudden Death', () => {
+    const arenas = Object.values(form.scenes!).flatMap(scene => scene.order);
+    expect(new Set(arenas).size).toBe(5);
+    for (const section of [...arenas, ...form.danger!.order]) {
+      expect(sounding(form.sections[section][lead]), section).toBeGreaterThan(0);
+    }
+    const tunes = arenas.map(a => JSON.stringify(form.sections[a][lead].map(note => note.freq)));
+    expect(new Set(tunes).size).toBe(arenas.length);
+  });
+
+  it('opens the match on an INTRO_BEATS intro that ends on the drums alone', () => {
+    const intro = form.intro!;
+    expect(new Set(intro.map(beats))).toEqual(new Set([INTRO_BEATS]));
+    // The last bar is the roll-off, nothing pitched, so it hands to any arena's key.
+    const lastBar = (line: Line) => {
+      let at = 0;
+      return line.filter(note => {
+        const inBar = at >= INTRO_BEATS - 4;
+        at += note.beats;
+        return inBar;
+      });
+    };
+    intro.forEach((line, t) => expect(sounding(lastBar(line)) > 0, `intro voice ${t}`).toBe(t === drums));
+    expect(sounding(intro[lead])).toBeGreaterThan(0);
   });
 
   it('lasts at least the standard floor per pass of Sudden Death, at its own tempo', () => {

@@ -9,7 +9,8 @@
  * with the once-only intro and any rest left out, or a formless score's
  * melodies.
  */
-import { scoreSeconds, type GameAudioOptions, type MusicProfile, type Note } from '../../src/games/engine/audio';
+import { scoreSeconds, type GameAudioOptions, type MusicProfile, type Note, type Track } from '../../src/games/engine/audio';
+import { pitch } from '../../src/games/engine/pitch';
 
 /** G2's floor, in seconds of one pass at the fastest tempo the cabinet reaches. */
 export const PASS_FLOOR_SECONDS: Record<MusicProfile['session'], number> = {
@@ -208,14 +209,109 @@ export function sceneScore(music: GameAudioOptions, scene: string): GameAudioOpt
   return { ...music, form: { sections: form.sections, beatsPerBar: form.beatsPerBar, order: [...form.scenes![scene].order] } };
 }
 
-/** Every gate a score fails, by name; an empty list is a score that clears round 2's floor. */
+/** The style gates a profile can switch off. */
+const GATES = ['seam', 'syncopation', 'rhythms'] as const;
+
+/**
+ * The profile one of a form's scenes is gated against: its own session and
+ * tempo, and the cabinet's `gates` with any the scene sets laid over them, so
+ * a cabinet whose brief drops a gate drops it in every scene unless one scene
+ * says otherwise.
+ */
+export function sceneProfile(profile: MusicProfile, scene: string): MusicProfile {
+  const own = profile.scenes![scene];
+  // Key by key, so a scene that writes `seam: undefined` inherits the cabinet's choice rather than erasing it.
+  const gates = Object.fromEntries(GATES.map(g => [g, own.gates?.[g] ?? profile.gates?.[g]]));
+  return { ...own, gates };
+}
+
+/**
+ * Every gate a score fails, by name; an empty list is a score that clears the
+ * floor. The seconds floor always applies; the three style gates apply unless
+ * the profile's `gates` switches one off (ADR 003's round 3 amendment).
+ */
 export function failedGates(music: GameAudioOptions, profile: MusicProfile): string[] {
   const failed: string[] = [];
   const bar = beatsPerBar(music);
+  // Only an explicit false switches a gate off; left out or undefined, it is on.
+  const on = Object.fromEntries(GATES.map(g => [g, profile.gates?.[g] !== false]));
   if (passSecondsAtFastest(music, profile) < PASS_FLOOR_SECONDS[profile.session]) failed.push('seconds');
   const lead = passLine(music, leadIndex(music));
-  if (new Set(barRhythms(lead, bar)).size < MIN_BAR_RHYTHMS) failed.push('rhythms');
-  if (unsyncopatedWindows(lead, bar).length > 0) failed.push('syncopation');
-  if (seamArrivals(music).length > 0) failed.push('seam');
+  if (on.rhythms && new Set(barRhythms(lead, bar)).size < MIN_BAR_RHYTHMS) failed.push('rhythms');
+  if (on.syncopation && unsyncopatedWindows(lead, bar).length > 0) failed.push('syncopation');
+  if (on.seam && seamArrivals(music).length > 0) failed.push('seam');
   return failed;
+}
+
+/**
+ * G3's register bands, by a voice's mean pitch over the whole score with its
+ * octave shift counted: under C3 is bass, C5 and above is high, and between
+ * is mid. A percussion voice has no pitch and is its own band.
+ */
+const BASS_BELOW = Math.log2(pitch('C3'));
+const HIGH_FROM = Math.log2(pitch('C5'));
+
+/**
+ * Track fields that are not the instrument: the notes, the level in the mix,
+ * the name and layer flag, the octave (already read through the register
+ * band), and the detuned twin and vibrato, which thicken or bend a voice
+ * without changing which instrument it is.
+ */
+const NOT_TIMBRE = new Set<string>(['melody', 'volume', 'name', 'startsMuted', 'octaveShift', 'detune', 'vibrato']);
+
+/** A value serialised with its object keys sorted, so two equal settings always print the same. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([k, v]) => `${k}:${canonical(v)}`).join(',')}}`;
+  }
+  return String(value);
+}
+
+/** Every line track `t` plays anywhere in the score: its melody, or its line in the intro and every section. */
+function allLines(music: GameAudioOptions, t: number): Note[][] {
+  const form = music.form;
+  if (!form) return [music.tracks[t]?.melody ?? []];
+  return [form.intro?.[t] ?? [], ...Object.values(form.sections).map(lines => lines[t] ?? [])];
+}
+
+/**
+ * One voice's part of the signature: 'drums' for a percussion voice, or its
+ * register band and every instrument field it sets, wave and envelope with
+ * their defaults filled in.
+ *
+ * The instrument fields are every `Track` field not listed in `NOT_TIMBRE`,
+ * read from the object rather than named here. So a field the engine gains
+ * later (round 3 plans a pan, an ADSR, a filter, a wavetable and FM) joins
+ * the signature the day a score sets it, with nothing here to update: a voice
+ * that moves to an FM patch or a custom wavetable becomes a different
+ * instrument without anyone remembering to teach this test the field. The
+ * price is that a field which is a mix setting rather than an instrument has
+ * to be added to `NOT_TIMBRE` when it lands. Values compare exactly, so a
+ * nudged number is a new instrument by this measure; the test is a floor that
+ * catches copies, and the owner's ear is what judges whether the difference
+ * is heard.
+ */
+export function voiceSignature(music: GameAudioOptions, t: number): string {
+  const track: Track = music.tracks[t];
+  const notes = allLines(music, t).flatMap(onsets);
+  if (notes.length === 0) return allLines(music, t).some(line => line.some(n => n.drum)) ? 'drums' : 'silent';
+  const mean = notes.reduce((s, n) => s + Math.log2(n.freq), 0) / notes.length + (track.octaveShift ?? 0);
+  const band = mean < BASS_BELOW ? 'bass' : mean >= HIGH_FROM ? 'high' : 'mid';
+  const timbre = Object.fromEntries(Object.entries(track).filter(([key]) => !NOT_TIMBRE.has(key)));
+  return `${band} ${canonical({ ...timbre, wave: track.wave ?? 'square', envelope: track.envelope ?? 'pluck' })}`;
+}
+
+/**
+ * G3: a score's instrument signature, the multiset of its voices' signatures
+ * (sorted, so the order of `tracks` does not matter) plus whether it has the
+ * echo send. Two cabinets with the same signature are the same band playing
+ * different notes, which is the sameness round 3 exists to end.
+ */
+export function instrumentSignature(music: GameAudioOptions): string {
+  const voices = music.tracks.map((_, t) => voiceSignature(music, t)).sort();
+  return [...voices, music.echo ? 'echo' : 'dry'].join(' | ');
 }

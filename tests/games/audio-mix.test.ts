@@ -71,6 +71,7 @@ function makeContext() {
       frequency: param(),
       detune: param(),
       Q: param(),
+      pan: param(),
       type: 'square',
       buffer: null as unknown,
       target: null as unknown,
@@ -97,6 +98,8 @@ function makeContext() {
     // Pulse duties, drums and the pause filter, for scores that use them.
     createPeriodicWave: vi.fn(() => ({})),
     createBiquadFilter: vi.fn(node),
+    // A voice's pan, for scores that place one off centre.
+    createStereoPanner: vi.fn(node),
     createBufferSource: vi.fn(node),
     createBuffer: vi.fn((_channels: number, length: number) => ({ getChannelData: () => new Float32Array(length) })),
     createDelay: vi.fn(() => ({ delayTime: param(), connect: vi.fn() }))
@@ -276,9 +279,9 @@ describe('effects in the score key', () => {
     }
   });
 
-  it('sets Line Hold in A', () => {
+  it('sets Line Hold in D, the key Kingdom Rush centres on', () => {
     const lineHold = SCORES.find(s => s.name === 'towerdefense');
-    expect(lineHold?.music.tonic).toBeCloseTo(p('A3'), 6);
+    expect(lineHold?.music.tonic).toBeCloseTo(p('D3'), 6);
   });
 });
 

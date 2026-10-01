@@ -327,10 +327,14 @@ export function initSyndicateGame(): void {
 
   function endCampaign(victory: boolean) {
     phase = 'over';
-    // Victory is a win chime, not the loss sting; only running out of agents
-    // or cash plays the latter.
-    audio.playSfx(victory ? 'score' : 'gameover');
-    audio.stop();
+    // The score's own ending, which stops the music once it has sounded; with
+    // the music muted it cannot play, so the shared effect marks the end
+    // instead. Victory is a win chime, not the loss sting; only running out of
+    // agents or cash plays the latter.
+    if (!audio.playEnding(victory ? 'victory' : 'fallen')) {
+      audio.playSfx(victory ? 'score' : 'gameover');
+      audio.stop();
+    }
     bankTakings();
     overIcon.textContent = victory ? '🏆' : '☠️';
     overTitle.textContent = victory ? strings.victory : strings.gameOver;
@@ -350,6 +354,8 @@ export function initSyndicateGame(): void {
       return;
     }
     phase = 'debrief';
+    // The music runs on through the debrief, so the extraction is a stinger over it.
+    audio.playStinger('extracted');
     // Banking persists the campaign's takings at each debrief, like the old
     // record key did, so quitting mid-campaign keeps the run on the table.
     bankTakings();

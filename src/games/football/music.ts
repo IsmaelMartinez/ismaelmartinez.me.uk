@@ -30,9 +30,9 @@
  *   envelope drops it two octaves in 35 ms, the thump of a sampled kick; the
  *   snare is the engine's noise snare written at full level on 2 and 4, the loud
  *   snare the brief asks for; hats are quieter noise ticks.
- * - crowd, sustained low-passed noise, the stadium. A layer that stays down
- *   (see the adaptive hooks): it is heard in the stingers' roars and groans,
- *   while the stand through a match is `sound.ts`, on the effects channel.
+ * - crowd, sustained low-passed noise, the stadium. It rests through every
+ *   section and is heard only in the stingers' roars and groans; the stand
+ *   through a match is `sound.ts`, on the effects channel.
  *
  * Three pitched voices plus drums and a noise bed, inside ADR 003's limit (the
  * crowd and the DAC kick are percussion, not pitched lines). There is no echo:
@@ -89,11 +89,10 @@
  *
  * Adaptive hooks, wired in `game.ts` from events the match already raises:
  * the drums are a `startsMuted` layer the kick-off brings in and half-time and
- * full time take out; the crowd is a `startsMuted` layer that `game.ts` no
- * longer raises, because the live stand is effects, not music, and lives in
- * `sound.ts` on the effects channel (its section lines here are unheard, and
- * the voice sounds only in the stingers); the rotation
- * above and the stage ramp pick the scene and the tempo; the shootout moves to
+ * full time take out; the crowd voice rests through every section and sounds
+ * only in the stingers, because the live stand is effects, not music, and
+ * lives in `sound.ts` on the effects channel; the rotation above and the stage
+ * ramp pick the scene and the tempo; the shootout moves to
  * its bed; the static screens go back to the menu; and `STINGERS` mark the
  * kick-off, a goal for, a goal against, half-time and the final whistle, in
  * the same FM palette, with the crowd's roar written into the goal's. Pause
@@ -390,16 +389,11 @@ function groove(count: number, bar: () => Note[]): Note[] {
 /* the crowd                                                            */
 
 /**
- * The crowd's line through a match section: a murmur for the first half and a
- * brighter one for the second, so a swell that holds across a section rises
- * with the phrase. Heard only while the layer is up.
+ * The crowd voice's line through every section: silence. The stand through a
+ * match is `sound.ts`, on the effects channel; this voice speaks only in the
+ * stingers below, so its section lines are rests that keep it the same length
+ * as every other voice.
  */
-function stand(bars: number, from = 650, to = 800): Note[] {
-  const half = (bars * 4) / 2;
-  return [roar(from, half, 0.85), roar(to, half)];
-}
-
-/** Silence where no crowd belongs: the menus. */
 function hush(bars: number): Note[] {
   return [r(bars * 4)];
 }
@@ -471,7 +465,7 @@ const M1_HOOK: Note[][] = [
   over(slap, ['F', 'C', 'Dm', 'Bb', 'F', 'C', 'Bb', 'Eb']),
   over(held, ['F', 'C', 'Dm', 'Bb', 'F', 'C', 'Bb', 'Eb']),
   groove(8, rock),
-  stand(8, 750, 950)
+  hush(8)
 ];
 
 // m1-verse, lower and answering in two-bar phrases: Dm Bb F C | Dm Bb Gm C
@@ -489,7 +483,7 @@ const M1_VERSE: Note[][] = [
   over(slap, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'Gm', 'C']),
   over(restruck, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'Gm', 'C']),
   groove(8, rock),
-  stand(8)
+  hush(8)
 ];
 
 // m1-tag: Csus4 to C, two bars on the dominant.
@@ -498,7 +492,7 @@ const M1_TAG: Note[][] = [
   over(slap, ['C', 'C']),
   [psg('C', 4, 0.9, [0, 5, 7]), psg('C', 4, 0.9)],
   [...rock(), ...fill()],
-  stand(2, 900, 900)
+  hush(2)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -519,7 +513,7 @@ const M2_RIFF: Note[][] = [
   over(disco, ['F', 'Eb', 'Bb', 'F', 'F', 'Eb', 'Bb', 'C']),
   over(stab, ['F', 'Eb', 'Bb', 'F', 'F', 'Eb', 'Bb', 'C']),
   groove(8, italo),
-  stand(8, 700, 850)
+  hush(8)
 ];
 
 // m2-chant, repeated notes the stand can shout back: Dm C Bb C | Dm C Bbm C
@@ -538,7 +532,7 @@ const M2_CHANT: Note[][] = [
   over(disco, ['Dm', 'C', 'Bb', 'C', 'Dm', 'C', 'Bbm', 'C']),
   over(stab, ['Dm', 'C', 'Bb', 'C', 'Dm', 'C', 'Bbm', 'C']),
   groove(8, italo),
-  stand(8, 800, 1000)
+  hush(8)
 ];
 
 // m2-lift: Bb C Dm C, climbing back to the riff.
@@ -552,7 +546,7 @@ const M2_LIFT: Note[][] = [
   over(disco, ['Bb', 'C', 'Dm', 'C']),
   over(held, ['Bb', 'C', 'Dm', 'C']),
   groove(4, italo),
-  stand(4, 900, 1100)
+  hush(4)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -573,7 +567,7 @@ const M3_VERSE: Note[][] = [
   over(halfSlap, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'C', 'C']),
   over(restruck, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'C', 'C']),
   groove(8, broad),
-  stand(8, 600, 700)
+  hush(8)
 ];
 
 /** The chorus's first six bars, Bb C F Dm Bb C, shared by both statements. */
@@ -594,7 +588,7 @@ const M3_CHORUS: Note[][] = [
   over(halfSlap, [...M3_CHORUS_CHORDS, 'Eb', 'C']),
   over(held, [...M3_CHORUS_CHORDS, 'Eb', 'C']),
   groove(8, broad),
-  stand(8, 750, 900)
+  hush(8)
 ];
 
 // m3-chorus-2: ... Bbm C, through the borrowed iv the second time.
@@ -603,7 +597,7 @@ const M3_CHORUS_2: Note[][] = [
   over(halfSlap, [...M3_CHORUS_CHORDS, 'Bbm', 'C']),
   over(held, [...M3_CHORUS_CHORDS, 'Bbm', 'C']),
   groove(8, broad),
-  stand(8, 800, 1000)
+  hush(8)
 ];
 
 // m3-turn: C, then C7 back to the Dm at the top.
@@ -612,7 +606,7 @@ const M3_TURN: Note[][] = [
   over(halfSlap, ['C', 'C']),
   [psg('C', 4, 0.9), psg('C', 4, 0.9, [0, 4, 7, 10])],
   [...broad(), ...fill()],
-  stand(2, 900, 900)
+  hush(2)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -633,7 +627,7 @@ const FINAL_A: Note[][] = [
   over(gallop, ['F', 'Bb', 'F', 'C', 'F', 'Bb', 'Eb', 'C']),
   over(blaze, ['F', 'Bb', 'F', 'C', 'F', 'Bb', 'Eb', 'C']),
   groove(8, drive),
-  stand(8, 900, 1100)
+  hush(8)
 ];
 
 // final-b, the final's own strain: Dm Bb F C | Gm Bb Bbm C
@@ -651,7 +645,7 @@ const FINAL_B: Note[][] = [
   over(gallop, ['Dm', 'Bb', 'F', 'C', 'Gm', 'Bb', 'Bbm', 'C']),
   over(blaze, ['Dm', 'Bb', 'F', 'C', 'Gm', 'Bb', 'Bbm', 'C']),
   groove(8, drive),
-  stand(8, 1000, 1200)
+  hush(8)
 ];
 
 // final-tag: C, then C7 back to the fanfare.
@@ -660,7 +654,7 @@ const FINAL_TAG: Note[][] = [
   over(gallop, ['C', 'C']),
   [psg('C', 4, 0.9, MAJOR_OCT), psg('C', 4, 0.9, [0, 4, 7, 10])],
   [...drive(), ...fill()],
-  stand(2, 1200, 1200)
+  hush(2)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -856,9 +850,9 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
     {
       // CROWD, sustained noise under a low-pass at each note's frequency in
       // hertz. Slow to rise and slow to fall, like a stand, and low in the mix.
-      // The layer stays down, so it sounds only in the stingers; the stand
-      // through a match is `sound.ts`, on the effects channel. A low-passed murmur carries little energy, so the level is high on
-      // paper; rendered, the crowd sits about 14 dB under the tune.
+      // It rests through every section and sounds only in the stingers; the
+      // stand through a match is `sound.ts`, on the effects channel. A
+      // low-passed roar carries little energy, so the level is high on paper.
       name: 'crowd',
       wave: 'noise',
       adsr: { attack: 0.35, decay: 0.5, sustain: 0.8, release: 0.9 },

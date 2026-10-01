@@ -87,6 +87,17 @@
  * into the grace month) over the ducked score, and the sim's pause speed and
  * the Retire prompt muffle it with `setPaused` rather than stopping it.
  *
+ * Beginnings and endings (#417). Every city is founded on a two-bar intro,
+ * the mallet's flourish over Fmaj7 and the suspension, which plays once
+ * before the village's first pass (a rest later returns to the statement,
+ * never to the flourish), as SimCity opened on its own short fanfare rather
+ * than dropping straight into the Village. A run ends through `playEnding`
+ * on one of two two-bar phrases, named for `gameOver`'s reason: `bankrupt`
+ * falls through the borrowed Bbm6 to a bare F, and `retired` closes a
+ * thriving city home to Fmaj7 with the mallet lifting to F6. Either plays at
+ * the tempo of the tier the city had reached, and neither is a loop, so the
+ * seam gate's ban on arriving home does not apply to them.
+ *
  * Gates. All three style gates stay on: Oka's tier tracks are tuneful loops
  * of the kind they measure, with pushed notes and varied bar rhythms.
  */
@@ -566,6 +577,64 @@ const METRO_TURNAROUND = metropolis(
   true
 );
 
+// --- beginnings and endings (#417) ------------------------------------------
+
+/**
+ * Every city is founded on a two-bar flourish at the village's tempo: the
+ * mallet runs up Fmaj7 and answers itself over the suspension, landing on the
+ * D a step above the statement's first C, so the hook follows on as the next
+ * phrase rather than as a second start. The keys and bass are the village's.
+ */
+const FOUNDING = village(
+  ['Fmaj7', 'C9sus'],
+  [
+    n('C5', 0.5, 0.7),
+    n('F5', 0.5, 0.75),
+    n('A5', 0.5, 0.8),
+    n('C6', 0.5, 0.85),
+    n('A5', 1, 0.8),
+    n('G5', 1, 0.75),
+    n('G5', 2, 0.85),
+    n('F5', 1, 0.7),
+    n('D5', 1, 0.65)
+  ]
+);
+
+/**
+ * A bankrupt city: the mallet falls through Oka's borrowed Bbm6 and comes to
+ * rest on a bare F with the keys' major third under it, a sad close that is
+ * still the gentle music of a builder's game rather than a failure buzzer.
+ */
+const BANKRUPT: Section = [
+  [n('Db6', 1, 0.85), n('C6', 1, 0.8), n('Bb5', 1, 0.75), n('G5', 1, 0.7), n('F5', 3, 0.8), r(1)],
+  [n('Db4', 1.5, 0.7), n('G4', 1.5, 0.6), n('F4', 1, 0.5), n('A3', 3, 0.6), r(1)],
+  [n('Bb1', 4, 0.9), n('F1', 3, 0.8), r(1)],
+  []
+];
+
+/**
+ * A retired city, solvent and thriving: the founding flourish again over C7,
+ * then the full close home to Fmaj7, the mallet lifting to F6 above the
+ * pieces' ceiling and a single soft kick under the arrival.
+ */
+const RETIRED: Section = [
+  [
+    n('C5', 0.5, 0.75),
+    n('F5', 0.5, 0.8),
+    n('A5', 0.5, 0.85),
+    n('C6', 0.5, 0.9),
+    n('Bb5', 1, 0.8),
+    n('G5', 1, 0.75),
+    n('A5', 0.5, 0.85),
+    n('C6', 0.5, 0.9),
+    n('F6', 2, 1),
+    r(1)
+  ],
+  [n('E4', 1.5, 0.7), n('Bb3', 1.5, 0.6), n('G4', 1, 0.5), n('A3', 1.5, 0.7), n('E4', 1.5, 0.6), r(1)],
+  [n('C2', 3, 0.9), n('G2', 1, 0.6), n('F2', 3, 0.9), r(1)],
+  [r(4), { freq: REST, beats: 1, drum: 'kick', gain: 0.6 }, r(3)]
+];
+
 // --- the city's tiers -----------------------------------------------------
 
 /**
@@ -635,6 +704,7 @@ export const CITY_MUSIC: GameAudioOptions = {
     { name: 'perc', volume: 0.45 }
   ],
   form: {
+    intro: FOUNDING,
     sections: {
       'village-statement': VILLAGE_STATEMENT,
       'village-answer': VILLAGE_ANSWER,
@@ -681,6 +751,9 @@ export const CITY_MUSIC: GameAudioOptions = {
       [r(1.5), { freq: REST, beats: 1.5, drum: 'kick', gain: 0.8 }]
     ],
     // Into the red: the line sags a semitone at a time over Bb.
-    red: [[n('E5', 1), n('Eb5', 1), n('D5', 2, 0.8)], [n('Db4', 2), n('Bb3', 2)], [n('Bb1', 4)], []]
+    red: [[n('E5', 1), n('Eb5', 1), n('D5', 2, 0.8)], [n('Db4', 2), n('Bb3', 2)], [n('Bb1', 4)], []],
+    // The two ways a run ends, by `gameOver`'s reason, played through `playEnding`.
+    bankrupt: BANKRUPT,
+    retired: RETIRED
   }
 };

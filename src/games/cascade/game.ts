@@ -395,8 +395,13 @@ export function initCascadeGame(): void {
   function endRun(reason: 'topOut' | 'timeUp') {
     phase = 'over';
     setSoftDrop(run, false);
-    audio.playSfx('gameover');
-    audio.stop();
+    // The score's own ending for this reason, which stops the music once it
+    // has sounded; with the music muted it cannot play, so the shared effect
+    // marks the end instead.
+    if (!audio.playEnding(reason)) {
+      audio.playSfx('gameover');
+      audio.stop();
+    }
     bankScore();
     finalScoreEl.textContent = `${run.score}`;
     // The two endings get their own server-rendered headline; a clock running

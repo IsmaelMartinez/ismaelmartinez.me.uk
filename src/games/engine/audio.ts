@@ -455,6 +455,13 @@ export interface MusicGates {
 
 export type SfxName = 'blip'| 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';
 
+/** What `GameAudio.effectsBus` hands a cabinet: see there. */
+export interface EffectsBus {
+  ctx: BaseAudioContext;
+  out: AudioNode;
+  level: number;
+}
+
 export interface GameAudio {
   /** Begin (or resume) the looping music. Safe to call repeatedly. */
   start(): void;
@@ -470,6 +477,17 @@ export interface GameAudio {
   setSfxMuted(muted: boolean): void;
   /** Play a one-shot sound effect. No-op when effects are muted or audio is unavailable. */
   playSfx(name: SfxName): void;
+  /**
+   * The effects channel, for a cabinet that synthesises sounds of its own (a
+   * crowd bed, a ball strike) rather than picking from `SfxName`: the context,
+   * and a bus into the speakers that follows the effects mute live, so a
+   * sustained sound routed through it falls silent on the toggle and comes back
+   * on the next one. `level` is the peak a built-in effect is scaled to, the
+   * reference to set a custom sound against so it sits where the stock ones do
+   * over the music. Builds the context on first use, so call it from a
+   * gesture's aftermath; null when audio is unavailable or disposed.
+   */
+  effectsBus(): EffectsBus | null;
   /**
    * Change the loop's tempo on the fly (already-scheduled notes keep their
    * old length; the ~100ms lookahead means the shift lands almost at once).
@@ -533,6 +551,15 @@ export interface GameAudio {
    * own gain, so it never lifts a mute or a stop. False when it did not play.
    */
   playStinger(name: string): boolean;
+  /**
+   * Ends the music on a stinger: the loop stops under it at once (a sustained
+   * note in flight included) and the phrase plays alone, after which the music
+   * is stopped as `stop()` leaves it. A cabinet's game-over or victory phrase
+   * goes through here rather than `playStinger` then `stop()`, which would cut
+   * the phrase it had just started. Same refusals as `playStinger`, and on a
+   * false the music is untouched, so the caller plays its effect and stops.
+   */
+  playEnding(name: string): boolean;
   /**
    * Muffles the music behind a low-pass and a lower level while the game is
    * paused, instead of stopping it: the score keeps its place, so unpausing
@@ -784,7 +811,7 @@ function shortNoiseCycle(): number[] {
  * or the short mode's cycle with its DC offset taken out (it is mostly zeros)
  * and scaled to white noise's RMS.
  */
-function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): AudioBuffer {
+export function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): AudioBuffer {
   let cache = noiseBuffers.get(ctx);
   if (!cache) {
     cache = new Map();
@@ -1832,6 +1859,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   // The sounding stinger's own gate into musicBus, so the next stinger or a
   // stop() can silence the notes it has already handed to the audio graph.
   let stingerGate: GainNode | null = null;
+  // Set by playEnding until the next start(), which has its cut and close to undo.
+  let ending = false;
   // One scheduling cursor per track: they advance independently on their own
   // note lengths so a slow bass and a busy lead stay locked to the same clock.
   const voice: Cursor[] = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
@@ -1862,6 +1891,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   let paused = false;
   let pauseFilter: BiquadFilterNode | null = null;
   let pauseGain: GainNode | null = null;
+  // The effects channel's bus for `effectsBus`, built on first ask.
+  let effectsOut: GainNode | null = null;
 
   /** Lazily create the AudioContext + music graph on first gesture. Returns null if unsupported. */
   function ensureContext(): AudioContext | null {
@@ -2008,6 +2039,17 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // Resuming is needed when the context starts suspended (autoplay policy).
     if (context.state === 'suspended') void context.resume();
     running = true;
+    if (ending) {
+      // A restart inside an ending phrase: the phrase goes, and the lane cut
+      // and the master's close still waiting at the phrase's end are undone.
+      ending = false;
+      cutStinger();
+      musicMaster.gain.cancelScheduledValues(context.currentTime);
+      if (lane) {
+        lane.gain.cancelScheduledValues(context.currentTime);
+        lane.gain.setTargetAtTime(1, context.currentTime, ADAPT_RAMP / 2);
+      }
+    }
     // Ramped rather than assigned, because stop() ducks this same gain and a
     // scheduled ramp outranks a later write to `.value`.
     musicMaster.gain.setTargetAtTime(musicMuted ? 0 : volume, context.currentTime, 0.02);
@@ -2034,6 +2076,32 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     // The duck lifts again on start(), which would bring back the rest of a
     // stinger still queued behind it (Snake's game-over phrase on a restart).
     cutStinger();
+  }
+
+  /**
+   * Schedules a stinger's lines from `at` on a fresh gate into the bus,
+   * replacing one still sounding, and returns the time its last line ends.
+   */
+  function soundStinger(lines: Note[][], at: number): number {
+    const context = ctx as AudioContext;
+    const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
+    // A new stinger replaces one still sounding, as the duck already assumes:
+    // the caller re-times the lift to this phrase's end alone.
+    cutStinger();
+    const gate = context.createGain();
+    gate.connect(musicBus as GainNode);
+    stingerGate = gate;
+    let end = at;
+    lines.forEach((line, t) => {
+      let time = at;
+      line.forEach((note, i) => {
+        const dur = note.beats * spb;
+        if (dur > 0) playNote(context, gate, tracks[t], note, line[i + 1], time, dur);
+        time += dur > 0 ? dur : spb;
+      });
+      end = Math.max(end, time);
+    });
+    return end;
   }
 
   /** Silences the sounding stinger's remaining notes, if any. */
@@ -2071,6 +2139,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   function setSfxMuted(value: boolean): void {
     sfxMuted = value;
     saveScore(SFX_MUTED_KEY, value ? 1 : 0);
+    if (effectsOut && ctx) effectsOut.gain.setTargetAtTime(value ? 0 : 1, ctx.currentTime, 0.02);
   }
 
   function toggleSfxMute(): boolean {
@@ -2167,6 +2236,18 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     }
   }
 
+  function effectsBus(): EffectsBus | null {
+    const context = ensureContext();
+    if (!context) return null;
+    if (context.state === 'suspended') void context.resume();
+    if (!effectsOut) {
+      effectsOut = context.createGain();
+      effectsOut.gain.value = sfxMuted ? 0 : 1;
+      effectsOut.connect(context.destination);
+    }
+    return { ctx: context, out: effectsOut, level: sfxLevel };
+  }
+
   // Background tabs throttle timers, which would starve the ~100ms lookahead and
   // make the music stutter. Suspend the context while hidden and resume on return.
   function onVisibilityChange(): void {
@@ -2196,6 +2277,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       layerGains = null;
       pauseFilter = null;
       pauseGain = null;
+      effectsOut = null;
     }
   }
 
@@ -2217,6 +2299,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     isSfxMuted: () => sfxMuted,
     setSfxMuted,
     playSfx,
+    effectsBus,
     setTempo(bpm: number) {
       // Finite-positive only, capped at MAX_BPM: Infinity would zero
       // secondsPerBeat and spin scheduleAhead's lookahead loop forever, and
@@ -2302,31 +2385,35 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     },
     playStinger(name: string) {
       const lines = stingers.get(name);
-      if (!lines || !running || musicMuted || !ctx || !musicBus) return false;
+      if (!lines || !running || musicMuted || !ctx) return false;
       const duck = ensureLayers();
       if (!duck) return false;
       const now = ctx.currentTime;
-      const at = now + 0.05;
-      const spb = form ? formBeatSeconds(form.form, form.pos.scene, secondsPerBeat) : secondsPerBeat;
-      // A new stinger replaces one still sounding, as the duck below already
-      // assumes: it re-times the lift to this phrase's end alone.
-      cutStinger();
-      const gate = ctx.createGain();
-      gate.connect(musicBus);
-      stingerGate = gate;
-      let end = at;
-      lines.forEach((line, t) => {
-        let time = at;
-        line.forEach((note, i) => {
-          const dur = note.beats * spb;
-          if (dur > 0) playNote(ctx as AudioContext, gate, tracks[t], note, line[i + 1], time, dur);
-          time += dur > 0 ? dur : spb;
-        });
-        end = Math.max(end, time);
-      });
+      const end = soundStinger(lines, now + 0.05);
       duck.gain.cancelScheduledValues(now);
       duck.gain.setTargetAtTime(STINGER_DUCK, now, ADAPT_RAMP / 2);
       duck.gain.setTargetAtTime(1, end, ADAPT_RAMP);
+      return true;
+    },
+    playEnding(name: string) {
+      const lines = stingers.get(name);
+      if (!lines || !running || musicMuted || !ctx || !musicMaster) return false;
+      const lane = ensureLayers();
+      if (!lane) return false;
+      const now = ctx.currentTime;
+      const end = soundStinger(lines, now + 0.05);
+      // The loop stops under the phrase: the scheduler for new notes, the lane
+      // for the ones already handed over (a pad note would drone through it).
+      lane.gain.cancelScheduledValues(now);
+      lane.gain.setTargetAtTime(0, now, ADAPT_RAMP / 2);
+      running = false;
+      if (scheduler !== null) {
+        clearInterval(scheduler);
+        scheduler = null;
+      }
+      // What stop() does at once waits for the phrase, which is music too.
+      musicMaster.gain.setTargetAtTime(0, end, 0.02);
+      ending = true;
       return true;
     },
     setPaused(on: boolean) {

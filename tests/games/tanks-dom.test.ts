@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initTanksGame } from '../../src/games/tanks';
-import { STINGER_SECONDS, TANKS_MUSIC } from '../../src/games/tanks/music';
+import { BASE_TEMPO, INTRO_BEATS, STINGER_SECONDS, TANKS_MUSIC } from '../../src/games/tanks/music';
 import * as matchModule from '../../src/games/tanks/match';
 import {
   createFrameDriver,
@@ -47,6 +47,7 @@ const mockAudio = vi.hoisted(() => ({
   setScene: vi.fn(() => true),
   setDanger: vi.fn(),
   playStinger: vi.fn(() => true),
+  playEnding: vi.fn(() => true),
   setPaused: vi.fn(),
   dispose: vi.fn()
 }));
@@ -132,13 +133,41 @@ function forceMatchOver(winner: 0 | 1): void {
   frames.step(1);
 }
 
-describe('Tank Duel match-end sound (#368)', () => {
+describe('Tank Duel match-end phrase (#417)', () => {
+  it.each([
+    ['the player takes a vs-CPU match', 'vs-cpu-btn', 0, 'matchWon'],
+    ['the CPU takes the match', 'vs-cpu-btn', 1, 'matchLost'],
+    ['player one takes a two-player match', 'two-player-btn', 0, 'matchOver'],
+    ['player two takes a two-player match', 'two-player-btn', 1, 'matchOver']
+  ] as const)('ends on its own phrase when %s, and leaves the stop to it', (_, mode, winner, ending) => {
+    document.getElementById(mode)!.click();
+    forceMatchOver(winner);
+
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledWith(ending);
+    expect(TANKS_MUSIC.stingers?.[ending]).toBeDefined();
+    // playEnding stops the music once the phrase has sounded; a stop here would cut it.
+    expect(mockAudio.stop).not.toHaveBeenCalled();
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('score');
+    expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+  });
+});
+
+describe('Tank Duel match-end sound with the music muted (#368)', () => {
+  beforeEach(() => {
+    mockAudio.playEnding.mockReturnValue(false);
+  });
+  afterEach(() => {
+    mockAudio.playEnding.mockReturnValue(true);
+  });
+
   it('plays the win chime, not the loss sting, when the player takes a vs-CPU match', () => {
     document.getElementById('vs-cpu-btn')!.click();
     forceMatchOver(0);
 
     expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the loss sting when the CPU actually takes the match', () => {
@@ -147,6 +176,7 @@ describe('Tank Duel match-end sound (#368)', () => {
 
     expect(mockAudio.playSfx).toHaveBeenCalledWith('gameover');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('score');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 
   it('plays the win chime for a decided two-player match either way', () => {
@@ -155,6 +185,7 @@ describe('Tank Duel match-end sound (#368)', () => {
 
     expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
     expect(mockAudio.playSfx).not.toHaveBeenCalledWith('gameover');
+    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -260,7 +291,7 @@ describe('Tank Duel music answers the match (#379, #415)', () => {
     expect(mockAudio.setDanger).toHaveBeenLastCalledWith(true);
   });
 
-  it('ends the match on the effects sting and a stop, with no round stinger and no muffle', () => {
+  it('ends a played-out match on its ending phrase, with no round stinger and no muffle (#417)', () => {
     click('vs-cpu-btn');
     loseRound(1);
     nextRound();
@@ -271,8 +302,9 @@ describe('Tank Duel music answers the match (#379, #415)', () => {
 
     loseRound(1);
     vi.advanceTimersByTime(STINGER_SECONDS * 1000);
-    expect(mockAudio.playSfx).toHaveBeenCalledWith('score');
-    expect(mockAudio.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledTimes(1);
+    expect(mockAudio.playEnding).toHaveBeenCalledWith('matchWon');
+    expect(mockAudio.stop).not.toHaveBeenCalled();
     expect(mockAudio.playStinger).not.toHaveBeenCalled();
     expect(mockAudio.setPaused).not.toHaveBeenCalledWith(true);
   });
@@ -310,6 +342,51 @@ describe('Tank Duel music answers the match (#379, #415)', () => {
       expect(TANKS_MUSIC.form?.scenes?.[arena]).toBeDefined();
     }
   );
+
+  describe('the match intro (#415)', () => {
+    const introPlaying = () =>
+      mockAudio.section.mockReturnValue({ name: 'intro', start: 0, danger: false, scene: null } as never);
+    afterEach(() => mockAudio.section.mockReturnValue(null));
+
+    it('holds the arena scene for the intro, then asks for it in the intro’s last beat', () => {
+      introPlaying();
+      pickArena('canyon');
+      click('vs-cpu-btn');
+      expect(mockAudio.setScene).not.toHaveBeenCalled();
+      const lastBeat = ((INTRO_BEATS - 1) * 60 * 1000) / BASE_TEMPO;
+      vi.advanceTimersByTime(lastBeat - 1);
+      expect(mockAudio.setScene).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(mockAudio.setScene).toHaveBeenCalledTimes(1);
+      expect(mockAudio.setScene).toHaveBeenCalledWith('canyon');
+    });
+
+    it('lets the intro open the first round, so only the later rounds play the round-start call', () => {
+      introPlaying();
+      click('vs-cpu-btn');
+      expect(mockAudio.playStinger).not.toHaveBeenCalledWith('roundStart');
+      loseRound(1);
+      nextRound();
+      expect(mockAudio.playStinger).toHaveBeenLastCalledWith('roundStart');
+    });
+
+    it('drops a scene still waiting on the intro when a new match starts', () => {
+      introPlaying();
+      pickArena('mesa');
+      click('vs-cpu-btn');
+      loseRound(1);
+      nextRound();
+      loseRound(1);
+      nextRound();
+      loseRound(1);
+      click('play-again-btn');
+      pickArena('bunker');
+      click('vs-cpu-btn');
+      vi.advanceTimersByTime(((INTRO_BEATS - 1) * 60 * 1000) / BASE_TEMPO);
+      expect(mockAudio.setScene).toHaveBeenCalledTimes(1);
+      expect(mockAudio.setScene).toHaveBeenCalledWith('bunker');
+    });
+  });
 
   it('opens every round on the round-start jingle, match point included', () => {
     click('vs-cpu-btn');

@@ -73,6 +73,18 @@
  * clock. All three style gates stay on: the pushes and suspensions above are
  * how each tune clears the syncopation gate without being bent out of shape.
  *
+ * Beginnings and endings (#417): every act opens on an `intro`, the music
+ * hall's "vamp till ready", two bars of its own accompaniment and kit on the
+ * dominant with a pickup into the tune. An intro plays on every `start()` of
+ * stopped music, which here is once per run and once per act: the score
+ * carries on from one level to the next on purpose (#414), and an intro a
+ * level would break into it every minute. A run then ends on one of three
+ * phrases through `playEnding`, which stops the music once it has sounded:
+ * `over` on a missed quota (the sad trombone), `victory` after the last level
+ * (a four-bar big finish), and `curtain` when the player ends a good run from
+ * a mid-run clear (a one-bar play-off, since banking a run is neither a
+ * failure nor the whole game won).
+ *
  * Adaptive hooks, all driven from `game.ts`:
  * - Act rotation: a new score, from its top, when play crosses into a new act.
  * - `setDanger`: Acts III and IV hold the only timed levels, and their scores
@@ -87,8 +99,8 @@
  *   haircut, two bits", 1899, public domain: the cheekiest ending there is),
  *   both on all four channels and in the act's key. Act II's are in A major,
  *   the key the Rondo's own coda turns to.
- * - `setPaused`: a failed level's result screen muffles the music rather than
- *   stopping it, and a retry lifts it with the score still in its place.
+ * - `setPaused`: only when the `over` ending cannot play (the music muted), a
+ *   failed level's result screen muffles the music rather than stopping it.
  */
 import { p, REST, type GameAudioOptions, type MusicProfile, type Note, type Track } from '../engine';
 
@@ -208,6 +220,22 @@ function section(lead: string, style: Comp, chart: string, drums: Note[]): Note[
   return [line(lead), bass, chords, drums];
 }
 
+/** One act's tracker pattern: the groove bar, and the fill that ends a phrase. */
+interface KitBars {
+  groove: string;
+  fill: string;
+}
+
+/**
+ * An act's intro, the music hall's "vamp till ready": two bars of the act's
+ * own accompaniment on its dominant seventh, the groove then the fill on the
+ * kit, and the lead silent until a pickup up the chord in the second bar that
+ * steps into the tune's first note. It never lands home, so the tune does.
+ */
+function vamp(style: Comp, dominant: string, pickup: string, drums: KitBars): Note[][] {
+  return section(`r:4 | r:2 ${pickup}`, style, `${dominant} | ${dominant}`, line(`${drums.groove} ${drums.fill}`));
+}
+
 /** Moves every pitched note of a stinger by `semitones`, so one pair of stingers serves every key. */
 function transpose(lines: Note[][], semitones: number): Note[][] {
   const ratio = Math.pow(2, semitones / 12);
@@ -215,9 +243,10 @@ function transpose(lines: Note[][], semitones: number): Note[][] {
 }
 
 /**
- * The two stingers, written in C major on all four channels and moved into
- * each act's key. Both land on the tonic, which a stinger may do: it plays
- * over the loop rather than closing it.
+ * The stingers, written in C major on all four channels and moved into each
+ * act's key. Each lands on the tonic, which a stinger may do: the first two
+ * play over the loop rather than closing it, and the other three are endings
+ * (`playEnding`), which close the music for good.
  */
 const STINGERS_IN_C: Record<string, Note[][]> = {
   // A tracker "ta-da": up the triad over a snare roll into one kick.
@@ -233,6 +262,43 @@ const STINGERS_IN_C: Record<string, Note[][]> = {
     line('C3:.5 r:2 G2:.5 C2:1'),
     [stab(chordOf('C'), 1.5), rest(1), stab(chordOf('G7'), .5), stab(chordOf('C'), 1)],
     line('k:.5 r:2 s:.5 s:.5 k:.5')
+  ],
+  // The run is over (a quota missed): the music hall's sad trombone, a
+  // chromatic fall in the lead and bass together onto the minor tonic.
+  over: [
+    line('E5:1 D#5:1 D5:1 C#5:1 | C5:2 r:2'),
+    line('G2:1 F#2:1 F2:1 E2:1 | C2:2 r:2'),
+    [rest(4), stab(chordOf('Cm'), 2), rest(2)],
+    line('r:3 s:.25@.5 s:.25@.6 s:.5@.7 | k:1 r:3')
+  ],
+  // The whole game won: a music-hall big finish, up the tonic to C6, through
+  // IV and V, three hits on the tonic and a held last chord over a snare roll.
+  victory: [
+    line('G4:.5 C5:.5 E5:.5 G5:.5 C6:1.5 G5:.5 | A5:.5 F5:.5 A5:.5 C6:.5 B5:1.5 G5:.5 | C6:1 r:.5 C6:.5 r:.5 C6:.5 r:1 | C6:3 r:1'),
+    line('C3:1 G2:1 E2:1 G2:1 | F2:1 C3:1 G2:1 D3:1 | C3:1 r:.5 C3:.5 r:.5 C3:.5 r:1 | C2:3 r:1'),
+    [
+      stab(chordOf('C'), 4),
+      stab(chordOf('F'), 2),
+      stab(chordOf('G7'), 2),
+      stab(chordOf('C'), 1),
+      rest(0.5),
+      stab(chordOf('C'), 0.5),
+      rest(0.5),
+      stab(chordOf('C'), 0.5),
+      rest(1),
+      stab(chordOf('C'), 3),
+      rest(1)
+    ],
+    line(`k:.5 h:.5@.5 s:.5 h:.5@.5 k:.5 h:.5@.5 s:.5 h:.5@.5 | k:.5 h:.5@.5 s:.5 h:.5@.5 k:.5 h:.5@.5 s:.5 h:.5@.5 |
+          k:1 r:.5 s:.5 r:.5 s:.5 r:1 | s:.25@.5 s:.25@.55 s:.25@.6 s:.25@.65 s:.25@.7 s:.25@.8 s:.25@.9 s:.25 k:1 r:1`)
+  ],
+  // The player ends a good run themselves: neither a failure nor the whole
+  // game won, so a turn's short play-off, the bow before the curtain.
+  curtain: [
+    line('E5:.5 D5:.5 C5:.5 G4:.5 C5:1 r:1'),
+    line('C3:.5 r:.5 G2:.5 r:.5 C2:1 r:1'),
+    [rest(2), stab(chordOf('C'), 1), rest(1)],
+    line('h:.5@.5 h:.5@.5 s:.5@.6 r:.5 k:1 r:1')
   ]
 };
 
@@ -300,7 +366,8 @@ const OOM_PAH: Comp = (c, beats, again) => [
 ];
 
 /** The lightest kit on the floor, for the teaching levels: kick and snare only. */
-const NURSERY_KIT = kit('k:1 s:1@.5 k:1 s:1@.5', 'k:1 s:1@.5 k:.5 s:.5@.5 s:.25@.6 s:.25@.7 s:.5@.8', 8, 8);
+const NURSERY: KitBars = { groove: 'k:1 s:1@.5 k:1 s:1@.5', fill: 'k:1 s:1@.5 k:.5 s:.5@.5 s:.25@.6 s:.25@.7 s:.5@.8' };
+const NURSERY_KIT = kit(NURSERY.groove, NURSERY.fill, 8, 8);
 
 const BRIDGE_CHART = 'G | G | D7 | G | G | G | D7 | G';
 const BRIDGE_TUNE = `
@@ -325,6 +392,8 @@ export const ACT_I_MUSIC: GameAudioOptions = {
   ...MIX,
   tracks: channels(WHISTLE, PAL_TICK),
   form: {
+    // Up D7 to C, which steps into the tune's D.
+    intro: vamp(OOM_PAH, 'D7', 'D4:.5 F#4:.5 A4:.5 C5:.5', NURSERY),
     order: ['tune', 'pops', 'trio', 'tune-open'],
     rest: REST_PASSES,
     sections: {
@@ -360,12 +429,11 @@ const TURCA: Comp = (c, beats, again) => [
 ];
 
 /** The janissary band: the bass drum on every beat, a cymbal on every off-beat, a snare roll to end a phrase. */
-const JANISSARY_KIT = kit(
-  'k:.5 h:.5@.6 k:.5 h:.5@.6 k:.5 h:.5@.6 k:.5 h:.5@.6',
-  'k:.5 h:.5@.6 k:.5 h:.5@.6 k:.5 s:.5@.7 s:.5@.8 s:.5',
-  8,
-  4
-);
+const JANISSARY: KitBars = {
+  groove: 'k:.5 h:.5@.6 k:.5 h:.5@.6 k:.5 h:.5@.6 k:.5 h:.5@.6',
+  fill: 'k:.5 h:.5@.6 k:.5 h:.5@.6 k:.5 s:.5@.7 s:.5@.8 s:.5'
+};
+const JANISSARY_KIT = kit(JANISSARY.groove, JANISSARY.fill, 8, 4);
 
 /** The opening: the turn up to C and to E, the run on the dominant, and the leap to C6. */
 const RONDO_OPENING = `
@@ -391,6 +459,8 @@ export const ACT_II_MUSIC: GameAudioOptions = {
   ...MIX,
   tracks: channels(HARPSICHORD, PAL_TICK),
   form: {
+    // Up E7 to D, which falls a step into the tune's C.
+    intro: vamp(TURCA, 'E7', 'E4:.5 G#4:.5 B4:.5 D5:.5', JANISSARY),
     order: ['rondo', 'episode', 'rondo-open'],
     rest: REST_PASSES,
     sections: {
@@ -438,7 +508,8 @@ export const ACT_II_MUSIC: GameAudioOptions = {
 const GROUND: Comp = (c, beats) => [[tone(c.bass, beats)], [stab(c, beats)]];
 
 /** Half-time: kick on 1, snare on 3, a hat between, and a roll into each new ground. */
-const CANON_KIT = kit('k:1 h:1@.45 s:1@.55 h:1@.45', 'k:1 h:1@.45 s:.5@.55 s:.5@.65 s:.5@.75 s:.5@.85', 4, 4);
+const CONTINUO: KitBars = { groove: 'k:1 h:1@.45 s:1@.55 h:1@.45', fill: 'k:1 h:1@.45 s:.5@.55 s:.5@.65 s:.5@.75 s:.5@.85' };
+const CANON_KIT = kit(CONTINUO.groove, CONTINUO.fill, 4, 4);
 
 /** Pachelbel's ground, two chords a bar at half notes: four bars. */
 const GROUND_CHART = 'D A | Bm F#m | G D | G A';
@@ -475,6 +546,8 @@ export const ACT_III_MUSIC: GameAudioOptions = {
   // broken chord on a continuo rather than a buzz.
   tracks: channels(STRINGS, 25),
   form: {
+    // Up A7 to G, which falls a step into the violin's F#.
+    intro: vamp(GROUND, 'A7', 'A4:.5 C#5:.5 E5:.5 G5:.5', CONTINUO),
     order: ['canon', 'suspensions', 'broken', 'runs', 'jig', 'canon'],
     rest: REST_PASSES,
     danger: { order: ['hurry'], tempo: 128 },
@@ -514,12 +587,11 @@ const GALOP: Comp = c => [
   [rest(0.5), stab(c, 0.5, 0.9), rest(0.5), stab(c, 0.5, 0.75)]
 ];
 
-const GALOP_KIT = kit(
-  'k:.5 h:.5@.5 s:.5 h:.5@.5 k:.5 h:.5@.5 s:.5 h:.5@.5',
-  'k:.5 h:.5@.5 s:.5 h:.5@.5 s:.25@.6 s:.25@.7 s:.25@.8 s:.25@.9 s:.5 k:.5',
-  8,
-  4
-);
+const GALLOP: KitBars = {
+  groove: 'k:.5 h:.5@.5 s:.5 h:.5@.5 k:.5 h:.5@.5 s:.5 h:.5@.5',
+  fill: 'k:.5 h:.5@.5 s:.5 h:.5@.5 s:.25@.6 s:.25@.7 s:.25@.8 s:.25@.9 s:.5 k:.5'
+};
+const GALOP_KIT = kit(GALLOP.groove, GALLOP.fill, 8, 4);
 /** Danger: kick and snare galloping on every eighth. */
 const RIOT_KIT = kit(
   'k:.5 s:.5@.7 k:.5 s:.5@.7 k:.5 s:.5@.7 k:.5 s:.5@.7',
@@ -564,6 +636,8 @@ export const ACT_IV_MUSIC: GameAudioOptions = {
   ...MIX,
   tracks: channels(ACCORDION, PAL_TICK),
   form: {
+    // Up G7 to F, which drops a fourth to the tune's C, the Can-Can's own leap.
+    intro: vamp(GALOP, 'G7', 'G4:.5 B4:.5 D5:.5 F5:.5', GALLOP),
     order: ['galop', 'kicks', 'trio', 'galop-open'],
     rest: REST_PASSES,
     danger: { order: ['riot', 'riot-kicks'], tempo: 176 },

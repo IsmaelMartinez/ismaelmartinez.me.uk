@@ -560,6 +560,61 @@ describe('playStinger', () => {
   });
 });
 
+describe('playEnding (#417)', () => {
+  const loopAfter = (log: string, t: number) => onsets(log).filter(([f, at]) => (f === 440 || f === 110) && at > t);
+
+  it('plays the phrase alone, stops the loop under it, and closes the master only once it has sounded', () => {
+    const played: boolean[] = [];
+    const log = drive(STUNG, 6, [{ at: 2, run: a => played.push(a.playEnding('horn')) }]);
+    expect(played).toEqual([true]);
+    expectTimes(timesOf(log, 880), [2.05]);
+    expectTimes(timesOf(log, 990), [2.55]);
+    // The lookahead had committed up to 2.1 when the call came; nothing after.
+    expect(loopAfter(log, 2.1)).toEqual([]);
+    // The lane is cut, so a sustained note already in flight goes with it.
+    expect(writes(log, 'gain#3.gain')).toEqual([
+      'gain#3.gain.value = 1',
+      'gain#3.gain.cancelScheduledValues(2)',
+      'gain#3.gain.setTargetAtTime(0, 2, 0.025)'
+    ]);
+    // The master closes when the phrase ends (3.05), not at the call.
+    expect(writes(log, 'gain#1.gain').filter(l => l.includes('setTargetAtTime(0,'))[0]).toBe(
+      'gain#1.gain.setTargetAtTime(0, 3.05, 0.02)'
+    );
+  });
+
+  it('plays nothing, and leaves the music running, when it cannot play', () => {
+    const played: boolean[] = [];
+    const unknown = drive(STUNG, 4, [{ at: 2, run: a => played.push(a.playEnding('nope')) }]);
+    expect(onsets(unknown)).toEqual(onsets(drive(STUNG, 4)));
+    const muted = drive(STUNG, 4, [
+      { at: 1, run: a => a.setMusicMuted(true) },
+      { at: 2, run: a => played.push(a.playEnding('horn')) }
+    ]);
+    expect(timesOf(muted, 880)).toEqual([]);
+    expect(played).toEqual([false, false]);
+  });
+
+  it('gives a start() inside the phrase the whole music back: phrase cut, lane and master open (#417)', () => {
+    const log = drive(STUNG, 5, [
+      { at: 2, run: a => a.playEnding('horn') },
+      { at: 2.3, run: a => a.start() }
+    ]);
+    const [gate] = routeOf(log, 880);
+    expect(writes(log, `${gate}.gain`)).toEqual([`${gate}.gain.setTargetAtTime(0, 2.3, 0.005)`]);
+    expect(writes(log, 'gain#3.gain').slice(-2)).toEqual([
+      'gain#3.gain.cancelScheduledValues(2.3)',
+      'gain#3.gain.setTargetAtTime(1, 2.3, 0.025)'
+    ]);
+    const master = writes(log, 'gain#1.gain');
+    const reopen = master.indexOf('gain#1.gain.cancelScheduledValues(2.3)');
+    expect(reopen).toBeGreaterThan(0);
+    expect(master[reopen + 1]).toMatch(/^gain#1\.gain\.setTargetAtTime\(0\.\d+, 2\.3, 0\.02\)$/);
+    // The loop is back, from the top.
+    expect(loopAfter(log, 2.3).length).toBeGreaterThan(0);
+  });
+});
+
 describe('setPaused', () => {
   const INTRO: GameAudioOptions = {
     tempo: 60,

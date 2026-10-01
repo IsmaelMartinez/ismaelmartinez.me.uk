@@ -119,7 +119,8 @@ export function initSnakeGame(): void {
 
   // The buzzer is one voice, so a stinger takes it over: the tune is cut for
   // as long as the stinger sounds, counted on the game clock, and `soloEnds`
-  // then hands the buzzer back (or, after the game-over phrase, stops it).
+  // then hands the buzzer back. The game-over phrase is not a solo: it ends
+  // the music through `playEnding`, which cuts the tune itself.
   let soloLeft = 0;
   let soloEnds: (() => void) | null = null;
 
@@ -132,8 +133,6 @@ export function initSnakeGame(): void {
     }
     // playStinger starts its line 50 ms ahead of the audio clock.
     soloLeft = 0.05 + stingerSeconds(name, tempoForStep(stepInterval(state.foodsEaten)));
-    // A later solo replaces an earlier one's ending: the game-over phrase
-    // must not hand the buzzer back to the tune halfway through.
     soloEnds = then;
     return true;
   }
@@ -192,9 +191,8 @@ export function initSnakeGame(): void {
     // Snake ignores bank()'s newRecord (no record toast here), but the
     // per-run baseline still has to reset for its stash gate to work.
     board.beginRun();
-    // A restart inside the game-over phrase stops the old run's music first,
-    // so the start below begins the ringtone from the top.
-    settleSolo();
+    // A restart inside the game-over phrase needs nothing here: the engine's
+    // start() cuts the phrase and begins the ringtone from its intro.
     audio.setLayer(BUZZER, true, 0);
     // The last run left the music wound up to wherever its snake got to.
     audio.setTempo(BASE_TEMPO);
@@ -208,9 +206,14 @@ export function initSnakeGame(): void {
     shake = 0.4;
     const head = state.snake[0];
     burst(px(head.x), px(head.y), '#f87171', 26);
-    // The buzzer's own crash, then silence; with the music muted the stinger
-    // does not play and the effect marks the death instead.
-    if (!solo('gameover', () => audio.stop())) {
+    // The buzzer's own crash ends the run's music: playEnding stops the tune
+    // under it and closes the music once it has sounded, so no solo is needed.
+    // A walls ring still sounding goes with it, and must not hand the buzzer
+    // back afterwards. With the music muted the phrase does not play and the
+    // effect marks the death instead.
+    soloEnds = null;
+    soloLeft = 0;
+    if (!audio.playEnding('gameover')) {
       audio.playSfx('gameover');
       audio.stop();
     }

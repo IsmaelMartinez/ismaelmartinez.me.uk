@@ -30,9 +30,9 @@
  *   envelope drops it two octaves in 35 ms, the thump of a sampled kick; the
  *   snare is the engine's noise snare written at full level on 2 and 4, the loud
  *   snare the brief asks for; hats are quieter noise ticks.
- * - crowd, sustained low-passed noise, the stadium. A layer that is silent until
- *   the match gives it something to shout about (see the adaptive hooks), and
- *   quiet when it comes: it is there to swell under the tune, never over it.
+ * - crowd, sustained low-passed noise, the stadium. It rests through every
+ *   section and is heard only in the stingers' roars and groans; the stand
+ *   through a match is `sound.ts`, on the effects channel.
  *
  * Three pitched voices plus drums and a noise bed, inside ADR 003's limit (the
  * crowd and the DAC kick are percussion, not pitched lines). There is no echo:
@@ -89,13 +89,21 @@
  *
  * Adaptive hooks, wired in `game.ts` from events the match already raises:
  * the drums are a `startsMuted` layer the kick-off brings in and half-time and
- * full time take out; the crowd is a `startsMuted` layer a shot, save, post,
- * goal or penalty kick swells in and a timer lets fall away again; the rotation
- * above and the stage ramp pick the scene and the tempo; the shootout moves to
+ * full time take out; the crowd voice rests through every section and sounds
+ * only in the stingers, because the live stand is effects, not music, and
+ * lives in `sound.ts` on the effects channel; the rotation above and the stage
+ * ramp pick the scene and the tempo; the shootout moves to
  * its bed; the static screens go back to the menu; and `STINGERS` mark the
  * kick-off, a goal for, a goal against, half-time and the final whistle, in
  * the same FM palette, with the crowd's roar written into the goal's. Pause
  * muffles the music with `setPaused`, and attract mode keeps it off.
+ *
+ * Beginnings and endings (#417). The form's `intro` is a two-bar title
+ * fanfare, heard each time the music starts from silence, which is where the
+ * cartridge played its title jingle; attract mode never starts the music, so
+ * the demo never hears it. A finished run ends through `playEnding` on one of
+ * `ENDINGS`: `eliminated`, two bars sinking through the borrowed iv, or
+ * `champion`, four bars of the final's fanfare, the score's one V to I.
  */
 import { p, REST, type DrumName, type GameAudioOptions, type MusicProfile, type Note } from '../engine';
 
@@ -381,16 +389,11 @@ function groove(count: number, bar: () => Note[]): Note[] {
 /* the crowd                                                            */
 
 /**
- * The crowd's line through a match section: a murmur for the first half and a
- * brighter one for the second, so a swell that holds across a section rises
- * with the phrase. Heard only while the layer is up.
+ * The crowd voice's line through every section: silence. The stand through a
+ * match is `sound.ts`, on the effects channel; this voice speaks only in the
+ * stingers below, so its section lines are rests that keep it the same length
+ * as every other voice.
  */
-function stand(bars: number, from = 650, to = 800): Note[] {
-  const half = (bars * 4) / 2;
-  return [roar(from, half, 0.85), roar(to, half)];
-}
-
-/** Silence where no crowd belongs: the menus. */
 function hush(bars: number): Note[] {
   return [r(bars * 4)];
 }
@@ -462,7 +465,7 @@ const M1_HOOK: Note[][] = [
   over(slap, ['F', 'C', 'Dm', 'Bb', 'F', 'C', 'Bb', 'Eb']),
   over(held, ['F', 'C', 'Dm', 'Bb', 'F', 'C', 'Bb', 'Eb']),
   groove(8, rock),
-  stand(8, 750, 950)
+  hush(8)
 ];
 
 // m1-verse, lower and answering in two-bar phrases: Dm Bb F C | Dm Bb Gm C
@@ -480,7 +483,7 @@ const M1_VERSE: Note[][] = [
   over(slap, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'Gm', 'C']),
   over(restruck, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'Gm', 'C']),
   groove(8, rock),
-  stand(8)
+  hush(8)
 ];
 
 // m1-tag: Csus4 to C, two bars on the dominant.
@@ -489,7 +492,7 @@ const M1_TAG: Note[][] = [
   over(slap, ['C', 'C']),
   [psg('C', 4, 0.9, [0, 5, 7]), psg('C', 4, 0.9)],
   [...rock(), ...fill()],
-  stand(2, 900, 900)
+  hush(2)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -510,7 +513,7 @@ const M2_RIFF: Note[][] = [
   over(disco, ['F', 'Eb', 'Bb', 'F', 'F', 'Eb', 'Bb', 'C']),
   over(stab, ['F', 'Eb', 'Bb', 'F', 'F', 'Eb', 'Bb', 'C']),
   groove(8, italo),
-  stand(8, 700, 850)
+  hush(8)
 ];
 
 // m2-chant, repeated notes the stand can shout back: Dm C Bb C | Dm C Bbm C
@@ -529,7 +532,7 @@ const M2_CHANT: Note[][] = [
   over(disco, ['Dm', 'C', 'Bb', 'C', 'Dm', 'C', 'Bbm', 'C']),
   over(stab, ['Dm', 'C', 'Bb', 'C', 'Dm', 'C', 'Bbm', 'C']),
   groove(8, italo),
-  stand(8, 800, 1000)
+  hush(8)
 ];
 
 // m2-lift: Bb C Dm C, climbing back to the riff.
@@ -543,7 +546,7 @@ const M2_LIFT: Note[][] = [
   over(disco, ['Bb', 'C', 'Dm', 'C']),
   over(held, ['Bb', 'C', 'Dm', 'C']),
   groove(4, italo),
-  stand(4, 900, 1100)
+  hush(4)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -564,7 +567,7 @@ const M3_VERSE: Note[][] = [
   over(halfSlap, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'C', 'C']),
   over(restruck, ['Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'C', 'C']),
   groove(8, broad),
-  stand(8, 600, 700)
+  hush(8)
 ];
 
 /** The chorus's first six bars, Bb C F Dm Bb C, shared by both statements. */
@@ -585,7 +588,7 @@ const M3_CHORUS: Note[][] = [
   over(halfSlap, [...M3_CHORUS_CHORDS, 'Eb', 'C']),
   over(held, [...M3_CHORUS_CHORDS, 'Eb', 'C']),
   groove(8, broad),
-  stand(8, 750, 900)
+  hush(8)
 ];
 
 // m3-chorus-2: ... Bbm C, through the borrowed iv the second time.
@@ -594,7 +597,7 @@ const M3_CHORUS_2: Note[][] = [
   over(halfSlap, [...M3_CHORUS_CHORDS, 'Bbm', 'C']),
   over(held, [...M3_CHORUS_CHORDS, 'Bbm', 'C']),
   groove(8, broad),
-  stand(8, 800, 1000)
+  hush(8)
 ];
 
 // m3-turn: C, then C7 back to the Dm at the top.
@@ -603,7 +606,7 @@ const M3_TURN: Note[][] = [
   over(halfSlap, ['C', 'C']),
   [psg('C', 4, 0.9), psg('C', 4, 0.9, [0, 4, 7, 10])],
   [...broad(), ...fill()],
-  stand(2, 900, 900)
+  hush(2)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -624,7 +627,7 @@ const FINAL_A: Note[][] = [
   over(gallop, ['F', 'Bb', 'F', 'C', 'F', 'Bb', 'Eb', 'C']),
   over(blaze, ['F', 'Bb', 'F', 'C', 'F', 'Bb', 'Eb', 'C']),
   groove(8, drive),
-  stand(8, 900, 1100)
+  hush(8)
 ];
 
 // final-b, the final's own strain: Dm Bb F C | Gm Bb Bbm C
@@ -642,7 +645,7 @@ const FINAL_B: Note[][] = [
   over(gallop, ['Dm', 'Bb', 'F', 'C', 'Gm', 'Bb', 'Bbm', 'C']),
   over(blaze, ['Dm', 'Bb', 'F', 'C', 'Gm', 'Bb', 'Bbm', 'C']),
   groove(8, drive),
-  stand(8, 1000, 1200)
+  hush(8)
 ];
 
 // final-tag: C, then C7 back to the fanfare.
@@ -651,7 +654,7 @@ const FINAL_TAG: Note[][] = [
   over(gallop, ['C', 'C']),
   [psg('C', 4, 0.9, MAJOR_OCT), psg('C', 4, 0.9, [0, 4, 7, 10])],
   [...drive(), ...fill()],
-  stand(2, 1200, 1200)
+  hush(2)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -685,6 +688,32 @@ const SHOOTOUT_TURN: Note[][] = [
   over(held, ['Db', 'G']),
   [...heart(), ...snareRoll()],
   [roar(700, 8, 0.9)]
+];
+
+/* ------------------------------------------------------------------ */
+/* intro: the title fanfare                                             */
+
+/**
+ * Two bars before the menu's first, played once each time the music starts
+ * from silence: the press of start, the return from attract mode, and the
+ * title screen after a run has ended. That is where a Mega Drive cartridge put
+ * its title jingle, between the Sega logo and the menu theme. A brass run up
+ * the F triad over the octave-bouncing slap bass, then C7 held, which hands
+ * the dominant to the menu's opening F. No drums or crowd: both voices are
+ * layers the match owns, and the menu they lead into has neither.
+ */
+const INTRO: Note[][] = [
+  [
+    n('F4', 0.5, 0.8), n('A4', 0.5, 0.85), n('C5', 0.5, 0.85), n('F5', 0.5, 0.9), n('A5', 1), r(0.5), n('G5', 0.5, 0.85),
+    n('E5', 0.5, 0.85), n('G5', 0.5, 0.9), n('Bb5', 1, 0.95), n('C6', 2)
+  ],
+  [
+    n('F2', 0.5), n('F3', 0.5, 0.8), n('F2', 0.5, 0.9), n('F3', 0.5, 0.8), n('F2', 1, 0.9), r(1),
+    n('C2', 0.5), n('C3', 0.5, 0.8), n('C2', 0.5, 0.9), n('C3', 0.5, 0.8), n('C2', 2, 0.85)
+  ],
+  [psg('F', 4, 0.85, MAJOR_OCT), psg('C', 4, 0.85, [0, 4, 7, 10])],
+  [r(8)],
+  hush(2)
 ];
 
 /* ------------------------------------------------------------------ */
@@ -736,8 +765,38 @@ const STINGERS: Record<string, Note[][]> = {
     [r(2), psg('F', 2, 0.8)],
     [hit('snare', 0.5), r(0.5), hit('snare', 0.5), r(0.5), kick(2, 1)],
     [r(2), roar(1500, 2, 0.8)]
+  ],
+  // The run's two endings, played through `playEnding`: the loop stops under
+  // them and they sound alone, then the music is off until the title screen
+  // starts it again. An ending may land home, which a loop's seam may not.
+  //
+  // Knocked out: two bars sinking through the borrowed iv, F to Bbm to F, the
+  // bass bouncing its octaves more slowly each time, and the stand groaning.
+  eliminated: [
+    [n('C5', 1, 0.85), n('Bb4', 0.5, 0.8), n('A4', 0.5, 0.8), n('Db5', 2, 0.8), n('C5', 1, 0.75), n('A4', 1, 0.7), n('F4', 2, 0.7)],
+    [n('F2', 1, 0.85), n('F3', 1, 0.7), n('Bb1', 1, 0.8), n('Bb2', 1, 0.65), n('F2', 4, 0.7)],
+    [psg('F', 2, 0.7), psg('Bbm', 2, 0.7), psg('F', 4, 0.6)],
+    [kick(1, 0.6), r(3), kick(1, 0.5), r(3)],
+    [roar(450, 4, 0.6), roar(400, 4, 0.45)]
+  ],
+  // Champions: four bars of the final's fanfare, F Bb C F, the one V to I in
+  // the score, over its galloping bass and groove and the loudest roar.
+  champion: [
+    [
+      n('C5', 0.5, 0.85), n('F5', 0.5, 0.9), n('A5', 0.5, 0.95), n('C6', 1.5), n('A5', 0.5, 0.9), n('C6', 0.5),
+      n('Bb5', 1.5), n('A5', 0.5, 0.9), n('F5', 1, 0.9), n('Bb5', 1),
+      n('C6', 1), n('Bb5', 0.5, 0.9), n('A5', 0.5, 0.9), n('G5', 1, 0.9), n('E5', 0.5, 0.85), n('G5', 0.5, 0.9),
+      n('F5', 0.5), n('A5', 0.5, 0.95), n('C6', 3)
+    ],
+    [...over(gallop, ['F', 'Bb', 'C']), n('F2', 0.5), n('F3', 0.5, 0.85), n('F2', 0.5), n('F3', 2.5, 0.85)],
+    [...over(blaze, ['F', 'Bb', 'C']), psg('F', 4, 0.9, MAJOR_OCT)],
+    [...drive(), ...drive(), ...fill(), kick(1, 1), hit('snare', 0.5), hit('snare', 0.5), kick(2, 1)],
+    [roar(1800, 8, 0.85), roar(2400, 8)]
   ]
 };
+
+/** The stingers that end a run, through `playEnding`; every other one marks a moment in a match. */
+export const ENDINGS = ['eliminated', 'champion'] as const;
 
 export const FOOTBALL_MUSIC: GameAudioOptions = {
   tempo: BASE_TEMPO,
@@ -790,10 +849,10 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
     },
     {
       // CROWD, sustained noise under a low-pass at each note's frequency in
-      // hertz. Slow to rise and slow to fall, like a stand, and low in the mix:
-      // a shot or a goal swells it in and `game.ts` lets it fall away again.
-      // A low-passed murmur carries little energy, so the level is high on
-      // paper; rendered, the crowd sits about 14 dB under the tune.
+      // hertz. Slow to rise and slow to fall, like a stand, and low in the mix.
+      // It rests through every section and sounds only in the stingers; the
+      // stand through a match is `sound.ts`, on the effects channel. A
+      // low-passed roar carries little energy, so the level is high on paper.
       name: 'crowd',
       wave: 'noise',
       adsr: { attack: 0.35, decay: 0.5, sustain: 0.8, release: 0.9 },
@@ -802,6 +861,7 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
     }
   ],
   form: {
+    intro: INTRO,
     sections: {
       'title-a': TITLE_A,
       'title-b': TITLE_B,

@@ -12,8 +12,9 @@ export { clamp, seededRng } from './math';
 export { formatClock } from './clock';
 export { initScoreboard, createRunRecord } from './scoreboard';
 export type { Scoreboard, ScoreboardOptions, RunRecordBank } from './scoreboard';
-export { createGameAudio, loadMusicMuted, loadSfxMuted, renderScore } from './audio';
+export { createGameAudio, loadMusicMuted, loadSfxMuted, noiseBuffer, renderScore } from './audio';
 export type {
+  EffectsBus,
   GameAudio,
   GameAudioOptions,
   MusicGates,

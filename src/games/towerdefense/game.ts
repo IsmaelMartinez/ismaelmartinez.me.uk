@@ -36,7 +36,7 @@ import {
   mountCabinet,
   createConfirmPrompt
 } from '../engine';
-import { CUES, HORDE_LAUNCH, TOWERDEFENSE_MUSIC } from './music';
+import { CUES, ENDINGS, HORDE_LAUNCH, TOWERDEFENSE_MUSIC } from './music';
 import { GRID_W, GRID_H, createTdMap, routePosition, type TdMap } from './path';
 import { spawnEnemy, stepEnemies, type Enemy, type EnemyKind } from './enemies';
 import {
@@ -369,16 +369,16 @@ export function initTowerDefenseGame(): void {
   wireSoundToggles(audio);
 
   /**
-   * The voices a phase of wave `wave` plays over the always-on riff and
-   * timpani (see music.ts). A lull is the preparation cue's horn; a battle
+   * The voices a phase of wave `wave` plays over the always-on violins and
+   * basses (see music.ts). A lull is the preparation cue's horn; a battle
    * brings the kit in and grows through its arc, Plants vs. Zombies' way,
-   * the horn's counter-riff joining from the arc's third wave and the plucked
-   * strings from its fifth; the horde has everything.
+   * the horn joining from the arc's third wave and the fife from its fifth;
+   * the horde has everything.
    */
-  function cueLayers(battle: boolean, wave: number): Record<'horn' | 'pizz' | 'drums', boolean> {
-    if (!battle) return { horn: true, pizz: false, drums: false };
+  function cueLayers(battle: boolean, wave: number): Record<'horn' | 'winds' | 'drums', boolean> {
+    if (!battle) return { horn: true, winds: false, drums: false };
     const into = wave >= AUTHORED_WAVES - 1 ? ARC_WAVES : wave % ARC_WAVES;
-    return { drums: true, horn: into >= 2, pizz: into >= 4 };
+    return { drums: true, horn: into >= 2, winds: into >= 4 };
   }
 
   /**
@@ -387,7 +387,7 @@ export function initTowerDefenseGame(): void {
    * which then holds through every lull after it (releasing it each wave
    * flipped tempo, section and register twice a cycle). The move lands on the
    * next bar line at the cue's top, and every layer change waits for that
-   * same bar line, so a wave hears its riff from the first note and a layer
+   * same bar line, so a wave hears its tune from the first note and a layer
    * never enters mid-phrase. The `setSection` after the `setScene` is what
    * makes that hold even when a launch comes before a lull's move has landed,
    * which cancels the move and would leave the layers waiting for the next
@@ -511,10 +511,16 @@ export function initTowerDefenseGame(): void {
     // which is already 'over'.
     standDownPrompt.dismiss();
     const stoodDown = reason === 'standdown';
-    audio.playSfx(stoodDown ? 'score' : 'gameover');
-    // A stand-down confirms from the paused prompt; the next run starts clear.
+    // A stand-down confirms from the paused prompt: the phrase must not play
+    // muffled, and the next run starts clear.
     audio.setPaused(false);
-    audio.stop();
+    // A line that held ends in the major, whichever door it took out; with the
+    // music off the effect marks the ending instead, and stops what is left.
+    const held = stoodDown || clearedCampaign;
+    if (!audio.playEnding(held ? ENDINGS.held : ENDINGS.fallen)) {
+      audio.playSfx(stoodDown ? 'score' : 'gameover');
+      audio.stop();
+    }
     bankScore();
     // Clearing the whole authored campaign earns the trophy screen for how far
     // the line held, whichever way the run then ended.

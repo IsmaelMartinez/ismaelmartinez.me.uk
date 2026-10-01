@@ -21,6 +21,9 @@ import {
   FOOTBALL_MUSIC,
   BASE_TEMPO as FOOTBALL_BASE_TEMPO
 } from '../../src/games/football/music';
+import { TOWERDEFENSE_MUSIC } from '../../src/games/towerdefense/music';
+import { SYNDICATE_MUSIC } from '../../src/games/syndicate/music';
+import { PARK_MUSIC, ENDINGS as PARK_ENDINGS } from '../../src/games/park/music';
 
 /**
  * Every cabinet's score, discovered rather than listed.
@@ -288,6 +291,186 @@ describe('the arcade scores', () => {
     expect(long).toEqual([]);
   });
 
+  it("opens Cascade on a pickup into the folk tune, and ends each run on D (#417)", () => {
+    const form = CASCADE_MUSIC.form!;
+    const beats = (line: Note[]) => line.reduce((sum, n) => sum + n.beats, 0);
+    // Two 2/4 bars on every channel, inside one form bar, so a jump asked for
+    // during it waits no longer than the loop's own bar would make it.
+    expect(form.intro!.map(beats)).toEqual([4, 4, 4, 4]);
+    // The lead lands a semitone under the tune's first note: a leading tone
+    // the folk tune's opening D answers, not a second tonic before it.
+    const introLead = form.intro![0].filter(n => n.freq > 0);
+    const tuneLead = form.sections[form.order[0]][0].find(n => n.freq > 0)!;
+    expect(Math.round(12 * Math.log2(tuneLead.freq / introLead[introLead.length - 1].freq))).toBe(1);
+    // Both endings arrive home on the lead, as the loop seam may not.
+    const semitonesFromD = (freq: number) => ((Math.round(12 * Math.log2(freq / p('D4'))) % 12) + 12) % 12;
+    for (const name of ['topOut', 'timeUp']) {
+      const lead = CASCADE_MUSIC.stingers![name][0].filter(n => n.freq > 0);
+      expect(semitonesFromD(lead[lead.length - 1].freq)).toBe(0);
+    }
+  });
+
+  describe('Line Hold, after Kingdom Rush (#410)', () => {
+    const form = TOWERDEFENSE_MUSIC.form!;
+    const basses = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'basses');
+    const semitonesFromD = (freq: number) => ((Math.round(12 * Math.log2(freq / p('D4'))) % 12) + 12) % 12;
+    /** Every cue the game plays, the preparations, the battles and the horde, as its own pass. */
+    const cues = [
+      ...Object.keys(form.scenes!).map(scene => ({ scene, music: sceneScore(TOWERDEFENSE_MUSIC, scene) })),
+      { scene: 'danger', music: { ...TOWERDEFENSE_MUSIC, form: { sections: form.sections, order: [...form.danger!.order] } } }
+    ];
+    /** Sounding notes per bar of a line. */
+    const perBar = (line: Note[]) => {
+      const counts: number[] = [];
+      let at = 0;
+      for (const note of line) {
+        const bar = Math.floor(at / 4 + 1e-6);
+        counts[bar] = (counts[bar] ?? 0) + (note.freq > 0 ? 1 : 0);
+        at += note.beats;
+      }
+      return counts;
+    };
+
+    it('keeps every note inside one bar, so a cue change lands within a bar', () => {
+      const long = Object.entries(form.sections).flatMap(([name, lines]) =>
+        lines.flatMap((line, t) => line.filter(n => n.beats > 4).map(n => `${name}[${t}] ${n.beats}`))
+      );
+      expect(long).toEqual([]);
+    });
+
+    it('opens every cue on D in the basses and hands back to the top through A', () => {
+      for (const { scene, music } of cues) {
+        const line = passLine(music, basses).filter(n => n.freq > 0);
+        expect(semitonesFromD(line[0].freq), scene).toBe(0);
+        // The last bar's downbeat: the dominant, never home.
+        const whole = passLine(music, basses);
+        let at = 0;
+        const total = whole.reduce((s, n) => s + n.beats, 0);
+        const downbeat = whole.find(n => {
+          const hit = at >= total - 4 - 1e-6 && n.freq > 0;
+          at += n.beats;
+          return hit;
+        })!;
+        expect(semitonesFromD(downbeat.freq), scene).toBe(7);
+      }
+    });
+
+    it('plays a preparation under its battle, as Kingdom Rush sits its preparations 3 to 8 dB down', () => {
+      const lead = TOWERDEFENSE_MUSIC.tracks.findIndex(t => t.name === 'lead');
+      const meanGain = (scene: string) => {
+        const notes = passLine(sceneScore(TOWERDEFENSE_MUSIC, scene), lead).filter(n => n.freq > 0);
+        return notes.reduce((s, n) => s + (n.gain ?? 1), 0) / notes.length;
+      };
+      for (const arc of [1, 2, 3]) expect(meanGain(`prep-${arc}`) / meanGain(`battle-${arc}`), `arc ${arc}`).toBeLessThanOrEqual(0.75);
+    });
+
+    it('gallops the basses under a battle and only plucks them under a preparation', () => {
+      for (const { scene, music } of cues) {
+        const counts = perBar(passLine(music, basses));
+        if (scene.startsWith('prep')) expect(Math.max(...counts), scene).toBeLessThanOrEqual(2);
+        else expect(Math.min(...counts), scene).toBeGreaterThanOrEqual(8);
+      }
+    });
+  });
+
+  describe('Syndicate, after Blade Runner and Russell Shaw', () => {
+    const form = SYNDICATE_MUSIC.form!;
+    const track = (name: string) => SYNDICATE_MUSIC.tracks.findIndex(t => t.name === name);
+    const semitonesFromE = (freq: number) => ((Math.round(12 * Math.log2(freq / p('E4'))) % 12) + 12) % 12;
+    const pitched = (line: Note[]) => line.filter(n => n.freq > 0);
+
+    it('opens the pass on E in the bass and hands back to the top through B', () => {
+      const line = passLine(SYNDICATE_MUSIC, track('bass'));
+      expect(semitonesFromE(pitched(line)[0].freq)).toBe(0);
+      const total = trackBeats(line);
+      let at = 0;
+      const downbeat = line.find(n => {
+        const hit = at >= total - 4 - 1e-6 && n.freq > 0;
+        at += n.beats;
+        return hit;
+      })!;
+      expect(semitonesFromE(downbeat.freq)).toBe(7);
+    });
+
+    it('drives every section on a sixteenth-note arpeggiator', () => {
+      for (const [name, lines] of Object.entries(form.sections)) {
+        expect(new Set(lines[track('arp')].map(n => n.beats)), name).toEqual(new Set([0.25]));
+      }
+    });
+
+    it('lands both campaign endings home on E in the lead, and turns the extraction major', () => {
+      const lastLead = (stinger: string) => pitched(SYNDICATE_MUSIC.stingers![stinger][track('lead')]).at(-1)!.freq;
+      expect(semitonesFromE(lastLead('victory'))).toBe(0);
+      expect(semitonesFromE(lastLead('fallen'))).toBe(0);
+      expect(semitonesFromE(lastLead('extracted'))).toBe(4);
+    });
+
+    it("plays its endings at the loop's level rather than under it", () => {
+      const meanGain = (line: Note[]) => {
+        const notes = pitched(line);
+        return notes.reduce((s, n) => s + (n.gain ?? 1), 0) / notes.length;
+      };
+      const loop = meanGain(passLine(SYNDICATE_MUSIC, track('lead')));
+      for (const name of ['victory', 'fallen']) {
+        expect(meanGain(SYNDICATE_MUSIC.stingers![name][track('lead')]) / loop, name).toBeGreaterThanOrEqual(0.9);
+      }
+    });
+  });
+
+  describe('Pixel Park, a band organ heard from across the park (#402)', () => {
+    const lead = PARK_MUSIC.tracks.findIndex(t => t.name === 'lead');
+    const bass = PARK_MUSIC.tracks.findIndex(t => t.name === 'bass');
+    const form = PARK_MUSIC.form!;
+    /** Every block of lines the score plays: the intro, both strains and the ending. */
+    const everyBlock = [form.intro!, ...Object.values(form.sections), ...Object.values(PARK_MUSIC.stingers!)];
+
+    it('swells its lead in on a round wave rather than plucking a square, an octave under the old tune', () => {
+      const voice = PARK_MUSIC.tracks[lead];
+      expect(voice.adsr, 'an ADSR in place of the default pluck').toBeDefined();
+      expect(voice.adsr!.attack).toBeGreaterThanOrEqual(0.03);
+      expect(['triangle', 'sine']).toContain(voice.wave);
+      // The old tune ran G5 to E6; this one stays at or under E5.
+      const notes = everyBlock.flatMap(lines => lines[lead]).filter(n => n.freq > 0);
+      expect(Math.max(...notes.map(n => n.freq))).toBeLessThanOrEqual(p('E5') + 0.01);
+    });
+
+    it("ducks the lead's weak beats to between half and two thirds of its downbeats", () => {
+      const levels = { down: [] as number[], weak: [] as number[] };
+      let at = 0;
+      for (const note of passLine(PARK_MUSIC, lead)) {
+        if (note.freq > 0) (at % 3 < 1e-6 ? levels.down : levels.weak).push(note.gain ?? 1);
+        at += note.beats;
+      }
+      const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+      const ratio = mean(levels.weak) / mean(levels.down);
+      expect(ratio).toBeGreaterThanOrEqual(0.5);
+      expect(ratio).toBeLessThanOrEqual(2 / 3);
+    });
+
+    it('waltzes at a strolling tempo with no drums and only a light echo', () => {
+      expect(form.beatsPerBar).toBe(3);
+      expect(PARK_MUSIC.tempo).toBeGreaterThanOrEqual(120);
+      expect(PARK_MUSIC.tempo).toBeLessThanOrEqual(132);
+      expect(everyBlock.flat(2).some(n => n.drum !== undefined)).toBe(false);
+      expect(PARK_MUSIC.echo!.feedback).toBeLessThanOrEqual(0.15);
+      expect(PARK_MUSIC.echo!.mix).toBeLessThanOrEqual(0.12);
+    });
+
+    it('opens on a vamp of whole bars and closes the park on G (#417)', () => {
+      const beats = (line: Note[]) => line.reduce((sum, n) => sum + n.beats, 0);
+      expect(beats(form.intro![lead]) % 3).toBe(0);
+      // The bass vamps from the first beat while the lead only picks up into the tune.
+      expect(form.intro![bass][0].freq).toBeGreaterThan(0);
+      expect(form.intro![lead][0].freq).toBe(0);
+      const semitonesFromG = (freq: number) => ((Math.round(12 * Math.log2(freq / p('G4'))) % 12) + 12) % 12;
+      const ending = PARK_MUSIC.stingers![PARK_ENDINGS.closed];
+      for (const voice of [lead, bass]) {
+        const sounding = ending[voice].filter(n => n.freq > 0);
+        expect(semitonesFromG(sounding[sounding.length - 1].freq)).toBe(0);
+      }
+    });
+  });
+
   it('gives Football a base tempo its knockout ramp can wind up from', () => {
     // Same split as Cascade: the pace the score was written at belongs to the
     // arrangement, the stage ramp in `game.ts` belongs to the game.
@@ -308,8 +491,24 @@ describe('the arcade scores', () => {
     expect(buzzer.adsr!.attack).toBeLessThanOrEqual(0.005);
     expect(buzzer.adsr!.release).toBeLessThanOrEqual(0.005);
     // The phone had one level for every note, in the loop and in the stingers.
-    const lines = [...Object.values(SNAKE_MUSIC.form!.sections), ...Object.values(SNAKE_MUSIC.stingers!)].flat(2);
+    const lines = [
+      SNAKE_MUSIC.form!.intro!,
+      ...Object.values(SNAKE_MUSIC.form!.sections),
+      ...Object.values(SNAKE_MUSIC.stingers!)
+    ].flat(2);
     expect(lines.some(note => note.gain !== undefined)).toBe(false);
+  });
+
+  it("opens Snake on a two-bar intro in the loop's own register, ending on a rest so the hook takes the downbeat (#417)", () => {
+    const [intro] = SNAKE_MUSIC.form!.intro!;
+    expect(trackBeats(intro)).toBe(8);
+    const pitched = (line: Note[]) => line.filter(note => note.freq > 0).map(note => note.freq);
+    const loop = Object.values(SNAKE_MUSIC.form!.sections).flatMap(([line]) => pitched(line));
+    expect(Math.min(...pitched(intro))).toBeGreaterThanOrEqual(Math.min(...loop));
+    expect(Math.max(...pitched(intro))).toBeLessThanOrEqual(Math.max(...loop));
+    // At least a quaver of silence at the end, more than any note's own staccato tail.
+    const lastSounding = intro.findLastIndex(note => note.freq > 0);
+    expect(trackBeats(intro.slice(lastSounding + 1))).toBeGreaterThanOrEqual(0.5);
   });
 });
 

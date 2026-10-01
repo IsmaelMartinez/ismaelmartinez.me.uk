@@ -455,6 +455,13 @@ export interface MusicGates {
 
 export type SfxName = 'blip'| 'score' | 'hit' | 'explosion' | 'gameover' | 'rescue';
 
+/** What `GameAudio.effectsBus` hands a cabinet: see there. */
+export interface EffectsBus {
+  ctx: BaseAudioContext;
+  out: AudioNode;
+  level: number;
+}
+
 export interface GameAudio {
   /** Begin (or resume) the looping music. Safe to call repeatedly. */
   start(): void;
@@ -470,6 +477,17 @@ export interface GameAudio {
   setSfxMuted(muted: boolean): void;
   /** Play a one-shot sound effect. No-op when effects are muted or audio is unavailable. */
   playSfx(name: SfxName): void;
+  /**
+   * The effects channel, for a cabinet that synthesises sounds of its own (a
+   * crowd bed, a ball strike) rather than picking from `SfxName`: the context,
+   * and a bus into the speakers that follows the effects mute live, so a
+   * sustained sound routed through it falls silent on the toggle and comes back
+   * on the next one. `level` is the peak a built-in effect is scaled to, the
+   * reference to set a custom sound against so it sits where the stock ones do
+   * over the music. Builds the context on first use, so call it from a
+   * gesture's aftermath; null when audio is unavailable or disposed.
+   */
+  effectsBus(): EffectsBus | null;
   /**
    * Change the loop's tempo on the fly (already-scheduled notes keep their
    * old length; the ~100ms lookahead means the shift lands almost at once).
@@ -793,7 +811,7 @@ function shortNoiseCycle(): number[] {
  * or the short mode's cycle with its DC offset taken out (it is mostly zeros)
  * and scaled to white noise's RMS.
  */
-function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): AudioBuffer {
+export function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): AudioBuffer {
   let cache = noiseBuffers.get(ctx);
   if (!cache) {
     cache = new Map();
@@ -1873,6 +1891,8 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   let paused = false;
   let pauseFilter: BiquadFilterNode | null = null;
   let pauseGain: GainNode | null = null;
+  // The effects channel's bus for `effectsBus`, built on first ask.
+  let effectsOut: GainNode | null = null;
 
   /** Lazily create the AudioContext + music graph on first gesture. Returns null if unsupported. */
   function ensureContext(): AudioContext | null {
@@ -2119,6 +2139,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
   function setSfxMuted(value: boolean): void {
     sfxMuted = value;
     saveScore(SFX_MUTED_KEY, value ? 1 : 0);
+    if (effectsOut && ctx) effectsOut.gain.setTargetAtTime(value ? 0 : 1, ctx.currentTime, 0.02);
   }
 
   function toggleSfxMute(): boolean {
@@ -2215,6 +2236,18 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     }
   }
 
+  function effectsBus(): EffectsBus | null {
+    const context = ensureContext();
+    if (!context) return null;
+    if (context.state === 'suspended') void context.resume();
+    if (!effectsOut) {
+      effectsOut = context.createGain();
+      effectsOut.gain.value = sfxMuted ? 0 : 1;
+      effectsOut.connect(context.destination);
+    }
+    return { ctx: context, out: effectsOut, level: sfxLevel };
+  }
+
   // Background tabs throttle timers, which would starve the ~100ms lookahead and
   // make the music stutter. Suspend the context while hidden and resume on return.
   function onVisibilityChange(): void {
@@ -2244,6 +2277,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
       layerGains = null;
       pauseFilter = null;
       pauseGain = null;
+      effectsOut = null;
     }
   }
 
@@ -2265,6 +2299,7 @@ export function createGameAudio(options: GameAudioOptions): GameAudio {
     isSfxMuted: () => sfxMuted,
     setSfxMuted,
     playSfx,
+    effectsBus,
     setTempo(bpm: number) {
       // Finite-positive only, capped at MAX_BPM: Infinity would zero
       // secondsPerBeat and spin scheduleAhead's lookahead loop forever, and

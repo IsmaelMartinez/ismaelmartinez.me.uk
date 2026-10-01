@@ -403,7 +403,8 @@ export function initTowerDefenseGame(): void {
       audio.setScene(scene);
       audio.setSection(form.scenes![scene].order[0]);
     }
-    for (const [voice, on] of Object.entries(cueLayers(battle, wave))) audio.setLayer(voice, on, on ? 0.1 : 0.5, 'section');
+    // A horde lull keeps the horde's whole band, as its scene holds.
+    for (const [voice, on] of Object.entries(cueLayers(battle || horde, wave))) audio.setLayer(voice, on, on ? 0.1 : 0.5, 'section');
     if (battle) audio.playStinger(horde ? HORDE_LAUNCH : CUES[waveArc(wave)].launch);
   }
 

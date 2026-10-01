@@ -820,9 +820,14 @@ describe('Line Hold music', () => {
     /** The launches (1-based) that switched the horde on, and the lulls that stayed in it. */
     const hordeLaunches: number[] = [];
     const hordeLulls: number[] = [];
+    /** The layers each horde lull leaves up, which must be the horde's whole set. */
+    const lullLayers: Record<string, boolean | undefined>[] = [];
     let dangerSeen = 0;
     let scenesSeen = 0;
     playWaves(20, (event, wave) => {
+      if (event === 'lull' && wave >= 18) {
+        lullLayers.push({ horn: layerState('horn'), winds: layerState('winds'), drums: layerState('drums') });
+      }
       if (event === 'launch' && dangerCalls(true) > dangerSeen) {
         dangerSeen = dangerCalls(true);
         hordeLaunches.push(wave);
@@ -838,6 +843,10 @@ describe('Line Hold music', () => {
     // Nothing ever releases it: the lulls after 18 and 19 stay in the horde,
     // restarting it at a bar line rather than moving to a preparation cue.
     expect(hordeLulls).toEqual([18, 19]);
+    // And its lulls keep the whole band, rather than dropping to the
+    // preparation mix and bringing the winds and kit back at every launch.
+    const everything = { horn: true, winds: true, drums: true };
+    expect(lullLayers).toEqual([everything, everything]);
     expect(dangerCalls(false)).toBe(0);
     // Three launches and two lulls start the horde's tune from its top, and every horde launch is in A.
     expect(mockAudio.setSection.mock.calls.filter(call => (call as unknown[])[0] === hordeTop)).toHaveLength(5);

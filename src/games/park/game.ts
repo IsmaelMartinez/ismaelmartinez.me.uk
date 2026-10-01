@@ -33,7 +33,7 @@ import {
   type Rotation,
   mountCabinet
 } from '../engine';
-import { PARK_MUSIC } from './music';
+import { ENDINGS, PARK_MUSIC } from './music';
 import {
   GRID_W,
   GRID_H,
@@ -825,8 +825,12 @@ export function initParkGame(): void {
 
   function gameOver() {
     phase = 'over';
-    audio.playSfx('gameover');
-    audio.stop();
+    // The organ plays the park out; with the music off the effect marks the
+    // ending instead, and stops what is left.
+    if (!audio.playEnding(ENDINGS.closed)) {
+      audio.playSfx('gameover');
+      audio.stop();
+    }
     finalDaysEl.textContent = day.toString();
     finalWelcomedEl.textContent = guestsWelcomed.toString();
     finalPeakEl.textContent = peakGuests.toString();

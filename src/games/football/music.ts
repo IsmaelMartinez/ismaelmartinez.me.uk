@@ -30,9 +30,9 @@
  *   envelope drops it two octaves in 35 ms, the thump of a sampled kick; the
  *   snare is the engine's noise snare written at full level on 2 and 4, the loud
  *   snare the brief asks for; hats are quieter noise ticks.
- * - crowd, sustained low-passed noise, the stadium. A layer that is silent until
- *   the match gives it something to shout about (see the adaptive hooks), and
- *   quiet when it comes: it is there to swell under the tune, never over it.
+ * - crowd, sustained low-passed noise, the stadium. A layer that stays down
+ *   (see the adaptive hooks): it is heard in the stingers' roars and groans,
+ *   while the stand through a match is `sound.ts`, on the effects channel.
  *
  * Three pitched voices plus drums and a noise bed, inside ADR 003's limit (the
  * crowd and the DAC kick are percussion, not pitched lines). There is no echo:
@@ -89,8 +89,10 @@
  *
  * Adaptive hooks, wired in `game.ts` from events the match already raises:
  * the drums are a `startsMuted` layer the kick-off brings in and half-time and
- * full time take out; the crowd is a `startsMuted` layer a shot, save, post,
- * goal or penalty kick swells in and a timer lets fall away again; the rotation
+ * full time take out; the crowd is a `startsMuted` layer that `game.ts` no
+ * longer raises, because the live stand is effects, not music, and lives in
+ * `sound.ts` on the effects channel (its section lines here are unheard, and
+ * the voice sounds only in the stingers); the rotation
  * above and the stage ramp pick the scene and the tempo; the shootout moves to
  * its bed; the static screens go back to the menu; and `STINGERS` mark the
  * kick-off, a goal for, a goal against, half-time and the final whistle, in
@@ -853,9 +855,9 @@ export const FOOTBALL_MUSIC: GameAudioOptions = {
     },
     {
       // CROWD, sustained noise under a low-pass at each note's frequency in
-      // hertz. Slow to rise and slow to fall, like a stand, and low in the mix:
-      // a shot or a goal swells it in and `game.ts` lets it fall away again.
-      // A low-passed murmur carries little energy, so the level is high on
+      // hertz. Slow to rise and slow to fall, like a stand, and low in the mix.
+      // The layer stays down, so it sounds only in the stingers; the stand
+      // through a match is `sound.ts`, on the effects channel. A low-passed murmur carries little energy, so the level is high on
       // paper; rendered, the crowd sits about 14 dB under the tune.
       name: 'crowd',
       wave: 'noise',

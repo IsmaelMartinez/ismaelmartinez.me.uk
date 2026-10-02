@@ -1463,4 +1463,31 @@ describe('Microcity music tiers (#378)', () => {
       expect(semitone(sounding(phrase[bass]).at(-1)!.freq) % 12, reason).toBe(5);
     }
   });
+
+  const keys = CITY_MUSIC.tracks.findIndex(t => t.name === 'keys');
+  /** Where each pitched note of a line starts, in beats. */
+  const onsets = (line: { freq: number; beats: number }[]) => {
+    const out: number[] = [];
+    let at = 0;
+    for (const note of line) {
+      if (note.freq > 0) out.push(at);
+      at += note.beats;
+    }
+    return out;
+  };
+
+  it('frames every city in 3/4, as SimCity opens on its waltz, and keeps the tier pieces in 4/4 (#438)', () => {
+    const frames = { founding: form.intro!, bankrupt: CITY_MUSIC.stingers!.bankrupt, retired: CITY_MUSIC.stingers!.retired };
+    for (const [name, lines] of Object.entries(frames)) {
+      const length = beats(lines[lead]);
+      expect(length % 3, name).toBe(0);
+      for (const line of lines) expect(beats(line), name).toBe(length);
+      const bars = Array.from({ length: length / 3 }, (_, bar) => bar * 3);
+      // Oom on every downbeat in the bass and nowhere else, pah-pah on two and three in the keys.
+      expect(onsets(lines[bass]), name).toEqual(bars);
+      expect(onsets(lines[keys]), name).toEqual(bars.flatMap(at => [at + 1, at + 2]));
+    }
+    // The tier pieces stay in common time, as Oka's Village and Town are.
+    expect(form.beatsPerBar ?? 4).toBe(4);
+  });
 });

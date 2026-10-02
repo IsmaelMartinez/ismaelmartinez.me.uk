@@ -88,7 +88,9 @@ describe('the wing cross is answerable', () => {
    * What the aim is *worth* is the sweeps' business, and `HeaderAim` records
    * both the numbers and why this axis is not yet one of the gated ones.
    */
-  it('honours the header aim rather than fixing it', { timeout: 120000 }, () => {
+  // Measured for #440 on 2026-10-02: 18 s and then 66 s in loaded full suite
+  // runs, past half of the 120 s this used to allow.
+  it('honours the header aim rather than fixing it', { timeout: 300000 }, () => {
     const [wing, lateral, depth] = WING_REPS[0];
     const rates = HEADER_AIMS.map(aim => {
       let air = 0;

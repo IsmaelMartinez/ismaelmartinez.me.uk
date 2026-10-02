@@ -148,6 +148,20 @@ function nextTickRaises(event: MatchEvent, settle?: (m: matchModule.MatchState) 
   frames.step(1);
 }
 
+/**
+ * Blows for half time the way `finishHalf` does at 45 minutes, pausing the
+ * match. The rest of the frame's fifteen ticks are real, and without the pause
+ * they were open play in an unseeded match: about one run in forty a CPU pass
+ * landed in them and played after the whistle (#440).
+ */
+function blowHalfTime(): void {
+  nextTickRaises({ type: 'halfTime' }, m => {
+    m.clock = 45;
+    m.phase = 'halfTime';
+    m.phaseTimer = matchModule.HALF_TIME_PAUSE;
+  });
+}
+
 /** Ends the live match level, with a shootout owed, the way `finishHalf` does at 90 minutes. */
 function endLevelWithShootout(): void {
   nextTickRaises({ type: 'end', winner: null, pendingShootout: true }, m => {
@@ -221,7 +235,7 @@ describe("CALCIO '90 match music", () => {
   it('takes the drums out at half-time under its stinger', () => {
     startAMatch();
     frames.advance(1); // kick-off: drums in
-    nextTickRaises({ type: 'halfTime' });
+    blowHalfTime();
     expect(mockAudio.playStinger).toHaveBeenLastCalledWith('half-time');
     expect(mockAudio.setLayer).toHaveBeenCalledWith('drums', false);
     expect(mockAudio.setLayer).not.toHaveBeenLastCalledWith('drums', true);
@@ -502,7 +516,7 @@ describe("CALCIO '90's stand swells on a chance (#413)", () => {
   it('settles back to the ball at the half-time whistle', () => {
     startAMatch();
     nextTickRaises(shot);
-    nextTickRaises({ type: 'halfTime' });
+    blowHalfTime();
     expect(lastTension()).toBe(0);
   });
 
@@ -593,7 +607,7 @@ describe("CALCIO '90's match sound follows the match", () => {
     startAMatch();
     frames.advance(1); // the real kick-off
     expect(mockSound.play).toHaveBeenCalledWith('whistle');
-    nextTickRaises({ type: 'halfTime' });
+    blowHalfTime();
     expect(mockSound.play).toHaveBeenLastCalledWith('whistle-half');
   });
 

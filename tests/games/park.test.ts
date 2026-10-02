@@ -120,11 +120,21 @@ describe('procedural park terrain (createPark)', () => {
   it('keeps every neighbour within one height step (the slope rule)', () => {
     for (const seed of seeds) {
       const { heights } = createPark(seededRandom(seed));
+      // The steepest step stands for every pair (a NaN step is kept and
+      // fails), at one expect call a park rather than one a neighbour pair,
+      // which measured 1.4 s alone and 2.5 s in a loaded full run (#440).
+      let steepest = 0;
+      let at = '';
       for (let i = 0; i < heights.length; i++) {
         for (const n of neighbours(i)) {
-          expect(Math.abs(heights[i] - heights[n])).toBeLessThanOrEqual(1);
+          const step = Math.abs(heights[i] - heights[n]);
+          if (step > steepest || Number.isNaN(step)) {
+            steepest = step;
+            at = `seed ${seed}, tiles ${i} and ${n}`;
+          }
         }
       }
+      expect(steepest, at).toBeLessThanOrEqual(1);
     }
   });
 

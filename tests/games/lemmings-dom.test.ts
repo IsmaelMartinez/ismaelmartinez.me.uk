@@ -160,6 +160,14 @@ const GAME_HTML = `
  */
 const TICKS_PER_FRAME = 15;
 
+/**
+ * The timeout for the untouched-level test, which steps the real loop through
+ * a whole level and its nuke. Measured for #440 on 2026-10-02: 1.2 to 2.2 s
+ * with the file run alone. (The clock-billing test's failures in #440 were
+ * not time: they were `syncClock`'s fractional start, see its docstring.)
+ */
+const HEAVY = { timeout: 30000 };
+
 const frames = createFrameDriver();
 const { step } = frames;
 let restoreContext: () => void;
@@ -250,7 +258,7 @@ afterEach(() => {
 });
 
 describe('game loop — no level is ever unescapable', () => {
-  it('hangs an untouched level, raises the hint, and lets the nuke end it', () => {
+  it('hangs an untouched level, raises the hint, and lets the nuke end it', HEAVY, () => {
     // Issue #256's headline repro: level 2 needs a basher, so with no input at
     // all every critter paces between the left wall and the pillar — nobody
     // dies, nobody blocks, and the crowd end condition never matches. The game

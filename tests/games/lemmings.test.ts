@@ -55,6 +55,13 @@ import {
 } from '../../src/games/lemmings/score';
 
 /**
+ * The timeout for the never-resolves census, which plays all twenty-five
+ * levels out to the runaway guard. Measured for #440 on 2026-10-02: 1.3 s
+ * with the file run alone and 3.6 s in a full suite run on a loaded machine.
+ */
+const HEAVY = { timeout: 30000 };
+
+/**
  * A test double for `CritterWorld` backed by a real `TerrainBitmap`, plus an
  * optional set of blocker columns so blocker-reversal can be exercised without
  * the game layer.
@@ -1504,7 +1511,7 @@ describe('levels — no level is ever unescapable', () => {
   const abandoned = () =>
     LEVELS.map(level => playLevel(level, () => {}, { nukeWhenStuck: false, maxTicks: 8000 }));
 
-  it('ten of the twenty-five levels never resolve on their own', () => {
+  it('ten of the twenty-five levels never resolve on their own', HEAVY, () => {
     // The diagnosis, kept as the record of which levels carry the underlying
     // terrain problem. Left to themselves, ten of them reach a state none of
     // their own rules answer for — no clock, no blockers, nobody dying — and

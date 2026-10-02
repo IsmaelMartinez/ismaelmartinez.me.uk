@@ -387,15 +387,18 @@ describe('runScore', () => {
 
 describe('simulated fixtures', () => {
   it('never invents a scoreline the player could not have produced', () => {
+    // Every scoreline is checked, but the 60,000 expect calls a per-match
+    // assertion made cost 1.8 s alone and 4.4 s on a loaded machine (#440), so
+    // the loop collects the ones that break a rule and asserts on those once.
     const rng = seededRandom(88);
+    const invented: number[] = [];
     for (let i = 0; i < 20000; i++) {
       const a = TEAMS[Math.floor(rng() * TEAMS.length)];
       const b = TEAMS[Math.floor(rng() * TEAMS.length)];
       const goals = simulateGoals(a, b, rng);
-      expect(goals).toBeGreaterThanOrEqual(0);
-      expect(goals).toBeLessThanOrEqual(5);
-      expect(Number.isInteger(goals)).toBe(true);
+      if (!(goals >= 0 && goals <= 5 && Number.isInteger(goals))) invented.push(goals);
     }
+    expect(invented).toEqual([]);
   });
 
   it('gives the better attack more goals on average', () => {

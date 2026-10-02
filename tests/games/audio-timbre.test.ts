@@ -764,7 +764,17 @@ describe('renderScore', () => {
     expect(renderedNotes).toEqual(notes(live));
   });
 
-  it('sums overlapping notes two at a time, so no node of a render has three inputs (#441)', async () => {
+  const ring = { attack: 0.01, decay: 0.1, sustain: 0.7, release: 2 };
+  const overlapping: GameAudioOptions['tracks'] = [
+    { wave: 'noise', adsr: ring, melody: Array.from({ length: 8 }, () => ({ freq: 700, beats: 1 })) },
+    { adsr: ring, detune: 6, pan: -0.5, melody: Array.from({ length: 8 }, () => ({ freq: 220, beats: 1 })) },
+    { melody: Array.from({ length: 16 }, () => ({ freq: REST, beats: 0.5, drum: 'snare' as const })) }
+  ];
+  it.each([
+    ['plain voices', overlapping, undefined],
+    // Named voices and a stinger give each voice a layer gain into one lane.
+    ['named layers with a stinger', overlapping.map((t, i) => ({ ...t, name: `v${i}` })), { hit: [[], [], []] }]
+  ])('sums %s two at a time, so no node of a render has three inputs (#441)', async (_, tracks, stingers) => {
     const ctx = makeRecordingContext(8000);
     vi.stubGlobal('window', {
       OfflineAudioContext: class {
@@ -773,20 +783,7 @@ describe('renderScore', () => {
         }
       }
     });
-    const ring = { attack: 0.01, decay: 0.1, sustain: 0.7, release: 2 };
-    await renderScore(
-      {
-        tempo: 120,
-        echo: { time: 0.3, feedback: 0.4, mix: 0.3 },
-        tracks: [
-          { wave: 'noise', adsr: ring, melody: Array.from({ length: 8 }, () => ({ freq: 700, beats: 1 })) },
-          { adsr: ring, detune: 6, pan: -0.5, melody: Array.from({ length: 8 }, () => ({ freq: 220, beats: 1 })) },
-          { melody: Array.from({ length: 16 }, () => ({ freq: REST, beats: 0.5, drum: 'snare' as const })) }
-        ]
-      },
-      4,
-      8000
-    );
+    await renderScore({ tempo: 120, echo: { time: 0.3, feedback: 0.4, mix: 0.3 }, tracks, stingers }, 4, 8000);
     const inputs = new Map<string, number>();
     for (const line of ctx.log) {
       const m = /^[a-z]+#\d+\.connect\((.+)\)$/.exec(line);

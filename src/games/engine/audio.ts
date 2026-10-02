@@ -1721,23 +1721,28 @@ function wantsLayers(options: GameAudioOptions): boolean {
  * The adaptive half of the music graph: a gain per voice, for layers, into
  * one `lane` gain that a stinger ducks, into the bus. A stinger itself goes
  * straight to the bus, past both, so neither a muted layer nor its own duck
- * can silence it.
+ * can silence it. A render passes `pairwise`, which sums the voices into the
+ * lane through a `SummingTree` rather than all at once, for the same reason
+ * it sums notes that way (#441).
  */
 function buildLayers(
   ctx: BaseAudioContext,
   bus: AudioNode,
   tracks: NormTrack[],
-  on: (t: number) => boolean
+  on: (t: number) => boolean,
+  pairwise = false
 ): { lane: GainNode; gains: GainNode[] } {
   const lane = ctx.createGain();
   lane.gain.value = 1;
   lane.connect(bus);
+  const tree = pairwise ? summingTree(ctx, lane) : null;
   const gains = tracks.map((_, t) => {
     const g = ctx.createGain();
     g.gain.value = on(t) ? 1 : 0;
-    g.connect(lane);
+    g.connect(tree ? tree.leaf() : lane);
     return g;
   });
+  tree?.finish();
   return { lane, gains };
 }
 
@@ -1851,7 +1856,7 @@ export async function renderScore(
       const t = trackIndex(tracks, /^\d+$/.test(key) ? Number(key) : key);
       if (t >= 0) picked.set(t, on);
     }
-    buses = buildLayers(ctx, bus, tracks, t => picked.get(t) ?? !tracks[t].startsMuted).gains;
+    buses = buildLayers(ctx, bus, tracks, t => picked.get(t) ?? !tracks[t].startsMuted, true).gains;
   }
   if (state) {
     // Danger wins, as it does live, where it lands after the scene it interrupts.

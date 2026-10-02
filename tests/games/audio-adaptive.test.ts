@@ -673,8 +673,9 @@ describe('renderScore from a given state', () => {
 
   it('starts with the layers it is given', async () => {
     const log = await render(LAYERED, 2, { layers: { drums: true, '0': false } });
+    // The layer gains are gain#4 and gain#6; gain#5 is the first's leaf into the lane (#441).
     expect(log).toContain('gain#4.gain.value = 0');
-    expect(log).toContain('gain#5.gain.value = 1');
+    expect(log).toContain('gain#6.gain.value = 1');
   });
 
   it('starts in the danger variant at its tempo, or at a named section', async () => {

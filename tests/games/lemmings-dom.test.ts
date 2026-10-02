@@ -160,6 +160,18 @@ const GAME_HTML = `
  */
 const TICKS_PER_FRAME = 15;
 
+/**
+ * The timeout for the two tests that step the real loop through a whole
+ * level. Measured for #440 on 2026-10-02: 1.2 to 2.2 s and 0.2 to 0.4 s with
+ * the file run alone. The clock-billing test is not caught by the
+ * `performance.now()` trap: the loop seeds its `last` inside
+ * `initLemmingsGame` and `syncClock` reads the clock after it, so a 400 ms
+ * stall injected on either side of `syncClock` still lands every frame on
+ * exactly 15 ticks and the test passes, while moving `syncClock` before init
+ * fails it as an assertion (2745 ticks against 2700), not as a timeout.
+ */
+const HEAVY = { timeout: 30000 };
+
 const frames = createFrameDriver();
 const { step } = frames;
 let restoreContext: () => void;
@@ -250,7 +262,7 @@ afterEach(() => {
 });
 
 describe('game loop — no level is ever unescapable', () => {
-  it('hangs an untouched level, raises the hint, and lets the nuke end it', () => {
+  it('hangs an untouched level, raises the hint, and lets the nuke end it', HEAVY, () => {
     // Issue #256's headline repro: level 2 needs a basher, so with no input at
     // all every critter paces between the left wall and the pillar — nobody
     // dies, nobody blocks, and the crowd end condition never matches. The game
@@ -431,7 +443,7 @@ describe('game loop — no level is ever unescapable', () => {
     );
   });
 
-  it('bills an authored clock for the whole clock, however still the field went', () => {
+  it('bills an authored clock for the whole clock, however still the field went', HEAVY, () => {
     // The scoring counterpart to the tests above. Nothing on a frozen field ends
     // a level any more, but a level with an authored `timeLimit` still has one
     // ending the player does not choose — and that ending has to be paid for at

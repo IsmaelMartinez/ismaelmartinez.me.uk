@@ -681,7 +681,15 @@ describe('headless playthrough', () => {
 
   const SEEDS = [1, 2, 99, 1337, 4242];
 
-  it('a seed changes the run, and the same seed brings it back (#264)', () => {
+  /**
+   * The two seed tests play five or six whole runs each. Measured for #440 on
+   * 2026-10-02: 1.3 to 3.1 s and 0.5 to 1.2 s with the file run alone, and
+   * 12.8 s and 4.0 s in a full suite run on a loaded machine, past Vitest's
+   * 5 s default.
+   */
+  const HEAVY = { timeout: 30000 };
+
+  it('a seed changes the run, and the same seed brings it back (#264)', HEAVY, () => {
     // The player-visible half. It is measured on a run pushed into the endless
     // assault rather than on the 18-wave campaign, and that choice is the
     // interesting part: on the campaign the same layout scores 5,164 or 5,284
@@ -706,7 +714,7 @@ describe('headless playthrough', () => {
     expect(again.heldByWave).toEqual(runs[0].heldByWave);
   });
 
-  it('a seed is variety, not a difficulty roll (#264)', () => {
+  it('a seed is variety, not a difficulty roll (#264)', HEAVY, () => {
     // The constraint that keeps the shared board fair. Whatever the seed, the
     // campaign is still winnable and still bleeds, which is the Round 6
     // no-perfect-runs contract, and the layout still holds the same number of

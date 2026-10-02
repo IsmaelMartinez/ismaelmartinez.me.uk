@@ -203,10 +203,16 @@ describe('a cross into the CPU box is contested (#308)', () => {
  * 17.6 s standalone — the two tests below share their matches through `keyed`,
  * so the second is nearly free — against a validate wall of seven minutes over
  * three shards.
+ *
+ * Whichever test runs first pays for all 1,200 matches, so both carry the same
+ * timeout. The 120 s it used to be was not enough on a loaded machine: for
+ * #440 on 2026-10-02 the first test took 95 s with the file run alone and
+ * 130 s in a full suite run, at load averages of 50 to 75 on 18 cores.
  */
 describe('the header aim axis stays under the ceiling (#308)', () => {
   const RATE_MATCHES = 300;
   const RATE_SEED0 = 3000001;
+  const AIM_SWEEP_TIMEOUT = 600000;
 
   function airRate(aim: (typeof HEADER_AIMS)[number]): number {
     const who = keyed(`air|${aim}`, () => winger(-1, 90, 30, aim));
@@ -219,7 +225,7 @@ describe('the header aim axis stays under the ceiling (#308)', () => {
     const measured = HEADER_AIMS.map(aim => `${aim}=${airRate(aim).toFixed(3)}`);
     const over = HEADER_AIMS.filter(aim => airRate(aim) > ceiling);
     expect(over, `against ${ceiling}: ${measured.join(' ')}`).toEqual([]);
-  }, 120000);
+  }, AIM_SWEEP_TIMEOUT);
 
   /**
    * And the nerf has to reshape rather than flatten. Before the defensive
@@ -244,5 +250,5 @@ describe('the header aim axis stays under the ceiling (#308)', () => {
     expect(centre, seen).toBeGreaterThan(far);
     // The shipped aim stays a live threat rather than collapsing towards `far`.
     expect(away, seen).toBeGreaterThan(2);
-  }, 120000);
+  }, AIM_SWEEP_TIMEOUT);
 });

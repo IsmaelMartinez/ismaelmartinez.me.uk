@@ -52,6 +52,15 @@ import {
 import { scoreSeconds } from '../../src/games/engine/audio';
 import { PASS_FLOOR_SECONDS } from './music-gates';
 
+/**
+ * The timeout for the tests that play whole matches or run the CPU's shot
+ * search hundreds of times. Measured for #440 on 2026-10-02: 0.3 to 2.6 s
+ * each with the file run alone, and up to 10 s (the one-note pairing, which
+ * also pays for the cached competent control) in a full suite run on a
+ * loaded machine, which is what tripped Vitest's 5 s default.
+ */
+const HEAVY = { timeout: 30000 };
+
 describe('terrain', () => {
   it('generates one height per column within bounds', () => {
     const ground = generateTerrain(WIDTH, HEIGHT, seededRandom());
@@ -143,10 +152,13 @@ describe('arenas', () => {
       for (let seed = 0; seed < 30; seed++) {
         const ground = generateTerrain(WIDTH, HEIGHT, seededRandom(seed), arena);
         expect(ground).toHaveLength(WIDTH);
-        for (const y of ground) {
-          expect(y).toBeGreaterThanOrEqual(HEIGHT * 0.3);
-          expect(y).toBeLessThanOrEqual(HEIGHT * 0.92);
-        }
+        // The extremes stand for every column (a NaN column poisons both and
+        // fails), at two expect calls a terrain rather than two a column: the
+        // per-column form made 240,000 of them, 1.5 to 2.0 s alone and 12 s
+        // on a loaded machine (#440).
+        const where = `${arena} seed ${seed}`;
+        expect(Math.min(...ground), where).toBeGreaterThanOrEqual(HEIGHT * 0.3);
+        expect(Math.max(...ground), where).toBeLessThanOrEqual(HEIGHT * 0.92);
       }
     }
   });
@@ -164,7 +176,7 @@ describe('arenas', () => {
     }
   });
 
-  it('leaves every arena winnable: the CPU can land a shot on the far tank', () => {
+  it('leaves every arena winnable: the CPU can land a shot on the far tank', HEAVY, () => {
     // newRound spawns tanks at 70 + random()*90 and WIDTH-70-random()*90, so the
     // real range runs from the widest separation (70 / WIDTH-70) to the closest
     // (160 / WIDTH-160). Test both extremes across every arena: if the CPU's
@@ -768,7 +780,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
     return total;
   }
 
-  it('plays a vs-CPU match through to a result and submits what the player watched land', () => {
+  it('plays a vs-CPU match through to a result and submits what the player watched land', HEAVY, () => {
     const played = playMatch(competent, { seed: 7 });
 
     // The match ended on its own, and the guard that knows nothing about it was
@@ -794,7 +806,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
     expect(submitsToBoard(played.match.mode)).toBe(true);
   });
 
-  it('leaves every arena playable: a competent gunner finishes and scores on all five', () => {
+  it('leaves every arena playable: a competent gunner finishes and scores on all five', HEAVY, () => {
     const arenas: ArenaType[] = ['hills', 'canyon', 'mesa', 'ridges', 'bunker'];
     for (const arena of arenas) {
       const played = playMatch(competent, { seed: 31, arena });
@@ -804,7 +816,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
     }
   });
 
-  it('finishes and puts a number on the board at every difficulty tier', () => {
+  it('finishes and puts a number on the board at every difficulty tier', HEAVY, () => {
     const tiers: Difficulty[] = ['rookie', 'gunner', 'veteran'];
     for (const difficulty of tiers) {
       const played = playMatch(competent, { seed: 91, difficulty });
@@ -849,21 +861,21 @@ describe('headless playthrough (seeded, deterministic)', () => {
     return meanT(diffs);
   }
 
-  it('out-scores a one-note gunner, on matched seeds with a reported t', () => {
+  it('out-scores a one-note gunner, on matched seeds with a reported t', HEAVY, () => {
     const paired = pairedAgainstCompetent(oneNote, 12);
     const line = `competent - oneNote: ${paired.mean.toFixed(1)} points (t=${paired.t.toFixed(2)})`;
     expect(paired.mean, line).toBeGreaterThan(0);
     expect(paired.t, line).toBeGreaterThan(2);
   });
 
-  it('out-scores a random gunner, on matched seeds with a reported t', () => {
+  it('out-scores a random gunner, on matched seeds with a reported t', HEAVY, () => {
     const paired = pairedAgainstCompetent(scattergun, 12);
     const line = `competent - scattergun: ${paired.mean.toFixed(1)} points (t=${paired.t.toFixed(2)})`;
     expect(paired.mean, line).toBeGreaterThan(0);
     expect(paired.t, line).toBeGreaterThan(2);
   });
 
-  it('scores a two-player match the same way and still keeps it off the board', () => {
+  it('scores a two-player match the same way and still keeps it off the board', HEAVY, () => {
     const played = playMatch(competent, { seed: 7, mode: '2p' });
     expect(played.finished).toBe(true);
     // Both tanks are driven from the one keyboard, so both totals grow...
@@ -875,7 +887,7 @@ describe('headless playthrough (seeded, deterministic)', () => {
     expect(submitsToBoard(played.match.mode)).toBe(false);
   });
 
-  it('replays a seed exactly, and a different seed differently', () => {
+  it('replays a seed exactly, and a different seed differently', HEAVY, () => {
     const a = playMatch(competent, { seed: 404 });
     const b = playMatch(competent, { seed: 404 });
     const c = playMatch(competent, { seed: 405 });

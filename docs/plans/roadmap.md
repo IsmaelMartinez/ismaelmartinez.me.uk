@@ -4,21 +4,16 @@ The live queue of work in progress, kept so that "continue with what we were doi
 resume in a fresh session. Each entry says where the work stands, where it lives, and the next steps
 in order. Finished work moves to "Done" with its merge.
 
-## Now: round 3 follow-ups (2026-10-02)
+## Now: nothing in flight (2026-10-02)
 
-The loose ends arcade music round 3 recorded, each its own issue, independent of the others so
-each can be investigated and fixed by a separate agent on its own branch and PR.
+Two small candidates the round 3 follow-ups turned up, not yet filed as issues:
 
-- [ ] #437 tighten the instrument-difference test beyond straight copies.
-- [ ] #438 Microcity in 3/4 like SNES SimCity, or a metre per scene.
-- [ ] #439 Critter Rescue's Act II sits 3 to 4 dB under the other acts.
-- [ ] #440 heavy playthrough tests time out at 5 s on a busy machine.
-- [ ] #441 the engine's one-second looping noise buffer and render repeat drift.
-
-### Next steps, in order
-
-1. One agent per issue, each in its own worktree, opening a PR that closes its issue.
-2. Address review comments on each PR; every merge is the owner's call, per PR.
+- The jukebox renders one voice at a time only to dodge summation drift, which #445 removed for
+  whole-score renders too; dropping that workaround shifts existing WAV renders by a few
+  least-significant bits, so it wants its own PR.
+- CLAUDE.md points at "the `performance.now()` clock trap described under Testing", but the
+  Testing section never describes it; #447 found the trap's real form (a fractional start for the
+  hand-driven clock in `tests/games/dom-helpers.ts`) and that belongs there.
 
 ## Waiting on a decision
 
@@ -30,6 +25,10 @@ each can be investigated and fixed by a separate agent on its own branch and PR.
 
 ## Done
 
+- 2026-10-02 round 3 follow-ups: #443 a near-copy-aware instrument-difference test (closes #437),
+  #444 Microcity's intro and endings in 3/4 (closes #438), #446 Critter Rescue's Act II level
+  (closes #439), #447 measured timeouts and two flaky tests fixed at the root (closes #440), #445
+  a ten-second noise buffer and bit-identical renders (closes #441).
 - 2026-10-01 #435 arcade music round 3: seven rescores, intros and endings through `playEnding`,
   Syndicate and Pixel Park, and CALCIO '90's match sound (closes #381, #402 to #417).
 - 2026-09-27 #400 engine scenes (`setScene`), CALCIO '90 moved onto them (closes #398).

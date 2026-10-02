@@ -87,16 +87,20 @@
  * into the grace month) over the ducked score, and the sim's pause speed and
  * the Retire prompt muffle it with `setPaused` rather than stopping it.
  *
- * Beginnings and endings (#417). Every city is founded on a two-bar intro,
- * the mallet's flourish over Fmaj7 and the suspension, which plays once
- * before the village's first pass (a rest later returns to the statement,
- * never to the flourish), as SimCity opened on its own short fanfare rather
- * than dropping straight into the Village. A run ends through `playEnding`
- * on one of two two-bar phrases, named for `gameOver`'s reason: `bankrupt`
- * falls through the borrowed Bbm6 to a bare F, and `retired` closes a
- * thriving city home to Fmaj7 with the mallet lifting to F6. Either plays at
- * the tempo of the tier the city had reached, and neither is a loop, so the
- * seam gate's ban on arriving home does not apply to them.
+ * Beginnings and endings (#417), in 3/4 (#438). Every city is founded on a
+ * two-bar intro, the mallet's flourish over Fmaj7 and the suspension, which
+ * plays once before the village's first pass (a rest later returns to the
+ * statement, never to the flourish), as SimCity opened on its own short theme
+ * rather than dropping straight into the Village. That opening theme is the
+ * one piece of Oka's score in 3/4 (Hooktheory has it in C at 131 bpm; the
+ * menu, Village and Town are in 4/4), so the frames waltz and the tiers do
+ * not: the score keeps one metre, the tiers' 4, and the engine needs no metre
+ * per scene. A run ends through `playEnding` on one of two two-bar phrases,
+ * named for `gameOver`'s reason: `bankrupt` falls through the borrowed Bbm6
+ * to a bare F, and `retired` closes a thriving city home to Fmaj7 with the
+ * mallet lifting to F6. Either plays at the tempo of the tier the city had
+ * reached, and neither is a loop, so the seam gate's ban on arriving home
+ * does not apply to them.
  *
  * Gates. All three style gates stay on: Oka's tier tracks are tuneful loops
  * of the kind they measure, with pushed notes and varied bar rhythms.
@@ -577,26 +581,48 @@ const METRO_TURNAROUND = metropolis(
   true
 );
 
-// --- beginnings and endings (#417) ------------------------------------------
+// --- beginnings and endings (#417), in 3/4 (#438) ---------------------------
 
 /**
- * Every city is founded on a two-bar flourish at the village's tempo: the
- * mallet runs up Fmaj7 and answers itself over the suspension, landing on the
- * D a step above the statement's first C, so the hook follows on as the next
- * phrase rather than as a second start. The keys and bass are the village's.
+ * A phrase that frames a city, in 3/4: the bass's oom held through every
+ * downbeat and the keys' pah-pah on two and three, under the mallet. SimCity
+ * opens on a waltz before its tier tracks settle into common time, so the
+ * founding and both endings waltz while every tier piece stays in 4/4. The
+ * form's `beatsPerBar`, the grid a move to another piece lands on, is the
+ * tiers' 4: the endings are stingers, which no grid touches, and a move asked
+ * for during the founding would cut it on beat 4, but every city is founded
+ * at population zero, which has to be zoned, powered and grown to the town's
+ * floor before any move is asked for, and the flourish lasts four seconds.
  */
-const FOUNDING = village(
-  ['Fmaj7', 'C9sus'],
+function waltz(lead: Note[], bars: { root: string; pah: [string, string] }[], perc?: Note[]): Section {
+  return [
+    lead,
+    bars.flatMap(({ pah: [two, three] }) => [r(1), n(two, 1, 0.6), n(three, 1, 0.55)]),
+    bars.flatMap(({ root }) => [n(root, 3, 0.9)]),
+    perc ?? [r(bars.length * 3)]
+  ];
+}
+
+/**
+ * Every city is founded on a two-bar waltz flourish at the village's tempo:
+ * the mallet runs up Fmaj7, holds its A over the third beat, and answers
+ * itself over the suspension, landing on the D a step above the statement's
+ * first C, so the hook follows on as the next phrase rather than as a second
+ * start.
+ */
+const FOUNDING = waltz(
   [
     n('C5', 0.5, 0.7),
     n('F5', 0.5, 0.75),
-    n('A5', 0.5, 0.8),
+    n('A5', 1.5, 0.9),
     n('C6', 0.5, 0.85),
-    n('A5', 1, 0.8),
+    n('Bb5', 1, 0.85),
     n('G5', 1, 0.75),
-    n('G5', 2, 0.85),
-    n('F5', 1, 0.7),
-    n('D5', 1, 0.65)
+    n('D5', 1, 0.7)
+  ],
+  [
+    { root: 'F2', pah: ['A3', 'E4'] },
+    { root: 'C2', pah: ['F4', 'Bb3'] }
   ]
 );
 
@@ -605,35 +631,27 @@ const FOUNDING = village(
  * rest on a bare F with the keys' major third under it, a sad close that is
  * still the gentle music of a builder's game rather than a failure buzzer.
  */
-const BANKRUPT: Section = [
-  [n('Db6', 1, 0.85), n('C6', 1, 0.8), n('Bb5', 1, 0.75), n('G5', 1, 0.7), n('F5', 3, 0.8), r(1)],
-  [n('Db4', 1.5, 0.7), n('G4', 1.5, 0.6), n('F4', 1, 0.5), n('A3', 3, 0.6), r(1)],
-  [n('Bb1', 4, 0.9), n('F1', 3, 0.8), r(1)],
-  []
-];
+const BANKRUPT = waltz(
+  [n('Db6', 1, 0.85), n('C6', 0.5, 0.75), n('Bb5', 0.5, 0.7), n('G5', 1, 0.7), n('F5', 2.5, 0.8), r(0.5)],
+  [
+    { root: 'Bb1', pah: ['Db4', 'G4'] },
+    { root: 'F1', pah: ['A3', 'C4'] }
+  ]
+);
 
 /**
- * A retired city, solvent and thriving: the founding flourish again over C7,
+ * A retired city, solvent and thriving: the founding's climb again over C7,
  * then the full close home to Fmaj7, the mallet lifting to F6 above the
  * pieces' ceiling and a single soft kick under the arrival.
  */
-const RETIRED: Section = [
+const RETIRED = waltz(
+  [n('C5', 0.5, 0.75), n('F5', 0.5, 0.8), n('A5', 0.5, 0.85), n('C6', 0.5, 0.9), n('Bb5', 1, 0.8), n('F6', 2, 1), r(1)],
   [
-    n('C5', 0.5, 0.75),
-    n('F5', 0.5, 0.8),
-    n('A5', 0.5, 0.85),
-    n('C6', 0.5, 0.9),
-    n('Bb5', 1, 0.8),
-    n('G5', 1, 0.75),
-    n('A5', 0.5, 0.85),
-    n('C6', 0.5, 0.9),
-    n('F6', 2, 1),
-    r(1)
+    { root: 'C2', pah: ['E4', 'Bb3'] },
+    { root: 'F2', pah: ['A3', 'E4'] }
   ],
-  [n('E4', 1.5, 0.7), n('Bb3', 1.5, 0.6), n('G4', 1, 0.5), n('A3', 1.5, 0.7), n('E4', 1.5, 0.6), r(1)],
-  [n('C2', 3, 0.9), n('G2', 1, 0.6), n('F2', 3, 0.9), r(1)],
-  [r(4), { freq: REST, beats: 1, drum: 'kick', gain: 0.6 }, r(3)]
-];
+  [r(3), { freq: REST, beats: 1, drum: 'kick', gain: 0.6 }, r(2)]
+);
 
 // --- the city's tiers -----------------------------------------------------
 

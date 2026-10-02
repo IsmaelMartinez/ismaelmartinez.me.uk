@@ -25,7 +25,7 @@
  * stream. It never draws from `Math.random` or a match's `rng`: a seeded match
  * or demo plays out the same with the sound on or off.
  */
-import { clamp, noiseBuffer, seededRng, type EffectsBus, type GameAudio } from '../engine';
+import { clamp, noiseBuffer, seededRng, SUSTAINED_NOISE_SECONDS, type EffectsBus, type GameAudio } from '../engine';
 import type { MatchState, StrikeKind } from './match';
 import { BOX_DEPTH, BOX_HALF, CENTRE_X, PITCH_L } from './pitch';
 import { shotArmed } from './render';
@@ -215,7 +215,7 @@ export function createMatchSound(audio: GameAudio, seed = 0x1990): MatchSound {
   function burst(b: EffectsBus, at: number, spec: Burst, bright: number, level: number): void {
     const src = b.ctx.createBufferSource();
     src.buffer = noiseBuffer(b.ctx);
-    // A different stretch of the one-second buffer each time, so two bursts in a row differ.
+    // A different stretch of the buffer's first second each time, so two bursts in a row differ.
     const offset = rng() * 0.9;
     const filter = b.ctx.createBiquadFilter();
     filter.type = spec.filter;
@@ -310,10 +310,10 @@ export function createMatchSound(audio: GameAudio, seed = 0x1990): MatchSound {
   let bed: Bed | null = null;
   let lastTension = -1;
 
-  /** A looped noise, filtered, into `into`; two at different rates never line up, so the loop is not heard. */
+  /** A looped noise, filtered, into `into`; the long buffer at 0.83 and 1.17 repeats every 12 or 8.5 s, not every 1.2 or 0.85 s as the one-second buffer did (#441). */
   function noiseLoop(b: EffectsBus, rate: number, into: AudioNode, at: number): AudioBufferSourceNode {
     const src = b.ctx.createBufferSource();
-    src.buffer = noiseBuffer(b.ctx);
+    src.buffer = noiseBuffer(b.ctx, 'white', SUSTAINED_NOISE_SECONDS);
     src.loop = true;
     src.playbackRate.setValueAtTime(rate, at);
     src.connect(into);
@@ -433,7 +433,7 @@ export function createMatchSound(audio: GameAudio, seed = 0x1990): MatchSound {
     if (!b) return;
     const now = b.ctx.currentTime;
     const src = b.ctx.createBufferSource();
-    src.buffer = noiseBuffer(b.ctx);
+    src.buffer = noiseBuffer(b.ctx, 'white', SUSTAINED_NOISE_SECONDS);
     src.loop = true;
     const g = b.ctx.createGain();
     g.gain.setValueAtTime(0.0001, now);

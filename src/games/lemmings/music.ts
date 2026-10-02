@@ -311,21 +311,34 @@ function stingersIn(semitones: number): Record<string, Note[][]> {
 /** The A500's fixed output filter, roughly: every pitched channel goes through it. */
 const PAULA_FILTER: Track['filter'] = { type: 'lowpass', cutoff: 4400, q: 0.7 };
 
-/** One act's lead sample: a single-cycle wave and the envelope the sample gave it. */
+/**
+ * One act's lead sample: a single-cycle wave, the envelope the sample gave it,
+ * and its level, as a ProTracker sample carried its own default volume.
+ */
 interface LeadSample {
   wavetable: Track['wavetable'];
   adsr: Track['adsr'];
+  volume: number;
 }
+
+/** The two accompanying channels' levels, which an act's left-hand figure may need to lift. */
+interface CompLevels {
+  bass: number;
+  chords: number;
+}
+
+const COMP_LEVELS: CompLevels = { bass: 0.8, chords: 0.3 };
 
 /**
  * The four channels, in Paula's layout, shared by every act so a stinger
- * sounds like the act it lands in; only the lead's sample and the chord
- * arpeggio's speed change between acts.
+ * sounds like the act it lands in; only the lead's sample, the chord
+ * arpeggio's speed and, where an act's figure is sparse, the accompaniment's
+ * level change between acts.
  */
-function channels(lead: LeadSample, arpRate: number): Track[] {
+function channels(lead: LeadSample, arpRate: number, comp: CompLevels = COMP_LEVELS): Track[] {
   return [
     // Channel 0, left: the tune.
-    { name: 'lead', ...lead, filter: PAULA_FILTER, pan: -1, volume: 0.75 },
+    { name: 'lead', ...lead, filter: PAULA_FILTER, pan: -1 },
     // Channel 1, right: a sampled bass, plucked and quickly damped.
     {
       name: 'bass',
@@ -333,7 +346,7 @@ function channels(lead: LeadSample, arpRate: number): Track[] {
       adsr: { attack: 0.003, decay: 0.2, sustain: 0.4, release: 0.05 },
       filter: PAULA_FILTER,
       pan: 1,
-      volume: 0.8
+      volume: comp.bass
     },
     // Channel 2, right: the chords, as tracker arpeggios on a square chip loop.
     {
@@ -343,7 +356,7 @@ function channels(lead: LeadSample, arpRate: number): Track[] {
       filter: PAULA_FILTER,
       arpRate,
       pan: 1,
-      volume: 0.3
+      volume: comp.chords
     },
     // Channel 3, left: the kit.
     { name: 'drums', pan: -1, volume: 0.55 }
@@ -377,7 +390,8 @@ const BRIDGE_TUNE = `
 /** Recorder-like: nearly a sine, with a breath of attack. */
 const WHISTLE: LeadSample = {
   wavetable: { harmonics: [1, 0.25, 0.12, 0.05], bits: 8 },
-  adsr: { attack: 0.01, decay: 0.15, sustain: 0.7, release: 0.06 }
+  adsr: { attack: 0.01, decay: 0.15, sustain: 0.7, release: 0.06 },
+  volume: 0.75
 };
 
 /**
@@ -441,10 +455,15 @@ const RONDO_OPENING = `
   B5:.25 A5:.25 G#5:.25 A5:.25 B5:.25 A5:.25 G#5:.25 A5:.25 C6:1 A5:.5 C6:.5 |`;
 const RONDO_OPENING_CHART = 'Am | E Am';
 
-/** Harpsichord-like: bright, plucked, and gone quickly. */
+/**
+ * Harpsichord-like: bright, plucked, and gone quickly. Full level, because a
+ * peaky table decaying to a 0.3 sustain is quieter than the other leads at
+ * the same volume; at 0.75 it left Act II 3 to 4 dB under the rest (#439).
+ */
 const HARPSICHORD: LeadSample = {
   wavetable: { harmonics: [1, 0.7, 0.5, 0.45, 0.3, 0.25, 0.2, 0.15], bits: 8 },
-  adsr: { attack: 0.002, decay: 0.3, sustain: 0.3, release: 0.05 }
+  adsr: { attack: 0.002, decay: 0.3, sustain: 0.3, release: 0.05 },
+  volume: 1
 };
 
 /**
@@ -457,7 +476,9 @@ export const ACT_II_MUSIC: GameAudioOptions = {
   tempo: 120,
   tonic: p('A3'),
   ...MIX,
-  tracks: channels(HARPSICHORD, PAL_TICK),
+  // Mozart's left hand strikes the bass for one eighth a chord, so the
+  // accompaniment comes up with the lead to sit level with the other acts.
+  tracks: channels(HARPSICHORD, PAL_TICK, { bass: 1, chords: 0.4 }),
   form: {
     // Up E7 to D, which falls a step into the tune's C.
     intro: vamp(TURCA, 'E7', 'E4:.5 G#4:.5 B4:.5 D5:.5', JANISSARY),
@@ -526,7 +547,8 @@ const CANON_BROKEN = 'D5:1 F#5:1 A5:1 G5:1 | F#5:1 D5:1 F#5:1 E5:1 | D5:1 B4:1 D
 /** String-like: a sawtooth's partials, bowed in. */
 const STRINGS: LeadSample = {
   wavetable: { harmonics: [1, 0.5, 0.33, 0.25, 0.2, 0.17, 0.14], bits: 8 },
-  adsr: { attack: 0.03, decay: 0.2, sustain: 0.8, release: 0.12 }
+  adsr: { attack: 0.03, decay: 0.2, sustain: 0.8, release: 0.12 },
+  volume: 0.75
 };
 
 /**
@@ -617,7 +639,8 @@ const CANCAN_CHART = 'C | G7 | G7 C | G7 C | C | G7 | G7 C';
 /** Accordion-like: odd partials strong, the even ones a trace. */
 const ACCORDION: LeadSample = {
   wavetable: { harmonics: [1, 0.1, 0.6, 0.1, 0.4, 0.1, 0.25], bits: 8 },
-  adsr: { attack: 0.006, decay: 0.1, sustain: 0.65, release: 0.05 }
+  adsr: { attack: 0.006, decay: 0.1, sustain: 0.65, release: 0.05 },
+  volume: 0.75
 };
 
 const GALOP_LAST = 'D5:.5 E5:1 C5:1.5 r:1';

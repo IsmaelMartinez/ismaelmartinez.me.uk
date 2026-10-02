@@ -136,7 +136,9 @@ describe('7.3 shot and keeper model, swept in isolation', () => {
    * that all twenty-four comparisons from 0.5 to a true post aim went *down*.
    * This walks the whole legal range at every distance and power.
    */
-  it('rises as the aim moves from centre toward a post', { timeout: 240000 }, () => {
+  // Measured for #440 on 2026-10-02: 117 s and 80 s in loaded full suite runs,
+  // half of the 240 s this used to allow.
+  it('rises as the aim moves from centre toward a post', { timeout: 600000 }, () => {
     for (const distance of SWEEP_DISTANCES) {
       // Inside the six-yard box the grid is swept for certainty, not for
       // shape. The keeper is a few pixels in front of the ball there, so the
@@ -243,7 +245,9 @@ describe('7.3 shot and keeper model, swept in isolation', () => {
     }
   });
 
-  it('leaves no cell of the grid at exactly 0 or exactly 1', { timeout: 300000 }, () => {
+  // Measured for #440 on 2026-10-02: 251 s in one loaded full suite run and
+  // 773 s in another, which timed out against the 300 s this used to allow.
+  it('leaves no cell of the grid at exactly 0 or exactly 1', { timeout: 2400000 }, () => {
     let cellCount = 0;
     let above = 0;
     for (const distance of SWEEP_DISTANCES) {

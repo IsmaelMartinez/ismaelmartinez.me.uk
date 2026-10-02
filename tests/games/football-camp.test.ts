@@ -57,7 +57,9 @@ const CAMP_FINALISTS = 3;
  * other out of the re-measure.
  */
 describe('no fixed camp position beats playing football', () => {
-  it('sweeps the attacking third at both aims and finds nothing better than a competent player', { timeout: 1800000 }, () => {
+  // Measured for #440 on 2026-10-02: 649 s and then 1,608 s in loaded full
+  // suite runs, the second within 11% of the 1,800 s this used to allow.
+  it('sweeps the attacking third at both aims and finds nothing better than a competent player', { timeout: 4800000 }, () => {
     const scan = CAMP_AIMS.flatMap((aim: CampAim) =>
       CAMP_SPOTS.map(([x, depth]) => ({
         x,

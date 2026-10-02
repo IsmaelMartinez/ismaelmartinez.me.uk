@@ -94,7 +94,7 @@ export const FULL_TIME_MINUTES = 90;
 
 const KICKOFF_FREEZE = 0.6;
 const GOAL_PAUSE = 1.2;
-const HALF_TIME_PAUSE = 1.0;
+export const HALF_TIME_PAUSE = 1.0;
 
 /** Seconds A must be held for a full-power shot. */
 export const CHARGE_TIME = 0.55;

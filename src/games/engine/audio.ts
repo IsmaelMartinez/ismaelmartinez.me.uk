@@ -663,14 +663,34 @@ const PULSE_HARMONICS = 64;
 
 const PULSE_DUTY: Record<PulseWave, number> = { pulse12: 0.125, pulse25: 0.25, pulse50: 0.5 };
 
-/** Length of the shared white-noise buffer, in seconds. */
+/** Length of the shared noise buffer the drums hit, in seconds; a hit lasts 170 ms at most. */
 const NOISE_SECONDS = 1;
+
+/**
+ * Length of the noise buffer a sustained noise loops: a noise note, or
+ * CALCIO '90's crowd bed. A looped buffer is a frozen noise that repeats at
+ * its own length, and at one second that repeat is the textbook audible case
+ * (a steady "whoosh" once a second, Guttman and Julesz 1963): Tank Duel's
+ * gusts hold for up to 10 s, so the wind went round the same second ten
+ * times, correlating at exactly 1.000 with itself a second later (#441). Ten
+ * seconds outlasts every noise note but CALCIO's 16-beat shootout roar, which
+ * goes round once, and costs 1.8 MB at 44.1 kHz, built only by the cabinets
+ * that hold a noise. Its first second is the drums' buffer, sample for sample.
+ */
+export const SUSTAINED_NOISE_SECONDS = 10;
 
 /**
  * Seed for the noise buffer. Fixed so that two renders of a score with drums
  * are sample-identical, which is what lets a jukebox comparison mean anything.
  */
 const NOISE_SEED = 0x2a03;
+
+/**
+ * Seed for where in the sustained buffer each noise note starts. Without it
+ * every note started at sample 0, so two gusts were the same gust; drawn from
+ * a seeded stream per context, a render still comes out the same every time.
+ */
+const NOISE_OFFSET_SEED = 0x441;
 
 /**
  * Every drum is a fixed-length hit whose level decays from the note's peak to
@@ -688,7 +708,9 @@ const DRUMS: Record<DrumName, { decay: number; level: number }> = {
  * context that made it, and both are worth making once rather than per note,
  * so they are keyed on the context and go when it does.
  */
-const noiseBuffers = new WeakMap<BaseAudioContext, Map<NoiseKind, AudioBuffer>>();
+const noiseBuffers = new WeakMap<BaseAudioContext, Map<string, AudioBuffer>>();
+/** Each context's stream of noise-note start offsets, as fractions of the buffer. */
+const noiseOffsets = new WeakMap<BaseAudioContext, () => number>();
 /** Pulse duties by name, wavetables by the object a score wrote. */
 const periodicWaves = new WeakMap<BaseAudioContext, Map<PulseWave | Wavetable, PeriodicWave>>();
 
@@ -807,19 +829,20 @@ function shortNoiseCycle(): number[] {
 }
 
 /**
- * The context's one second of a noise, built on first use: seeded white noise,
+ * The context's `seconds` of a noise, built on first use: seeded white noise,
  * or the short mode's cycle with its DC offset taken out (it is mostly zeros)
- * and scaled to white noise's RMS.
+ * and scaled to white noise's RMS. Every length starts with the same samples.
  */
-export function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): AudioBuffer {
+export function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white', seconds = NOISE_SECONDS): AudioBuffer {
   let cache = noiseBuffers.get(ctx);
   if (!cache) {
     cache = new Map();
     noiseBuffers.set(ctx, cache);
   }
-  let buffer = cache.get(kind);
+  const key = `${kind}:${seconds}`;
+  let buffer = cache.get(key);
   if (!buffer) {
-    const length = Math.ceil(ctx.sampleRate * NOISE_SECONDS);
+    const length = Math.ceil(ctx.sampleRate * seconds);
     buffer = ctx.createBuffer(1, length, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     if (kind === 'short') {
@@ -834,9 +857,19 @@ export function noiseBuffer(ctx: BaseAudioContext, kind: NoiseKind = 'white'): A
       const rng = seededRng(NOISE_SEED);
       for (let i = 0; i < length; i++) data[i] = rng() * 2 - 1;
     }
-    cache.set(kind, buffer);
+    cache.set(key, buffer);
   }
   return buffer;
+}
+
+/** Where the context's next noise note starts, in seconds into `buffer`. */
+function noiseOffset(ctx: BaseAudioContext, buffer: AudioBuffer): number {
+  let next = noiseOffsets.get(ctx);
+  if (!next) {
+    next = seededRng(NOISE_OFFSET_SEED);
+    noiseOffsets.set(ctx, next);
+  }
+  return next() * (buffer.length / buffer.sampleRate);
 }
 
 /**
@@ -1049,8 +1082,9 @@ function playTone(
   };
   if (type === 'noise') {
     const source = ctx.createBufferSource();
-    source.buffer = noiseBuffer(ctx, colour.noise);
-    // The buffer is a second long; a longer note loops it.
+    const buffer = noiseBuffer(ctx, colour.noise, SUSTAINED_NOISE_SECONDS);
+    source.buffer = buffer;
+    // A note longer than the buffer loops it.
     source.loop = true;
     const cutoff = ctx.createBiquadFilter();
     cutoff.type = 'lowpass';
@@ -1059,7 +1093,7 @@ function playTone(
     arpeggiate(cutoff.frequency);
     source.connect(cutoff);
     cutoff.connect(input);
-    source.start(start);
+    source.start(start, noiseOffset(ctx, buffer));
     source.stop(stopAt);
     return;
   }
@@ -1425,7 +1459,8 @@ function playNote(
   const peak = VOICE_PEAK * track.volume * noteGain(note.gain);
   // A rest makes no nodes, so it gets no panner either.
   const sounds = !!note.drum || note.freq > 0;
-  const out = track.pan === 0 || !sounds ? bus : panTo(ctx, bus, track.pan, at);
+  const into = (sounds && summingTrees.get(bus)?.leaf()) || bus;
+  const out = track.pan === 0 || !sounds ? into : panTo(ctx, into, track.pan, at);
   if (note.drum) {
     playDrum(ctx, note.drum, at, peak, out, track.noise);
     return;
@@ -1712,6 +1747,57 @@ function trackIndex(tracks: NormTrack[], track: number | string): number {
   return tracks.findIndex(t => t.name === track);
 }
 
+/**
+ * A fixed tree of pass-through gains that sums a render's notes into `out`
+ * two at a time, so a render comes out the same every time (#441).
+ *
+ * Chrome sums the connections into a node in an order that varies from run
+ * to run, and float addition is commutative but not associative, so a node
+ * with two inputs always gives the same sum and a node with three or more
+ * does not. Every note used to connect straight to its bus, and a voice whose
+ * notes overlap (a 2 s release under 1 s gusts, a snare roll's hits, a lead's
+ * ring) put three or four sounding inputs on it, and every repeat came out
+ * different in the last bit of some of its samples.
+ * Here each note gets a leaf of its own and every node of the tree has two
+ * inputs at most: leaves pair up as they are made, like a binary counter,
+ * and `finish` joins what is left and connects the root to `out`. A leaf
+ * takes the note's one output, or a snare's two hits.
+ */
+interface SummingTree {
+  leaf(): AudioNode;
+  finish(): void;
+}
+
+/** The trees `playNote` sends a note through instead of its bus, keyed by the bus; only renders make one. */
+const summingTrees = new WeakMap<AudioNode, SummingTree>();
+
+function summingTree(ctx: BaseAudioContext, out: AudioNode): SummingTree {
+  const stack: { node: AudioNode; size: number }[] = [];
+  const join = (a: AudioNode, b: AudioNode): AudioNode => {
+    const sum = ctx.createGain();
+    a.connect(sum);
+    b.connect(sum);
+    return sum;
+  };
+  return {
+    leaf() {
+      const node = ctx.createGain();
+      let top: { node: AudioNode; size: number } = { node, size: 1 };
+      while (stack.length && stack[stack.length - 1].size === top.size) {
+        const below = stack.pop()!;
+        top = { node: join(below.node, top.node), size: top.size * 2 };
+      }
+      stack.push(top);
+      return node;
+    },
+    finish() {
+      let root = stack.pop()?.node;
+      while (root && stack.length) root = join(stack.pop()!.node, root);
+      root?.connect(out);
+    }
+  };
+}
+
 /** Where a render starts: which layers sound, whether in danger, and at which section. */
 export interface RenderState {
   /** Each named or indexed voice on or off; the rest start as their score says. */
@@ -1751,6 +1837,7 @@ export async function renderScore(
     // A rate the browser does not support is a RangeError from the constructor.
     return null;
   }
+  const held = holdNodes(ctx);
   const { bus } = buildMusicGraph(ctx, options.volume ?? DEFAULT_VOLUME, options.echo);
   const tracks = normalizeTracks(options);
   const cursors = tracks.map(() => ({ next: 0, idx: 0, beat: 0 }));
@@ -1776,8 +1863,48 @@ export async function renderScore(
       else if (state.pos.scene !== null) state.pos.step = 0;
     }
   }
+  const trees = [...new Set(buses)].map(b => {
+    const tree = summingTree(ctx, b);
+    summingTrees.set(b, tree);
+    return tree;
+  });
   scheduleWindow(ctx, buses, tracks, cursors, seconds, beatSeconds(options.tempo), false, state);
-  return ctx.startRendering();
+  for (const tree of trees) tree.finish();
+  const rendered = await ctx.startRendering();
+  held.length = 0;
+  return rendered;
+}
+
+/** Every kind of node the engine makes. */
+const NODE_FACTORIES = [
+  'createGain',
+  'createOscillator',
+  'createBiquadFilter',
+  'createBufferSource',
+  'createStereoPanner',
+  'createDelay'
+] as const;
+
+/**
+ * Keeps every node a render makes reachable until the render is done (#441).
+ * Chrome disconnects a node whose wrapper is garbage-collected, and a finished
+ * note's filter and envelope become collectable while a few milliseconds of
+ * their tail are still ringing at around -100 dBFS. When that collection lands
+ * depends on the main thread, not the render, so one render in four or five
+ * cut a tail somewhere else. Holding the nodes takes the collector out of it.
+ */
+function holdNodes(ctx: BaseAudioContext): AudioNode[] {
+  const held: AudioNode[] = [];
+  const factories = ctx as unknown as Record<string, (...args: unknown[]) => AudioNode>;
+  for (const name of NODE_FACTORIES) {
+    const make = factories[name];
+    factories[name] = (...args) => {
+      const node = make.apply(ctx, args);
+      held.push(node);
+      return node;
+    };
+  }
+  return held;
 }
 
 /**

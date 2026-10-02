@@ -526,9 +526,45 @@ describe('noise', () => {
     expect(args(log, 'filter#1.frequency', 'setValueAtTime')).toEqual([[880, T0]]);
     expect(log).toContain('source#1.connect(filter#1)');
     expect(log).toContain('filter#1.connect(gain#3)');
-    expect(args(log, 'source#1', 'start')).toEqual([[T0]]);
+    const [[at, offset]] = args(log, 'source#1', 'start');
+    expect(at).toBe(T0);
+    expect(offset).toBeGreaterThanOrEqual(0);
+    expect(offset).toBeLessThan(10);
     const [[stop]] = args(log, 'source#1', 'stop');
     expect(stop).toBeCloseTo(T0 + 1.02, 9);
+  });
+
+  it('loops a sustained noise from ten seconds of the same noise the drums hit (#441)', () => {
+    const { log, buffers } = capture(
+      {
+        tempo: 60,
+        tracks: [
+          { melody: [{ freq: REST, beats: 1, drum: 'snare' }] },
+          { wave: 'noise', melody: [{ freq: 800, beats: 1 }] }
+        ]
+      },
+      0.5
+    );
+    expect(log.filter(l => l.startsWith('create buffer')).sort()).toEqual([
+      'create buffer#1(1, 44100, 44100)',
+      'create buffer#2(1, 441000, 44100)'
+    ]);
+    const [drums, sustained] = [...buffers].sort((a, b) => a.length - b.length);
+    expect(Array.from(sustained.subarray(0, drums.length))).toEqual(Array.from(drums));
+    // Past the first second it is new noise, not the first second again.
+    expect(sustained.subarray(44100, 44200).some((v, i) => v !== drums[i])).toBe(true);
+  });
+
+  it('starts each noise note somewhere new in the buffer, the same places in every context', () => {
+    const gusts = { tempo: 60, tracks: [{ wave: 'noise' as const, melody: [{ freq: 800, beats: 1 }] }] };
+    const offsets = () =>
+      capture(gusts, 4)
+        .log.filter(l => /^source#\d+\.start\(/.test(l))
+        .map(l => Number(l.slice(0, -1).split(', ')[1]));
+    const first = offsets();
+    expect(first.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(first).size).toBe(first.length);
+    expect(offsets()).toEqual(first);
   });
 
   it('plays a noise note from the short mode when the voice asks for it', () => {
@@ -726,6 +762,38 @@ describe('renderScore', () => {
     const renderedNotes = notes(ctx.log);
     expect(renderedNotes.length).toBeGreaterThan(20);
     expect(renderedNotes).toEqual(notes(live));
+  });
+
+  it('sums overlapping notes two at a time, so no node of a render has three inputs (#441)', async () => {
+    const ctx = makeRecordingContext(8000);
+    vi.stubGlobal('window', {
+      OfflineAudioContext: class {
+        constructor() {
+          return Object.assign(ctx, { startRendering: () => Promise.resolve({}) });
+        }
+      }
+    });
+    const ring = { attack: 0.01, decay: 0.1, sustain: 0.7, release: 2 };
+    await renderScore(
+      {
+        tempo: 120,
+        echo: { time: 0.3, feedback: 0.4, mix: 0.3 },
+        tracks: [
+          { wave: 'noise', adsr: ring, melody: Array.from({ length: 8 }, () => ({ freq: 700, beats: 1 })) },
+          { adsr: ring, detune: 6, pan: -0.5, melody: Array.from({ length: 8 }, () => ({ freq: 220, beats: 1 })) },
+          { melody: Array.from({ length: 16 }, () => ({ freq: REST, beats: 0.5, drum: 'snare' as const })) }
+        ]
+      },
+      4,
+      8000
+    );
+    const inputs = new Map<string, number>();
+    for (const line of ctx.log) {
+      const m = /^[a-z]+#\d+\.connect\((.+)\)$/.exec(line);
+      if (m) inputs.set(m[1], (inputs.get(m[1]) ?? 0) + 1);
+    }
+    expect(inputs.size).toBeGreaterThan(40);
+    expect(Math.max(...inputs.values())).toBeLessThanOrEqual(2);
   });
 
   it('refuses a length or a sample rate it cannot render at', async () => {

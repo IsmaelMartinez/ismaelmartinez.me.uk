@@ -96,6 +96,13 @@ import {
 import { seededRandom } from './seeded-random';
 import { musicTier, TIER_FLOORS, TIER_SCENES, CITY_MUSIC } from '../../src/games/city/music';
 
+/**
+ * The timeout for the two long-growth tests below. Measured for #440 on
+ * 2026-10-02: 1.7 s and 1.4 s with the file run alone, and 4.6 s and 2.6 s
+ * in a full suite run on a loaded machine, close to Vitest's 5 s default.
+ */
+const HEAVY = { timeout: 30000 };
+
 describe('engine grid2d', () => {
   it('respects grid edges for neighbours', () => {
     expect(gridNeighbours(0, 4, 3).sort()).toEqual([1, 4]);
@@ -1150,7 +1157,7 @@ describe('city milestone ladder reachability (#265)', () => {
     return { peak, densest };
   }
 
-  it('lets a maximised city reach the metropolis rung', () => {
+  it('lets a maximised city reach the metropolis rung', HEAVY, () => {
     const top = POP_MILESTONES[METROPOLIS_INDEX];
     for (const seed of [1, 7919, 15838]) {
       expect(playOut(seed).peak).toBeGreaterThanOrEqual(top);
@@ -1300,7 +1307,7 @@ describe('city demand deadlock (#301)', () => {
     }
   });
 
-  it('keeps a city growing with nothing helping it and nothing hitting it', () => {
+  it('keeps a city growing with nothing helping it and nothing hitting it', HEAVY, () => {
     // No disasters, no political events, no grants — just a good layout being
     // zoned. This used to stop dead: 160 people, then nothing for the rest of
     // the run however much land was left, and the run's whole score came from

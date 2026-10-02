@@ -38,6 +38,13 @@ import { aCue, airArmed, shotArmed } from '../../src/games/football/render';
 import { SHOOT_RANGE } from '../../src/games/football/ai';
 import { passive, competent } from './football-policies';
 
+/**
+ * The timeout for the two tests that play whole matches. Measured for #440
+ * on 2026-10-02: 1.6 s and 1.2 s with the file run alone, and 3.4 s and
+ * 1.8 s in a full suite run on a loaded machine.
+ */
+const HEAVY = { timeout: 30000 };
+
 const DT = 1 / 60;
 const TEAMS: [ReturnType<typeof teamByCode>, ReturnType<typeof teamByCode>] = [
   teamByCode('ENG'),
@@ -91,7 +98,7 @@ describe('kickoff assignment', () => {
     expect(afterHalf.side).toBe(1);
   });
 
-  it('restarts with the conceding side after a goal', () => {
+  it('restarts with the conceding side after a goal', HEAVY, () => {
     // Several seeds, because one match is not guaranteed to contain a goal and
     // this is an assertion about what happens *after* one, not about how often
     // they arrive.
@@ -722,7 +729,7 @@ describe('the keeper against a delivery in flight', () => {
 });
 
 describe('a whole match runs to completion', () => {
-  it('finishes, keeps everyone on the pitch, and logs a coherent scoreline', () => {
+  it('finishes, keeps everyone on the pitch, and logs a coherent scoreline', HEAVY, () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const m = createMatch({ rng: seededRandom(seed * 7919), difficulty: 0.45, teams: TEAMS });
       playMatch(m, competent());

@@ -291,18 +291,23 @@ function allLines(music: GameAudioOptions, t: number): Note[][] {
  * instrument without anyone remembering to teach this test the field. The
  * price is that a field which is a mix setting rather than an instrument has
  * to be added to `NOT_TIMBRE` when it lands. Values compare exactly, so a
- * nudged number is a new instrument by this measure; the test is a floor that
- * catches copies, and the owner's ear is what judges whether the difference
- * is heard.
+ * nudged number is a new instrument by this measure, which is why the
+ * cabinet test compares scores with `instrumentDistance` instead.
  */
 export function voiceSignature(music: GameAudioOptions, t: number): string {
   const track: Track = music.tracks[t];
-  const notes = allLines(music, t).flatMap(onsets);
-  if (notes.length === 0) return allLines(music, t).some(line => line.some(n => n.drum)) ? 'drums' : 'silent';
-  const mean = notes.reduce((s, n) => s + Math.log2(n.freq), 0) / notes.length + (track.octaveShift ?? 0);
-  const band = mean < BASS_BELOW ? 'bass' : mean >= HIGH_FROM ? 'high' : 'mid';
+  const band = registerBand(music, t);
+  if (band === 'drums' || band === 'silent') return band;
   const timbre = Object.fromEntries(Object.entries(track).filter(([key]) => !NOT_TIMBRE.has(key)));
   return `${band} ${canonical({ ...timbre, wave: track.wave ?? 'square', envelope: track.envelope ?? 'pluck' })}`;
+}
+
+/** Track `t`'s G3 register band, or 'drums' for a percussion voice and 'silent' for one that plays nothing. */
+function registerBand(music: GameAudioOptions, t: number): string {
+  const notes = allLines(music, t).flatMap(onsets);
+  if (notes.length === 0) return allLines(music, t).some(line => line.some(n => n.drum)) ? 'drums' : 'silent';
+  const mean = notes.reduce((s, n) => s + Math.log2(n.freq), 0) / notes.length + (music.tracks[t].octaveShift ?? 0);
+  return mean < BASS_BELOW ? 'bass' : mean >= HIGH_FROM ? 'high' : 'mid';
 }
 
 /**
@@ -315,3 +320,64 @@ export function instrumentSignature(music: GameAudioOptions): string {
   const voices = music.tracks.map((_, t) => voiceSignature(music, t)).sort();
   return [...voices, music.echo ? 'echo' : 'dry'].join(' | ');
 }
+
+/**
+ * A voice reduced to four coarse traits, each one a thing the ear tells apart
+ * before it hears any number: the register band; the tone source (FM, a
+ * custom wavetable, noise, the pulse family with square as its 50% duty, or
+ * the plain sine, triangle or sawtooth); the envelope's shape (a swell when
+ * the attack takes a tenth of a second or more or the voice is a pad, held
+ * when an ADSR sustains at half level or above, otherwise a pluck); and
+ * whether a filter colours it. A percussion voice is 'drums' in all four.
+ */
+function voiceTraits(music: GameAudioOptions, t: number): string[] {
+  const band = registerBand(music, t);
+  if (band === 'drums' || band === 'silent') return [band, band, band, band];
+  const track = music.tracks[t];
+  const wave = track.wave ?? 'square';
+  const source = track.fm ? 'fm' : track.wavetable ? 'table' : wave === 'square' || wave.startsWith('pulse') ? 'pulse' : wave;
+  const a = track.adsr;
+  const shape = a
+    ? a.attack >= 0.1 ? 'swell' : a.sustain >= 0.5 ? 'held' : 'pluck'
+    : track.envelope === 'pad' ? 'swell' : 'pluck';
+  return [band, source, shape, track.filter ? 'filtered' : 'open'];
+}
+
+/** Every ordering of `xs`; a score has at most six voices, so 720 at worst. */
+function orderings<T>(xs: T[]): T[][] {
+  if (xs.length <= 1) return [xs];
+  return xs.flatMap((x, i) => orderings([...xs.slice(0, i), ...xs.slice(i + 1)]).map(rest => [x, ...rest]));
+}
+
+/**
+ * G3: how far apart two scores' instrument sets are, counted in coarse traits.
+ *
+ * The voices are paired up the way that makes the two bands closest, and each
+ * pair costs one point per trait of `voiceTraits` that differs. A voice with no
+ * partner, because one band is larger, costs all four, and a mismatched echo
+ * send costs one more. Zero is the same band, which `instrumentSignature`'s
+ * exact comparison misses as soon as one number moves: a copy with a decay
+ * nudged by a hundredth of a second is a new signature but still distance 0,
+ * and a nudge that tips a trait over its threshold (a sustain from 0.55 to
+ * 0.45) only reaches 1.
+ */
+export function instrumentDistance(a: GameAudioOptions, b: GameAudioOptions): number {
+  let small = a.tracks.map((_, t) => voiceTraits(a, t));
+  let large = b.tracks.map((_, t) => voiceTraits(b, t));
+  if (small.length > large.length) [small, large] = [large, small];
+  const cost = (x: string[], y: string[]) => x.filter((trait, i) => trait !== y[i]).length;
+  const paired = Math.min(
+    ...orderings(large).map(order => small.reduce((sum, voice, i) => sum + cost(voice, order[i]), 0))
+  );
+  return paired + 4 * (large.length - small.length) + (!!a.echo === !!b.echo ? 0 : 1);
+}
+
+/**
+ * The fewest coarse traits two live cabinets may differ by. Measured on
+ * 2026-10-02 the closest pair on the floor is Microcity against Critter
+ * Rescue's second act at 3, then Microcity against the other three acts at 4,
+ * and the parked Pixel Park and Syndicate sit 10 or more from everything, so
+ * 2 leaves the shipped scores a trait of headroom while failing a copy with
+ * its numbers nudged (0) or one trait or the echo changed (1).
+ */
+export const MIN_INSTRUMENT_DISTANCE = 2;

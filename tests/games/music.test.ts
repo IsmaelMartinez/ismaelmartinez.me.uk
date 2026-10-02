@@ -5,6 +5,8 @@ import {
   PASS_FLOOR_SECONDS,
   barRhythms,
   failedGates,
+  MIN_INSTRUMENT_DISTANCE,
+  instrumentDistance,
   instrumentSignature,
   leadIndex,
   lowestVoiceIndex,
@@ -840,21 +842,58 @@ describe('the round 3 difference test', () => {
   });
 
   /**
-   * One cabinet's signatures, a set because a cabinet may export several
-   * scores (Critter Rescue's four acts are one cabinet). The parked cabinets
-   * are left out: they are not on the floor, and a revival (#381) rescores them.
+   * #437's near-copy: Cascade's band with every number nudged and the lead's
+   * pulse duty moved from 50% to 25%. Each change is a new exact signature, so
+   * the old cabinet test passed it, but the band is still two pulses over a
+   * wavetable bass and drums, held, plucked and held, all unfiltered.
+   */
+  const nearCascade: GameAudioOptions = {
+    ...CASCADE_MUSIC,
+    tracks: CASCADE_MUSIC.tracks.map((track, t) => ({
+      ...track,
+      ...(t === 0 ? { wave: 'pulse25' as const } : {}),
+      ...(track.adsr ? { adsr: { ...track.adsr, decay: track.adsr.decay + 0.01, release: track.adsr.release + 0.01 } } : {})
+    }))
+  };
+
+  it("passes #437's near-copy under the exact signature and catches it by distance", () => {
+    expect(instrumentSignature(nearCascade)).not.toBe(instrumentSignature(CASCADE_MUSIC));
+    expect(instrumentDistance(nearCascade, CASCADE_MUSIC)).toBeLessThan(MIN_INSTRUMENT_DISTANCE);
+  });
+
+  it('counts one point per coarse trait that differs, four per unpaired voice and one for the echo', () => {
+    const plain = band([lead, 'A5'], [bass, 'A2']);
+    expect(instrumentDistance(band([bass, 'A2'], [lead, 'A5']), plain)).toBe(0);
+    // A pulse's duty is a nudge within the pulse family, and square is its 50% duty.
+    expect(instrumentDistance(band([{ wave: 'square' }, 'A5'], [bass, 'A2']), plain)).toBe(0);
+    expect(instrumentDistance(band([lead, 'A4'], [bass, 'A2']), plain)).toBe(1);
+    expect(instrumentDistance(band([{ wave: 'sawtooth' }, 'A5'], [bass, 'A2']), plain)).toBe(1);
+    expect(instrumentDistance(band([{ ...lead, fm: { ratio: 1, index: 2 } }, 'A5'], [bass, 'A2']), plain)).toBe(1);
+    expect(instrumentDistance(band([{ ...lead, adsr: { attack: 0.1, decay: 0, sustain: 0, release: 0 } }, 'A5'], [bass, 'A2']), plain)).toBe(1);
+    expect(instrumentDistance(band([{ ...lead, adsr: { attack: 0, decay: 0, sustain: 0.5, release: 0 } }, 'A5'], [bass, 'A2']), plain)).toBe(1);
+    expect(instrumentDistance(band([{ ...lead, filter: { cutoff: 900 } }, 'A5'], [bass, 'A2']), plain)).toBe(1);
+    expect(instrumentDistance({ ...plain, echo: { time: 0.2, feedback: 0.3, mix: 0.2 } }, plain)).toBe(1);
+    expect(instrumentDistance(band([lead, 'A5'], [bass, 'A2'], [pad, 'A3']), plain)).toBe(4);
+  });
+
+  /**
+   * One cabinet's scores (Critter Rescue's four acts are one cabinet). The
+   * parked cabinets are left out: they are not on the floor, and a revival
+   * (#381) rescores them.
    */
   const PARKED = new Set(['park', 'syndicate']);
   const CABINETS = [...new Set(DISCOVERED.map(d => d.cabinet))]
     .filter(cabinet => !PARKED.has(cabinet))
     .map(cabinet => {
       const scores = DISCOVERED.filter(d => d.cabinet === cabinet);
-      return { cabinet, profile: scores[0].profile, signatures: new Set(scores.map(d => instrumentSignature(d.music))) };
+      return { cabinet, profile: scores[0].profile, scores: scores.map(d => d.music) };
     });
-  /** The other live cabinets with a score whose signature matches one of this cabinet's. */
+  /** The other live cabinets with a score fewer than `MIN_INSTRUMENT_DISTANCE` traits from one of this cabinet's. */
   const twinsOf = (cabinet: string): string[] => {
-    const own = CABINETS.find(c => c.cabinet === cabinet)!.signatures;
-    return CABINETS.filter(c => c.cabinet !== cabinet && [...c.signatures].some(s => own.has(s))).map(c => c.cabinet);
+    const own = CABINETS.find(c => c.cabinet === cabinet)!.scores;
+    return CABINETS.filter(
+      c => c.cabinet !== cabinet && c.scores.some(s => own.some(o => instrumentDistance(s, o) < MIN_INSTRUMENT_DISTANCE))
+    ).map(c => c.cabinet);
   };
 
   it('finds the live cabinets and leaves the parked ones out', () => {
@@ -864,15 +903,15 @@ describe('the round 3 difference test', () => {
   });
 
   it.each(CABINETS)(
-    '$cabinet shares its instrument set with no other cabinet, or still does while it waits for its rescore',
+    '$cabinet sits at least MIN_INSTRUMENT_DISTANCE traits from every other cabinet, or still does not while it waits for its rescore',
     ({ cabinet, profile }) => {
       const twins = twinsOf(cabinet);
       if (profile.palettePending) {
         // A flag on a cabinet that no longer collides is stale. Ending a
         // collision can clear two flags at once, since both sides lose their twin.
-        expect(twins, `${cabinet} no longer shares its instrument set; remove its palettePending`).not.toEqual([]);
+        expect(twins, `${cabinet} is far enough from every other cabinet now; remove its palettePending`).not.toEqual([]);
       } else {
-        expect(twins, `${cabinet} has the same instruments as ${twins.join(', ')}`).toEqual([]);
+        expect(twins, `${cabinet} is fewer than ${MIN_INSTRUMENT_DISTANCE} instrument traits from ${twins.join(', ')}`).toEqual([]);
       }
     }
   );

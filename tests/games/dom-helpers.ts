@@ -118,6 +118,15 @@ export interface FrameDriver {
    * ever runs. Starting at or after it lands every frame's delta on the
    * loop's own cap, so tick counts are exact whenever the file happens to be
    * scheduled.
+   *
+   * The reading is rounded up to a whole millisecond, and that is load-bearing
+   * too (#440). From a fractional start, `(clock + 250) - clock` is not always
+   * exactly 250 in floating point, and a frame that comes up a hair short
+   * runs 14 steps instead of 15: between 1% and 7% of starts (depending on
+   * the reading's magnitude) lose a tick over 140 frames, so whether an exact
+   * tick count held depended on when the file was scheduled, which is why it
+   * showed up on a busy machine. Whole numbers add and subtract exactly,
+   * which keeps every delta at 250.
    */
   syncClock(): void;
   /**
@@ -154,7 +163,7 @@ export function createFrameDriver(): FrameDriver {
       });
     },
     syncClock() {
-      clock = performance.now();
+      clock = Math.ceil(performance.now());
     },
     advance(seconds) {
       const frames = Math.ceil((seconds * 1000) / FRAME_MS);

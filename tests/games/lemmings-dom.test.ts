@@ -161,14 +161,10 @@ const GAME_HTML = `
 const TICKS_PER_FRAME = 15;
 
 /**
- * The timeout for the two tests that step the real loop through a whole
- * level. Measured for #440 on 2026-10-02: 1.2 to 2.2 s and 0.2 to 0.4 s with
- * the file run alone. The clock-billing test is not caught by the
- * `performance.now()` trap: the loop seeds its `last` inside
- * `initLemmingsGame` and `syncClock` reads the clock after it, so a 400 ms
- * stall injected on either side of `syncClock` still lands every frame on
- * exactly 15 ticks and the test passes, while moving `syncClock` before init
- * fails it as an assertion (2745 ticks against 2700), not as a timeout.
+ * The timeout for the untouched-level test, which steps the real loop through
+ * a whole level and its nuke. Measured for #440 on 2026-10-02: 1.2 to 2.2 s
+ * with the file run alone. (The clock-billing test's failures in #440 were
+ * not time: they were `syncClock`'s fractional start, see its docstring.)
  */
 const HEAVY = { timeout: 30000 };
 
@@ -443,7 +439,7 @@ describe('game loop — no level is ever unescapable', () => {
     );
   });
 
-  it('bills an authored clock for the whole clock, however still the field went', HEAVY, () => {
+  it('bills an authored clock for the whole clock, however still the field went', () => {
     // The scoring counterpart to the tests above. Nothing on a frozen field ends
     // a level any more, but a level with an authored `timeLimit` still has one
     // ending the player does not choose — and that ending has to be paid for at

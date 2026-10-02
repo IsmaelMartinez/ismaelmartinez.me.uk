@@ -261,9 +261,10 @@
        * gain: two inputs matched on 5 of 5 renders, three inputs differed on
        * 2 of 5, four on 5 of 5; a whole-score `renderScore` of Cascade or Tank
        * Duel differed on every pair, and enough samples straddle a 16-bit step
-       * that the WAVs differ too. One voice keeps the bus at two sounding
-       * inputs at most, so each part is repeatable, and the sum is exact in
-       * the fixed order below. Everything after the bus (echo, master volume)
+       * that the WAVs differ too. One voice keeps a layered score's lane at one
+       * input, `renderScore` sums each voice's own overlapping notes two at a
+       * time (#441), so each part is repeatable, and the sum is exact in the
+       * fixed order below. Everything after the bus (echo, master volume)
        * is linear, so the mix is the whole-score render up to that last bit.
        *
        * The card's adaptive controls apply per voice through `renderParts`: a

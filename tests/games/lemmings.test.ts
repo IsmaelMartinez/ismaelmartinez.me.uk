@@ -1945,3 +1945,81 @@ describe('Critter Rescue music, the Amiga palette', () => {
     }
   );
 });
+
+/**
+ * The acts' levels (#439). Act II used to render about 3 dB under the other
+ * acts by RMS: its harpsichord sample decays to a 0.3 sustain from a bright,
+ * peaky table, and Mozart's left hand gives the bass one eighth a chord. A
+ * render needs an `OfflineAudioContext`, which Node lacks, so this estimates a
+ * pass's level from what sets it: each pitched note's energy under the
+ * engine's ADSR (a linear attack, an exponential decay to the sustain, the
+ * hold, an exponential release), times its voice volume and note gain
+ * squared, times the RMS of its voice's cycle at unit peak, over the pass's
+ * length. The kit and the Paula filter are left out, the kit being a few per
+ * cent of any act's energy. Against renderScore it agrees to about 0.3 dB: it
+ * puts Act II 3.0 dB under the others' mean before the fix (rendered: 3.1)
+ * and 0.6 after (rendered: 0.8). Dropping either half of the fix (the lead's
+ * level or the accompaniment's), or lowering the harpsichord's sustain to 0.1,
+ * trips the 1.2 dB bound.
+ */
+describe('Critter Rescue music, one level across the acts (#439)', () => {
+  type Voice = GameAudioOptions['tracks'][number];
+  /** Where the engine's exponential release ends. */
+  const ADSR_FLOOR = 0.0001;
+
+  /** RMS of a voice's cycle at unit peak, drawn as the engine draws a `harmonics` table. */
+  function cycleRms(track: Voice): number {
+    const table = track.wavetable!;
+    let cycle = table.samples;
+    if (!cycle) {
+      const drawn = Array.from({ length: 32 }, (_, k) =>
+        table.harmonics!.reduce((sum, level, i) => sum + level * Math.sin((2 * Math.PI * (i + 1) * k) / 32), 0)
+      );
+      const top = Math.max(...drawn.map(Math.abs));
+      cycle = drawn.map(v => v / top);
+    }
+    return Math.sqrt(cycle.reduce((sum, v) => sum + v * v, 0) / cycle.length);
+  }
+
+  /** The integral of a unit-peak ADSR's level squared over a note held `held` seconds, its release included. */
+  function envelopeEnergy(adsr: NonNullable<Voice['adsr']>, held: number): number {
+    const { attack, decay, sustain, release } = adsr;
+    const ring = (level: number) => (level * level * release) / (2 * Math.log(level / ADSR_FLOOR));
+    if (attack >= held) {
+      const top = held / attack;
+      return (top * top * held) / 3 + ring(top);
+    }
+    const reach = Math.min(decay, held - attack);
+    const end = Math.pow(sustain, reach / decay);
+    const decayed = (decay * (end * end - 1)) / (2 * Math.log(sustain));
+    return attack / 3 + decayed + end * end * (held - attack - reach) + ring(end);
+  }
+
+  /** One pass of an act's form as mean power in decibels, on a scale shared by every act. */
+  function passLevel(music: GameAudioOptions): number {
+    const form = music.form!;
+    const seconds = 60 / music.tempo!;
+    let energy = 0;
+    let beats = 0;
+    for (const name of form.order) beats += form.sections[name][0].reduce((sum, n) => sum + n.beats, 0);
+    music.tracks.forEach((track, t) => {
+      if (!track.wavetable) return;
+      const scale = ((track.volume ?? 1) * cycleRms(track)) ** 2;
+      for (const name of form.order) {
+        for (const note of form.sections[name][t]) {
+          if (note.freq > 0) energy += scale * (note.gain ?? 1) ** 2 * envelopeEnergy(track.adsr!, note.beats * seconds);
+        }
+      }
+    });
+    return 10 * Math.log10(energy / (beats * seconds));
+  }
+
+  it('keeps every act within 1.2 dB of the mean of the others', () => {
+    const levels = ACT_MUSIC.map(passLevel);
+    const gaps = levels.map((level, act) => {
+      const others = levels.filter((_, other) => other !== act);
+      return +Math.abs(level - others.reduce((sum, l) => sum + l, 0) / others.length).toFixed(2);
+    });
+    expect(gaps.every(gap => gap < 1.2), `gaps from the other acts' mean, Act I to IV: ${gaps.join(', ')} dB`).toBe(true);
+  });
+});

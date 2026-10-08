@@ -67,6 +67,18 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
     </section>
   )}
 
+  <section class="section arcade-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="arcade-teaser">
+        <span>
+          <span class="arcade-kicker">{t('fun.arcade.subtitle')}</span>
+          <span class="arcade-title">{t('fun.arcade.teaser.title')}</span>
+        </span>
+        <span class="btn btn-outline arcade-cta">./{t('fun.arcade.teaser.cta')} →</span>
+      </a>
+    </div>
+  </section>
+
   <ContactCTA lang={lang} />
 </Layout>
 
@@ -126,6 +138,55 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
   }
 
   .event:hover .event-title {
+    color: var(--color-accent);
+  }
+
+  .arcade-section {
+    padding-top: 0;
+  }
+
+  .arcade-teaser {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    padding: var(--space-xl);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+    transition: border-color 0.2s ease;
+  }
+
+  .arcade-teaser:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+  }
+
+  .arcade-kicker {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+
+  .arcade-title {
+    display: block;
+    font-size: 1.6rem;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
+  .arcade-cta {
+    text-transform: lowercase;
+  }
+
+  .arcade-teaser:hover .arcade-cta {
+    border-color: var(--color-accent);
     color: var(--color-accent);
   }
 

@@ -1,7 +1,9 @@
 ---
-import { useTranslations, getLocalizedPath } from '../i18n/translations';
-import { getFeaturedProjects } from '../data/projects';
-import { personJsonLd } from '../data/person';
+import { useTranslations, getLocalizedPath, formatDate, locales } from '../i18n/translations';
+import { projects, getFeaturedProjects } from '../data/projects';
+import { personJsonLd, toJsonLd } from '../data/person';
+import { getPublishedArticles } from '../utils/articles';
+import { TERMINAL_STRING_KEYS, type TerminalData, type TerminalStrings } from '../terminal/commands';
 
 interface Props {
   lang: 'en' | 'es' | 'cat';
@@ -10,6 +12,32 @@ interface Props {
 const { lang } = Astro.props;
 const t = useTranslations(lang);
 const featured = getFeaturedProjects().slice(0, 3);
+
+// Everything the live terminal knows, composed here so its script needs neither
+// the content collection nor the translations dictionary.
+const terminalData: TerminalData = {
+  name: personJsonLd.name,
+  role: t('hero.tagline'),
+  motto: t('hero.headlineAside'),
+  articles: (await getPublishedArticles(lang)).map(article => {
+    const slug = article.id.replace(`${lang}/`, '');
+    return {
+      slug,
+      title: article.data.title,
+      description: article.data.description,
+      date: formatDate(article.data.publishedDate, lang, 'short'),
+      tags: article.data.tags,
+      href: getLocalizedPath(`/articles/${slug}`, lang),
+    };
+  }),
+  projects: projects.map(project => ({ name: project.name, url: project.url })),
+  arcadeHref: getLocalizedPath('/fun', lang),
+  gameHrefPrefix: getLocalizedPath('/fun/', lang),
+  langHrefs: Object.fromEntries(locales.map(code => [code, getLocalizedPath('/', code)])),
+  strings: Object.fromEntries(
+    TERMINAL_STRING_KEYS.map(key => [key, t(`terminal.${key}`)])
+  ) as TerminalStrings,
+};
 ---
 
 <section class="hero">
@@ -25,11 +53,13 @@ const featured = getFeaturedProjects().slice(0, 3);
       </div>
     </div>
 
-    {/* The prompts are decoration; a screen reader hears only the answers. */}
-    <div class="terminal">
+    {/* The prompts are decoration; a screen reader hears only the answers.
+        Without JavaScript this stays the static panel; src/terminal/dom.ts adds the live prompt. */}
+    <div class="terminal" data-terminal>
+      <script is:inline type="application/json" data-terminal-data set:html={toJsonLd(terminalData)} />
       <div class="terminal-bar" aria-hidden="true">
         <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
-        <span class="terminal-title">whoami</span>
+        <span class="terminal-title">tty1 · ismael@home</span>
       </div>
       <div class="terminal-body">
         <p class="terminal-cmd" aria-hidden="true"><span class="prompt">$</span> whoami</p>
@@ -48,6 +78,13 @@ const featured = getFeaturedProjects().slice(0, 3);
     </div>
   </div>
 </section>
+
+<script>
+  import { initTerminal } from '../terminal/dom';
+
+  initTerminal();
+  document.addEventListener('astro:after-swap', () => initTerminal());
+</script>
 
 <style>
   .hero {
@@ -91,6 +128,7 @@ const featured = getFeaturedProjects().slice(0, 3);
   }
 
   .terminal {
+    position: relative;
     border: 1px solid var(--color-frame);
     border-radius: var(--radius-lg);
     background: var(--color-bg-secondary);
@@ -98,6 +136,24 @@ const featured = getFeaturedProjects().slice(0, 3);
     font-size: 0.875rem;
     line-height: 1.8;
     overflow: hidden;
+    transition: border-color 0.2s ease;
+  }
+
+  .terminal:focus-within {
+    border-color: var(--color-accent);
+  }
+
+  /* The 90s part: faint CRT scanlines over the live screen. */
+  .terminal.is-live::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0 2px,
+      color-mix(in srgb, var(--color-text) 4%, transparent) 2px 3px
+    );
   }
 
   .terminal-bar {
@@ -123,6 +179,19 @@ const featured = getFeaturedProjects().slice(0, 3);
   .terminal-body {
     padding: 1.25rem 1.375rem;
     color: var(--color-text);
+  }
+
+  /* A fixed height, not a maximum: the hero centres its two columns, so a
+     screen that grew with its output would push the headline around. It is set
+     on the static panel too, so the prompt arriving causes no layout shift. */
+  .terminal-body {
+    height: 23rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .terminal.is-live .terminal-body {
+    cursor: text;
   }
 
   .terminal-cmd {
@@ -167,5 +236,120 @@ const featured = getFeaturedProjects().slice(0, 3);
 
   @keyframes blink {
     50% { opacity: 0; }
+  }
+
+  /* Once live, the prompt's own caret takes over from the decorative one. */
+  .terminal.is-live .cursor {
+    display: none;
+  }
+
+  /* Phosphor glow, dark theme only: on paper it would just look smudged. */
+  :global(:root[data-theme="dark"]) .terminal.is-live .terminal-body {
+    text-shadow: 0 0 6px color-mix(in srgb, currentColor 30%, transparent);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme="light"])) .terminal.is-live .terminal-body {
+      text-shadow: 0 0 6px color-mix(in srgb, currentColor 30%, transparent);
+    }
+  }
+
+  /* Lines printed by src/terminal/dom.ts are created at runtime and carry no
+     Astro scope attribute, so their rules are global under the terminal. */
+  .terminal :global(.term-log) {
+    margin-top: 0.75rem;
+  }
+
+  .terminal :global(.term-line) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* One column per cell, the last taking the rest: help is two, article rows three. */
+  .terminal :global(.term-grid) {
+    display: grid;
+    column-gap: 1.2em;
+  }
+
+  .terminal :global(.term-grid[data-columns="2"]) {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .terminal :global(.term-grid[data-columns="3"]) {
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+  }
+
+  /* Too narrow for help's two columns: each description drops under its
+     command. Article rows keep theirs, so a title wraps beside its number. */
+  @media (max-width: 640px) {
+    .terminal :global(.term-grid[data-columns="2"]) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .terminal :global(.term-grid[data-columns="2"] > :nth-child(even)) {
+      padding-left: 1.5em;
+    }
+  }
+
+  .terminal :global(.term-muted) {
+    color: var(--color-text-muted);
+  }
+
+  .terminal :global(.term-accent) {
+    color: var(--color-accent);
+  }
+
+  .terminal :global(.term-error) {
+    color: var(--color-danger);
+  }
+
+  .terminal :global(.term-line a) {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--color-frame);
+    text-underline-offset: 3px;
+  }
+
+  .terminal :global(.term-line a:hover) {
+    color: var(--color-accent);
+    text-decoration-color: currentColor;
+  }
+
+  .terminal :global(.term-input-row) {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6em;
+  }
+
+  .terminal :global(.term-input) {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    caret-color: var(--color-accent);
+    outline: none;
+  }
+
+  .terminal :global(.term-input::placeholder) {
+    color: var(--color-text-faint);
+  }
+
+  .terminal :global(.term-sr) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* iOS zooms into any input under 16px; on touch screens the prompt meets it. */
+  @media (pointer: coarse) {
+    .terminal :global(.term-input) {
+      font-size: 16px;
+    }
   }
 </style>

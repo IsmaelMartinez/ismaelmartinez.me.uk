@@ -38,17 +38,23 @@ const t = useTranslations(lang);
   }
 
   .project-name {
-    font-size: 1.25rem;
-    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0;
   }
 
   .project-name a {
-    color: var(--color-text);
+    color: var(--color-accent);
     transition: color 0.2s ease;
   }
 
+  .project-name a::before {
+    content: '/';
+  }
+
   .project-name a:hover {
-    color: var(--color-accent);
+    color: var(--color-accent-hover);
   }
 
   .project-description {

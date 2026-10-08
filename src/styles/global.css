@@ -1,16 +1,26 @@
+/* Self-hosted, because the CSP has no font-src and so falls back to default-src
+   self: a Google Fonts link would be blocked. */
+@import "@fontsource-variable/space-grotesk/wght.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
 :root {
-  /* Editorial × Brutalist — paper & ink (light default) */
-  --color-bg: #eaf0f9;
+  /* Console: slate & amber. Light is the counterpart of the dark palette, which
+     is the design of record; the amber accent darkens here for 4.5:1 on paper. */
+  --color-bg: #f6f7f9;
   --color-bg-secondary: #ffffff;
-  --color-text: #0f1b2e;
-  --color-text-muted: #46566e;
-  --color-accent: #1d4ed8;
-  --color-accent-hover: #1e40af;
-  --color-accent-solid: #1d4ed8;
-  --color-accent-solid-hover: #1e40af;
-  --color-border: #c3d0e2;
-  --color-frame: #0f1b2e;
-  --color-shadow: #0f1b2e;
+  --color-text: #0d1014;
+  --color-text-muted: #4a5462;
+  --color-text-faint: #5b6573;
+  --color-accent: #8a5300;
+  --color-accent-hover: #6e4200;
+  /* Fills (buttons, the active language, selection) stay amber in both themes,
+     always with dark ink on them. */
+  --color-accent-solid: #ffb224;
+  --color-accent-solid-hover: #ffc85c;
+  --color-on-accent: #0d1014;
+  --color-border: #dce1e8;
+  --color-frame: #c5ccd6;
   --gradient-magic: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
 
   /* Health tier colours */
@@ -32,17 +42,12 @@
   --space-3xl: 4rem;
 
   /* Typography */
-  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+  --font-sans: "Space Grotesk Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
 
-  /* Frame & shadow */
-  --radius: 2px;
-  --frame-width: 2px;
-  --shadow-card: 6px 6px 0 var(--color-shadow);
-  --shadow-card-pressed: 2px 2px 0 var(--color-shadow);
-  --shadow-btn: 4px 4px 0 var(--color-shadow);
-  --shadow-btn-pressed: 1px 1px 0 var(--color-shadow);
+  /* Shape */
+  --radius: 10px;
+  --radius-lg: 14px;
 
   /* Sizing */
   --max-width: 1200px;
@@ -52,17 +57,15 @@
 /* Dark mode — system preference (when no manual override) */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-bg: #0c1424;
-    --color-bg-secondary: #15213a;
-    --color-text: #e4ebf6;
-    --color-text-muted: #93a3be;
-    --color-accent: #60a5fa;
-    --color-accent-hover: #93c5fd;
-    --color-accent-solid: #2563eb;
-    --color-accent-solid-hover: #1d4ed8;
-    --color-border: #29354f;
-    --color-frame: #e4ebf6;
-    --color-shadow: #05080f;
+    --color-bg: #0d1014;
+    --color-bg-secondary: #151a21;
+    --color-text: #e8ecf1;
+    --color-text-muted: #9ba5b3;
+    --color-text-faint: #7d8796;
+    --color-accent: #ffb224;
+    --color-accent-hover: #ffc85c;
+    --color-border: #222933;
+    --color-frame: #2a313c;
     --color-tier-gold: #ffd700;
     --color-tier-silver: #c0c0c0;
     --color-tier-bronze: #cd7f32;
@@ -74,17 +77,15 @@
 
 /* Dark mode — manual override */
 :root[data-theme="dark"] {
-  --color-bg: #0c1424;
-  --color-bg-secondary: #15213a;
-  --color-text: #e4ebf6;
-  --color-text-muted: #93a3be;
-  --color-accent: #60a5fa;
-  --color-accent-hover: #93c5fd;
-  --color-accent-solid: #2563eb;
-  --color-accent-solid-hover: #1d4ed8;
-  --color-border: #29354f;
-  --color-frame: #e4ebf6;
-  --color-shadow: #05080f;
+  --color-bg: #0d1014;
+  --color-bg-secondary: #151a21;
+  --color-text: #e8ecf1;
+  --color-text-muted: #9ba5b3;
+  --color-text-faint: #7d8796;
+  --color-accent: #ffb224;
+  --color-accent-hover: #ffc85c;
+  --color-border: #222933;
+  --color-frame: #2a313c;
   --color-tier-gold: #ffd700;
   --color-tier-silver: #c0c0c0;
   --color-tier-bronze: #cd7f32;
@@ -127,9 +128,8 @@ body {
 }
 
 h1, h2, h3, h4 {
-  font-family: var(--font-serif);
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1.15;
 }
 
@@ -145,7 +145,7 @@ a:hover {
 
 ::selection {
   background: var(--color-accent-solid);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 :focus-visible {
@@ -170,15 +170,13 @@ img {
 }
 
 .section-title {
-  font-size: 1.75rem;
+  font-size: 2rem;
   margin-bottom: var(--space-sm);
 }
 
 .section-description {
   color: var(--color-text-muted);
   margin-bottom: var(--space-xl);
-  font-style: italic;
-  font-family: var(--font-serif);
 }
 
 /* The header every listing page opens with (about, projects, writing, tags, health). */
@@ -187,7 +185,7 @@ img {
 }
 
 .page-title {
-  font-size: 2rem;
+  font-size: clamp(2.2rem, 4.5vw, 3rem);
   font-weight: 700;
   margin-bottom: var(--space-md);
 }
@@ -200,35 +198,28 @@ img {
 
 /* Eyebrow / kicker label */
 .kicker {
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
 }
 
 /* Card */
 .card {
   background: var(--color-bg-secondary);
-  border: var(--frame-width) solid var(--color-frame);
-  border-radius: var(--radius);
-  padding: var(--space-lg);
-  box-shadow: var(--shadow-card);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  transition: border-color 0.2s ease;
 }
 
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .card:hover {
-    transform: translate(3px, 3px);
-    box-shadow: var(--shadow-card-pressed);
-  }
+.card:hover {
+  border-color: var(--color-accent);
 }
 
 /* Grid */
 .grid {
   display: grid;
-  gap: var(--space-xl);
+  gap: var(--space-md);
 }
 
 .grid-2 {
@@ -244,40 +235,36 @@ img {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: 0.7rem 1.5rem;
+  min-height: 2.875rem;
+  padding: 0 1.25rem;
   border-radius: var(--radius);
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 0.82rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  border: var(--frame-width) solid var(--color-frame);
-  box-shadow: var(--shadow-btn);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: 1px solid var(--color-frame);
   cursor: pointer;
-  transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.2s ease, color 0.2s ease;
-}
-
-.btn:hover {
-  transform: translate(2px, 2px);
-  box-shadow: var(--shadow-btn-pressed);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .btn-primary {
   background: var(--color-accent-solid);
-  color: #fff;
+  border-color: var(--color-accent-solid);
+  color: var(--color-on-accent);
 }
 
 .btn-primary:hover {
   background: var(--color-accent-solid-hover);
-  color: #fff;
+  border-color: var(--color-accent-solid-hover);
+  color: var(--color-on-accent);
 }
 
 .btn-outline {
-  background: var(--color-bg-secondary);
+  background: transparent;
   color: var(--color-text);
 }
 
 .btn-outline:hover {
+  border-color: var(--color-accent);
   color: var(--color-accent);
 }
 
@@ -287,12 +274,9 @@ img {
   padding: 0.15rem 0.55rem;
   background: transparent;
   border: 1px solid var(--color-frame);
-  border-radius: var(--radius);
-  font-family: var(--font-sans);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   color: var(--color-text-muted);
 }
 
@@ -303,17 +287,13 @@ img {
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
   background: var(--color-bg-secondary);
-  border: var(--frame-width) solid var(--color-frame);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.2s ease;
 }
 
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .link-card:hover {
-    transform: translate(3px, 3px);
-    box-shadow: var(--shadow-card-pressed);
-  }
+.link-card:hover {
+  border-color: var(--color-accent);
 }
 
 .link-card-icon {
@@ -404,8 +384,6 @@ html.theme-switching::view-transition-new(root) {
     --color-accent: #000;
     --color-border: #ccc;
     --color-frame: #000;
-    --shadow-card: none;
-    --shadow-btn: none;
   }
 
   nav,

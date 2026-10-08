@@ -312,7 +312,9 @@ const floorIsland = Buffer.from(
       0 0 1px rgba(29, 78, 216, 0.5),
       0 0 14px rgba(37, 99, 235, 0.35),
       0 0 34px rgba(37, 99, 235, 0.2);
-    --sign-accent: var(--color-accent-solid);
+    /* A literal, not the site accent: the room keeps its own blue showroom
+       palette whatever the site chrome around it does. */
+    --sign-accent: #1d4ed8;
     --sign-accent-glow:
       0 0 1px rgba(29, 78, 216, 0.5),
       0 0 14px rgba(0, 183, 255, 0.45),

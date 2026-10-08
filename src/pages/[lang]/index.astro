@@ -2,7 +2,6 @@
 import Layout from '../../layouts/Layout.astro';
 import Hero from '../../components/Hero.astro';
 import ProjectCard from '../../components/ProjectCard.astro';
-import ArticleCard from '../../components/ArticleCard.astro';
 import ContactCTA from '../../components/ContactCTA.astro';
 import { useTranslations, locales, getLocalizedPath } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
@@ -27,17 +26,17 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
 
   <section class="section">
     <div class="container">
-      <h2 class="section-title">{t('section.projects')}</h2>
-      <p class="section-description">{t('section.projects.description')}</p>
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">{t('section.projects')}</h2>
+          <p class="section-description">{t('section.projects.description')}</p>
+        </div>
+        <a href={getLocalizedPath('/projects', lang)} class="section-more">{t('common.viewAll')} →</a>
+      </div>
       <div class="grid grid-3">
         {featuredProjects.map(project => (
           <ProjectCard project={project} lang={lang} />
         ))}
-      </div>
-      <div class="section-footer">
-        <a href={getLocalizedPath('/projects', lang)} class="btn btn-outline">
-          {t('common.viewAll')} →
-        </a>
       </div>
     </div>
   </section>
@@ -45,27 +44,25 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
   {latestArticles.length > 0 && (
     <section class="section">
       <div class="container">
-        <h2 class="section-title">{t('section.writing')}</h2>
-        <p class="section-description">{t('section.writing.description')}</p>
-        <div class="grid grid-3">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">{t('section.writing')}</h2>
+            <p class="section-description">{t('section.writing.description')}</p>
+          </div>
+          <a href={getLocalizedPath('/writing', lang)} class="section-more">{t('common.viewAll')} →</a>
+        </div>
+        {/* An event log, the writing's own vocabulary; the event name is code, so it is not translated. */}
+        <ol class="event-log">
           {latestArticles.map(article => (
-            <ArticleCard
-              title={article.data.title}
-              description={article.data.description}
-              publishedDate={article.data.publishedDate}
-              slug={article.id.replace(`${lang}/`, '')}
-              heroImage={article.data.heroImage}
-              tags={article.data.tags}
-              lang={lang}
-              originalPlatform={article.data.originalPlatform}
-            />
+            <li>
+              <a href={getLocalizedPath(`/articles/${article.id.replace(`${lang}/`, '')}`, lang)} class="event">
+                <time datetime={article.data.publishedDate.toISOString()}>{article.data.publishedDate.toISOString().slice(0, 10)}</time>
+                <span class="event-name" aria-hidden="true">article.published</span>
+                <span class="event-title">{article.data.title}</span>
+              </a>
+            </li>
           ))}
-        </div>
-        <div class="section-footer">
-          <a href={getLocalizedPath('/writing', lang)} class="btn btn-outline">
-            {t('common.viewAll')} →
-          </a>
-        </div>
+        </ol>
       </div>
     </section>
   )}
@@ -74,8 +71,71 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
 </Layout>
 
 <style>
-  .section-footer {
-    margin-top: var(--space-xl);
-    text-align: center;
+  .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 0 var(--space-lg);
+  }
+
+  .section-more {
+    margin-bottom: var(--space-xl);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    text-transform: lowercase;
+    color: var(--color-text-muted);
+  }
+
+  .section-more:hover {
+    color: var(--color-accent);
+  }
+
+  .event-log {
+    list-style: none;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .event {
+    display: grid;
+    grid-template-columns: 7.5rem 10.5rem minmax(0, 1fr);
+    gap: var(--space-lg);
+    align-items: baseline;
+    padding: 1.25rem var(--space-xs);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+  }
+
+  .event time {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--color-text-faint);
+  }
+
+  .event-name {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--color-accent);
+  }
+
+  .event-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .event:hover .event-title {
+    color: var(--color-accent);
+  }
+
+  @media (max-width: 640px) {
+    .event {
+      grid-template-columns: 1fr;
+      gap: var(--space-xs);
+    }
+
+    .event-name {
+      display: none;
+    }
   }
 </style>

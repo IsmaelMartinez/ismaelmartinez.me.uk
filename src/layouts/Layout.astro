@@ -100,7 +100,7 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
 
     <nav class="nav" aria-label={t('nav.mainNavigation')}>
       <div class="container nav-container">
-        <a href={getLocalizedPath('/', lang)} class="nav-logo">Ismael <em>Martinez</em></a>
+        <a href={getLocalizedPath('/', lang)} class="nav-logo" aria-label="Ismael Martinez Ramos"><em>~/</em>ismael</a>
 
         <button id="menu-toggle" class="menu-toggle" aria-label={t('nav.menuToggle')} aria-controls="nav-links" aria-expanded="false" type="button">
           <span class="menu-icon"></span>
@@ -139,16 +139,17 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
     </main>
 
     <footer class="footer">
-      <div class="container">
-        <p>
-          {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> {t('footer.and')} ☕
-        </p>
+      <div class="container footer-container">
+        <div>
+          <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez Ramos</p>
+          <p>
+            {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> {t('footer.and')} ☕
+          </p>
+        </div>
         <p class="footer-links">
           <a href={getLocalizedPath(connectAnchorPath, lang)} class="footer-link">{t('cta.connect')}</a>
-          <span class="footer-separator">·</span>
-          <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">RSS</a>
+          <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">rss</a>
         </p>
-        <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez Ramos</p>
       </div>
     </footer>
 
@@ -452,7 +453,7 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
     z-index: 200;
     padding: var(--space-sm) var(--space-md);
     background: var(--color-accent-solid);
-    color: #fff;
+    color: var(--color-on-accent);
     border-radius: 0 0 0.25rem 0.25rem;
     font-weight: 600;
     text-decoration: none;
@@ -478,8 +479,9 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
     top: 0;
     z-index: 100;
     background: var(--color-bg);
-    border-bottom: 3px double var(--color-frame);
+    border-bottom: 1px solid var(--color-border);
     height: var(--nav-height);
+    font-family: var(--font-mono);
   }
 
   .nav-container {
@@ -490,10 +492,8 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
   }
 
   .nav-logo {
-    font-family: var(--font-serif);
-    font-size: 1.35rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
+    font-size: 1rem;
+    font-weight: 500;
     color: var(--color-text);
   }
 
@@ -508,59 +508,51 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
   .nav-links {
     display: flex;
     list-style: none;
-    gap: var(--space-xl);
+    gap: var(--space-xs);
   }
 
   .nav-links a {
+    display: block;
+    padding: var(--space-sm) 0.875rem;
+    border-radius: 8px;
     color: var(--color-text-muted);
-    font-weight: 700;
-    font-size: 0.76rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    transition: color 0.2s ease;
-    position: relative;
+    font-size: 0.875rem;
+    text-transform: lowercase;
+    transition: color 0.2s ease, background 0.2s ease;
   }
 
-  .nav-links a::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -4px;
-    height: 2px;
-    background: var(--color-accent);
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.25s ease;
-  }
-
-  .nav-links a:hover,
-  .nav-links a[aria-current="page"] {
+  .nav-links a:hover {
     color: var(--color-text);
   }
 
-  .nav-links a:hover::after,
-  .nav-links a[aria-current="page"]::after {
-    transform: scaleX(1);
+  .nav-links a[aria-current="page"] {
+    color: var(--color-text);
+    background: var(--color-bg-secondary);
+    box-shadow: inset 0 0 0 1px var(--color-border);
   }
 
   .nav-actions {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: var(--space-sm);
   }
 
   .lang-switcher {
     display: flex;
-    gap: var(--space-sm);
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--color-frame);
+    border-radius: 8px;
   }
 
   .theme-toggle {
     background: none;
     border: 1px solid var(--color-frame);
-    border-radius: var(--radius);
+    border-radius: 8px;
     cursor: pointer;
-    padding: var(--space-xs) var(--space-sm);
+    min-width: 2.125rem;
+    min-height: 2.125rem;
+    justify-content: center;
     color: var(--color-text-muted);
     font-size: 1rem;
     line-height: 1;
@@ -587,21 +579,21 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
   }
 
   .lang-link {
-    padding: var(--space-xs) var(--space-sm);
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    text-transform: lowercase;
     color: var(--color-text-muted);
-    border-radius: var(--radius);
-    border: 1px solid transparent;
+    border-radius: 6px;
     transition: all 0.2s ease;
   }
 
-  .lang-link:hover,
+  .lang-link:hover {
+    color: var(--color-text);
+  }
+
   .lang-link.active {
-    color: var(--color-accent);
-    border-color: var(--color-frame);
-    background: var(--color-bg-secondary);
+    color: var(--color-on-accent);
+    background: var(--color-accent-solid);
   }
 
   /* Hamburger menu button */
@@ -650,51 +642,45 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
   }
 
   .footer {
-    border-top: 3px double var(--color-frame);
-    padding: var(--space-xl) 0;
-    text-align: center;
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
+    border-top: 1px solid var(--color-border);
+    padding: var(--space-xl) 0 var(--space-2xl);
+    color: var(--color-text-faint);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+  }
+
+  .footer-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--space-md);
   }
 
   .footer a {
-    text-decoration: underline;
+    color: var(--color-text-muted);
   }
 
   .footer a:hover {
-    text-decoration: none;
-  }
-
-  .footer-links {
-    margin-top: var(--space-sm);
-  }
-
-  .footer-link,
-  .footer-rss {
-    color: var(--color-text-muted);
-    text-decoration: none;
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  .footer-link:hover,
-  .footer-rss:hover {
     color: var(--color-accent);
   }
 
-  .footer-separator {
-    color: var(--color-text-muted);
-    margin: 0 var(--space-xs);
+  .footer-links {
+    display: flex;
+    gap: var(--space-lg);
+  }
+
+  .footer-link {
+    text-transform: lowercase;
   }
 
   .footer-copy {
-    margin-top: var(--space-sm);
-    font-size: 0.75rem;
+    color: var(--color-text-muted);
   }
 
   @media (max-width: 768px) {
-    .nav-links {
-      gap: var(--space-md);
+    .nav-links a {
+      padding: var(--space-sm);
     }
   }
 

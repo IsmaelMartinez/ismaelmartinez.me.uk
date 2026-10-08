@@ -142,7 +142,7 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
       <div class="container footer-container">
         <div>
           <p class="footer-copy">&copy; {new Date().getFullYear()} Ismael Martinez Ramos</p>
-          <p>
+          <p class="footer-built">
             {t('footer.built')} <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> {t('footer.and')} ☕
           </p>
         </div>
@@ -663,6 +663,12 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
 
   .footer a:hover {
     color: var(--color-accent);
+  }
+
+  /* A link inside running text keeps an underline, so it is not told apart by colour alone. */
+  .footer-built a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .footer-links {

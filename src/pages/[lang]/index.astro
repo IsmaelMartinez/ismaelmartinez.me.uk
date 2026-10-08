@@ -3,7 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import Hero from '../../components/Hero.astro';
 import ProjectCard from '../../components/ProjectCard.astro';
 import ContactCTA from '../../components/ContactCTA.astro';
-import { useTranslations, locales, getLocalizedPath } from '../../i18n/translations';
+import { useTranslations, locales, getLocalizedPath, formatDate } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { getFeaturedProjects } from '../../data/projects';
 import { getPublishedArticles } from '../../utils/articles';
@@ -56,7 +56,7 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
           {latestArticles.map(article => (
             <li>
               <a href={getLocalizedPath(`/articles/${article.id.replace(`${lang}/`, '')}`, lang)} class="event">
-                <time datetime={article.data.publishedDate.toISOString()}>{article.data.publishedDate.toISOString().slice(0, 10)}</time>
+                <time datetime={article.data.publishedDate.toISOString()}>{formatDate(article.data.publishedDate, lang, 'short')}</time>
                 <span class="event-name" aria-hidden="true">article.published</span>
                 <span class="event-title">{article.data.title}</span>
               </a>
@@ -98,7 +98,8 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
 
   .event {
     display: grid;
-    grid-template-columns: 7.5rem 10.5rem minmax(0, 1fr);
+    /* Wide enough for the longest locale form, Catalan's "27 de febr. del 2026". */
+    grid-template-columns: 10.5rem 10.5rem minmax(0, 1fr);
     gap: var(--space-lg);
     align-items: baseline;
     padding: 1.25rem var(--space-xs);

@@ -2,9 +2,8 @@
 import Layout from '../../layouts/Layout.astro';
 import Hero from '../../components/Hero.astro';
 import ProjectCard from '../../components/ProjectCard.astro';
-import ArticleCard from '../../components/ArticleCard.astro';
 import ContactCTA from '../../components/ContactCTA.astro';
-import { useTranslations, locales, getLocalizedPath } from '../../i18n/translations';
+import { useTranslations, locales, getLocalizedPath, formatDate } from '../../i18n/translations';
 import type { Locale } from '../../i18n/translations';
 import { getFeaturedProjects } from '../../data/projects';
 import { getPublishedArticles } from '../../utils/articles';
@@ -27,17 +26,17 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
 
   <section class="section">
     <div class="container">
-      <h2 class="section-title">{t('section.projects')}</h2>
-      <p class="section-description">{t('section.projects.description')}</p>
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">{t('section.projects')}</h2>
+          <p class="section-description">{t('section.projects.description')}</p>
+        </div>
+        <a href={getLocalizedPath('/projects', lang)} class="section-more">{t('common.viewAll')} →</a>
+      </div>
       <div class="grid grid-3">
         {featuredProjects.map(project => (
           <ProjectCard project={project} lang={lang} />
         ))}
-      </div>
-      <div class="section-footer">
-        <a href={getLocalizedPath('/projects', lang)} class="btn btn-outline">
-          {t('common.viewAll')} →
-        </a>
       </div>
     </div>
   </section>
@@ -45,37 +44,160 @@ const latestArticles = (await getPublishedArticles(lang)).slice(0, 3);
   {latestArticles.length > 0 && (
     <section class="section">
       <div class="container">
-        <h2 class="section-title">{t('section.writing')}</h2>
-        <p class="section-description">{t('section.writing.description')}</p>
-        <div class="grid grid-3">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">{t('section.writing')}</h2>
+            <p class="section-description">{t('section.writing.description')}</p>
+          </div>
+          <a href={getLocalizedPath('/writing', lang)} class="section-more">{t('common.viewAll')} →</a>
+        </div>
+        {/* An event log, the writing's own vocabulary; the event name is code, so it is not translated. */}
+        <ol class="event-log">
           {latestArticles.map(article => (
-            <ArticleCard
-              title={article.data.title}
-              description={article.data.description}
-              publishedDate={article.data.publishedDate}
-              slug={article.id.replace(`${lang}/`, '')}
-              heroImage={article.data.heroImage}
-              tags={article.data.tags}
-              lang={lang}
-              originalPlatform={article.data.originalPlatform}
-            />
+            <li>
+              <a href={getLocalizedPath(`/articles/${article.id.replace(`${lang}/`, '')}`, lang)} class="event">
+                <time datetime={article.data.publishedDate.toISOString()}>{formatDate(article.data.publishedDate, lang, 'short')}</time>
+                <span class="event-name" aria-hidden="true">article.published</span>
+                <span class="event-title">{article.data.title}</span>
+              </a>
+            </li>
           ))}
-        </div>
-        <div class="section-footer">
-          <a href={getLocalizedPath('/writing', lang)} class="btn btn-outline">
-            {t('common.viewAll')} →
-          </a>
-        </div>
+        </ol>
       </div>
     </section>
   )}
+
+  <section class="section arcade-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="arcade-teaser">
+        <span>
+          <span class="arcade-kicker">{t('fun.arcade.subtitle')}</span>
+          <span class="arcade-title">{t('fun.arcade.teaser.title')}</span>
+        </span>
+        <span class="btn btn-outline arcade-cta">./{t('fun.arcade.teaser.cta')} →</span>
+      </a>
+    </div>
+  </section>
 
   <ContactCTA lang={lang} />
 </Layout>
 
 <style>
-  .section-footer {
-    margin-top: var(--space-xl);
-    text-align: center;
+  .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 0 var(--space-lg);
+  }
+
+  .section-more {
+    margin-bottom: var(--space-xl);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    text-transform: lowercase;
+    color: var(--color-text-muted);
+  }
+
+  .section-more:hover {
+    color: var(--color-accent);
+  }
+
+  .event-log {
+    list-style: none;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .event {
+    display: grid;
+    /* Wide enough for the longest locale form, Catalan's "27 de febr. del 2026". */
+    grid-template-columns: 10.5rem 10.5rem minmax(0, 1fr);
+    gap: var(--space-lg);
+    align-items: baseline;
+    padding: 1.25rem var(--space-xs);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+  }
+
+  .event time {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--color-text-faint);
+  }
+
+  .event-name {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--color-accent);
+  }
+
+  .event-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .event:hover .event-title {
+    color: var(--color-accent);
+  }
+
+  .arcade-section {
+    padding-top: 0;
+  }
+
+  .arcade-teaser {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    padding: var(--space-xl);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+    transition: border-color 0.2s ease;
+  }
+
+  .arcade-teaser:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+  }
+
+  .arcade-kicker {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+
+  .arcade-title {
+    display: block;
+    font-size: 1.6rem;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
+  .arcade-cta {
+    text-transform: lowercase;
+  }
+
+  .arcade-teaser:hover .arcade-cta {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  @media (max-width: 640px) {
+    .event {
+      grid-template-columns: 1fr;
+      gap: var(--space-xs);
+    }
+
+    .event-name {
+      display: none;
+    }
   }
 </style>

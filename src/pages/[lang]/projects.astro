@@ -98,13 +98,14 @@ const health = await fetchPortfolioHealth();
     font-size: 0.875rem;
     color: var(--color-text);
     background: var(--color-bg-secondary);
-    border: var(--frame-width) solid var(--color-frame);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius);
-    box-shadow: var(--shadow-btn);
     text-decoration: none;
+    transition: border-color 0.2s ease, color 0.2s ease;
   }
 
   .contributions-list a:hover {
+    border-color: var(--color-accent);
     color: var(--color-accent);
   }
 </style>

@@ -25,7 +25,12 @@ what it published.
 
 The scores API and its Blob boards need nothing per wave; unreleased boards
 simply sit unread. Pages hidden between waves answer 404 to an old search
-result or bookmark until their wave lands, which is accepted.
+result or bookmark until their wave lands, which is accepted. CI builds the
+site twice per shard, once as the public build and once as a Vercel preview
+into `dist-preview/`, so the build tests assert both that the public build
+carries exactly the released cabinets and that a preview carries every one;
+the guards that grep a cabinet's built page read the preview build and so
+keep running for cabinets the public build leaves out.
 
 ## The waves
 

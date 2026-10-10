@@ -15,31 +15,33 @@
  * previews show the whole chain, exactly as they show draft articles, so a
  * wave can be played at its real URL before it ships.
  *
- * Server-side only: this reads the build's env. Client code gets the
- * released chain through the islands the pages compose (the floor's
- * base64 data, the terminal's `games`), never by importing this module.
+ * Server-side only: this reads the build's env, through `showsDrafts` and
+ * only there (an `env` left undefined falls to that module's own default,
+ * which is the one place the build's private keys are read; see the note
+ * on `buildEnv`). Client code gets the released chain through the islands
+ * the pages compose (the floor's base64 data, the terminal's `games`), never
+ * by importing this module.
  */
 
 import { UNLOCK_CHAIN } from '../games/engine/progress';
 import { locales } from '../i18n/translations';
 import { showsDrafts, type DraftEnv } from '../utils/drafts';
-
-export type ChainGameId = (typeof UNLOCK_CHAIN)[number];
+import type { ChainGameId } from './arcadeCabinets';
 
 /** Cabinets open to the public, counted from the front of `UNLOCK_CHAIN`. */
 export const RELEASED = 0;
 
 /** The chain prefix the public site carries; the whole chain in dev and previews. */
-export function releasedChain(env: DraftEnv = import.meta.env, count = RELEASED): readonly ChainGameId[] {
+export function releasedChain(env?: DraftEnv, count = RELEASED): readonly ChainGameId[] {
   return UNLOCK_CHAIN.slice(0, showsDrafts(env) ? UNLOCK_CHAIN.length : count);
 }
 
-export function isReleased(id: string, env: DraftEnv = import.meta.env): boolean {
+export function isReleased(id: string, env?: DraftEnv): boolean {
   return (releasedChain(env) as readonly string[]).includes(id);
 }
 
 /** False while nothing is released: the floor and every link to it stay unbuilt. */
-export function arcadeOpen(env: DraftEnv = import.meta.env): boolean {
+export function arcadeOpen(env?: DraftEnv): boolean {
   return releasedChain(env).length > 0;
 }
 
@@ -48,7 +50,7 @@ export function arcadeOpen(env: DraftEnv = import.meta.env): boolean {
  * with no id, the floor) is released, and no paths at all otherwise, which is
  * how Astro leaves a page out of the build.
  */
-export function arcadePaths(id?: ChainGameId, env: DraftEnv = import.meta.env) {
+export function arcadePaths(id?: ChainGameId, env?: DraftEnv) {
   const built = id ? isReleased(id, env) : arcadeOpen(env);
   return built ? locales.map(lang => ({ params: { lang } })) : [];
 }

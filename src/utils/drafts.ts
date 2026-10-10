@@ -14,11 +14,20 @@ export interface DraftEnv {
   VERCEL_ENV?: string;
 }
 
+/**
+ * The build's own env, read as explicit member accesses. Astro injects a
+ * private key such as VERCEL_ENV into a bare `import.meta.env` only in files
+ * whose source names that key, so a caller in another module that passes no
+ * env must reach the default here rather than hand over its own
+ * `import.meta.env` (src/data/release.ts did, and previews lost the arcade).
+ */
+const buildEnv = (): DraftEnv => ({ DEV: import.meta.env.DEV, VERCEL_ENV: import.meta.env.VERCEL_ENV });
+
 /** Dev and Vercel previews show everything; the arcade's release gate reuses this rule. */
-export function showsDrafts(env: DraftEnv = import.meta.env): boolean {
+export function showsDrafts(env: DraftEnv = buildEnv()): boolean {
   return Boolean(env.DEV) || env.VERCEL_ENV === 'preview';
 }
 
-export function isPublished(data: { draft: boolean }, env: DraftEnv = import.meta.env): boolean {
+export function isPublished(data: { draft: boolean }, env: DraftEnv = buildEnv()): boolean {
   return showsDrafts(env) || !data.draft;
 }

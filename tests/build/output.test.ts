@@ -7,7 +7,7 @@ import {
   towerDps,
   towerRange
 } from '../../src/games/towerdefense/towers';
-import { releasedChain, isReleased, arcadeOpen } from '../../src/data/release';
+import { releasedChain, arcadeOpen } from '../../src/data/release';
 import { UNLOCK_CHAIN } from '../../src/games/engine/progress';
 
 // Build tests assert on ./dist and skip when no build exists. CI always
@@ -19,6 +19,13 @@ const hasDist = existsSync('dist/en/index.html');
 // test carries the released arcade only (src/data/release.ts); vitest's own
 // import.meta.env must not be consulted, as it reads as dev.
 const production = { DEV: false };
+
+// CI also builds `dist-preview` under VERCEL_ENV=preview (ci.yml), which
+// carries every cabinet whatever RELEASED says. The guards that grep a
+// cabinet's page read that build, so they keep running on cabinets the public
+// build leaves out; locally, build it with
+// `VERCEL_ENV=preview npx astro build --outDir dist-preview` to include them.
+const hasPreview = existsSync('dist-preview/en/index.html');
 
 describe.skipIf(!hasDist)('build output', () => {
 
@@ -56,10 +63,10 @@ describe.skipIf(!hasDist)('build output', () => {
   // guard that keeps it that way: the numbers are computed here from the same
   // TOWERS the game fires with, so putting a literal back in the page turns
   // this red the moment anyone retunes a tower.
-  describe.skipIf(!isReleased('towerdefense', production))('Line Hold tool bar carries the tower table\u2019s own numbers', () => {
+  describe.skipIf(!hasPreview)('Line Hold tool bar carries the tower table\u2019s own numbers', () => {
     for (const locale of locales) {
       it(`${locale} tool bar shows dps, range and splash from TOWERS`, () => {
-        const html = readFileSync(`dist/${locale}/fun/towerdefense/index.html`, 'utf-8');
+        const html = readFileSync(`dist-preview/${locale}/fun/towerdefense/index.html`, 'utf-8');
         for (const kind of TOWER_KINDS) {
           const fresh = createTower(kind, 0);
           expect(html, `${kind} cost`).toContain(`>${TOWERS[kind].cost}<`);
@@ -123,10 +130,10 @@ describe.skipIf(!hasDist)('build output', () => {
    * announced a name that did not contain the label (WCAG 2.5.3). The hint
    * belongs in `title`, which is a description, not a name.
    */
-  describe.skipIf(!isReleased('city', production))('Microcity retire controls keep their visible label as their name', () => {
+  describe.skipIf(!hasPreview)('Microcity retire controls keep their visible label as their name', () => {
     for (const locale of locales) {
       it(`${locale}/fun/city keeps the label in the name and guards the run`, () => {
-        const html = readFileSync(`dist/${locale}/fun/city/index.html`, 'utf-8');
+        const html = readFileSync(`dist-preview/${locale}/fun/city/index.html`, 'utf-8');
         const buttons = html.match(/<button[^>]*id="retire[^"]*"[^>]*>/g) ?? [];
         // The control itself plus the two answers on its confirmation.
         expect(buttons).toHaveLength(3);
@@ -168,16 +175,37 @@ describe.skipIf(!hasDist)('build output', () => {
     it('links the arcade from the home teaser, the footer and the Konami overlay only once it is open', () => {
       const home = readFileSync('dist/en/index.html', 'utf-8');
       expect(home.includes('class="arcade-teaser"')).toBe(open);
-      expect(home.includes('class="footer-link"') && home.includes('href="/en/fun"')).toBe(open);
+      const footer = home.match(/<footer[\s\S]*<\/footer>/)?.[0] ?? '';
+      expect(footer).not.toBe('');
+      expect(footer.includes('href="/en/fun" class="footer-link"')).toBe(open);
       expect(home.includes('id="konami-overlay"')).toBe(open);
     });
 
-    it('tells the home terminal which cabinets exist', () => {
-      const home = readFileSync('dist/en/index.html', 'utf-8');
+    const terminalGames = (dir: string): string[] => {
+      const home = readFileSync(`${dir}/en/index.html`, 'utf-8');
       const island = home.match(/data-terminal-data[^>]*>([^<]*)</)?.[1] ?? '';
       expect(island).not.toBe('');
-      const data = JSON.parse(island.replace(/\\u003c/g, '<')) as { games: string[] };
-      expect(data.games).toEqual(released);
+      return (JSON.parse(island.replace(/\\u003c/g, '<')) as { games: string[] }).games;
+    };
+
+    it('tells the home terminal which cabinets exist', () => {
+      expect(terminalGames('dist')).toEqual(released);
+    });
+
+    // The gate once held a preview to the public set: release.ts handed its
+    // own import.meta.env to showsDrafts, and Astro fills a file's bare
+    // import.meta.env only with the private keys that file names, so
+    // VERCEL_ENV never arrived. Unit tests cannot see that (vitest's env is
+    // complete); only a build under VERCEL_ENV=preview can.
+    it.skipIf(!hasPreview)('shows a Vercel preview every cabinet, whatever RELEASED says', () => {
+      for (const locale of locales) {
+        expect(existsSync(`dist-preview/${locale}/fun/index.html`), `${locale} floor`).toBe(true);
+        for (const id of UNLOCK_CHAIN) {
+          expect(existsSync(`dist-preview/${locale}/fun/${id}/index.html`), `${locale}/fun/${id}`).toBe(true);
+        }
+      }
+      expect(terminalGames('dist-preview')).toEqual([...UNLOCK_CHAIN]);
+      expect(readFileSync('dist-preview/en/index.html', 'utf-8')).toContain('class="arcade-teaser"');
     });
   });
 

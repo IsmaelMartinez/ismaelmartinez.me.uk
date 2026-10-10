@@ -255,6 +255,12 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
           clearTimeout(logoClickTimer);
           logoClickTimer = setTimeout(() => { logoClicks = 0; }, 2000);
           if (logoClicks >= 5) {
+            // Nothing to unlock until the arcade's first wave is released
+            // (the overlay is not rendered), so the tap stays a plain link.
+            if (!document.getElementById('konami-overlay')) {
+              logoClicks = 0;
+              return;
+            }
             e.preventDefault();
             const logo = e.target as HTMLElement;
             logo.style.animation = 'spin 0.5s ease';

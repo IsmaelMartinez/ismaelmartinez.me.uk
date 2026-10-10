@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { RELEASED, releasedChain, isReleased, arcadeOpen, arcadePaths } from '../../src/data/release';
 import { UNLOCK_CHAIN } from '../../src/games/engine/progress';
 import { locales } from '../../src/i18n/translations';
@@ -31,6 +31,31 @@ describe('the arcade release gate', () => {
     expect(isReleased('tanks', production)).toBe(RELEASED > 0);
     expect(isReleased('tanks', { DEV: true })).toBe(true);
     expect(isReleased('park', { DEV: true })).toBe(false);
+  });
+
+  // The pages call these with no env at all, so the no-env path must follow
+  // the build's own DEV and VERCEL_ENV. This pins only that it reads them:
+  // vitest's import.meta.env is complete, so it cannot see Astro's rule that
+  // a file's bare import.meta.env carries only the private keys that file
+  // names. The preview build in tests/build/output.test.ts is the guard for
+  // that, and the reason showsDrafts reads the keys explicitly.
+  describe('with no env passed, as the pages call it', () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('shows the whole chain on a Vercel preview', () => {
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VERCEL_ENV', 'preview');
+      expect(releasedChain()).toEqual(UNLOCK_CHAIN);
+      expect(arcadeOpen()).toBe(true);
+      expect(arcadePaths('towerdefense')).toHaveLength(locales.length);
+    });
+
+    it('gates a production build to RELEASED', () => {
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VERCEL_ENV', 'production');
+      expect(releasedChain()).toEqual(UNLOCK_CHAIN.slice(0, RELEASED));
+      expect(arcadeOpen()).toBe(RELEASED > 0);
+    });
   });
 
   it('builds a page in every locale when released and leaves it out otherwise', () => {

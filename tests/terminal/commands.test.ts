@@ -174,6 +174,11 @@ describe('run', () => {
       }
     });
 
+    it('answers open <cabinet> as an unknown name, since open never admits what the arcade holds', () => {
+      expect(closed('open tanks').lines.map(text)).toEqual(['[noFile] tanks']);
+      expect(closed('open tanks').effect).toBeUndefined();
+    });
+
     it('still lists games as a directory and play in help, so the notice can be found', () => {
       expect(closed('ls').lines.map(text)[0]).toContain('games/');
       expect(closed('help').lines.map(text).join('\n')).toContain('play <game>');

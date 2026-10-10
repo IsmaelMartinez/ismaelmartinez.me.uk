@@ -249,6 +249,9 @@ function open(arg: string | undefined, data: TerminalData, floor: GameFloor): Re
     if (arcadeClosed(data)) return closedNotice(data);
     return { lines: [opening('arcade', data)], effect: { kind: 'navigate', href: data.arcadeHref } };
   }
+  // A cabinet the floor does not list reads as an unknown name here whether it
+  // is shrouded or not yet released: `open` never admits what the arcade
+  // holds, so the construction notice is `play`'s and `open arcade`'s alone.
   if (floor.unlocked.includes(name)) return playGame(name, data);
   const project = data.projects.find(p => p.name.toLowerCase() === name);
   if (project) {

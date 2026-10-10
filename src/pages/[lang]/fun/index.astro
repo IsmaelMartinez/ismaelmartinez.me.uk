@@ -127,7 +127,10 @@ const floorIsland = Buffer.from(
             nothing. Its hint names only the game before it in the chain —
             server-rendered for the fresh-floor default (and no-JS), retargeted
             client-side once real progress is known. */}
-        <div class="locked-cabinet" data-shroud>
+        {/* A one-cabinet release has nothing to shroud, so the tarp is hidden
+            server-side too and a no-JS visitor is not promised a reveal that
+            cannot come until the next wave. */}
+        <div class="locked-cabinet" data-shroud hidden={chain.length < 2}>
           <div class="shroud-tape" aria-hidden="true"></div>
           <span class="shroud-icon" aria-hidden="true">?</span>
           <p class="shroud-title">{t('fun.arcade.locked.title')}</p>

@@ -1,5 +1,6 @@
-# Build output
+# Build output (dist-preview is CI's VERCEL_ENV=preview build, see ci.yml)
 dist/
+dist-preview/
 
 # Dependencies
 node_modules/

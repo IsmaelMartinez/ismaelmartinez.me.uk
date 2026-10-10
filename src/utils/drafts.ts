@@ -14,6 +14,11 @@ export interface DraftEnv {
   VERCEL_ENV?: string;
 }
 
+/** Dev and Vercel previews show everything; the arcade's release gate reuses this rule. */
+export function showsDrafts(env: DraftEnv = import.meta.env): boolean {
+  return Boolean(env.DEV) || env.VERCEL_ENV === 'preview';
+}
+
 export function isPublished(data: { draft: boolean }, env: DraftEnv = import.meta.env): boolean {
-  return Boolean(env.DEV) || env.VERCEL_ENV === 'preview' || !data.draft;
+  return showsDrafts(env) || !data.draft;
 }

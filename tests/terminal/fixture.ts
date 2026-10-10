@@ -51,6 +51,7 @@ export const data: TerminalData = {
     { name: 'teams-for-linux', url: 'https://example.com/teams-for-linux' },
     { name: 'repo-butler', url: 'https://example.com/repo-butler' },
   ],
+  games: ['tanks', 'snake', 'cascade', 'city', 'football', 'lemmings', 'towerdefense'],
   arcadeHref: '/en/fun',
   gameHrefPrefix: '/en/fun/',
   langHrefs: { en: '/en/', es: '/es/', cat: '/cat/' },
@@ -59,6 +60,10 @@ export const data: TerminalData = {
 
 /** A floor two cabinets in: tanks and snake open, cascade shrouded. */
 export const floor: GameFloor = { unlocked: ['tanks', 'snake'], next: 'cascade' };
+
+/** The relaunch: nothing released yet, so the floor is empty and the arcade has no page. */
+export const closedData: TerminalData = { ...data, games: [] };
+export const closedFloor: GameFloor = { unlocked: [], next: null };
 
 /** A printed line as plain text, with two spaces where the renderer puts a column gap. */
 export const text = (line: Line): string =>

@@ -7,11 +7,18 @@ import {
   towerDps,
   towerRange
 } from '../../src/games/towerdefense/towers';
+import { releasedChain, isReleased, arcadeOpen } from '../../src/data/release';
+import { UNLOCK_CHAIN } from '../../src/games/engine/progress';
 
 // Build tests assert on ./dist and skip when no build exists. CI always
 // builds first, so there they always run; locally, `npm run build` first
 // to include them (a stale dist means stale assertions).
 const hasDist = existsSync('dist/en/index.html');
+
+// `npm run build` has neither DEV nor a Vercel preview env, so the dist under
+// test carries the released arcade only (src/data/release.ts); vitest's own
+// import.meta.env must not be consulted, as it reads as dev.
+const production = { DEV: false };
 
 describe.skipIf(!hasDist)('build output', () => {
 
@@ -49,7 +56,7 @@ describe.skipIf(!hasDist)('build output', () => {
   // guard that keeps it that way: the numbers are computed here from the same
   // TOWERS the game fires with, so putting a literal back in the page turns
   // this red the moment anyone retunes a tower.
-  describe('Line Hold tool bar carries the tower table\u2019s own numbers', () => {
+  describe.skipIf(!isReleased('towerdefense', production))('Line Hold tool bar carries the tower table\u2019s own numbers', () => {
     for (const locale of locales) {
       it(`${locale} tool bar shows dps, range and splash from TOWERS`, () => {
         const html = readFileSync(`dist/${locale}/fun/towerdefense/index.html`, 'utf-8');
@@ -116,7 +123,7 @@ describe.skipIf(!hasDist)('build output', () => {
    * announced a name that did not contain the label (WCAG 2.5.3). The hint
    * belongs in `title`, which is a description, not a name.
    */
-  describe('Microcity retire controls keep their visible label as their name', () => {
+  describe.skipIf(!isReleased('city', production))('Microcity retire controls keep their visible label as their name', () => {
     for (const locale of locales) {
       it(`${locale}/fun/city keeps the label in the name and guards the run`, () => {
         const html = readFileSync(`dist/${locale}/fun/city/index.html`, 'utf-8');
@@ -129,6 +136,49 @@ describe.skipIf(!hasDist)('build output', () => {
         expect(html).toContain('role="alertdialog"');
       });
     }
+  });
+
+  // The arcade opens in waves (src/data/release.ts): a cabinet past the
+  // current wave has no page, no sitemap entry and no link, and while nothing
+  // is released neither does the floor. Written against the manifest rather
+  // than a fixed list so it stays true as each wave bumps RELEASED.
+  describe('the arcade release gate', () => {
+    const released = releasedChain(production) as readonly string[];
+    const open = arcadeOpen(production);
+
+    it('builds exactly the released cabinets, in every locale', () => {
+      for (const locale of locales) {
+        expect(existsSync(`dist/${locale}/fun/index.html`), `${locale} floor`).toBe(open);
+        for (const id of UNLOCK_CHAIN) {
+          expect(existsSync(`dist/${locale}/fun/${id}/index.html`), `${locale}/fun/${id}`).toBe(released.includes(id));
+        }
+      }
+    });
+
+    it('lists only released arcade URLs in the sitemap', () => {
+      const sitemaps = readdirSync('dist').filter(f => /^sitemap.*\.xml$/.test(f));
+      expect(sitemaps.length).toBeGreaterThan(0);
+      const xml = sitemaps.map(file => readFileSync(`dist/${file}`, 'utf-8')).join('\n');
+      expect(xml.includes('/en/fun/</loc>')).toBe(open);
+      for (const id of UNLOCK_CHAIN) {
+        expect(xml.includes(`/en/fun/${id}/`), id).toBe(released.includes(id));
+      }
+    });
+
+    it('links the arcade from the home teaser, the footer and the Konami overlay only once it is open', () => {
+      const home = readFileSync('dist/en/index.html', 'utf-8');
+      expect(home.includes('class="arcade-teaser"')).toBe(open);
+      expect(home.includes('class="footer-link"') && home.includes('href="/en/fun"')).toBe(open);
+      expect(home.includes('id="konami-overlay"')).toBe(open);
+    });
+
+    it('tells the home terminal which cabinets exist', () => {
+      const home = readFileSync('dist/en/index.html', 'utf-8');
+      const island = home.match(/data-terminal-data[^>]*>([^<]*)</)?.[1] ?? '';
+      expect(island).not.toBe('');
+      const data = JSON.parse(island.replace(/\\u003c/g, '<')) as { games: string[] };
+      expect(data.games).toEqual(released);
+    });
   });
 
   // The arcade jukebox (#367) is a dev tool: astro.config.mjs injects its route

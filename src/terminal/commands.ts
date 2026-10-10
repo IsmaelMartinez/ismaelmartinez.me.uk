@@ -36,6 +36,7 @@ export const TERMINAL_STRING_KEYS = [
   'noMatches',
   'matches',
   'locked',
+  'closed',
   'opening',
   'readHint',
   'listHint',
@@ -67,6 +68,12 @@ export interface TerminalData {
   /** Newest first; `ls articles` numbers them in this order and `open 3` reads it back. */
   articles: TerminalArticle[];
   projects: TerminalProject[];
+  /**
+   * The released chain, in floor order (`src/data/release.ts`). Empty while the
+   * arcade is still under construction, when every arcade command answers
+   * with the `closed` notice instead and `arcadeHref` leads nowhere.
+   */
+  games: string[];
   arcadeHref: string;
   /** Prefix a cabinet id is appended to, e.g. `/en/fun/`. */
   gameHrefPrefix: string;
@@ -156,7 +163,12 @@ function articleRow(article: TerminalArticle, index: number): Line {
   ];
 }
 
+const arcadeClosed = (data: TerminalData): boolean => data.games.length === 0;
+
+const closedNotice = (data: TerminalData): Result => ({ lines: [out(data.strings.closed, 'muted')] });
+
 function listGames(data: TerminalData, floor: GameFloor): Line[] {
+  if (arcadeClosed(data)) return closedNotice(data).lines;
   const lines: Line[] = floor.unlocked.map(id => [{ text: id, href: `${data.gameHrefPrefix}${id}` }]);
   if (floor.next) {
     const newest = floor.unlocked[floor.unlocked.length - 1];
@@ -234,6 +246,7 @@ function open(arg: string | undefined, data: TerminalData, floor: GameFloor): Re
   }
   const name = arg.toLowerCase();
   if (name === 'arcade') {
+    if (arcadeClosed(data)) return closedNotice(data);
     return { lines: [opening('arcade', data)], effect: { kind: 'navigate', href: data.arcadeHref } };
   }
   if (floor.unlocked.includes(name)) return playGame(name, data);
@@ -249,7 +262,7 @@ function playGame(id: string, data: TerminalData): Result {
 }
 
 function play(arg: string | undefined, data: TerminalData, floor: GameFloor): Result {
-  if (!arg) return { lines: listGames(data, floor) };
+  if (!arg || arcadeClosed(data)) return { lines: listGames(data, floor) };
   const id = arg.toLowerCase();
   // A shrouded cabinet answers exactly like a name that is not one, so `play`
   // cannot be used to probe the unlock chain for what comes next.
@@ -342,7 +355,7 @@ function candidatesFor(command: string, data: TerminalData, floor: GameFloor): s
       return ['role', ...slugs];
     case 'open':
     case 'cd':
-      return [...slugs, 'arcade', ...floor.unlocked, ...data.projects.map(p => p.name)];
+      return [...slugs, ...(arcadeClosed(data) ? [] : ['arcade']), ...floor.unlocked, ...data.projects.map(p => p.name)];
     case 'play':
       return [...floor.unlocked];
     case 'theme':

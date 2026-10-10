@@ -8,12 +8,9 @@
  */
 
 import { run, complete, type Effect, type Line, type Segment, type TerminalData } from './commands';
-import { UNLOCK_CHAIN, completedGames, visibleCabinets } from '../games/engine/progress';
+import { completedGames, visibleCabinets } from '../games/engine/progress';
 
 const HISTORY_LIMIT = 50;
-
-/** The floor is read per command, so a cabinet unlocked in another tab shows up at once. */
-const currentFloor = () => visibleCabinets(UNLOCK_CHAIN, completedGames());
 
 function renderSegment(segment: Segment): HTMLElement {
   const node = segment.href ? document.createElement('a') : document.createElement('span');
@@ -83,6 +80,12 @@ export function initTerminal(
   if (!island?.textContent || !body) return;
   const data = JSON.parse(island.textContent) as TerminalData;
   terminal.dataset.terminalWired = 'true';
+
+  // The floor is read per command, so a cabinet unlocked in another tab shows
+  // up at once. The chain is the released one the server composed, so an
+  // unreleased cabinet is never on the floor even once this device has
+  // finished the one before it.
+  const currentFloor = () => visibleCabinets(data.games, completedGames(data.games));
 
   const log = document.createElement('div');
   log.className = 'term-log';

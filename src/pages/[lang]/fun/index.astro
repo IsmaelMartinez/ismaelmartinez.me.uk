@@ -1,13 +1,14 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import ArcadeCabinet from '../../../components/ArcadeCabinet.astro';
-import { useTranslations, getLocalizedPath, locales } from '../../../i18n/translations';
+import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
 import type { Locale } from '../../../i18n/translations';
-import { UNLOCK_CHAIN } from '../../../games/engine/progress';
 import { CABINETS } from '../../../data/arcadeCabinets';
+import { releasedChain, arcadePaths } from '../../../data/release';
 
+// No floor is built until the first wave is released (src/data/release.ts).
 export function getStaticPaths() {
-  return locales.map(lang => ({ params: { lang } }));
+  return arcadePaths();
 }
 
 const lang = Astro.params.lang as Locale;
@@ -16,7 +17,11 @@ const t = useTranslations(lang);
 // The floor is under construction: cabinets stand in UNLOCK_CHAIN order — a
 // walk through gaming history, oldest homaged classic first — and are
 // revealed one at a time (see src/games/engine/progress.ts). The old
-// Featured / Back-catalogue shelves are retired with it.
+// Featured / Back-catalogue shelves are retired with it. Only the RELEASED
+// prefix of the chain stands here at all (src/data/release.ts): the floor is
+// opened in waves, and a cabinet past the current wave is composed into
+// neither the island below nor the chain the client script walks, so the
+// floor simply ends, shroudless, at the newest released cabinet.
 //
 // THE NEXT CABINET IS A MYSTERY. Unlock state lives client-side, so only the
 // always-on first cabinet and one anonymous shrouded silhouette are rendered
@@ -48,13 +53,15 @@ const t = useTranslations(lang);
 // rename _syndicate.astro back to syndicate.astro, re-add an entry to
 // src/data/arcadeCabinets.ts, and slot it into the unlock chain in
 // progress.ts.
-const firstId = UNLOCK_CHAIN[0];
+const chain = releasedChain();
+const firstId = chain[0];
 const first = CABINETS[firstId];
 
 // Everything the client script needs to dress an unlocked cabinet, fully
 // localized and pre-formatted here so the client imports neither the cabinet
-// catalogue nor the (three-locale) translations dictionary.
-const floorCabinets = UNLOCK_CHAIN.map(id => {
+// catalogue nor the (three-locale) translations dictionary. Its order is the
+// chain the client walks, so the island carries released cabinets only.
+const floorCabinets = chain.map(id => {
   const c = CABINETS[id];
   return {
     id,
@@ -163,11 +170,7 @@ const floorIsland = Buffer.from(
   // arrives already localized and pre-formatted through the island. All the
   // unlock logic is in progress.ts (tested); this only builds DOM.
   import { loadBest, loadInitials, formatScore } from '../../../games/engine/highscores';
-  import {
-    UNLOCK_CHAIN,
-    completedGames,
-    visibleCabinets
-  } from '../../../games/engine/progress';
+  import { completedGames, visibleCabinets } from '../../../games/engine/progress';
 
   interface CabinetView {
     id: string;
@@ -243,7 +246,10 @@ const floorIsland = Buffer.from(
     for (const old of row.querySelectorAll('[data-floor-clone]')) old.remove();
 
     const byId = new Map(island.cabinets.map(c => [c.id, c]));
-    const { unlocked, next } = visibleCabinets(UNLOCK_CHAIN, completedGames());
+    // The island's order is the released chain, so an unreleased cabinet is
+    // never walked to, however far this device's progress has gone.
+    const chain = island.cabinets.map(c => c.id);
+    const { unlocked, next } = visibleCabinets(chain, completedGames(chain));
 
     for (const id of unlocked.slice(1)) {
       const meta = byId.get(id);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { run, complete, fill } from '../../src/terminal/commands';
-import { data, floor, text } from './fixture';
+import { data, floor, closedData, closedFloor, text } from './fixture';
 
 const printed = (input: string) => run(input, data, floor).lines.map(text);
 
@@ -160,6 +160,28 @@ describe('run', () => {
     it('plays an unlocked cabinet, and lists the floor when play has no argument', () => {
       expect(run('play tanks', data, floor).effect).toEqual({ kind: 'navigate', href: '/en/fun/tanks' });
       expect(printed('play')).toEqual(printed('ls games'));
+    });
+  });
+
+  describe('before the arcade is released', () => {
+    const closed = (input: string) => run(input, closedData, closedFloor);
+
+    it('answers ls games, play and open arcade with the construction notice and goes nowhere', () => {
+      for (const input of ['ls games', 'play', 'play tanks', 'open arcade']) {
+        const result = closed(input);
+        expect(result.effect, input).toBeUndefined();
+        expect(result.lines.map(text), input).toEqual(['[closed]']);
+      }
+    });
+
+    it('still lists games as a directory and play in help, so the notice can be found', () => {
+      expect(closed('ls').lines.map(text)[0]).toContain('games/');
+      expect(closed('help').lines.map(text).join('\n')).toContain('play <game>');
+    });
+
+    it('offers neither the arcade nor a cabinet to Tab', () => {
+      expect(complete('open arc', closedData, closedFloor)).toEqual({ value: 'open arc', options: [] });
+      expect(complete('play t', closedData, closedFloor)).toEqual({ value: 'play t', options: [] });
     });
   });
 

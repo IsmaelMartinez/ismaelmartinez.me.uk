@@ -4,6 +4,7 @@ import { projects, getFeaturedProjects } from '../data/projects';
 import { personJsonLd, toJsonLd } from '../data/person';
 import { getPublishedArticles } from '../utils/articles';
 import { TERMINAL_STRING_KEYS, type TerminalData, type TerminalStrings } from '../terminal/commands';
+import { releasedChain } from '../data/release';
 
 interface Props {
   lang: 'en' | 'es' | 'cat';
@@ -31,6 +32,7 @@ const terminalData: TerminalData = {
     };
   }),
   projects: projects.map(project => ({ name: project.name, url: project.url })),
+  games: [...releasedChain()],
   arcadeHref: getLocalizedPath('/fun', lang),
   gameHrefPrefix: getLocalizedPath('/fun/', lang),
   langHrefs: Object.fromEntries(locales.map(code => [code, getLocalizedPath('/', code)])),

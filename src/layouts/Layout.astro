@@ -2,6 +2,7 @@
 import { ClientRouter } from 'astro:transitions';
 import { locales, localeMeta, useTranslations, getLocalizedPath, type Locale } from '../i18n/translations';
 import { connectAnchorPath } from '../data/links';
+import { arcadeOpen } from '../data/release';
 import '../styles/global.css';
 
 interface Props {
@@ -147,24 +148,29 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
           </p>
         </div>
         <p class="footer-links">
-          <a href={getLocalizedPath('/fun', lang)} class="footer-link">{t('fun.arcade.footerLink')}</a>
+          {arcadeOpen() && (
+            <a href={getLocalizedPath('/fun', lang)} class="footer-link">{t('fun.arcade.footerLink')}</a>
+          )}
           <a href={getLocalizedPath(connectAnchorPath, lang)} class="footer-link">{t('cta.connect')}</a>
           <a href={`/${lang}/rss.xml`} class="footer-rss" aria-label="RSS Feed">rss</a>
         </p>
       </div>
     </footer>
 
-    <!-- Easter Egg: Konami Code -->
-    <div id="konami-overlay" class="konami-overlay" role="dialog" aria-modal="true" aria-label="Secret Arcade Unlocked">
-      <div class="konami-content">
-        <button id="konami-close" class="konami-close" aria-label="Close" type="button">&times;</button>
-        <div class="konami-emoji">🕹️</div>
-        <h2>SECRET ARCADE UNLOCKED!</h2>
-        <p>You've discovered the hidden arcade. Game on!</p>
-        <div class="konami-confetti"></div>
-        <a id="konami-enter" href={getLocalizedPath('/fun', lang)} class="btn btn-arcade">Enter Arcade</a>
+    {/* Easter Egg: Konami Code. The listener below stays; without the overlay
+        to show, the code does nothing until the arcade's first wave is released. */}
+    {arcadeOpen() && (
+      <div id="konami-overlay" class="konami-overlay" role="dialog" aria-modal="true" aria-label="Secret Arcade Unlocked">
+        <div class="konami-content">
+          <button id="konami-close" class="konami-close" aria-label="Close" type="button">&times;</button>
+          <div class="konami-emoji">🕹️</div>
+          <h2>SECRET ARCADE UNLOCKED!</h2>
+          <p>You've discovered the hidden arcade. Game on!</p>
+          <div class="konami-confetti"></div>
+          <a id="konami-enter" href={getLocalizedPath('/fun', lang)} class="btn btn-arcade">Enter Arcade</a>
+        </div>
       </div>
-    </div>
+    )}
 
     <script>
       // Close Konami overlay (close button or tap outside content)
@@ -249,6 +255,12 @@ const fullTitle = `${title} | Ismael Martinez Ramos`;
           clearTimeout(logoClickTimer);
           logoClickTimer = setTimeout(() => { logoClicks = 0; }, 2000);
           if (logoClicks >= 5) {
+            // Nothing to unlock until the arcade's first wave is released
+            // (the overlay is not rendered), so the tap stays a plain link.
+            if (!document.getElementById('konami-overlay')) {
+              logoClicks = 0;
+              return;
+            }
             e.preventDefault();
             const logo = e.target as HTMLElement;
             logo.style.animation = 'spin 0.5s ease';

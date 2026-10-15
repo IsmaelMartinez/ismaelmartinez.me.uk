@@ -321,7 +321,8 @@ export function run(input: string, data: TerminalData, floor: GameFloor): Result
     }
     case 'lang': {
       const code = args[0]?.toLowerCase();
-      const href = code ? data.langHrefs[code] : undefined;
+      // An own-key lookup, so `lang constructor` cannot reach Object.prototype.
+      const href = code && Object.hasOwn(data.langHrefs, code) ? data.langHrefs[code] : undefined;
       if (!href) return usage(`lang <${Object.keys(data.langHrefs).join('|')}>`, data);
       return { lines: [opening(code!, data)], effect: { kind: 'navigate', href } };
     }

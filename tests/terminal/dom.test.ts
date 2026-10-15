@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { initTerminal } from '../../src/terminal/dom';
+import { initTerminal, sitePath, siteUrl } from '../../src/terminal/dom';
 import { doneKey } from '../../src/games/engine/progress';
 import { installLocalStorage } from '../games/dom-helpers';
 import { data } from './fixture';
@@ -156,5 +156,37 @@ describe('initTerminal', () => {
     document.body.innerHTML = '<div class="terminal" data-terminal><div class="terminal-body"></div></div>';
     initTerminal(document, navigate);
     expect(document.querySelector('.term-input')).toBeNull();
+  });
+});
+
+describe('sitePath', () => {
+  const origin = 'https://example.test';
+
+  it('passes bare root-relative site paths through', () => {
+    expect(sitePath('/en/fun/snake', origin)).toBe('/en/fun/snake');
+    expect(sitePath('/es/', origin)).toBe('/es/');
+  });
+
+  it('refuses anything that would leave the site or run script', () => {
+    for (const href of [
+      'javascript:alert(1)',
+      'https://evil.test/',
+      '//evil.test/path',
+      '/\\evil.test',
+      'en/about',
+      '/en/about?x=1',
+      '/en/about#connect',
+      '',
+    ]) {
+      expect(sitePath(href, origin), href).toBeNull();
+    }
+  });
+});
+
+describe('siteUrl', () => {
+  it('builds the destination on the bare origin, dropping the current query and fragment', () => {
+    const here = new URL('https://example.test/en/?campaign=mail#footer');
+    expect(siteUrl('/es/', here.origin)).toBe('https://example.test/es/');
+    expect(siteUrl('/en/fun/snake', here.origin)).toBe('https://example.test/en/fun/snake');
   });
 });

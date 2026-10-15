@@ -68,10 +68,41 @@ function applyTheme(mode: 'dark' | 'light' | 'toggle'): void {
   document.getElementById('theme-toggle')?.click();
 }
 
-/** `navigate` is a seam for tests: jsdom implements no page navigation. */
+/**
+ * The site path a `navigate` effect may go to, or null. Every in-site href the
+ * island carries is a bare root-relative path, so anything that resolves off
+ * this origin, carries a query or fragment, or is not a path at all (a
+ * `javascript:` URL) is refused rather than navigated to.
+ */
+export function sitePath(href: string, origin: string = window.location.origin): string | null {
+  if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//')) return null;
+  let url: URL;
+  try {
+    url = new URL(href, origin);
+  } catch {
+    return null;
+  }
+  if (url.origin !== origin || url.search !== '' || url.hash !== '') return null;
+  return url.pathname;
+}
+
+/**
+ * The URL a site path navigates to: built on the bare origin, so it can carry
+ * neither a scheme nor the current page's query or fragment.
+ */
+export function siteUrl(path: string, origin: string = window.location.origin): string {
+  const dest = new URL(origin);
+  dest.pathname = path;
+  return dest.href;
+}
+
+/**
+ * `navigate` is a seam for tests: jsdom implements no page navigation. It only
+ * ever receives a `sitePath`.
+ */
 export function initTerminal(
   root: ParentNode = document,
-  navigate: (href: string) => void = href => window.location.assign(href),
+  navigate: (path: string) => void = path => window.location.assign(siteUrl(path)),
 ): void {
   const terminal = root.querySelector<HTMLElement>('[data-terminal]');
   if (!terminal || terminal.dataset.terminalWired === 'true') return;
@@ -126,9 +157,11 @@ export function initTerminal(
   const perform = (effect: Effect | undefined) => {
     if (!effect) return;
     switch (effect.kind) {
-      case 'navigate':
-        navigate(effect.href);
+      case 'navigate': {
+        const path = sitePath(effect.href);
+        if (path !== null) navigate(path);
         break;
+      }
       case 'external':
         window.open(effect.href, '_blank', 'noopener,noreferrer');
         break;

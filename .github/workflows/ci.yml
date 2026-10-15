@@ -84,6 +84,16 @@ jobs:
       - name: Build the site
         run: npm run build
 
+      # A second build as a Vercel preview sees it (src/utils/drafts.ts), so
+      # the tests can assert that every arcade cabinet reaches a preview
+      # whatever RELEASED gates from the public build, and the guards that grep
+      # a cabinet's built page keep running on cabinets not yet released. The
+      # gate once held previews to the public set without any test noticing.
+      - name: Build the site as a preview
+        env:
+          VERCEL_ENV: preview
+        run: npx astro build --outDir dist-preview
+
       - name: Run tests
         env:
           SHARD: ${{ matrix.shard }}

@@ -203,6 +203,14 @@ describe('run', () => {
     expect(printed('lang fr')).toEqual(['[usage] lang <en|es|cat>']);
   });
 
+  it('reads only its own locale keys, never Object.prototype', () => {
+    for (const key of ['constructor', '__proto__', 'tostring', 'hasownproperty']) {
+      const result = run(`lang ${key}`, data, floor);
+      expect(result.effect).toBeUndefined();
+      expect(result.lines.map(text)).toEqual(['[usage] lang <en|es|cat>']);
+    }
+  });
+
   it('echoes text as typed and expands $MOTTO', () => {
     expect(printed('echo Hello,  World')).toEqual(['Hello,  World']);
     expect(printed('echo $MOTTO')).toEqual(['Or at least trying to.']);

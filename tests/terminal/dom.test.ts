@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { initTerminal, sitePath } from '../../src/terminal/dom';
+import { initTerminal, sitePath, siteUrl } from '../../src/terminal/dom';
 import { doneKey } from '../../src/games/engine/progress';
 import { installLocalStorage } from '../games/dom-helpers';
 import { data } from './fixture';
@@ -180,5 +180,13 @@ describe('sitePath', () => {
     ]) {
       expect(sitePath(href, origin), href).toBeNull();
     }
+  });
+});
+
+describe('siteUrl', () => {
+  it('builds the destination on the bare origin, dropping the current query and fragment', () => {
+    const here = new URL('https://example.test/en/?campaign=mail#footer');
+    expect(siteUrl('/es/', here.origin)).toBe('https://example.test/es/');
+    expect(siteUrl('/en/fun/snake', here.origin)).toBe('https://example.test/en/fun/snake');
   });
 });

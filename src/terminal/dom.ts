@@ -87,15 +87,22 @@ export function sitePath(href: string, origin: string = window.location.origin):
 }
 
 /**
+ * The URL a site path navigates to: built on the bare origin, so it can carry
+ * neither a scheme nor the current page's query or fragment.
+ */
+export function siteUrl(path: string, origin: string = window.location.origin): string {
+  const dest = new URL(origin);
+  dest.pathname = path;
+  return dest.href;
+}
+
+/**
  * `navigate` is a seam for tests: jsdom implements no page navigation. It only
- * ever receives a `sitePath`, and moves by pathname alone, so it cannot leave
- * the origin or be handed a scheme.
+ * ever receives a `sitePath`.
  */
 export function initTerminal(
   root: ParentNode = document,
-  navigate: (path: string) => void = path => {
-    window.location.pathname = path;
-  },
+  navigate: (path: string) => void = path => window.location.assign(siteUrl(path)),
 ): void {
   const terminal = root.querySelector<HTMLElement>('[data-terminal]');
   if (!terminal || terminal.dataset.terminalWired === 'true') return;

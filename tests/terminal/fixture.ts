@@ -51,7 +51,7 @@ export const data: TerminalData = {
     { name: 'teams-for-linux', url: 'https://example.com/teams-for-linux' },
     { name: 'repo-butler', url: 'https://example.com/repo-butler' },
   ],
-  games: ['tanks', 'snake', 'cascade', 'city', 'football', 'lemmings', 'towerdefense'],
+  games: ['tanks', 'snake', 'cascade', 'city', 'football', 'primetime', 'lemmings', 'towerdefense'],
   arcadeHref: '/en/fun',
   gameHrefPrefix: '/en/fun/',
   langHrefs: { en: '/en/', es: '/es/', cat: '/cat/' },

@@ -75,6 +75,16 @@ export const CABINETS: Record<ChainGameId, CabinetMeta> = {
     icon: '⚽',
     color: '#22c55e',
     path: '/fun/football',
+    estYear: 1990
+  },
+  primetime: {
+    title: 'PRIME TIME',
+    taglineKey: 'fun.primetime.description',
+    genreKey: 'fun.arcade.genre.primetime',
+    twoPlayer: false,
+    icon: '📺',
+    color: '#ec4899',
+    path: '/fun/primetime',
     estYear: 1990,
     isNew: true
   },

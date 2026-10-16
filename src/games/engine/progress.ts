@@ -37,6 +37,7 @@ export const UNLOCK_CHAIN = [
   'cascade',
   'city',
   'football',
+  'primetime',
   'lemmings',
   'towerdefense'
 ] as const;

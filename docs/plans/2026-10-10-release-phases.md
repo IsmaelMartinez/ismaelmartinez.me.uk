@@ -38,8 +38,8 @@ keep running for cabinets the public build leaves out.
 |---|---|---|
 | Relaunch | redesign, terminal, article 1 of the AI-Assisted Open Source series | 0 |
 | Wave 1 | Tank Duel, Snake, Cascade | 3 |
-| Wave 2 | Microcity, CALCIO '90 | 5 |
-| Wave 3 | Critter Rescue, Line Hold | 7 |
+| Wave 2 | Microcity, CALCIO '90, PRIME TIME | 6 |
+| Wave 3 | Critter Rescue, Line Hold | 8 |
 
 The series has four parts, published weekly by flipping `draft: false` in all
 three locales and setting `publishedDate` to the publish date (the home page and
@@ -64,3 +64,6 @@ either for a later wave is the three edits recorded in CLAUDE.md plus a bump of
 ## Progress
 
 - 2026-10-10: gate built, `RELEASED = 0`.
+- 2026-10-16: PRIME TIME (Smash TV, 1990) slotted into the chain after CALCIO
+  '90, so wave 2 grows to three cabinets and the counts above moved by one
+  (`docs/plans/2026-10-16-prime-time-arena-shooter-plan.md`).

@@ -1,0 +1,244 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
+import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { arcadePaths } from '../../../data/release';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return arcadePaths('primetime');
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+---
+
+<Layout title="Prime Time" lang={lang}>
+  <section class="primetime-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div
+        class="game-container"
+        id="primetime-root"
+        data-t-big-money={t('fun.primetime.host.bigMoney')}
+        data-t-big-prizes={t('fun.primetime.host.bigPrizes')}
+        data-t-love-it={t('fun.primetime.host.loveIt')}
+        data-t-carnage={t('fun.primetime.host.carnage')}
+        data-t-good-luck={t('fun.primetime.host.goodLuck')}
+        data-t-new-car={t('fun.primetime.host.newCar')}
+        data-t-no-keys={t('fun.primetime.host.noKeys')}
+        data-t-extra-life={t('fun.primetime.host.extraLife')}
+        data-t-studio={t('fun.primetime.studioBanner')}
+        data-t-studio-clear={t('fun.primetime.studioClear')}
+        data-t-dome={t('fun.primetime.dome')}
+        data-t-last-life={t('fun.primetime.lastLife')}
+        data-t-paused={t('fun.primetime.paused')}
+        data-t-new-record={t('fun.primetime.newRecord')}
+        data-t-game-over={t('fun.primetime.gameOver')}
+        data-t-game-over-desc={t('fun.primetime.gameOverDesc')}
+        data-t-winner={t('fun.primetime.winner')}
+        data-t-winner-desc={t('fun.primetime.winnerDesc')}
+        data-t-weapon-machine={t('fun.primetime.weaponMachine')}
+        data-t-weapon-spread={t('fun.primetime.weaponSpread')}
+        data-t-weapon-grenade={t('fun.primetime.weaponGrenade')}
+        data-t-weapon-rocket={t('fun.primetime.weaponRocket')}
+        data-t-item-shield={t('fun.primetime.itemShield')}
+        data-t-item-boots={t('fun.primetime.itemBoots')}
+        data-t-item-bomb={t('fun.primetime.itemBomb')}
+        data-t-item-life={t('fun.primetime.itemLife')}
+      >
+        <div class="game-header">
+          <h1><span class="primetime-emoji">📺</span> {t('fun.primetime.title')}</h1>
+          <SoundToggles lang={lang} />
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.cash')}</span>
+              <span id="cash" class="score-value cash">$0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.lives')}</span>
+              <span id="lives" class="score-value lives">3</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.keys')}</span>
+              <span id="keys" class="score-value keys">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.weapon')}</span>
+              <span id="weapon" class="score-value weapon">{t('fun.primetime.weaponMachine')}</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.studio')}</span>
+              <span id="studio" class="score-value studio">1</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.record')}</span>
+              <span id="record" class="score-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-area">
+          <canvas id="game-canvas"></canvas>
+          <ToastArea />
+
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">📺</span>
+              <h2>{t('fun.primetime.title')}</h2>
+              <p class="tagline">{t('fun.primetime.tagline')}</p>
+              <p class="instructions">{t('fun.primetime.instructions')}</p>
+              <button id="start-btn" class="btn btn-primary btn-large">
+                {t('fun.primetime.start')}
+              </button>
+            </div>
+          </div>
+
+          <div id="over-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span id="over-icon" class="play-icon">📺</span>
+              <h2 id="over-title">{t('fun.primetime.gameOver')}</h2>
+              <p id="over-desc">{t('fun.primetime.gameOverDesc')}</p>
+              <p class="final-stats">
+                {t('fun.primetime.finalScore')}: <strong id="final-score">$0</strong>
+              </p>
+              <HighScoreTable gameId="primetime" lang={lang} accent="#ec4899" />
+              <button id="again-btn" class="btn btn-primary btn-large">
+                {t('fun.primetime.playAgain')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p class="hint">{t('fun.primetime.hint')}</p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired studio. Re-init after every
+  // swap; initPrimeTimeGame no-ops on pages without a fresh root.
+  import { initPrimeTimeGame } from '../../../games/primetime';
+  initPrimeTimeGame();
+  document.addEventListener('astro:after-swap', initPrimeTimeGame);
+</script>
+
+<style>
+  .primetime-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .game-container {
+    max-width: 760px;
+  }
+
+  .primetime-emoji {
+    animation: onAir 1.2s steps(2, end) infinite;
+  }
+
+  @keyframes onAir {
+    0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+    50% { filter: drop-shadow(0 0 8px #ec4899); }
+  }
+
+  .score-value {
+    color: #ec4899;
+  }
+
+  .score-value.cash {
+    color: #facc15;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .score-value.lives {
+    color: #f87171;
+  }
+
+  .score-value.keys {
+    color: #fbbf24;
+  }
+
+  .score-value.weapon {
+    color: #22d3ee;
+    font-size: 1rem;
+    line-height: 1.35rem;
+    text-transform: uppercase;
+  }
+
+  .score-value.studio {
+    color: #a855f7;
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 660 / 420;
+    /* The canvas is the controller on touch: both sticks live on it, so the
+       browser must not scroll or zoom under a thumb. */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .game-overlay {
+    z-index: 2;
+  }
+
+  .overlay-content {
+    max-width: 520px;
+  }
+
+  .overlay-content h2 {
+    margin: 0 0 var(--space-xs);
+    color: #ec4899;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .overlay-content p {
+    margin: 0 0 var(--space-md);
+    color: var(--color-text);
+  }
+
+  .overlay-content .tagline {
+    color: #facc15;
+    font-weight: 600;
+  }
+
+  .overlay-content .instructions {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .play-icon {
+    margin-bottom: var(--space-md);
+  }
+
+  .final-stats strong {
+    color: #facc15;
+  }
+
+  @media (max-width: 600px) {
+    /* Six readouts: tighter and smaller so they sit in two rows, not three. */
+    .scores {
+      justify-content: center;
+      gap: var(--space-sm) var(--space-md);
+    }
+
+    .score-value {
+      font-size: 1.1rem;
+    }
+
+    .score-value.weapon {
+      font-size: 0.85rem;
+    }
+  }
+</style>

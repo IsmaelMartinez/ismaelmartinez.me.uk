@@ -141,13 +141,14 @@ describe('initTerminal', () => {
     expect(navigate).toHaveBeenCalledWith('/en/articles/the-ai-automation-trap');
   });
 
-  it('reads the arcade floor at the moment of the command, not at page load', () => {
+  it('plays any released cabinet at once while the unlock gate is off', () => {
+    // The floor is still read per command through floorFor, but with
+    // UNLOCK_GATED off nothing has to be finished first: a fresh device with
+    // no done flags gets every released cabinet.
     const store = installLocalStorage();
     mount();
     initTerminal(document, navigate);
-    type('play snake');
-    expect(navigate).not.toHaveBeenCalled();
-    store[doneKey('tanks')] = '1';
+    expect(store[doneKey('tanks')]).toBeUndefined();
     type('play snake');
     expect(navigate).toHaveBeenCalledWith('/en/fun/snake');
   });

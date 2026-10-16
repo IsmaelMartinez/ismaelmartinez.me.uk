@@ -1,0 +1,476 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
+import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { arcadePaths } from '../../../data/release';
+import type { Locale } from '../../../i18n/translations';
+
+export function getStaticPaths() {
+  return arcadePaths('primetime');
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+
+/**
+ * The controls, laid out under the screen for every way of playing. Keys
+ * are drawn as keycaps and stay the same in every locale; the prose beside
+ * them is translated. The one-line hint the other cabinets carry was not
+ * enough here: a twin-stick game has to say that the second set of keys is
+ * the gun.
+ */
+type Row = { label: string; keys?: string[]; alt?: string[]; text?: string };
+const CONTROLS: { title: string; rows: Row[] }[] = [
+  {
+    title: t('fun.primetime.controls.keyboard'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), keys: ['W', 'A', 'S', 'D'] },
+      { label: t('fun.primetime.controls.fire'), keys: ['↑', '←', '↓', '→'], alt: ['I', 'J', 'K', 'L'], text: t('fun.primetime.controls.keyboardFireNote') },
+      { label: t('fun.primetime.controls.pause'), keys: ['P'], alt: ['Esc'] }
+    ]
+  },
+  {
+    title: t('fun.primetime.controls.mouse'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), keys: ['W', 'A', 'S', 'D'] },
+      { label: t('fun.primetime.controls.fire'), text: t('fun.primetime.controls.mouseFire') },
+      { label: t('fun.primetime.controls.pause'), keys: ['P'], alt: ['Esc'] }
+    ]
+  },
+  {
+    title: t('fun.primetime.controls.gamepad'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), text: t('fun.primetime.controls.padMove') },
+      { label: t('fun.primetime.controls.fire'), text: t('fun.primetime.controls.padFire') },
+      { label: t('fun.primetime.controls.pause'), text: t('fun.primetime.controls.padPause') }
+    ]
+  },
+  {
+    title: t('fun.primetime.controls.touch'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), text: t('fun.primetime.controls.touchMove') },
+      { label: t('fun.primetime.controls.fire'), text: t('fun.primetime.controls.touchFire') },
+      { label: t('fun.primetime.controls.pause'), text: t('fun.primetime.controls.touchPause') }
+    ]
+  }
+];
+---
+
+<Layout title="Prime Time" lang={lang}>
+  <section class="primetime-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div
+        class="game-container"
+        id="primetime-root"
+        data-t-big-money={t('fun.primetime.host.bigMoney')}
+        data-t-big-prizes={t('fun.primetime.host.bigPrizes')}
+        data-t-love-it={t('fun.primetime.host.loveIt')}
+        data-t-carnage={t('fun.primetime.host.carnage')}
+        data-t-good-luck={t('fun.primetime.host.goodLuck')}
+        data-t-new-car={t('fun.primetime.host.newCar')}
+        data-t-no-keys={t('fun.primetime.host.noKeys')}
+        data-t-extra-life={t('fun.primetime.host.extraLife')}
+        data-t-studio={t('fun.primetime.studioBanner')}
+        data-t-studio-clear={t('fun.primetime.studioClear')}
+        data-t-dome={t('fun.primetime.dome')}
+        data-t-last-life={t('fun.primetime.lastLife')}
+        data-t-paused={t('fun.primetime.paused')}
+        data-t-new-record={t('fun.primetime.newRecord')}
+        data-t-game-over={t('fun.primetime.gameOver')}
+        data-t-game-over-desc={t('fun.primetime.gameOverDesc')}
+        data-t-winner={t('fun.primetime.winner')}
+        data-t-winner-desc={t('fun.primetime.winnerDesc')}
+        data-t-weapon-machine={t('fun.primetime.weaponMachine')}
+        data-t-weapon-spread={t('fun.primetime.weaponSpread')}
+        data-t-weapon-grenade={t('fun.primetime.weaponGrenade')}
+        data-t-weapon-rocket={t('fun.primetime.weaponRocket')}
+        data-t-item-shield={t('fun.primetime.itemShield')}
+        data-t-item-boots={t('fun.primetime.itemBoots')}
+        data-t-item-bomb={t('fun.primetime.itemBomb')}
+        data-t-item-life={t('fun.primetime.itemLife')}
+      >
+        <div class="game-header">
+          <h1><span class="primetime-emoji">📺</span> {t('fun.primetime.title')}</h1>
+          <SoundToggles lang={lang} />
+          <button type="button" id="pause-btn" class="btn sound-btn" aria-label={t('fun.primetime.pause')}>⏸</button>
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.cash')}</span>
+              <span id="cash" class="score-value cash">$0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.lives')}</span>
+              <span id="lives" class="score-value lives">3</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.keys')}</span>
+              <span id="keys" class="score-value keys">0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.weapon')}</span>
+              <span id="weapon" class="score-value weapon">{t('fun.primetime.weaponMachine')}</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.studio')}</span>
+              <span id="studio" class="score-value studio">1</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{t('fun.primetime.record')}</span>
+              <span id="record" class="score-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-area">
+          <canvas id="game-canvas"></canvas>
+          <ToastArea />
+
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">📺</span>
+              <h2>{t('fun.primetime.title')}</h2>
+              <p class="tagline">{t('fun.primetime.tagline')}</p>
+              <p class="instructions">{t('fun.primetime.instructions')}</p>
+              <button id="start-btn" class="btn btn-primary btn-large">
+                {t('fun.primetime.start')}
+              </button>
+            </div>
+          </div>
+
+          <div id="over-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span id="over-icon" class="play-icon">📺</span>
+              <h2 id="over-title">{t('fun.primetime.gameOver')}</h2>
+              <p id="over-desc">{t('fun.primetime.gameOverDesc')}</p>
+              <p class="final-stats">
+                {t('fun.primetime.finalScore')}: <strong id="final-score">$0</strong>
+              </p>
+              <HighScoreTable gameId="primetime" lang={lang} accent="#3fa9ff" />
+              <button id="again-btn" class="btn btn-primary btn-large">
+                {t('fun.primetime.playAgain')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p class="hint">{t('fun.primetime.hint')}</p>
+
+        <section class="controls-guide" aria-labelledby="controls-title">
+          <h2 id="controls-title">{t('fun.primetime.controls.title')}</h2>
+          <p class="controls-how">{t('fun.primetime.controls.how')}</p>
+          <div class="controls-grid">
+            {CONTROLS.map(card => (
+              <div class="controls-card">
+                <h3>{card.title}</h3>
+                <dl>
+                  {card.rows.map(row => (
+                    <>
+                      <dt>{row.label}</dt>
+                      <dd>
+                        {row.keys && <span class="keys">{row.keys.map(k => <kbd>{k}</kbd>)}</span>}
+                        {row.alt && (
+                          <>
+                            <span class="keys-or">{t('fun.primetime.controls.keyboardFire')}</span>
+                            <span class="keys">{row.alt.map(k => <kbd>{k}</kbd>)}</span>
+                          </>
+                        )}
+                        {row.text && <span class="keys-text">{row.text}</span>}
+                      </dd>
+                    </>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired studio. Re-init after every
+  // swap; initPrimeTimeGame no-ops on pages without a fresh root.
+  import { initPrimeTimeGame } from '../../../games/primetime';
+  initPrimeTimeGame();
+  document.addEventListener('astro:after-swap', initPrimeTimeGame);
+</script>
+
+<style>
+  .primetime-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .game-container {
+    max-width: 760px;
+  }
+
+  .primetime-emoji {
+    animation: onAir 1.2s steps(2, end) infinite;
+  }
+
+  @keyframes onAir {
+    0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+    50% { filter: drop-shadow(0 0 8px #e03030); }
+  }
+
+  /* The readouts are the arcade's: blue LED digits on black inside a riveted
+     steel frame, with a red segment bar under each, the way Smash TV's score
+     boxes sat in its top wall. */
+  .scores {
+    gap: var(--space-sm);
+  }
+
+  .score-item {
+    min-width: 5.5rem;
+    padding: 0.2rem 0.5rem 0.35rem;
+    background: #0a0a10;
+    border: 2px solid #8e8e98;
+    border-top-color: #c6c6ce;
+    border-left-color: #c6c6ce;
+    box-shadow: inset 0 0 0 1px #2a2a30, 0 1px 0 #4a4a54;
+    position: relative;
+  }
+
+  .score-item::after {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.15rem;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, #e03030 0 6px, transparent 6px 8px);
+  }
+
+  .score-label {
+    color: #8e8e98;
+    font-size: 0.6rem;
+  }
+
+  .score-value {
+    display: block;
+    color: #3fa9ff;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 1.25rem;
+    line-height: 1.4rem;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 6px rgba(63, 169, 255, 0.7);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .score-value.cash {
+    color: #3fa9ff;
+  }
+
+  .score-value.lives {
+    color: #3fa9ff;
+  }
+
+  .score-value.keys {
+    color: #ffd34a;
+    text-shadow: 0 0 6px rgba(255, 211, 74, 0.7);
+  }
+
+  .score-value.weapon {
+    color: #ff4fd8;
+    text-shadow: 0 0 6px rgba(255, 79, 216, 0.7);
+    font-size: 0.85rem;
+    line-height: 1.4rem;
+    text-transform: uppercase;
+  }
+
+  .score-value.studio {
+    color: #3fa9ff;
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 684 / 444;
+    /* The canvas is the controller on touch: both sticks live on it, so the
+       browser must not scroll or zoom under a thumb. */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .game-overlay {
+    z-index: 2;
+  }
+
+  .overlay-content {
+    max-width: 520px;
+  }
+
+  .overlay-content h2 {
+    margin: 0 0 var(--space-xs);
+    color: #3fa9ff;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    text-shadow: 0 0 10px rgba(63, 169, 255, 0.6);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .overlay-content p {
+    margin: 0 0 var(--space-md);
+    color: var(--color-text);
+  }
+
+  .overlay-content .tagline {
+    color: #ff4fd8;
+    font-weight: 600;
+  }
+
+  .overlay-content .instructions {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .play-icon {
+    margin-bottom: var(--space-md);
+  }
+
+  .final-stats strong {
+    color: #3fa9ff;
+  }
+
+  /* The controls under the screen: four steel cards in the HUD's livery,
+     keys as keycaps. */
+  .controls-guide {
+    margin-top: var(--space-xl);
+  }
+
+  .controls-guide h2 {
+    margin: 0 0 var(--space-xs);
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #3fa9ff;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+
+  .controls-how {
+    margin: 0 0 var(--space-md);
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+  }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .controls-card {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    background: #0a0a10;
+    border: 2px solid #8e8e98;
+    border-top-color: #c6c6ce;
+    border-left-color: #c6c6ce;
+    box-shadow: inset 0 0 0 1px #2a2a30, 0 1px 0 #4a4a54;
+    color: #dcdce4;
+  }
+
+  .controls-card h3 {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #ff4fd8;
+    text-shadow: 0 0 6px rgba(255, 79, 216, 0.6);
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+
+  .controls-card dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-xs) var(--space-md);
+    margin: 0;
+    align-items: baseline;
+  }
+
+  .controls-card dt {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8e8e98;
+  }
+
+  .controls-card dd {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .keys {
+    display: inline-flex;
+    gap: 0.25rem;
+    vertical-align: middle;
+  }
+
+  .keys-or {
+    margin: 0 0.4rem;
+    color: #8e8e98;
+    font-size: 0.75rem;
+  }
+
+  .keys-text {
+    display: block;
+    color: #dcdce4;
+  }
+
+  .keys + .keys-text,
+  .keys-or + .keys + .keys-text {
+    margin-top: 0.25rem;
+    color: #8e8e98;
+    font-size: 0.78rem;
+  }
+
+  kbd {
+    display: inline-block;
+    min-width: 1.6rem;
+    padding: 0.1rem 0.4rem;
+    text-align: center;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #3fa9ff;
+    text-shadow: 0 0 5px rgba(63, 169, 255, 0.6);
+    background: #1c1c24;
+    border: 1px solid #8e8e98;
+    border-bottom-width: 3px;
+    border-radius: 4px;
+  }
+
+  @media (max-width: 600px) {
+    .controls-grid {
+      grid-template-columns: 1fr;
+    }
+
+    /* Six readouts: tighter and smaller so they sit in two rows, not three. */
+    .scores {
+      justify-content: center;
+      gap: var(--space-sm) var(--space-md);
+    }
+
+    .score-item {
+      min-width: 4.4rem;
+    }
+
+    .score-value {
+      font-size: 1rem;
+    }
+
+    .score-value.weapon {
+      font-size: 0.7rem;
+    }
+  }
+</style>

@@ -8,7 +8,7 @@
  */
 
 import { run, complete, type Effect, type Line, type Segment, type TerminalData } from './commands';
-import { completedGames, visibleCabinets } from '../games/engine/progress';
+import { floorFor } from '../games/engine/progress';
 
 const HISTORY_LIMIT = 50;
 
@@ -116,7 +116,7 @@ export function initTerminal(
   // up at once. The chain is the released one the server composed, so an
   // unreleased cabinet is never on the floor even once this device has
   // finished the one before it.
-  const currentFloor = () => visibleCabinets(data.games, completedGames(data.games));
+  const currentFloor = () => floorFor(data.games);
 
   const log = document.createElement('div');
   log.className = 'term-log';

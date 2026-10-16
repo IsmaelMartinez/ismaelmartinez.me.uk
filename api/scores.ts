@@ -79,7 +79,7 @@ interface Submission {
   nonce: string;
 }
 
-/** The ten boards: nine cabinets, with Cascade fielding one per mode. */
+/** The eleven boards: ten cabinets, with Cascade fielding one per mode. */
 export const GAMES: readonly string[] = [
   'snake',
   'tanks',
@@ -90,7 +90,8 @@ export const GAMES: readonly string[] = [
   'towerdefense',
   'cascade',
   'cascade-countdown',
-  'football'
+  'football',
+  'primetime'
 ];
 
 const ALLOWED_ORIGINS = [

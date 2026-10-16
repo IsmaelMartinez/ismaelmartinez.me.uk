@@ -17,7 +17,7 @@
  *   for f in before/*.png; do cmp "$f" "after/$(basename "$f")"; done
  *
  * Usage: node scripts/screenshot-games.js <outDir> [game...]
- * (games: linehold city snake tanks; default all. `park` and `syndicate` are
+ * (games: linehold city snake tanks primetime; default all. `park` and `syndicate` are
  * parked — their pages are unrouted, so they are skipped by the default run
  * and only attempted when named explicitly, after un-parking the page.)
  * Serves ./dist via a tiny static server on 4173. The Chromium path below
@@ -155,6 +155,25 @@ if (run('linehold')) {
   // Into the first wave: 12s build timer, then marchers on the road.
   await step(page, 60, 250);
   await snap(page, 'linehold-wave');
+  await page.close();
+}
+
+// --- PRIME TIME -----------------------------------------------------------
+if (run('primetime')) {
+  const page = await openGame('/en/fun/primetime/');
+  await page.click('#start-btn');
+  // Two seconds in: the first grunts are through the doors.
+  await step(page, 8, 250);
+  await snap(page, 'primetime-doors');
+  // Hold the sticks: move north-east, fire east, for five seconds of carnage.
+  await page.keyboard.down('d');
+  await page.keyboard.down('w');
+  await page.keyboard.down('ArrowRight');
+  await step(page, 20, 250);
+  await snap(page, 'primetime-fight');
+  await page.keyboard.up('d');
+  await page.keyboard.up('w');
+  await page.keyboard.up('ArrowRight');
   await page.close();
 }
 

@@ -37,6 +37,7 @@ export const UNLOCK_CHAIN = [
   'cascade',
   'city',
   'football',
+  'primetime',
   'lemmings',
   'towerdefense'
 ] as const;
@@ -135,6 +136,16 @@ function readDone(gameId: string): boolean {
   }
 }
 
+/**
+ * Whether the floor gates cabinets behind the one before. Switched OFF on
+ * 2026-10-16 at the owner's request ("it is annoying"): every released
+ * cabinet stands on the floor from the first visit and the shroud never
+ * shows. The chain, `markDone` and `completedGames` are kept intact and keep
+ * recording, so turning the walk back on is this one line; `visibleCabinets`
+ * stays the pure rule a gated floor would read.
+ */
+export const UNLOCK_GATED = false;
+
 export interface FloorState {
   /** Cabinets standing on the floor ready to play, in chain order. */
   unlocked: string[];
@@ -162,4 +173,14 @@ export function visibleCabinets(chain: readonly string[], done: ReadonlySet<stri
     unlocked: [...chain.slice(0, newest + 1)],
     next: chain[newest + 1] ?? null
   };
+}
+
+/**
+ * The floor as the page and the terminal should show it: the whole released
+ * chain with no shroud while `UNLOCK_GATED` is off, else the progressive
+ * walk measured from this device's finished cabinets.
+ */
+export function floorFor(chain: readonly string[], gated: boolean = UNLOCK_GATED): FloorState {
+  if (!gated) return { unlocked: [...chain], next: null };
+  return visibleCabinets(chain, completedGames(chain));
 }

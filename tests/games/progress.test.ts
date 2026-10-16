@@ -4,6 +4,8 @@ import {
   doneKey,
   markDone,
   completedGames,
+  floorFor,
+  UNLOCK_GATED,
   visibleCabinets
 } from '../../src/games/engine/progress';
 import { bestKey } from '../../src/games/engine/highscores';
@@ -20,6 +22,23 @@ describe('UNLOCK_CHAIN', () => {
     // enforces this, since the EST. plaques are per-cabinet data.
     const years = UNLOCK_CHAIN.map(id => CABINETS[id].estYear);
     expect(years).toEqual([...years].sort((a, b) => a - b));
+  });
+});
+
+describe('floorFor', () => {
+  it('is the switch the floor and the terminal read, and it is off', () => {
+    // The owner found the walk annoying (2026-10-16); every released cabinet
+    // stands on the floor from the first visit. Flip UNLOCK_GATED to gate again.
+    expect(UNLOCK_GATED).toBe(false);
+    expect(floorFor(chain)).toEqual({ unlocked: [...chain], next: null });
+  });
+
+  it('becomes the progressive walk when gated, measured from the finished cabinets', () => {
+    installLocalStorage();
+    const ungated = floorFor(['tanks', 'snake', 'cascade'], true);
+    expect(ungated).toEqual({ unlocked: ['tanks'], next: 'snake' });
+    markDone('tanks', 10);
+    expect(floorFor(['tanks', 'snake', 'cascade'], true)).toEqual({ unlocked: ['tanks', 'snake'], next: 'cascade' });
   });
 });
 

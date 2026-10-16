@@ -64,7 +64,7 @@ import {
   type RunInput,
   type RunState
 } from '../../src/games/primetime/run';
-import { composeInput, readGamepad, stickVector, STICK_RANGE } from '../../src/games/primetime/input';
+import { GAME_KEYS, composeInput, readGamepad, stickVector, STICK_RANGE } from '../../src/games/primetime/input';
 import { seededRandom } from './seeded-random';
 import { TICK, competent, idle, playRun, turret } from './primetime-policies';
 
@@ -601,6 +601,24 @@ describe('the run', () => {
     expect(events.filter(e => e.type === 'kill').length).toBeGreaterThanOrEqual(4);
   });
 
+  it('bursts a grenade against a wall it reaches before its fuse, on the crowd in the doorway', () => {
+    const run = quietRoom();
+    run.items.push({ id: 1, item: 'grenade', x: run.player.x, y: run.player.y, ttl: 9, r: ITEM_R });
+    advance(run, TICK);
+    // Stand near the east wall and lob at it: the fuse would carry the shot
+    // off the canvas, where it used to vanish without bursting.
+    run.player.x = ARENA.x + ARENA.w - 40;
+    // A grunt beside the door, off the shot's line but inside its blast; the
+    // grace keeps the contestant alive long enough for the lob to land.
+    run.player.invuln = 5;
+    run.enemies.push(spawnEnemy(650, 'grunt', ARENA.x + ARENA.w - 12, run.player.y + 30, rng()));
+    const events = advance(run, 0.6, { moveX: 0, moveY: 0, fireX: 1, fireY: 0 });
+    const blasts = events.filter(e => e.type === 'blast');
+    expect(blasts.length).toBeGreaterThan(0);
+    for (const b of blasts) if (b.type === 'blast') expect(b.x).toBeLessThanOrEqual(ARENA.x + ARENA.w);
+    expect(events.filter(e => e.type === 'kill')).toHaveLength(1);
+  });
+
   it('detonates a shot mine on the crowd around it, and on a contestant only when they stand on it', () => {
     for (const standOnIt of [false, true]) {
       const run = quietRoom();
@@ -820,6 +838,12 @@ describe('the sticks', () => {
     expect(composeInput({ keys, pad: null, mouse: null, move: stick, fire: null }).moveX).toBe(1);
     // The keyboard wins while it is live.
     expect(composeInput({ keys: new Set(['a']), pad: null, mouse: null, move: stick, fire: null }).moveX).toBe(-1);
+  });
+
+  it('leaves Space alone, so a focused header button can still be pressed mid-game', () => {
+    expect(GAME_KEYS.has(' ')).toBe(false);
+    expect(GAME_KEYS.has('w')).toBe(true);
+    expect(GAME_KEYS.has('ArrowLeft')).toBe(true);
   });
 
   it('folds the d-pad into the left stick and ignores a disconnected pad', () => {

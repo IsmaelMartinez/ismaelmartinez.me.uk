@@ -50,13 +50,17 @@ const FIRE_KEYS: Record<string, [number, number]> = {
   l: [1, 0]
 };
 
-/** Every key the game consumes, so the page does not scroll under a fight. */
+/**
+ * Every key the game consumes, so the page does not scroll under a fight.
+ * Space is not among them: neither stick uses it, and swallowing it would
+ * stop a keyboard player activating a focused header button (pause, the
+ * mutes) mid-game.
+ */
 export const GAME_KEYS: ReadonlySet<string> = new Set([
   ...Object.keys(MOVE_KEYS),
   ...Object.keys(MOVE_KEYS).map(k => k.toUpperCase()),
   ...Object.keys(FIRE_KEYS),
-  ...['I', 'J', 'K', 'L'],
-  ' '
+  ...['I', 'J', 'K', 'L']
 ]);
 
 function fromKeys(keys: ReadonlySet<string>, table: Record<string, [number, number]>): Pt {

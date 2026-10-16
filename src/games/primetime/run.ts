@@ -667,8 +667,13 @@ function stepShots(run: RunState, dt: number, events: RunEvent[]): void {
     if (spent) continue;
     const off = s.x < -SHOT_MARGIN || s.x > CANVAS_W + SHOT_MARGIN || s.y < -SHOT_MARGIN || s.y > CANVAS_H + SHOT_MARGIN;
     if (s.life <= 0 || off) {
-      // A grenade whose fuse ran out, or that reached a wall, bursts there.
-      if (s.blast > 0 && !off) blast(run, s, s.blast, s.damage, events);
+      // A grenade whose fuse ran out bursts where it is; one that reached a
+      // wall first bursts against the wall, never past it, so a grenade
+      // lobbed at a crowd in a doorway is not swallowed by the margin.
+      if (s.blast > 0) {
+        const at = off ? clampToArena(s.x, s.y, 0) : s;
+        blast(run, at, s.blast, s.damage, events);
+      }
       continue;
     }
     kept.push(s);

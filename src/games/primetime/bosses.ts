@@ -17,9 +17,9 @@ export interface BossDef {
 }
 
 export const BOSSES: Record<BossKind, BossDef> = {
-  mutoid: { hp: 150, speed: 34, r: 34, worth: 10000 },
-  scarface: { hp: 190, speed: 52, r: 30, worth: 20000 },
-  cobra: { hp: 230, speed: 118, r: 22, worth: 40000 }
+  mutoid: { hp: 150, speed: 34, r: 34, worth: 25000 },
+  scarface: { hp: 160, speed: 52, r: 30, worth: 50000 },
+  cobra: { hp: 230, speed: 124, r: 22, worth: 100000 }
 };
 
 /** What a boss asks the simulation to do beyond moving and shooting. */
@@ -31,15 +31,15 @@ export interface BossCall {
 export const COBRA_SEGMENTS = 12;
 export const COBRA_GAP = 15;
 /** Mutoid's fan: shots per volley, their speed and the volley's full width, by stage. */
-const MUTOID_FAN = [4, 6];
+const MUTOID_FAN = [3, 5];
 const MUTOID_RELOAD = [2.1, 1.6];
 const MUTOID_SHOT = 165;
-const MUTOID_SPREAD = [Math.PI / 4.5, Math.PI / 3.6];
+const MUTOID_SPREAD = [Math.PI / 4.5, Math.PI / 2.9];
 /** Seconds between Mutoid's calls for grunts, and how many each brings. */
 const MUTOID_CALL = 5.5;
 const MUTOID_CALL_GRUNTS = 4;
 /** Scarface's cycle: hover, a shaking wind-up that telegraphs the charge, then the charge. */
-const SCARFACE_HOVER = [2.2, 1.6];
+const SCARFACE_HOVER = [2.2, 1.9];
 export const SCARFACE_WINDUP = 0.6;
 const SCARFACE_CHARGE = 0.9;
 export const SCARFACE_CHARGE_SPEED = 360;
@@ -48,7 +48,7 @@ const SCARFACE_RING_RELOAD = 2.4;
 const SCARFACE_RING_SPEED = 150;
 /** Cobra: shots a burst, the reload by stage, the weave. */
 const COBRA_BURST = 3;
-const COBRA_RELOAD = [1.9, 1.3];
+const COBRA_RELOAD = [1.4, 1.0];
 const COBRA_SHOT = 190;
 const COBRA_WEAVE = 0.55;
 const COBRA_WEAVE_RATE = 3.2;
@@ -86,6 +86,26 @@ export function spawnBoss(id: number, kind: BossKind, rng: () => number): Enemy 
   };
   if (kind === 'cobra') e.tail = Array.from({ length: COBRA_SEGMENTS }, () => ({ x: at.x, y: at.y }));
   return e;
+}
+
+/**
+ * Sends a boss back to its entrance to stand for `pause` seconds, as it did
+ * when it first appeared: position, body, heading, pattern phase and clocks
+ * all reset, so a Scarface killed mid-charge does not resume the charge from
+ * the doorway and Mutoid does not call grunts the instant he lands. Health
+ * is kept; it is the contestant's respawn, not the boss's.
+ */
+export function resetBoss(e: Enemy, pause: number): void {
+  const at = bossEntry(e.kind as BossKind);
+  e.x = at.x;
+  e.y = at.y;
+  e.vx = 0;
+  e.vy = 0;
+  e.t = 0;
+  e.timer = pause;
+  e.phase = e.kind === 'mutoid' ? MUTOID_CALL : 0;
+  if (e.kind === 'scarface') e.jitter = SCARFACE_RING_RELOAD;
+  if (e.tail) for (const seg of e.tail) Object.assign(seg, at);
 }
 
 /** A boss's stage, 0 or 1: the pattern tightens under half health. */

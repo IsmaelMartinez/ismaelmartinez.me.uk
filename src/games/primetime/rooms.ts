@@ -89,12 +89,19 @@ export interface RoomMix {
 export function mix(m: RoomMix): RoomScript {
   const pace = m.pace ?? 0.4;
   const spawns: SpawnEntry[] = [];
+  // The three streams overlap: each next one starts half way through the one
+  // before, so the floor holds a crowd rather than a queue. Played serially
+  // with gaps, the first version of this put an average of two grunts on the
+  // floor against a gun that kills nine a second, and a third of every fight
+  // was an empty room (the playtest round's measurement).
   const g1 = Math.round(m.grunts * 0.45);
   const g2 = Math.round(m.grunts * 0.35);
   const g3 = m.grunts - g1 - g2;
+  const start2 = 0.8 + g1 * pace * 0.5;
+  const start3 = start2 + g2 * pace * 0.5;
   if (g1 > 0) spawns.push({ kind: 'grunt', count: g1, at: 0.8, every: pace, door: 'any' });
-  if (g2 > 0) spawns.push({ kind: 'grunt', count: g2, at: 0.8 + g1 * pace + 3.5, every: pace, door: 'any' });
-  if (g3 > 0) spawns.push({ kind: 'grunt', count: g3, at: 0.8 + (g1 + g2) * pace + 8, every: pace * 0.9, door: 'any' });
+  if (g2 > 0) spawns.push({ kind: 'grunt', count: g2, at: start2, every: pace, door: 'any' });
+  if (g3 > 0) spawns.push({ kind: 'grunt', count: g3, at: start3, every: pace * 0.9, door: 'any' });
   if (m.mines) spawns.push({ kind: 'mine', count: m.mines, at: 0.4, every: 0.25, door: 'floor' });
   if (m.orbs) spawns.push({ kind: 'orb', count: m.orbs, at: 3.5, every: 1.7, door: 'any', armed: m.armed });
   if (m.shrapnel) spawns.push({ kind: 'shrapnel', count: m.shrapnel, at: 7, every: 3.2, door: 'any' });
@@ -137,13 +144,13 @@ const STUDIO_1: Circuit = {
   start: 'S',
   boss: 'X',
   rooms: index([
-    room('S', 0, 1, ['e'], mix({ grunts: 28, pace: 0.38, items: ['cash'] })),
-    room('B', 1, 1, ['n', 'e', 's'], mix({ grunts: 40, orbs: 2, pace: 0.36, items: ['cash', 'key'] })),
-    room('A', 1, 0, ['e'], mix({ grunts: 36, orbs: 3, pace: 0.36, items: ['spread', 'toaster'] })),
-    room('C', 2, 0, ['s'], mix({ grunts: 44, mines: 3, pace: 0.36, items: ['cash', 'vcr', 'key'] })),
-    room('E', 1, 2, ['e'], mix({ grunts: 36, orbs: 2, mines: 2, pace: 0.36, items: ['grenade', 'cash'] })),
-    room('F', 2, 2, ['n'], mix({ grunts: 42, orbs: 3, pace: 0.36, items: ['life', 'key', 'toaster'] })),
-    room('D', 2, 1, ['e'], mix({ grunts: 48, orbs: 4, mines: 3, shrapnel: 1, pace: 0.36, items: ['shield', 'cash', 'key'] })),
+    room('S', 0, 1, ['e'], mix({ grunts: 45, pace: 0.38, items: ['cash'] })),
+    room('B', 1, 1, ['n', 'e', 's'], mix({ grunts: 64, orbs: 2, pace: 0.36, items: ['cash', 'key'] })),
+    room('A', 1, 0, ['e'], mix({ grunts: 58, orbs: 3, pace: 0.36, items: ['spread', 'toaster'] })),
+    room('C', 2, 0, ['s'], mix({ grunts: 70, mines: 3, pace: 0.36, items: ['cash', 'vcr', 'key'] })),
+    room('E', 1, 2, ['e'], mix({ grunts: 58, orbs: 2, mines: 2, pace: 0.36, items: ['grenade', 'cash'] })),
+    room('F', 2, 2, ['n'], mix({ grunts: 67, orbs: 3, pace: 0.36, items: ['life', 'key', 'toaster'] })),
+    room('D', 2, 1, ['e'], mix({ grunts: 77, orbs: 4, mines: 3, shrapnel: 1, pace: 0.36, items: ['shield', 'cash', 'key'] })),
     room('X', 3, 1, ['e'], { spawns: [], items: [{ item: 'spread', at: 2 }, { item: 'cash', at: 14 }] }, 'mutoid')
   ])
 };
@@ -164,27 +171,27 @@ const STUDIO_2: Circuit = {
   start: 'S',
   boss: 'X',
   rooms: index([
-    room('S', 0, 0, ['e'], mix({ grunts: 40, orbs: 3, armed: true, pace: 0.36, items: ['cash', 'key'] })),
-    room('A', 1, 0, ['e', 's'], mix({ grunts: 46, orbs: 4, armed: true, mines: 3, items: ['rocket', 'cash'] })),
-    room('P', 2, 0, ['s'], mix({ grunts: 30, tanks: 1, items: ['vcr', 'car', 'key', 'life'] })),
-    room('B', 1, 1, ['e', 's'], mix({ grunts: 50, orbs: 4, armed: true, shrapnel: 2, items: ['grenade', 'toaster'] })),
-    room('C', 2, 1, ['e'], mix({ grunts: 54, orbs: 5, armed: true, mines: 4, tanks: 1, snakes: 1, items: ['shield', 'cash', 'key'] })),
-    room('E', 1, 2, ['e'], mix({ grunts: 44, snakes: 1, mines: 3, items: ['spread', 'cash'] })),
-    room('F', 2, 2, ['n'], mix({ grunts: 48, orbs: 4, armed: true, tanks: 2, items: ['bomb', 'vcr', 'key'] })),
-    room('D', 3, 1, ['e'], mix({ grunts: 60, orbs: 5, armed: true, shrapnel: 3, snakes: 2, pace: 0.34, items: ['rocket', 'boots', 'cash'] })),
+    room('S', 0, 0, ['e'], mix({ grunts: 64, orbs: 3, armed: true, pace: 0.36, items: ['cash', 'key'] })),
+    room('A', 1, 0, ['e', 's'], mix({ grunts: 74, orbs: 4, armed: true, mines: 3, items: ['rocket', 'cash'] })),
+    room('P', 2, 0, ['s'], mix({ grunts: 48, tanks: 1, items: ['vcr', 'car', 'key', 'life'] })),
+    room('B', 1, 1, ['e', 's'], mix({ grunts: 80, orbs: 4, armed: true, shrapnel: 2, items: ['grenade', 'toaster'] })),
+    room('C', 2, 1, ['e'], mix({ grunts: 86, orbs: 5, armed: true, mines: 4, tanks: 1, snakes: 1, items: ['shield', 'cash', 'key'] })),
+    room('E', 1, 2, ['e'], mix({ grunts: 70, snakes: 1, mines: 3, items: ['spread', 'cash'] })),
+    room('F', 2, 2, ['n'], mix({ grunts: 77, orbs: 4, armed: true, tanks: 2, items: ['bomb', 'vcr', 'key'] })),
+    room('D', 3, 1, ['e'], mix({ grunts: 96, orbs: 5, armed: true, shrapnel: 3, snakes: 2, pace: 0.34, items: ['rocket', 'boots', 'cash'] })),
     room(
       'X',
       4,
       1,
       ['e'],
-      { spawns: [{ kind: 'mine', count: 5, at: 0.4, every: 0.25, door: 'floor' }], items: [{ item: 'rocket', at: 2 }, { item: 'shield', at: 16 }] },
+      { spawns: [{ kind: 'mine', count: 3, at: 0.4, every: 0.25, door: 'floor' }], items: [{ item: 'rocket', at: 2 }, { item: 'shield', at: 16 }] },
       'scarface'
     )
   ])
 };
 
 /**
- * Studio 3: everything at once, ninety grunts a room at the end. A hub after
+ * Studio 3: everything at once, a hundred and forty grunts a room at the end. A hub after
  * the opener forks into two routes that rejoin, then a straight run of two
  * rooms to Cobra Death. The upper route is the prize route (two cars), the
  * lower has the gear.
@@ -200,14 +207,14 @@ const STUDIO_3: Circuit = {
   start: 'S',
   boss: 'X',
   rooms: index([
-    room('S', 0, 1, ['e'], mix({ grunts: 52, orbs: 3, armed: true, tanks: 1, pace: 0.34, items: ['spread', 'cash', 'key'] })),
-    room('H', 1, 1, ['n', 's'], mix({ grunts: 58, orbs: 4, armed: true, shrapnel: 2, pace: 0.33, items: ['grenade', 'toaster', 'key'] })),
-    room('A', 1, 0, ['e'], mix({ grunts: 60, orbs: 5, armed: true, tanks: 2, items: ['car', 'toaster', 'key'] })),
-    room('C', 2, 0, ['s'], mix({ grunts: 66, snakes: 2, mines: 5, items: ['grenade', 'car', 'vcr'] })),
-    room('B', 1, 2, ['e'], mix({ grunts: 60, orbs: 5, armed: true, shrapnel: 3, items: ['rocket', 'shield', 'key'] })),
-    room('F', 2, 2, ['n'], mix({ grunts: 64, tanks: 3, snakes: 1, items: ['life', 'bomb', 'cash'] })),
-    room('D', 2, 1, ['e'], mix({ grunts: 74, orbs: 6, armed: true, mines: 5, shrapnel: 3, tanks: 2, pace: 0.3, items: ['rocket', 'boots', 'key'] })),
-    room('E', 3, 1, ['e'], mix({ grunts: 90, orbs: 6, armed: true, snakes: 3, shrapnel: 4, pace: 0.28, items: ['grenade', 'shield', 'vcr', 'key'] })),
+    room('S', 0, 1, ['e'], mix({ grunts: 83, orbs: 3, armed: true, tanks: 1, pace: 0.34, items: ['spread', 'cash', 'key'] })),
+    room('H', 1, 1, ['n', 's'], mix({ grunts: 93, orbs: 4, armed: true, shrapnel: 2, pace: 0.33, items: ['grenade', 'toaster', 'key'] })),
+    room('A', 1, 0, ['e'], mix({ grunts: 96, orbs: 5, armed: true, tanks: 2, items: ['car', 'toaster', 'key'] })),
+    room('C', 2, 0, ['s'], mix({ grunts: 106, snakes: 2, mines: 5, items: ['grenade', 'car', 'vcr'] })),
+    room('B', 1, 2, ['e'], mix({ grunts: 96, orbs: 5, armed: true, shrapnel: 3, items: ['rocket', 'shield', 'key'] })),
+    room('F', 2, 2, ['n'], mix({ grunts: 102, tanks: 3, snakes: 1, items: ['life', 'bomb', 'cash'] })),
+    room('D', 2, 1, ['e'], mix({ grunts: 118, orbs: 6, armed: true, mines: 5, shrapnel: 3, tanks: 2, pace: 0.3, items: ['rocket', 'boots', 'key'] })),
+    room('E', 3, 1, ['e'], mix({ grunts: 144, orbs: 6, armed: true, snakes: 3, shrapnel: 4, pace: 0.28, items: ['grenade', 'shield', 'vcr', 'key'] })),
     room('X', 4, 1, ['e'], { spawns: [], items: [{ item: 'rocket', at: 2 }, { item: 'shield', at: 18 }, { item: 'rocket', at: 30 }] }, 'cobra')
   ])
 };

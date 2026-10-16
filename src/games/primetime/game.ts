@@ -32,6 +32,7 @@ import {
   drawBanner,
   drawBossBar,
   drawDomeHud,
+  drawDoorContents,
   drawDoors,
   drawEnemies,
   drawItems,
@@ -134,6 +135,8 @@ export function initPrimeTimeGame(): void {
   let whiteout = 0;
   /** The DOM test's hand on the sticks; null means the real ones. */
   let devInput: RunInput | null = null;
+  /** Seconds until a won run's overlay goes up; 0 is none pending. */
+  let pendingEnd = 0;
   const hud = { cash: -1, lives: -1, keys: -1, weapon: '', studio: -1 };
 
   const fx = createEffects({
@@ -148,7 +151,8 @@ export function initPrimeTimeGame(): void {
   });
 
   const board = initScoreboard(document.getElementById('highscores'));
-  recordEl.textContent = `${board.best()}`;
+  const dollars = (n: number) => `$${n.toLocaleString('en-US')}`;
+  recordEl.textContent = dollars(board.best());
 
   const audio = createGameAudio(PRIMETIME_MUSIC);
   wireSoundToggles(audio);
@@ -164,13 +168,13 @@ export function initPrimeTimeGame(): void {
   function bankScore() {
     const { best, newRecord } = board.bank(run.cash);
     if (newRecord) showToast(`🏅 ${strings.newRecord}`);
-    recordEl.textContent = `${best}`;
+    recordEl.textContent = dollars(best);
   }
 
   function updateHud() {
     if (hud.cash !== run.cash) {
       hud.cash = run.cash;
-      cashEl.textContent = `$${run.cash.toLocaleString('en-US')}`;
+      cashEl.textContent = dollars(run.cash);
     }
     if (hud.lives !== run.lives) {
       hud.lives = run.lives;
@@ -204,9 +208,10 @@ export function initPrimeTimeGame(): void {
     shock = null;
     whiteout = 0;
     flashT = 0;
+    pendingEnd = 0;
     setTheme(themeFor(run));
     board.beginRun();
-    recordEl.textContent = `${board.best()}`;
+    recordEl.textContent = dollars(board.best());
     sticks.release();
     phase = 'play';
     audio.setDanger(false);
@@ -225,7 +230,7 @@ export function initPrimeTimeGame(): void {
     }
     bankScore();
     updateHud();
-    finalScoreEl.textContent = `$${run.cash.toLocaleString('en-US')}`;
+    finalScoreEl.textContent = dollars(run.cash);
     overIcon.textContent = kind === 'won' ? '🏆' : '📺';
     overTitle.textContent = kind === 'won' ? strings.winner : strings.gameOver;
     overDesc.textContent = kind === 'won' ? strings.winnerDesc : strings.gameOverDesc;
@@ -237,13 +242,13 @@ export function initPrimeTimeGame(): void {
     for (const ev of events) {
       switch (ev.type) {
         case 'cash':
-          fx.floater(ev.x, ev.y - 14, `+$${ev.amount.toLocaleString('en-US')}`, '#fde047', ev.amount >= 5000 ? { size: 18, glow: true, life: 1.4 } : {});
+          fx.floater(ev.x, ev.y - 14, `+${dollars(ev.amount)}`, '#fde047', ev.amount >= 5000 ? { size: 18, glow: true, life: 1.4 } : {});
           bankScore();
           break;
         case 'kill': {
           const big = ev.kind === 'tank' || ev.kind === 'shrapnel' || ev.kind === 'snake';
           fx.burst(ev.x, ev.y, big ? 14 : 6, ENEMY_COLOR[ev.kind], big ? { speed: 160, life: 0.6, size: 2.5 } : {});
-          if (ev.kind in ENEMIES || !ev.kind) sound.play(big ? 'bigKill' : 'kill');
+          if (ev.kind in ENEMIES) sound.play(big ? 'bigKill' : 'kill');
           break;
         }
         case 'shot':
@@ -252,7 +257,7 @@ export function initPrimeTimeGame(): void {
           break;
         case 'hit':
           fx.burst(ev.x, ev.y, 2, '#fff', { speed: 60, life: 0.2, size: 1.2 });
-          if (run.boss) sound.play('bossHit');
+          if (run.boss && Math.hypot(ev.x - run.boss.x, ev.y - run.boss.y) <= run.boss.r + 8) sound.play('bossHit');
           break;
         case 'blast':
           fx.burst(ev.x, ev.y, 26, '#fb923c', { speed: ev.radius * 2.4, life: 0.5, size: 3, glow: true });
@@ -296,6 +301,9 @@ export function initPrimeTimeGame(): void {
         case 'enterRoom':
           setTheme(themeFor(run));
           audio.setScene(ev.boss ? SCENES.boss : null);
+          // A scene change takes the score out of the danger variant (see
+          // Cascade's tune changes), so the last life is asserted again here.
+          audio.setDanger(run.lives === 1);
           if (ev.key === CIRCUITS[ev.circuit].start && run.roomsCleared > 0) say(strings.studio.replace('{n}', String(ev.circuit + 1)));
           break;
         case 'bossStage':
@@ -321,13 +329,16 @@ export function initPrimeTimeGame(): void {
         case 'dome':
           setTheme(DOME_THEME);
           audio.setScene(SCENES.dome);
+          audio.setDanger(false);
           say(strings.dome, '#facc15');
           break;
         case 'gameOver':
           endRun('over');
           break;
         case 'won':
-          endRun('won');
+          // A win in the same tick as a host line (no keys for the dome)
+          // would hide the line under the overlay: let it be read first.
+          pendingEnd = Math.max(0.05, banner.life);
           break;
         case 'doorsOpen':
         case 'exit':
@@ -364,10 +375,17 @@ export function initPrimeTimeGame(): void {
   document.addEventListener('astro:before-swap', () => document.removeEventListener('visibilitychange', onVisibility), {
     once: true
   });
-  // A tap on the pause card resumes, for a touch player with no P key.
+  // A tap on the pause card resumes, for a touch player with no P key; the
+  // header's pause button is their way in.
   canvas.addEventListener('pointerdown', () => {
     if (phase === 'paused') setPaused(false);
   });
+  document.getElementById('pause-btn')?.addEventListener('click', () => {
+    if (phase === 'play') setPaused(true);
+    else if (phase === 'paused') setPaused(false);
+  });
+  // Alt-tabbing away without hiding the tab would leave a held key latched.
+  listenUntilSwap(window, 'blur', () => sticks.release());
 
   // --- Loop ----------------------------------------------------------------------------
   function update(dt: number) {
@@ -378,6 +396,14 @@ export function initPrimeTimeGame(): void {
     if (shock) shock.t += dt;
     fx.update(dt);
     if (phase !== 'play') return;
+    if (pendingEnd > 0) {
+      pendingEnd -= dt;
+      if (pendingEnd <= 0) {
+        pendingEnd = 0;
+        endRun('won');
+      }
+      return;
+    }
     const input = devInput ?? sticks.read(run.player);
     handleEvents(tickRun(run, input, dt));
     updateHud();
@@ -389,6 +415,7 @@ export function initPrimeTimeGame(): void {
       drawMap(ctx, run, { studio: strings.studio, dome: strings.dome }, theme);
     } else {
       drawDoors(ctx, run, clock, theme);
+      drawDoorContents(ctx, run);
       drawItems(ctx, run.items, clock);
       drawEnemies(ctx, run, clock);
       drawShots(ctx, run);
@@ -422,13 +449,19 @@ export function initPrimeTimeGame(): void {
   updateHud();
   loop.start();
 
-  // A hand on the sticks for the DOM suite and for play-testing bots, as
-  // Cascade's `cascadeDev`. Never read by the game itself.
-  (window as unknown as { primetimeDev: unknown }).primetimeDev = {
-    getRun: () => run,
-    setInput: (input: RunInput | null) => {
-      devInput = input;
-    },
-    noInput: NO_INPUT
-  };
+  // A hand on the sticks for the DOM suite and for play-testing bots, only
+  // when the page is opened with #dev, as Cascade's `cascadeDev`; retired
+  // with the page so a ClientRouter swap cannot leave it pointing at a dead
+  // run. Never read by the game itself.
+  if (window.location.hash === '#dev') {
+    const devWindow = window as unknown as Record<string, unknown>;
+    devWindow.primetimeDev = {
+      getRun: () => run,
+      setInput: (input: RunInput | null) => {
+        devInput = input;
+      },
+      noInput: NO_INPUT
+    };
+    document.addEventListener('astro:before-swap', () => delete devWindow.primetimeDev, { once: true });
+  }
 }

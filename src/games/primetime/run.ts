@@ -37,6 +37,7 @@ import { seededRng } from '../engine/math';
 import {
   ENEMIES,
   MINE_BLAST,
+  MINE_PLAYER_BLAST,
   contactPoints,
   shrapnelBurst,
   spawnEnemy,
@@ -46,7 +47,7 @@ import {
   type EnemyKind,
   type Flak
 } from './enemies';
-import { bossEntry, spawnBoss, stepBoss } from './bosses';
+import { resetBoss, spawnBoss, stepBoss } from './bosses';
 import {
   BOOTS_FACTOR,
   BOOTS_SECONDS,
@@ -212,13 +213,13 @@ export const MAP_SECONDS = 1.6;
 export const SAFE_SPAWN = 150;
 /** A kill every so many drops a cash prize where the enemy fell. */
 export const DROP_EVERY_KILLS = 12;
-/** Kills inside `STREAK_WINDOW` seconds that earn the carnage line. */
-export const STREAK_KILLS = 25;
-export const STREAK_WINDOW = 2.5;
+/** A streak of kills, none more than `STREAK_WINDOW` seconds after the last, that earns the carnage line. */
+export const STREAK_KILLS = 20;
+export const STREAK_WINDOW = 0.6;
 /** Mines do this much to a boss caught in their blast. */
 const MINE_BOSS_DAMAGE = 10;
 /** Seconds a boss waits after its entrance before it starts. */
-const BOSS_ENTRANCE = 1.4;
+export const BOSS_ENTRANCE = 1.4;
 /** Shots the renderer and the tests may count on being swept past the walls. */
 const SHOT_MARGIN = 12;
 
@@ -343,8 +344,13 @@ function pickDoor(run: RunState): Side {
   return pool[Math.floor(run.rng() * pool.length)];
 }
 
-/** A floor point clear of the walls and the contestant; the best of a few tries when the floor is crowded. */
-function floorPoint(run: RunState, margin = 40): Pt {
+/**
+ * A floor point clear of the walls and at least `safe` from the contestant;
+ * the best of a few tries when the floor is crowded. Spawns keep the full
+ * `SAFE_SPAWN`; the prize room, where nothing hostile lands, only keeps a
+ * prize off the contestant's own square so it is seen landing.
+ */
+function floorPoint(run: RunState, margin = 40, safe = SAFE_SPAWN): Pt {
   let best: Pt = { x: ARENA.x + ARENA.w / 2, y: ARENA.y + ARENA.h / 2 };
   let bestD = -1;
   for (let tries = 0; tries < 12; tries++) {
@@ -353,7 +359,7 @@ function floorPoint(run: RunState, margin = 40): Pt {
       y: ARENA.y + margin + run.rng() * (ARENA.h - margin * 2)
     };
     const d = dist(p, run.player);
-    if (d > SAFE_SPAWN) return p;
+    if (d > safe) return p;
     if (d > bestD) {
       bestD = d;
       best = p;
@@ -387,9 +393,12 @@ function pay(run: RunState, amount: number, at: Pt, reason: 'kill' | 'prize' | '
 /**
  * An enemy dies: cash, the drop every so many kills, a shrapnel man's shards,
  * a mine's blast, a boss's fall. Blasts can chain, so kills queue rather than
- * recurse.
+ * recurse. `harmless` is for the smart bomb and the respawn shockwave: a mine
+ * they set off clears the crowd as any mine does but never kills the
+ * contestant, since both exist to save them (a bomb taken beside a mine was
+ * a death before this flag).
  */
-function kill(run: RunState, e: Enemy, events: RunEvent[], paid = true): void {
+function kill(run: RunState, e: Enemy, events: RunEvent[], paid = true, harmless = false): void {
   const queue: Enemy[] = [e];
   while (queue.length > 0) {
     const victim = queue.shift()!;
@@ -400,7 +409,9 @@ function kill(run: RunState, e: Enemy, events: RunEvent[], paid = true): void {
       run.kills++;
       pay(run, victim.worth, victim, victim.boss ? 'boss' : 'kill', events);
       if (!victim.boss && run.kills % DROP_EVERY_KILLS === 0) dropItem(run, 'cash', victim);
-      if (run.t - run.streak.since > STREAK_WINDOW) run.streak = { count: 0, since: run.t };
+      // A streak is kills that keep coming: the window rolls from the last kill.
+      if (run.t - run.streak.since > STREAK_WINDOW) run.streak.count = 0;
+      run.streak.since = run.t;
       run.streak.count++;
       if (run.streak.count === STREAK_KILLS) events.push({ type: 'host', line: 'carnage' });
     }
@@ -417,7 +428,7 @@ function kill(run: RunState, e: Enemy, events: RunEvent[], paid = true): void {
           queue.push(other);
         }
       }
-      if (run.alive && !protectedPlayer(run) && dist(run.player, victim) <= MINE_BLAST + run.player.r) {
+      if (!harmless && run.alive && !protectedPlayer(run) && dist(run.player, victim) <= MINE_PLAYER_BLAST + run.player.r) {
         die(run, events);
       }
     }
@@ -464,21 +475,14 @@ function afterDeath(run: RunState, events: RunEvent[]): void {
   // hostile shot on the floor is swept, so the respawn is never into a death.
   for (const e of [...run.enemies]) {
     if (e.boss || e.hp === -Infinity) continue;
-    if (dist(e, run.player) <= SHOCK_RADIUS + e.r) kill(run, e, events, false);
+    if (dist(e, run.player) <= SHOCK_RADIUS + e.r) kill(run, e, events, false, true);
   }
   run.flak = [];
   // A boss cannot be killed by the shockwave, so it is sent back to its
   // entrance and made to stand for a beat: left where it was it would be on
   // the contestant the moment the grace ran out, and the second life would go
   // the way of the first with nothing the contestant could do about it.
-  if (run.boss) {
-    const entry = bossEntry(run.boss.kind as BossKind);
-    run.boss.x = entry.x;
-    run.boss.y = entry.y;
-    run.boss.t = 0;
-    run.boss.timer = BOSS_ENTRANCE;
-    if (run.boss.tail) for (const seg of run.boss.tail) Object.assign(seg, entry);
-  }
+  if (run.boss) resetBoss(run.boss, BOSS_ENTRANCE);
   events.push({ type: 'respawn', x: run.player.x, y: run.player.y, radius: SHOCK_RADIUS });
   // The shockwave may have finished the room.
   if (run.phase === 'room' && roomDone(run)) clearRoom(run, events);
@@ -515,7 +519,7 @@ function pickUp(run: RunState, item: Item, events: RunEvent[]): void {
       events.push({ type: 'bomb' });
       for (const e of [...run.enemies]) {
         if (e.boss || e.hp === -Infinity) continue;
-        kill(run, e, events);
+        kill(run, e, events, true, true);
       }
       run.flak = [];
       break;
@@ -733,7 +737,10 @@ function stepContact(run: RunState, events: RunEvent[]): void {
  * once stalled a run for good. They stay on the floor until the exit.
  */
 function roomDone(run: RunState): boolean {
-  return run.schedule.length === 0 && run.enemies.every(e => e.kind === 'mine');
+  // The last shrapnel shards or a tank's final shell still crossing the floor
+  // hold the celebration back too: they leave the canvas inside three seconds,
+  // and a death during BIG MONEY would be a sour one.
+  return run.schedule.length === 0 && run.flak.length === 0 && run.enemies.every(e => e.kind === 'mine');
 }
 
 const CLEAR_LINES: HostLine[] = ['bigMoney', 'bigPrizes', 'loveIt'];
@@ -825,7 +832,7 @@ function stepDome(run: RunState, input: RunInput, dt: number, events: RunEvent[]
         break;
       }
     }
-    const at = floorPoint(run, 44);
+    const at = floorPoint(run, 44, 40);
     run.items.push({ id: run.nextId++, item: pick, x: at.x, y: at.y, ttl: 4, r: ITEM_R });
   }
   if (run.phaseT >= DOME_SECONDS) win(run, events);

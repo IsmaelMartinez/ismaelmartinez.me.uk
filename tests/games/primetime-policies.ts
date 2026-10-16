@@ -157,8 +157,13 @@ export const competent: Policy = run => {
     // Dead on the centre line the sign would flip every tick and the
     // contestant would jitter in place, so the tie goes to the side with the
     // most floor: the one the arena's centre is on.
+    // The tie is broken by the way the contestant is already going (their
+    // facing), and only then by the side the arena's centre is on, so the
+    // sign cannot flip tick by tick as the centre shot's line is crossed.
+    const fPerp = p.facing.x * uy - p.facing.y * ux;
     const cPerp = (centre.x - p.x) * uy - (centre.y - p.y) * ux;
-    const side = Math.abs(perpSum) > 6 ? (perpSum >= 0 ? 1 : -1) : cPerp >= 0 ? 1 : -1;
+    const side =
+      Math.abs(perpSum) > 6 ? (perpSum >= 0 ? 1 : -1) : Math.abs(fPerp) > 0.3 ? (fPerp >= 0 ? 1 : -1) : cPerp >= 0 ? 1 : -1;
     mx += uy * side * 6;
     my += -ux * side * 6;
   }

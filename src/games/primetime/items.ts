@@ -34,7 +34,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   toaster: { worth: 2500, ttl: 9 },
   vcr: { worth: 5000, ttl: 9 },
   car: { worth: 25000, ttl: 10 },
-  key: { worth: 500, ttl: 11 },
+  key: { worth: 500, ttl: 18 },
   spread: { worth: 0, weapon: 'spread', ttl: 12 },
   grenade: { worth: 0, weapon: 'grenade', ttl: 12 },
   rocket: { worth: 0, weapon: 'rocket', ttl: 12 },

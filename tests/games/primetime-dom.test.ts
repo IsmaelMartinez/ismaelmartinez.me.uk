@@ -77,6 +77,7 @@ const PAGE_HTML = `
     <div class="game-area">
       <canvas id="game-canvas"></canvas>
       <div id="toast-area"></div>
+      <button id="pause-btn"></button>
       <div id="start-overlay" class="game-overlay"><button id="start-btn"></button></div>
       <div id="over-overlay" class="game-overlay" style="display: none;">
         <span id="over-icon"></span><h2 id="over-title"></h2><p id="over-desc"></p>
@@ -146,6 +147,8 @@ beforeEach(() => {
   frames.install();
   vi.spyOn(Math, 'random').mockReturnValue(0.123456);
   mountHtml(PAGE_HTML, { canvasSize: [CANVAS_W, CANVAS_H] });
+  // The dev handle only exists on a page opened with #dev, as Cascade's does.
+  window.location.hash = '#dev';
   initPrimeTimeGame();
   frames.syncClock();
 });
@@ -194,7 +197,7 @@ describe('PRIME TIME through the page', () => {
     dev().setInput({ moveX: 0, moveY: 0, fireX: 1, fireY: 0 });
     advance(0.5);
     expect(text('cash')).toBe(`$${ENEMIES.grunt.worth}`);
-    expect(text('record')).toBe(`${ENEMIES.grunt.worth}`);
+    expect(text('record')).toBe(`$${ENEMIES.grunt.worth}`);
     expect(Number(localStorage.getItem(bestKey('primetime')))).toBe(ENEMIES.grunt.worth);
   });
 
@@ -242,6 +245,10 @@ describe('PRIME TIME through the page', () => {
     expect(run().roomKey).toBe(CIRCUITS[0].boss);
     expect(run().boss).not.toBeNull();
     expect(mockAudio.setScene).toHaveBeenLastCalledWith(SCENES.boss);
+    // Entering the boss room is a scene change, which leaves the danger
+    // variant, so the last-life state is asserted again after it.
+    expect(mockAudio.setDanger).toHaveBeenLastCalledWith(false);
+    run().lives = 1;
     // Beat it and walk out: the next studio opens on the arena loop again.
     run().enemies = [];
     advance(0.25);
@@ -252,6 +259,9 @@ describe('PRIME TIME through the page', () => {
     expect(run().lives).toBe(livesBefore + 1);
     expect(mockAudio.playStinger).toHaveBeenCalledWith('studioClear');
     expect(mockAudio.setScene).toHaveBeenLastCalledWith(null);
+    // Lives were set to 1 before the studio's bonus life, so entering studio
+    // 2 (lives 2) re-asserts the danger state off rather than on.
+    expect(mockAudio.setDanger).toHaveBeenLastCalledWith(false);
     expect(text('studio')).toBe('2');
   });
 
@@ -261,11 +271,29 @@ describe('PRIME TIME through the page', () => {
     quiet(run());
     advance(0.25);
     expect(run().phase).toBe('cleared');
-    walkOut();
+    // Out of the east door by hand, so the moment of arrival can be caught.
+    const c = doorCentre('e');
+    run().player.x = c.x - 30;
+    run().player.y = c.y;
+    dev().setInput({ moveX: 1, moveY: 0, fireX: 0, fireY: 0 });
+    advance(1.5);
+    dev().setInput(null);
+    advance(MAP_SECONDS);
     expect(run().phase).toBe('won');
+    // No keys: the host's line is read before the overlay goes up.
+    expect(overlayShown()).toBe(false);
+    advance(2.5);
     expect(overlayShown()).toBe(true);
     expect(text('over-title')).toBe('Grand champion!');
     expect(mockAudio.playEnding).toHaveBeenCalledWith(ENDINGS.winner);
+  });
+
+  it('pauses from the header button too, for a touch player with no keyboard', () => {
+    startRun();
+    document.getElementById('pause-btn')!.click();
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(true);
+    document.getElementById('pause-btn')!.click();
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(false);
   });
 
   it('pauses on P with the music muffled, and resumes on the next P', () => {

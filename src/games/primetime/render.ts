@@ -24,9 +24,9 @@ import {
   type Pt
 } from './arena';
 import { SCARFACE_PHASE, bossStage } from './bosses';
-import type { Enemy } from './enemies';
+import { ORB_CHARGE, type Enemy } from './enemies';
 import type { Item, ItemId } from './items';
-import { CIRCUITS, DOME_SECONDS, type RoomDef } from './rooms';
+import { CIRCUITS, DOME_SECONDS, neighbour, type RoomDef } from './rooms';
 import { MAP_SECONDS, RESPAWN_INVULN, type RunState, type Shot } from './run';
 import type { Stick } from './input';
 import { STICK_RANGE } from './input';
@@ -362,13 +362,15 @@ function drawGrunt(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void
 
 function drawOrb(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
   const colour = e.armed ? '#f87171' : ENEMY_COLOR.orb;
-  const pulse = 0.6 + 0.4 * Math.sin(clock * 6 + e.jitter);
+  // An armed orb about to shoot flares white: the telegraph.
+  const charging = e.armed && e.timer <= ORB_CHARGE;
+  const pulse = charging ? 1.4 : 0.6 + 0.4 * Math.sin(clock * 6 + e.jitter);
   shadow(ctx, e.x, e.y + 6, e.r);
   ctx.shadowColor = colour;
   ctx.shadowBlur = 12 * pulse;
   const g = ctx.createRadialGradient(e.x - 3, e.y - 3, 1, e.x, e.y, e.r);
   g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.4, colour);
+  g.addColorStop(charging ? 0.75 : 0.4, colour);
   g.addColorStop(1, e.armed ? '#7f1d1d' : '#155e75');
   ctx.fillStyle = g;
   ctx.beginPath();
@@ -379,7 +381,9 @@ function drawOrb(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
 
 function drawMine(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
   shadow(ctx, e.x, e.y, e.r - 2);
-  ctx.fillStyle = '#374151';
+  // Spikes in a warning yellow-grey: a mine the floor hides is not a hazard,
+  // it is a trap, and the first playtest round found these near-invisible.
+  ctx.fillStyle = '#9ca3af';
   ctx.beginPath();
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
@@ -388,10 +392,13 @@ function drawMine(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void 
   }
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#1f2937';
+  ctx.fillStyle = '#374151';
   ctx.beginPath();
   ctx.arc(e.x, e.y, e.r - 5, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = '#facc15';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
   const rate = e.hp < e.maxHp ? 10 : 3;
   if (Math.floor(clock * rate + e.jitter) % 2 === 0) {
     ctx.fillStyle = '#ef4444';
@@ -683,19 +690,26 @@ export function drawShots(ctx: CanvasRenderingContext2D, run: RunState): void {
     }
   }
   ctx.lineCap = 'butt';
+  // Hostile shots are the most lethal thing on the floor, so they are the one
+  // thing in hot orange with a dark rim: rose on the pink-walled studio read
+  // as decoration.
   for (const f of run.flak) {
     const speed = Math.hypot(f.vx, f.vy) || 1;
-    ctx.strokeStyle = 'rgba(251, 113, 133, 0.45)';
+    ctx.strokeStyle = 'rgba(251, 146, 60, 0.5)';
     ctx.lineWidth = f.r;
     ctx.beginPath();
-    ctx.moveTo(f.x - (f.vx / speed) * 10, f.y - (f.vy / speed) * 10);
+    ctx.moveTo(f.x - (f.vx / speed) * 12, f.y - (f.vy / speed) * 12);
     ctx.lineTo(f.x, f.y);
     ctx.stroke();
-    ctx.fillStyle = '#fb7185';
+    ctx.fillStyle = '#1c0a00';
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r + 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff7a1a';
     ctx.beginPath();
     ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#fff1f2';
+    ctx.fillStyle = '#fff7ed';
     ctx.beginPath();
     ctx.arc(f.x, f.y, f.r * 0.45, 0, Math.PI * 2);
     ctx.fill();
@@ -790,6 +804,42 @@ export function drawBanner(ctx: CanvasRenderingContext2D, text: string, life: nu
   ctx.globalAlpha = 1;
 }
 
+/** A room's prizes and gear as glyphs, three at most. */
+export function roomGlyphs(room: RoomDef): string {
+  return room.script.items
+    .slice(0, 3)
+    .map(i => ITEM_GLYPH[i.item])
+    .join('');
+}
+
+/**
+ * Over each open door, what the room beyond holds, so the choice is made
+ * at the door with the map's information rather than blind.
+ */
+export function drawDoorContents(ctx: CanvasRenderingContext2D, run: RunState): void {
+  if (run.openDoors.length === 0) return;
+  const circuit = CIRCUITS[run.circuit];
+  const room = circuit.rooms[run.roomKey];
+  ctx.font = '16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const side of run.openDoors) {
+    const next = neighbour(circuit, room, side);
+    if (!next) continue;
+    const r = doorRect(side);
+    const inward = inwardOf(side);
+    const x = r.x + r.w / 2 + inward.x * 34;
+    const y = r.y + r.h / 2 + inward.y * 30;
+    const text = next.boss ? '💀' : roomGlyphs(next);
+    if (!text) continue;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(x - 10 * Math.max(1, text.length / 2) - 8, y - 12, 20 * Math.max(1, text.length / 2) + 16, 24, 6);
+    ctx.fill();
+    ctx.fillText(text, x, y + 1);
+  }
+}
+
 export interface MapStrings {
   studio: string;
   dome: string;
@@ -816,7 +866,13 @@ export function drawMap(ctx: CanvasRenderingContext2D, run: RunState, strings: M
   ctx.shadowColor = theme.trim;
   ctx.shadowBlur = 14;
   ctx.fillStyle = theme.trim;
-  const title = run.mapTarget === 'next-studio' ? strings.studio.replace('{n}', String(Math.min(3, circuit.studio + 1))) : strings.studio.replace('{n}', String(circuit.studio));
+  const last = run.circuit === CIRCUITS.length - 1;
+  const title =
+    run.mapTarget === 'next-studio'
+      ? last
+        ? strings.dome
+        : strings.studio.replace('{n}', String(circuit.studio + 1))
+      : strings.studio.replace('{n}', String(circuit.studio));
   ctx.fillText(title, CANVAS_W / 2, oy - 40);
   ctx.shadowBlur = 0;
   // Corridors between neighbours an exit joins.
@@ -850,6 +906,11 @@ export function drawMap(ctx: CanvasRenderingContext2D, run: RunState, strings: M
       ctx.font = 'bold 14px monospace';
       ctx.fillStyle = '#86efac';
       ctx.fillText('✓', c.x, c.y + 1);
+    } else if (!visited) {
+      // What the room holds, so the long way round can be seen to be the
+      // rich one: the choice the map exists to offer (`rooms.ts`).
+      ctx.font = '11px sans-serif';
+      ctx.fillText(roomGlyphs(r), c.x, c.y + 1);
     }
   }
   // The token slides from the room just left toward where the exit leads.

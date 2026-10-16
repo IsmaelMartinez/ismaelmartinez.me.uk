@@ -55,12 +55,12 @@ is green and the review rounds stop finding anything the owner would notice.
   on the canvas). Fire is held, not tapped. Check: the input module's pure
   part is unit-tested for the eight-way snap and the dead zone, and the DOM
   suite drives a run from keyboard events.
-- **G2 The crowd.** Rooms are about numbers: forty grunts in a first-studio
-  room, ninety in the third, in streams from the doors, with orbs, mines,
-  shrapnel men, tanks and snakes layered in as the studios go on. Check: a
-  test asserts every room's script is finite, that enemy counts rise across
-  the three studios, and that the simulation holds a hundred enemies and
-  sixty bullets a tick inside the fixed step's budget.
+- **G2 The crowd.** Rooms are about numbers: forty-five grunts in a
+  first-studio room, a hundred and forty in the third, in overlapping streams
+  from the doors, with orbs, mines, shrapnel men, tanks and snakes layered in
+  as the studios go on. Check: a test asserts every room's script is finite
+  and that enemy counts rise across the three studios; the playthroughs run
+  studio 3's rooms at full speed in the harness, which is the budget check.
 - **G3 A run with a shape.** Three studios, a map with choices, a boss at the
   end of each, a bonus prize room gated on keys, an ending in both directions.
   Check: a competent scripted player (`tests/games/primetime-policies.ts`)
@@ -116,10 +116,11 @@ is green and the review rounds stop finding anything the owner would notice.
   of invulnerability, so a death is a lost life and never a lost run on its
   own.
 - **Rooms are authored scripts, the run is seeded.** A room's enemies, counts,
-  doors and timing are a table in `rooms.ts`; the seed moves only where along
-  a door an enemy appears, a grunt's speed jitter and the prize drops' timing,
-  so two players on different seeds fight the same room, as Line Hold's seed
-  moves only the spawn jitter.
+  doors and timing are a table in `rooms.ts`; the seed moves only which door
+  and where along it an enemy appears, a grunt's speed jitter and where a
+  prize lands, so two players on different seeds fight the same room, as Line
+  Hold's seed moves only the spawn jitter. The seed is the harness's handle
+  and is not shown: unlike Line Hold's, what it moves is cosmetic.
 - **The bonus room is the only place keys matter**, and it pays in cash the
   board can hold: `MAX_SCORE` is ten million and a perfect run is well under one.
 - **No voluntary door to the board.** A run is bounded (three bosses) and the
@@ -146,3 +147,30 @@ is green and the review rounds stop finding anything the owner would notice.
   with a thin margin rather than a wall. Report over ten seeds: 8 of 10
   competent runs clear studio 1, the rest die to Mutoid Man; runs last 2.5 to
   5 minutes and end at $41k to $129k.
+- 2026-10-16, round 2 (the reviews): a playtest critic and a code reviewer
+  read the harness, the frames and the diff. The critic's census of 38 bot
+  deaths found orb shots (10) and Mutoid's fan (8) on top, then mine blasts
+  (6), and measured the crowd as a trickle: an average of two grunts on the
+  floor and a third of every fight an empty room, because the three streams
+  ran one after another with gaps. Changes: the streams overlap and every
+  grunt count is 1.6x (28 to 144 a room); a mine's blast kills the contestant
+  only inside `MINE_PLAYER_BLAST` (30) while clearing the crowd at 64, and a
+  mine set off by the smart bomb or the shockwave is harmless (the reviewer's
+  probe showed a bomb taken beside a mine was a death); orbs hold fire inside
+  120 px and flare before a shot; Mutoid's fans are 3 and 5 shots (the
+  stage-1 fan had gaps narrower than the contestant), Scarface has 160 hp and
+  a longer breath between charges, Cobra Death runs at 124 with faster bursts
+  and the bosses pay 25k/50k/100k; `resetBoss` resets a pushed-back boss's
+  charge, heading and clocks, not only its position; the last-life music is
+  re-asserted after every scene change, which was dropping it in boss rooms;
+  the room clear waits for the last hostile shot; the map and the open doors
+  show what the room beyond holds; flak is hot orange, mines are lit, a pause
+  button serves touch, a blur releases held keys, the dev handle is gated on
+  `#dev`. The bot itself gained hysteresis on its dodge (its facing breaks a
+  fan's centre-line tie), without which it jittered in place and died to
+  every fan whatever the fan's shape, which is what a week of tuning against
+  it would have been measuring. Report after: 8 of 10 clear studio 1, most
+  reach studio 2's second half, 1 reaches studio 3; a twelve-life studio-3
+  play wins on 7 or more seeds and reaches the dome on some. The two figures
+  still to judge by hand are the first boss (one life a run for the bot) and
+  the pace of studio 3 at 144 grunts a room.

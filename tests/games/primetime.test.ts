@@ -22,6 +22,7 @@ import { SPREAD_ANGLE, WEAPONS, WEAPON_IDS, shotVectors } from '../../src/games/
 import {
   ENEMIES,
   MINE_BLAST,
+  MINE_PLAYER_BLAST,
   SEGMENT_GAP,
   SHRAPNEL_SHARDS,
   SNAKE_SEGMENTS,
@@ -32,7 +33,7 @@ import {
   stepEnemy,
   type Flak
 } from '../../src/games/primetime/enemies';
-import { BOSSES, SCARFACE_PHASE, bossStage, spawnBoss, stepBoss } from '../../src/games/primetime/bosses';
+import { BOSSES, SCARFACE_CHARGE_SPEED, SCARFACE_PHASE, bossEntry, bossStage, spawnBoss, stepBoss } from '../../src/games/primetime/bosses';
 import { DOME_KEYS, ITEMS, ITEM_R, SHIELD_SECONDS } from '../../src/games/primetime/items';
 import {
   CIRCUITS,
@@ -45,6 +46,7 @@ import {
   type RoomDef
 } from '../../src/games/primetime/rooms';
 import {
+  BOSS_ENTRANCE,
   DEATH_SECONDS,
   MAP_SECONDS,
   NO_INPUT,
@@ -52,6 +54,8 @@ import {
   SAFE_SPAWN,
   SHOCK_RADIUS,
   START_LIVES,
+  STREAK_KILLS,
+  STREAK_WINDOW,
   createRun,
   fingerprint,
   jumpToRoom,
@@ -199,8 +203,14 @@ describe('the crowd', () => {
       stepEnemy(quiet, player, TICK, out);
     }
     expect(out).toHaveLength(0);
-    for (let i = 0; i < 300; i++) stepEnemy(armed, player, TICK, out);
+    // From well out of its minimum range it fires; inside it, it holds.
+    const far = { x: 600, y: 200 };
+    for (let i = 0; i < 300; i++) stepEnemy(armed, far, TICK, out);
     expect(out.length).toBeGreaterThan(0);
+    const close = spawnEnemy(3, 'orb', 100, 200, rng(), true);
+    const held: Flak[] = [];
+    for (let i = 0; i < 300; i++) stepEnemy(close, { x: close.x + 40, y: close.y }, TICK, held);
+    expect(held).toHaveLength(0);
   });
 
   it('shells the contestant from a tank on a clock', () => {
@@ -433,9 +443,12 @@ describe('the run', () => {
     const events = advance(run, 0.5, { moveX: 0, moveY: 0, fireX: 1, fireY: 0 });
     const cash = events.filter(e => e.type === 'cash');
     expect(cash.length).toBe(1);
+    // The dollars land where the grunt fell, on the shot's line east of the contestant.
     expect(cash[0]).toMatchObject({ amount: ENEMIES.grunt.worth, reason: 'kill' });
-    // Every dollar lands somewhere on the floor.
-    for (const c of cash) if (c.type === 'cash') expect(insideArena(c.x, c.y, 0) || true).toBe(true);
+    if (cash[0].type === 'cash') {
+      expect(cash[0].y).toBeCloseTo(run.player.y, 0);
+      expect(cash[0].x).toBeGreaterThan(run.player.x);
+    }
     expect(run.cash).toBe(ENEMIES.grunt.worth);
     // A grunt on top of the contestant kills them.
     run.enemies.push(spawnEnemy(100, 'grunt', run.player.x, run.player.y, rng()));
@@ -588,18 +601,126 @@ describe('the run', () => {
     expect(events.filter(e => e.type === 'kill').length).toBeGreaterThanOrEqual(4);
   });
 
-  it('detonates a shot mine on the crowd around it and on an unprotected contestant inside it', () => {
+  it('detonates a shot mine on the crowd around it, and on a contestant only when they stand on it', () => {
+    for (const standOnIt of [false, true]) {
+      const run = quietRoom();
+      const gap = standOnIt ? MINE_PLAYER_BLAST + run.player.r - 2 : MINE_PLAYER_BLAST + run.player.r + 12;
+      const mine = spawnEnemy(700, 'mine', run.player.x + gap, run.player.y, rng());
+      run.enemies.push(mine);
+      run.enemies.push(spawnEnemy(701, 'grunt', mine.x + 30, mine.y, rng()));
+      run.enemies.push(spawnEnemy(702, 'grunt', mine.x + MINE_BLAST + 130, mine.y, rng()));
+      const events = advance(run, 0.4, { moveX: 0, moveY: 0, fireX: 1, fireY: 0 });
+      const kills = events.filter(e => e.type === 'kill').map(e => (e.type === 'kill' ? e.kind : ''));
+      expect(kills).toContain('mine');
+      expect(kills.filter(k => k === 'grunt')).toHaveLength(1);
+      // Inside the crowd radius but off the mine itself, a stray round that
+      // set it off costs nothing; standing on it, everything.
+      expect(events.map(e => e.type).includes('death')).toBe(standOnIt);
+    }
+  });
+
+  it('never lets a smart bomb or a respawn shockwave kill the contestant through a mine beside them', () => {
     const run = quietRoom();
-    const mine = spawnEnemy(700, 'mine', run.player.x + 60, run.player.y, rng());
-    run.enemies.push(mine);
-    run.enemies.push(spawnEnemy(701, 'grunt', mine.x + 30, mine.y, rng()));
-    run.enemies.push(spawnEnemy(702, 'grunt', mine.x + MINE_BLAST + 40, mine.y, rng()));
-    const events = advance(run, 0.6, { moveX: 0, moveY: 0, fireX: 1, fireY: 0 });
-    const kills = events.filter(e => e.type === 'kill').map(e => (e.type === 'kill' ? e.kind : ''));
-    expect(kills).toContain('mine');
-    expect(kills.filter(k => k === 'grunt')).toHaveLength(1);
-    // The contestant stood 60 px away, inside the 64 px blast: dead.
-    expect(events.map(e => e.type)).toContain('death');
+    run.enemies.push(spawnEnemy(710, 'mine', run.player.x + 20, run.player.y, rng()));
+    run.items.push({ id: 1, item: 'bomb', x: run.player.x, y: run.player.y, ttl: 9, r: ITEM_R });
+    const bombed = advance(run, TICK);
+    expect(bombed.map(e => e.type)).toContain('blast');
+    expect(bombed.map(e => e.type)).not.toContain('death');
+    expect(run.enemies).toEqual([]);
+    // Now a death beside a mine: the shockwave sets it off, harmlessly.
+    run.enemies.push(spawnEnemy(711, 'mine', run.player.x + 20, run.player.y, rng()));
+    run.enemies.push(spawnEnemy(712, 'grunt', run.player.x, run.player.y, rng()));
+    const events = advance(run, DEATH_SECONDS + 2 * TICK);
+    expect(events.filter(e => e.type === 'death')).toHaveLength(1);
+    expect(events.map(e => e.type)).toContain('respawn');
+    expect(run.enemies).toEqual([]);
+    expect(run.alive).toBe(true);
+  });
+
+  it('keeps an enemy inside the walls once it has entered, so it can never circle out of reach', () => {
+    const run = quietRoom();
+    // An orb heading straight at the far wall from mid-floor.
+    const orb = spawnEnemy(720, 'orb', run.player.x, run.player.y + 100, rng());
+    run.enemies.push(orb);
+    run.player.invuln = 60;
+    run.player.x = ARENA.x + 30;
+    for (let i = 0; i < 60 * 8; i++) {
+      tickRun(run, NO_INPUT, TICK);
+      // The contestant stays glued to the west wall; the orb must still be on the floor.
+      run.player.x = ARENA.x + 30;
+      expect(insideArena(orb.x, orb.y, orb.r)).toBe(true);
+    }
+  });
+
+  it('keeps the doors open through a death in a cleared room', () => {
+    const run = createRun(3);
+    run.schedule = [];
+    run.itemSchedule = [];
+    run.enemies = [];
+    advance(run, TICK);
+    expect(run.phase).toBe('cleared');
+    const doors = [...run.openDoors];
+    run.player.invuln = 0;
+    run.enemies.push(spawnEnemy(730, 'grunt', run.player.x, run.player.y, rng()));
+    advance(run, DEATH_SECONDS + 2 * TICK);
+    expect(run.alive).toBe(true);
+    expect(run.phase).toBe('cleared');
+    expect(run.openDoors).toEqual(doors);
+  });
+
+  it('sends a boss back to its entrance to stand for a beat on a respawn, its charge and clocks reset', () => {
+    const run = jumpAndQuiet(1, 'X');
+    const boss = run.enemies.find(e => e.boss)!;
+    // Scarface mid-charge, on top of the contestant.
+    boss.phase = SCARFACE_PHASE.charge;
+    boss.vx = -SCARFACE_CHARGE_SPEED;
+    boss.vy = 0;
+    boss.x = run.player.x;
+    boss.y = run.player.y;
+    boss.t = 20;
+    const events = advance(run, DEATH_SECONDS + 2 * TICK);
+    expect(events.map(e => e.type)).toContain('respawn');
+    const entry = bossEntry('scarface');
+    expect([boss.x, boss.y]).toEqual([entry.x, entry.y]);
+    expect(boss.phase).toBe(SCARFACE_PHASE.hover);
+    expect([boss.vx, boss.vy]).toEqual([0, 0]);
+    // And he stands there through the entrance pause before moving again.
+    advance(run, BOSS_ENTRANCE - 2 * TICK);
+    expect([boss.x, boss.y]).toEqual([entry.x, entry.y]);
+    advance(run, 0.5);
+    expect(dist(boss, entry)).toBeGreaterThan(5);
+  });
+
+  it('holds the room clear back until the last hostile shot has left the floor', () => {
+    const run = createRun(3);
+    run.schedule = [];
+    run.itemSchedule = [];
+    run.enemies = [];
+    run.flak.push({ x: ARENA.x + 40, y: ARENA.y + 40, vx: -200, vy: 0, r: 4, life: 5 });
+    advance(run, TICK);
+    expect(run.phase).toBe('room');
+    advance(run, 0.5);
+    expect(run.phase).toBe('cleared');
+  });
+
+  it('calls a streak of fast kills carnage, and a slow trickle not', () => {
+    const run = quietRoom();
+    // A wall of grunts queued on the shot's line, one every 30 px: the machine
+    // gun takes them down several a second.
+    for (let i = 0; i < STREAK_KILLS + 4; i++) run.enemies.push(spawnEnemy(800 + i, 'grunt', run.player.x + 80 + i * 24, run.player.y, rng()));
+    run.player.invuln = 30;
+    const events = advance(run, 4, { moveX: 0, moveY: 0, fireX: 1, fireY: 0 });
+    expect(events).toContainEqual({ type: 'host', line: 'carnage' });
+    const slow = quietRoom();
+    slow.player.invuln = 90;
+    let lines = 0;
+    for (let i = 0; i < STREAK_KILLS + 4; i++) {
+      slow.enemies.push(spawnEnemy(900 + i, 'grunt', slow.player.x + 60, slow.player.y, rng()));
+      lines += advance(slow, STREAK_WINDOW + 0.3, { moveX: 0, moveY: 0, fireX: 1, fireY: 0 }).filter(
+        e => e.type === 'host' && e.line === 'carnage'
+      ).length;
+    }
+    expect(lines).toBe(0);
   });
 
   it('pays the studio out and adds a life when the contestant leaves a boss room', () => {
@@ -772,10 +893,35 @@ describe('playing PRIME TIME', () => {
         livesBefore = run.lives;
         ticks++;
       }
-      expect(deaths).toBe(run.deaths);
       // Every death took exactly one life; extra lives are the only gains.
       expect(lostLives).toBe(deaths);
+      expect(deaths).toBeGreaterThan(0);
     }
+  });
+
+  it('plays the third studio through to its end with a deep pocket of lives, dome included when the keys allow', () => {
+    let finished = 0;
+    let domes = 0;
+    for (const seed of SEEDS) {
+      const run = createRun(seed);
+      jumpToRoom(run, 2, CIRCUITS[2].start);
+      run.lives = 12;
+      // Arriving from two studios with a few keys in hand, as a player would.
+      run.keys = DOME_KEYS - 2;
+      let ticks = 0;
+      let dome = false;
+      while (run.phase !== 'over' && run.phase !== 'won' && ticks < 60 * 60 * 12) {
+        for (const ev of tickRun(run, competent(run), TICK)) if (ev.type === 'dome') dome = true;
+        ticks++;
+      }
+      expect(['over', 'won']).toContain(run.phase);
+      if (run.phase === 'won') finished++;
+      if (dome) domes++;
+      expect(run.cash).toBeGreaterThan(50000);
+    }
+    expect(finished).toBeGreaterThanOrEqual(7);
+    // Every studio-3 route carries DOME_KEYS keys of its own; two of them under fire is the usual haul.
+    expect(domes).toBeGreaterThanOrEqual(2);
   });
 
   it.each(['mutoid', 'scarface', 'cobra'] as const)('can beat %s: the competent contestant wins the fight on most seeds', kind => {

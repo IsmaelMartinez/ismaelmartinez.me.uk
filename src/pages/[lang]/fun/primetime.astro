@@ -54,6 +54,7 @@ const t = useTranslations(lang);
         <div class="game-header">
           <h1><span class="primetime-emoji">📺</span> {t('fun.primetime.title')}</h1>
           <SoundToggles lang={lang} />
+          <button type="button" id="pause-btn" class="btn sound-btn" aria-label={t('fun.primetime.pause')}>⏸</button>
           <div class="scores">
             <div class="score-item">
               <span class="score-label">{t('fun.primetime.cash')}</span>

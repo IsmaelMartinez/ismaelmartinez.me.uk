@@ -84,13 +84,24 @@ export const SEGMENT_GAP = 13;
 /** Shots a shrapnel man bursts into when he dies, and how fast they fly. */
 export const SHRAPNEL_SHARDS = 8;
 export const SHRAPNEL_SPEED = 190;
-/** A mine's blast radius. It kills ordinary enemies and an unshielded contestant inside it. */
+/** A mine's blast radius against the crowd. */
 export const MINE_BLAST = 64;
+/**
+ * How close an unshielded contestant must be for a mine's blast to kill them:
+ * standing on it, in effect. The crowd radius above used to apply to the
+ * contestant too, and a round that missed a wobbling grunt and flew on into
+ * a mine 60 px away was a fifth of all deaths in mine rooms (the playtest
+ * round's census), for a hazard worth 150 that does not even gate the clear.
+ */
+export const MINE_PLAYER_BLAST = 30;
 /** Seconds between a tank's shells, and between an armed orb's shots. */
 export const TANK_RELOAD = 2.3;
 export const ORB_RELOAD = 2.6;
 export const TANK_SHELL_SPEED = 170;
 export const ORB_SHOT_SPEED = 150;
+/** An armed orb holds its fire inside this distance, and glows for this long before a shot. */
+export const ORB_MIN_RANGE = 120;
+export const ORB_CHARGE = 0.3;
 /** How far an orb can turn a second, in radians: it rounds on the contestant rather than tracking. */
 const ORB_TURN = 2.2;
 /** How fast a snake's head weaves across its heading, and how wide. */
@@ -183,7 +194,11 @@ export function stepEnemy(e: Enemy, player: Pt, dt: number, out: Flak[]): void {
       e.x += e.vx * dt;
       e.y += e.vy * dt;
       if (e.armed) {
-        e.timer -= dt;
+        // Never point-blank: a shot from inside `ORB_MIN_RANGE` arrives in a
+        // quarter of a second, which no eight-way step can answer. The clock
+        // waits at its charge instead, so the renderer's charge flash (the
+        // last `ORB_CHARGE` seconds of `timer`) is also the telegraph.
+        if (e.timer > ORB_CHARGE || dist(e, player) > ORB_MIN_RANGE) e.timer -= dt;
         if (e.timer <= 0) {
           e.timer = ORB_RELOAD;
           out.push(fireAt(e, player, ORB_SHOT_SPEED));

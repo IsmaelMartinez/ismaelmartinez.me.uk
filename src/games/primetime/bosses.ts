@@ -113,22 +113,27 @@ export function bossStage(e: Enemy): number {
   return e.hp * 2 <= e.maxHp ? 1 : 0;
 }
 
-/** Keeps a boss's body on the floor; a charging Scarface bounces instead. */
-function keepIn(e: Enemy): Side | null {
-  let hit: Side | null = null;
+/**
+ * Keeps a boss's body on the floor and says which walls it crossed this
+ * tick, both of them at a corner: a charging Scarface reflects each crossed
+ * axis, and reporting only the last wall once left him pressing into the
+ * side wall for a tick after a diagonal charge into a corner.
+ */
+function keepIn(e: Enemy): Side[] {
+  const hit: Side[] = [];
   if (e.x - e.r < ARENA.x) {
     e.x = ARENA.x + e.r;
-    hit = 'w';
+    hit.push('w');
   } else if (e.x + e.r > ARENA.x + ARENA.w) {
     e.x = ARENA.x + ARENA.w - e.r;
-    hit = 'e';
+    hit.push('e');
   }
   if (e.y - e.r < ARENA.y) {
     e.y = ARENA.y + e.r;
-    hit = 'n';
+    hit.push('n');
   } else if (e.y + e.r > ARENA.y + ARENA.h) {
     e.y = ARENA.y + ARENA.h - e.r;
-    hit = 's';
+    hit.push('s');
   }
   return hit;
 }
@@ -216,9 +221,9 @@ export function stepBoss(e: Enemy, player: Pt, dt: number, out: Flak[]): BossCal
       } else {
         e.x += e.vx * dt;
         e.y += e.vy * dt;
-        const wall = keepIn(e);
-        if (wall === 'w' || wall === 'e') e.vx = -e.vx;
-        if (wall === 'n' || wall === 's') e.vy = -e.vy;
+        const walls = keepIn(e);
+        if (walls.includes('w') || walls.includes('e')) e.vx = -e.vx;
+        if (walls.includes('n') || walls.includes('s')) e.vy = -e.vy;
         if (e.timer <= 0) {
           e.phase = SCARFACE_PHASE.hover;
           e.timer = SCARFACE_HOVER[stage];

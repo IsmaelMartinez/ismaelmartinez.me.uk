@@ -284,6 +284,24 @@ describe('the bosses', () => {
     for (const f of out) expect(f.vx).toBeLessThan(0);
   });
 
+  it('bounces a charging Scarface off both walls at once in a corner', () => {
+    // A diagonal charge into the top-left corner: both velocities reverse on
+    // the same tick. Reporting only the last wall crossed reversed one and
+    // left him pressing into the other until the next tick.
+    const b = spawnBoss(1, 'scarface', rng());
+    b.phase = SCARFACE_PHASE.charge;
+    b.timer = 5;
+    b.x = ARENA.x + b.r + 1;
+    b.y = ARENA.y + b.r + 1;
+    b.vx = -SCARFACE_CHARGE_SPEED * 0.7;
+    b.vy = -SCARFACE_CHARGE_SPEED * 0.7;
+    stepBoss(b, { x: ARENA.x + 300, y: ARENA.y + 200 }, TICK, []);
+    expect(b.vx).toBeGreaterThan(0);
+    expect(b.vy).toBeGreaterThan(0);
+    expect(b.x - b.r).toBeGreaterThanOrEqual(ARENA.x);
+    expect(b.y - b.r).toBeGreaterThanOrEqual(ARENA.y);
+  });
+
   it('has Scarface hover, wind up (telegraphing the charge) and then charge', () => {
     const b = spawnBoss(1, 'scarface', rng());
     const out: Flak[] = [];

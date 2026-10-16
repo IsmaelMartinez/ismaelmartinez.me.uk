@@ -186,4 +186,10 @@ is green and the review rounds stop finding anything the owner would notice.
   plate over one eye, the scar and a grimace, with an open-mouthed frame for
   the wind-up and charge; Cobra Death as a hooded head with eye-spots and a
   forked tongue turned along its heading, over a chain of scaled segments.
-  Checked in close-up on the preview at two device pixels per pixel.
+  Checked in close-up on the preview at two device pixels per pixel. The
+  owner then asked for the grunts and orbs to get the same treatment, so the
+  whole crowd is bitmaps now: three-frame clubbers with the club over the
+  shoulder, chrome orbs with a lens that is cyan when harmless, red when armed
+  and white in the charge before a shot, a spiked mine with a hazard stripe,
+  Mr Shrapnel as a red barrel on legs with a lit fuse, a tank hull with a
+  turned turret, and a snake head and segments turned along their heading.

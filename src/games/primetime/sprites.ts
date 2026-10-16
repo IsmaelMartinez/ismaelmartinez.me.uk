@@ -104,51 +104,223 @@ export const PLAYER: SpriteDef = {
 
 /**
  * A clubber: Smash TV's grunt is a bald blue-skinned bruiser in an orange
- * vest with a wooden club. Two frames, the legs apart and together.
+ * vest with a wooden club over one shoulder. Three frames: legs apart,
+ * together, apart the other way, with the club swinging.
  */
-const GRUNT_PALETTE = { k: K, b: '#5b8def', B: '#2f54b8', e: '#ef4444', o: '#f97316', O: '#c2410c', t: '#3f3f46', w: '#a16207', W: '#713f12' };
+const GRUNT_PALETTE = { k: K, b: '#5b8def', B: '#2f54b8', c: '#8fb4ff', e: '#ef4444', o: '#f97316', O: '#c2410c', t: '#3f3f46', T: '#27272a', w: '#a16207', W: '#713f12', g: '#9ca3af' };
 export const GRUNT: SpriteDef[] = [
   {
     scale: 2,
     palette: GRUNT_PALETTE,
     rows: [
-      '...kkkk...',
-      '..kbbbbk..',
-      '..kbebek..',
-      '..kbbbbk..',
-      '...kBBk...',
-      '.kkoookk.w',
-      'kbkooookbW',
-      'kbkoOOokbk',
-      'kBkooookBk',
-      '.kkoookkk.',
-      '..kttttk..',
-      '..kt..tk..',
-      '..kk..kk..',
-      '..........'
+      '....kkkk..ww',
+      '...kcbbbk.wW',
+      '...kbbbbk.wW',
+      '...kbeebk.W.',
+      '...kbbbbkkk.',
+      '....kBBkkbbk',
+      '..kkoookkbbk',
+      '.kbkoOookbBk',
+      'kbbkoooookk.',
+      'kbbkoOOooBk.',
+      'kBBkooooook.',
+      '.kkkkooookk.',
+      '....kttttk..',
+      '...kttkkttk.',
+      '...kTk..kTk.',
+      '...kkk..kkk.'
     ]
   },
   {
     scale: 2,
     palette: GRUNT_PALETTE,
     rows: [
-      '...kkkk...',
-      '..kbbbbk..',
-      '..kbebek..',
-      '..kbbbbk..',
-      '...kBBk...',
-      '.kkoookkw.',
-      'kbkooookWk',
-      'kbkoOOokbk',
-      'kBkooookBk',
-      '.kkoookkk.',
-      '..kttttk..',
-      '.ktt..ttk.',
-      '.kk....kk.',
-      '..........'
+      '....kkkk....',
+      '...kcbbbk.ww',
+      '...kbbbbk.wW',
+      '...kbeebkkW.',
+      '...kbbbbkbbk',
+      '....kBBkkbbk',
+      '..kkoookkbBk',
+      '.kbkoOookbk.',
+      'kbbkooooook.',
+      'kbbkoOOooBk.',
+      'kBBkooooook.',
+      '.kkkkooookk.',
+      '....kttttk..',
+      '....kttttk..',
+      '....kTkkTk..',
+      '....kk..kk..'
+    ]
+  },
+  {
+    scale: 2,
+    palette: GRUNT_PALETTE,
+    rows: [
+      '....kkkk....',
+      '...kcbbbk...',
+      '...kbbbbk.kk',
+      '...kbeebkbbk',
+      '...kbbbbkbbk',
+      '....kBBkkbBk',
+      '..kkoookkbkw',
+      '.kbkoOookkwW',
+      'kbbkoooook.W',
+      'kbbkoOOooBk.',
+      'kBBkooooook.',
+      '.kkkkooookk.',
+      '....kttttk..',
+      '...kttkkttk.',
+      '...kTk..kTk.',
+      '...kkk..kkk.'
     ]
   }
 ];
+
+/**
+ * An orb: a hovering chrome sphere with a lens for an eye, Smash TV's
+ * floating mines that drift at you. The lens is cyan on a harmless orb and
+ * red on one that shoots; the third frame is the white flare of a charge.
+ */
+const ORB_PALETTE = { k: K, m: '#cbd5e1', M: '#64748b', d: '#334155', w: '#ffffff', c: '#22d3ee', C: '#0e7490', r: '#ef4444', R: '#7f1d1d' };
+const orbRows = (lens: string, core: string): string[] => [
+  '....kkkk....',
+  '..kkmmmmkk..',
+  '.kmwmmmmMMk.',
+  '.kwmmmmmMMk.',
+  'kmmmkkkkmMMk',
+  `kmmk${lens}${lens}${lens}${lens}kMMk`,
+  `kmmk${lens}${core}${core}${lens}kMMk`,
+  `kMMk${lens}${lens}${lens}${lens}kddk`,
+  'kMMMkkkkMddk',
+  '.kMMMMMMddk.',
+  '.kMMMMdddddk',
+  '..kkddddkk..',
+  '....kkkk....'
+];
+export const ORB: SpriteDef = { scale: 2, palette: ORB_PALETTE, rows: orbRows('C', 'c') };
+export const ORB_ARMED: SpriteDef = { scale: 2, palette: ORB_PALETTE, rows: orbRows('R', 'r') };
+export const ORB_CHARGING: SpriteDef = { scale: 2, palette: ORB_PALETTE, rows: orbRows('r', 'w') };
+
+/** A mine: a spiked steel disc with a hazard stripe; the renderer blinks its lamp. */
+export const MINE: SpriteDef = {
+  scale: 2,
+  palette: { k: K, m: '#9ca3af', M: '#4b5563', d: '#1f2937', y: '#facc15' },
+  rows: [
+    '....kk....',
+    '.k.kmmk.k.',
+    'kmkmMMmkmk',
+    '.kmMddMmk.',
+    'kkMdddddMk',
+    'kkMdddddMk',
+    '.kmMdyyMmk',
+    'kmkmMMmkmk',
+    '.k.kmmk.k.',
+    '....kk....'
+  ]
+};
+
+/**
+ * Mr Shrapnel: a walking bomb, a red steel barrel on legs with a lit fuse,
+ * two frames. The spark on the fuse is the renderer's.
+ */
+const SHRAPNEL_PALETTE = { k: K, r: '#ef4444', R: '#991b1b', d: '#111827', m: '#9ca3af', t: '#3f3f46', w: '#78350f', e: '#fde047' };
+export const SHRAPNEL: SpriteDef[] = [
+  {
+    scale: 2,
+    palette: SHRAPNEL_PALETTE,
+    rows: [
+      '.....ww.....',
+      '....kwk.....',
+      '..kkkkkkkk..',
+      '.kmmmmmmmmk.',
+      'kRrrrrrrrrRk',
+      'krrrrrrrrrrk',
+      'kddddddddddk',
+      'krrkeekrrrrk',
+      'krrkeekrrrrk',
+      'kRrrrrrrrrRk',
+      '.kmmmmmmmmk.',
+      '..kkkkkkkk..',
+      '..kttk.kttk.',
+      '..ktk...ktk.',
+      '..kkk...kkk.'
+    ]
+  },
+  {
+    scale: 2,
+    palette: SHRAPNEL_PALETTE,
+    rows: [
+      '.....ww.....',
+      '....kwk.....',
+      '..kkkkkkkk..',
+      '.kmmmmmmmmk.',
+      'kRrrrrrrrrRk',
+      'krrrrrrrrrrk',
+      'kddddddddddk',
+      'krrkeekrrrrk',
+      'krrkeekrrrrk',
+      'kRrrrrrrrrRk',
+      '.kmmmmmmmmk.',
+      '..kkkkkkkk..',
+      '...kttkttk..',
+      '...ktkkktk..',
+      '...kk...kk..'
+    ]
+  }
+];
+
+/** A tank's hull and treads; the turret is the renderer's, turned to the contestant. */
+export const TANK: SpriteDef = {
+  scale: 2,
+  palette: { k: K, g: '#84cc16', G: '#4d7c0f', d: '#1f2937', m: '#4b5563', y: '#a3e635' },
+  rows: [
+    'kkkkkkkkkkkkkkkkkk',
+    'kdmdmdmdmdmdmdmdmk',
+    'kkkkkkkkkkkkkkkkkk',
+    '.kGggggggggggggGk.',
+    '.kgggggkkkkgggggk.',
+    '.kggggkyyyykggggk.',
+    '.kggggkyyyykggggk.',
+    '.kggggGkkkkGggggk.',
+    '.kGGGggggggggGGGk.',
+    'kkkkkkkkkkkkkkkkkk',
+    'kdmdmdmdmdmdmdmdmk',
+    'kkkkkkkkkkkkkkkkkk'
+  ]
+};
+
+/** A snake's head, facing right to be turned along its heading, and its body segment. */
+const SNAKE_PALETTE = { k: K, p: '#d946ef', P: '#86198f', y: '#fde047', e: '#111827', t: '#f87171' };
+export const SNAKE_HEAD: SpriteDef = {
+  scale: 2,
+  palette: SNAKE_PALETTE,
+  rows: [
+    '..kkkkkk.....',
+    '.kPppppppk...',
+    'kPpppkykppk..',
+    'kppppkekpppk.',
+    'kppppppppppkt',
+    'kppppppppppkt',
+    'kppppkekpppk.',
+    'kPpppkykppk..',
+    '.kPppppppk...',
+    '..kkkkkk.....'
+  ]
+};
+export const SNAKE_SEGMENT: SpriteDef = {
+  scale: 2,
+  palette: SNAKE_PALETTE,
+  rows: [
+    '.kkkkkk.',
+    'kPppppPk',
+    'kpppyppk',
+    'kppyyppk',
+    'kpppyppk',
+    'kPppppPk',
+    '.kkkkkk.'
+  ]
+};
 
 /**
  * Mutoid Man's upper half: a pink mutant torso bolted to steel shoulders,

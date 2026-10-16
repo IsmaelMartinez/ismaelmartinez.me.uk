@@ -25,7 +25,24 @@ import {
 } from './arena';
 import { SCARFACE_PHASE, bossStage } from './bosses';
 import { ORB_CHARGE, type Enemy } from './enemies';
-import { COBRA_HEAD, COBRA_SEGMENT, GRUNT, MUTOID, PLAYER, SCARFACE, drawSprite, sprite } from './sprites';
+import {
+  COBRA_HEAD,
+  COBRA_SEGMENT,
+  GRUNT,
+  MINE,
+  MUTOID,
+  ORB,
+  ORB_ARMED,
+  ORB_CHARGING,
+  PLAYER,
+  SCARFACE,
+  SHRAPNEL,
+  SNAKE_HEAD,
+  SNAKE_SEGMENT,
+  TANK,
+  drawSprite,
+  sprite
+} from './sprites';
 
 /** The contestant's skin, for the hands on the gun. */
 const SKIN_TONE = '#f1c27d';
@@ -319,147 +336,89 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
 
 function drawGrunt(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
   shadow(ctx, e.x, e.y + 6, e.r);
-  const frame = Math.floor(clock * 8 + e.jitter) % 2;
-  drawSprite(ctx, sprite(`grunt${frame}`, GRUNT[frame]), e.x, e.y - 2, e.vx < 0);
+  const frame = [0, 1, 2, 1][Math.floor(clock * 9 + e.jitter) % 4];
+  drawSprite(ctx, sprite(`grunt${frame}`, GRUNT[frame]), e.x, e.y - 4, e.vx < 0);
 }
 
 function drawOrb(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
   const colour = e.armed ? '#f87171' : ENEMY_COLOR.orb;
   // An armed orb about to shoot flares white: the telegraph.
   const charging = e.armed && e.timer <= ORB_CHARGE;
-  const pulse = charging ? 1.4 : 0.6 + 0.4 * Math.sin(clock * 6 + e.jitter);
-  shadow(ctx, e.x, e.y + 6, e.r);
-  ctx.shadowColor = colour;
-  ctx.shadowBlur = 12 * pulse;
-  const g = ctx.createRadialGradient(e.x - 3, e.y - 3, 1, e.x, e.y, e.r);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(charging ? 0.75 : 0.4, colour);
-  g.addColorStop(1, e.armed ? '#7f1d1d' : '#155e75');
+  const pulse = charging ? 1 : 0.5 + 0.5 * Math.sin(clock * 6 + e.jitter);
+  const hover = Math.sin(clock * 4 + e.jitter) * 2;
+  shadow(ctx, e.x, e.y + 10, e.r * 0.8);
+  // The glow under the sphere, the one thing about it that is not a block.
+  const g = ctx.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, e.r + 10);
+  g.addColorStop(0, `${colour}${charging ? 'aa' : '55'}`);
+  g.addColorStop(1, `${colour}00`);
   ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.fillRect(e.x - e.r - 10, e.y + hover - e.r - 10, e.r * 2 + 20, e.r * 2 + 20);
+  const def = charging ? ORB_CHARGING : e.armed ? ORB_ARMED : ORB;
+  const name = charging ? 'orb-charging' : e.armed ? 'orb-armed' : 'orb';
+  drawSprite(ctx, sprite(name, def), e.x, e.y + hover, Math.floor(clock * 3 + e.jitter) % 2 === 0);
+  if (!charging && pulse > 0.85) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillRect(e.x - 8, e.y + hover - 8, 2, 2);
+  }
 }
 
 function drawMine(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
-  shadow(ctx, e.x, e.y, e.r - 2);
-  // Spikes in a warning yellow-grey: a mine the floor hides is not a hazard,
-  // it is a trap, and the first playtest round found these near-invisible.
-  ctx.fillStyle = '#9ca3af';
-  ctx.beginPath();
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    const rr = i % 2 === 0 ? e.r : e.r - 4;
-    ctx.lineTo(e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#374151';
-  ctx.beginPath();
-  ctx.arc(e.x, e.y, e.r - 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#facc15';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  shadow(ctx, e.x, e.y + 4, e.r - 2);
+  drawSprite(ctx, sprite('mine', MINE), e.x, e.y, false, Math.floor(clock * 2 + e.jitter) % 2 ? Math.PI / 4 : 0);
   const rate = e.hp < e.maxHp ? 10 : 3;
   if (Math.floor(clock * rate + e.jitter) % 2 === 0) {
     ctx.fillStyle = '#ef4444';
     ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 6;
-    ctx.beginPath();
-    ctx.arc(e.x, e.y, 2.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.shadowBlur = 8;
+    ctx.fillRect(e.x - 2, e.y - 2, 4, 4);
     ctx.shadowBlur = 0;
   }
 }
 
 function drawShrapnel(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
-  shadow(ctx, e.x, e.y, e.r);
-  const step = Math.sin(clock * 9 + e.jitter) * 3;
-  ctx.fillStyle = '#1f2937';
-  ctx.fillRect(e.x - 7, e.y + 6 + step, 5, 6);
-  ctx.fillRect(e.x + 2, e.y + 6 - step, 5, 6);
-  ctx.fillStyle = ENEMY_COLOR.shrapnel;
-  ctx.beginPath();
-  ctx.roundRect(e.x - e.r + 1, e.y - e.r + 1, e.r * 2 - 2, e.r * 2 - 2, 4);
-  ctx.fill();
-  ctx.strokeStyle = '#7f1d1d';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.fillStyle = '#111827';
-  ctx.fillRect(e.x - e.r + 1, e.y - 2, e.r * 2 - 2, 4);
-  // The fuse.
-  ctx.strokeStyle = '#78350f';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(e.x, e.y - e.r + 1);
-  ctx.lineTo(e.x + 3, e.y - e.r - 6);
-  ctx.stroke();
+  shadow(ctx, e.x, e.y + 8, e.r);
+  const frame = Math.floor(clock * 6 + e.jitter) % 2;
+  drawSprite(ctx, sprite(`shrapnel${frame}`, SHRAPNEL[frame]), e.x, e.y - 4, e.vx < 0);
+  // The spark on the fuse.
   ctx.fillStyle = Math.floor(clock * 20) % 2 === 0 ? '#fde047' : '#f97316';
-  ctx.beginPath();
-  ctx.arc(e.x + 3, e.y - e.r - 7, 2.5, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.shadowColor = '#fde047';
+  ctx.shadowBlur = 6;
+  ctx.fillRect(e.x + (e.vx < 0 ? 1 : -3), e.y - 22, 3, 3);
+  ctx.shadowBlur = 0;
 }
 
 function drawTank(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: number): void {
-  shadow(ctx, e.x, e.y, e.r);
-  const w = e.r * 2;
-  const h = e.r * 1.6;
-  // Treads.
-  ctx.fillStyle = '#1f2937';
-  ctx.fillRect(e.x - w / 2, e.y - h / 2 - 3, w, 6);
-  ctx.fillRect(e.x - w / 2, e.y + h / 2 - 3, w, 6);
-  ctx.fillStyle = '#4b5563';
-  const roll = (clock * 30 + e.jitter) % 8;
-  for (let x = -w / 2 + roll; x < w / 2; x += 8) {
-    ctx.fillRect(e.x + x, e.y - h / 2 - 2, 3, 4);
-    ctx.fillRect(e.x + x, e.y + h / 2 - 2, 3, 4);
-  }
-  // Hull and turret.
-  ctx.fillStyle = ENEMY_COLOR.tank;
-  ctx.fillRect(e.x - w / 2 + 2, e.y - h / 2 + 2, w - 4, h - 4);
-  ctx.strokeStyle = '#365314';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(e.x - w / 2 + 2, e.y - h / 2 + 2, w - 4, h - 4);
+  shadow(ctx, e.x, e.y + 8, e.r);
+  drawSprite(ctx, sprite('tank', TANK), e.x, e.y);
+  // Tread motion: a dark bar rolling along each tread.
+  const roll = Math.floor((clock * 16 + e.jitter) % 9) * 4;
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(e.x - 16 + roll, e.y - 10, 2, 4);
+  ctx.fillRect(e.x - 16 + roll, e.y + 6, 2, 4);
+  // The turret, turned to the contestant.
   const a = Math.atan2(player.y - e.y, player.x - e.x);
-  ctx.strokeStyle = '#1a2e05';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(e.x, e.y);
-  ctx.lineTo(e.x + Math.cos(a) * (e.r + 6), e.y + Math.sin(a) * (e.r + 6));
-  ctx.stroke();
-  ctx.fillStyle = '#a3e635';
-  ctx.beginPath();
-  ctx.arc(e.x, e.y, 6, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.save();
+  ctx.translate(Math.round(e.x), Math.round(e.y));
+  ctx.rotate(a);
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(0, -4, 24, 8);
+  ctx.fillStyle = '#365314';
+  ctx.fillRect(2, -2, 20, 4);
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(20, -3, 5, 6);
+  ctx.restore();
 }
 
 function drawSnake(ctx: CanvasRenderingContext2D, e: Enemy): void {
   const tail = e.tail ?? [];
+  const seg = sprite('snake-seg', SNAKE_SEGMENT);
   for (let i = tail.length - 1; i >= 0; i--) {
     const s = tail[i];
-    const rr = e.r * 0.85 - i * 0.4;
-    ctx.fillStyle = i % 2 === 0 ? '#a21caf' : ENEMY_COLOR.snake;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
-    ctx.fill();
+    const prev = i === 0 ? e : tail[i - 1];
+    drawSprite(ctx, seg, s.x, s.y, false, Math.atan2(prev.y - s.y, prev.x - s.x));
   }
-  shadow(ctx, e.x, e.y, e.r);
-  ctx.fillStyle = ENEMY_COLOR.snake;
-  ctx.beginPath();
-  ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#701a75';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  const a = Math.atan2(e.vy, e.vx);
-  ctx.fillStyle = '#fde047';
-  for (const s of [-0.5, 0.5]) {
-    ctx.beginPath();
-    ctx.arc(e.x + Math.cos(a + s) * 5, e.y + Math.sin(a + s) * 5, 2, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  shadow(ctx, e.x, e.y + 6, e.r);
+  drawSprite(ctx, sprite('snake-head', SNAKE_HEAD), e.x, e.y, false, Math.atan2(e.vy, e.vx));
 }
 
 function drawMutoid(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: number): void {

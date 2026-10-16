@@ -264,4 +264,12 @@ is green and the review rounds stop finding anything the owner would notice.
   (0 of 40 other seeds do, because the bot is a poor key collector), so it
   now asserts the dome on seeds that arrive with the full set, where it is
   a promise, and the measured collection rate is in its comment.
+- 2026-10-16, the controls guide: "impossible to know how to shoot". The
+  one-line hint every cabinet carries under its screen was the only place
+  the controls were written, and a twin-stick game has to say that the
+  second set of keys is the gun. The page now carries a controls section
+  under the screen, four cards in the HUD's livery (keyboard, keyboard and
+  mouse, gamepad, touch), each with move, fire and pause, keys drawn as
+  keycaps, and a line on how eight-way fire works; translated in the three
+  locales, keys left as they are.
 

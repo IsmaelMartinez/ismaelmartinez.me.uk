@@ -14,6 +14,49 @@ export function getStaticPaths() {
 
 const lang = Astro.params.lang as Locale;
 const t = useTranslations(lang);
+
+/**
+ * The controls, laid out under the screen for every way of playing. Keys
+ * are drawn as keycaps and stay the same in every locale; the prose beside
+ * them is translated. The one-line hint the other cabinets carry was not
+ * enough here: a twin-stick game has to say that the second set of keys is
+ * the gun.
+ */
+type Row = { label: string; keys?: string[]; alt?: string[]; text?: string };
+const CONTROLS: { title: string; rows: Row[] }[] = [
+  {
+    title: t('fun.primetime.controls.keyboard'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), keys: ['W', 'A', 'S', 'D'] },
+      { label: t('fun.primetime.controls.fire'), keys: ['↑', '←', '↓', '→'], alt: ['I', 'J', 'K', 'L'], text: t('fun.primetime.controls.keyboardFireNote') },
+      { label: t('fun.primetime.controls.pause'), keys: ['P'], alt: ['Esc'] }
+    ]
+  },
+  {
+    title: t('fun.primetime.controls.mouse'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), keys: ['W', 'A', 'S', 'D'] },
+      { label: t('fun.primetime.controls.fire'), text: t('fun.primetime.controls.mouseFire') },
+      { label: t('fun.primetime.controls.pause'), keys: ['P'], alt: ['Esc'] }
+    ]
+  },
+  {
+    title: t('fun.primetime.controls.gamepad'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), text: t('fun.primetime.controls.padMove') },
+      { label: t('fun.primetime.controls.fire'), text: t('fun.primetime.controls.padFire') },
+      { label: t('fun.primetime.controls.pause'), text: t('fun.primetime.controls.padPause') }
+    ]
+  },
+  {
+    title: t('fun.primetime.controls.touch'),
+    rows: [
+      { label: t('fun.primetime.controls.move'), text: t('fun.primetime.controls.touchMove') },
+      { label: t('fun.primetime.controls.fire'), text: t('fun.primetime.controls.touchFire') },
+      { label: t('fun.primetime.controls.pause'), text: t('fun.primetime.controls.touchPause') }
+    ]
+  }
+];
 ---
 
 <Layout title="Prime Time" lang={lang}>
@@ -116,6 +159,35 @@ const t = useTranslations(lang);
         </div>
 
         <p class="hint">{t('fun.primetime.hint')}</p>
+
+        <section class="controls-guide" aria-labelledby="controls-title">
+          <h2 id="controls-title">{t('fun.primetime.controls.title')}</h2>
+          <p class="controls-how">{t('fun.primetime.controls.how')}</p>
+          <div class="controls-grid">
+            {CONTROLS.map(card => (
+              <div class="controls-card">
+                <h3>{card.title}</h3>
+                <dl>
+                  {card.rows.map(row => (
+                    <>
+                      <dt>{row.label}</dt>
+                      <dd>
+                        {row.keys && <span class="keys">{row.keys.map(k => <kbd>{k}</kbd>)}</span>}
+                        {row.alt && (
+                          <>
+                            <span class="keys-or">{t('fun.primetime.controls.keyboardFire')}</span>
+                            <span class="keys">{row.alt.map(k => <kbd>{k}</kbd>)}</span>
+                          </>
+                        )}
+                        {row.text && <span class="keys-text">{row.text}</span>}
+                      </dd>
+                    </>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   </section>
@@ -270,7 +342,119 @@ const t = useTranslations(lang);
     color: #3fa9ff;
   }
 
+  /* The controls under the screen: four steel cards in the HUD's livery,
+     keys as keycaps. */
+  .controls-guide {
+    margin-top: var(--space-xl);
+  }
+
+  .controls-guide h2 {
+    margin: 0 0 var(--space-xs);
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #3fa9ff;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+
+  .controls-how {
+    margin: 0 0 var(--space-md);
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+  }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .controls-card {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    background: #0a0a10;
+    border: 2px solid #8e8e98;
+    border-top-color: #c6c6ce;
+    border-left-color: #c6c6ce;
+    box-shadow: inset 0 0 0 1px #2a2a30, 0 1px 0 #4a4a54;
+    color: #dcdce4;
+  }
+
+  .controls-card h3 {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #ff4fd8;
+    text-shadow: 0 0 6px rgba(255, 79, 216, 0.6);
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+
+  .controls-card dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-xs) var(--space-md);
+    margin: 0;
+    align-items: baseline;
+  }
+
+  .controls-card dt {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8e8e98;
+  }
+
+  .controls-card dd {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .keys {
+    display: inline-flex;
+    gap: 0.25rem;
+    vertical-align: middle;
+  }
+
+  .keys-or {
+    margin: 0 0.4rem;
+    color: #8e8e98;
+    font-size: 0.75rem;
+  }
+
+  .keys-text {
+    display: block;
+    color: #dcdce4;
+  }
+
+  .keys + .keys-text,
+  .keys-or + .keys + .keys-text {
+    margin-top: 0.25rem;
+    color: #8e8e98;
+    font-size: 0.78rem;
+  }
+
+  kbd {
+    display: inline-block;
+    min-width: 1.6rem;
+    padding: 0.1rem 0.4rem;
+    text-align: center;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #3fa9ff;
+    text-shadow: 0 0 5px rgba(63, 169, 255, 0.6);
+    background: #1c1c24;
+    border: 1px solid #8e8e98;
+    border-bottom-width: 3px;
+    border-radius: 4px;
+  }
+
   @media (max-width: 600px) {
+    .controls-grid {
+      grid-template-columns: 1fr;
+    }
+
     /* Six readouts: tighter and smaller so they sit in two rows, not three. */
     .scores {
       justify-content: center;

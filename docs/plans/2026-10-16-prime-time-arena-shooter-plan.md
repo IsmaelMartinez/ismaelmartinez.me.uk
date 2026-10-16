@@ -174,3 +174,16 @@ is green and the review rounds stop finding anything the owner would notice.
   play wins on 7 or more seeds and reaches the dome on some. The two figures
   still to judge by hand are the first boss (one life a run for the bot) and
   the pace of studio 3 at 144 grunts a room.
+- 2026-10-16, round 3 (the owner's look): the contestant and the bosses drawn
+  from primitives were "nothing like the original". They are authored
+  bitmaps now (`sprites.ts`): the contestant from the belt up in Smash TV's
+  above-and-in-front view (dark hair, red headband, blue tank top, bare
+  shoulders) over scissoring legs and a two-handed gun that turns with the
+  aim; the clubbers as bald blue bruisers in orange vests with clubs, two
+  frames; Mutoid Man as a pink cyborg torso with a chrome visor face and
+  steel shoulders on rolling treads, cannons slung under the shoulders and
+  turned to the contestant; Scarface as a grey-green head with a riveted
+  plate over one eye, the scar and a grimace, with an open-mouthed frame for
+  the wind-up and charge; Cobra Death as a hooded head with eye-spots and a
+  forked tongue turned along its heading, over a chain of scaled segments.
+  Checked in close-up on the preview at two device pixels per pixel.

@@ -25,6 +25,10 @@ import {
 } from './arena';
 import { SCARFACE_PHASE, bossStage } from './bosses';
 import { ORB_CHARGE, type Enemy } from './enemies';
+import { COBRA_HEAD, COBRA_SEGMENT, GRUNT, MUTOID, PLAYER, SCARFACE, drawSprite, sprite } from './sprites';
+
+/** The contestant's skin, for the hands on the gun. */
+const SKIN_TONE = '#f1c27d';
 import type { Item, ItemId } from './items';
 import { CIRCUITS, DOME_SECONDS, neighbour, type RoomDef } from './rooms';
 import { MAP_SECONDS, RESPAWN_INVULN, type RunState, type Shot } from './run';
@@ -242,56 +246,53 @@ export function drawDoors(ctx: CanvasRenderingContext2D, run: RunState, clock: n
   }
 }
 
-/** The contestant: a jumpsuit, a head, a gun on the aim, a blink while invulnerable, a bubble while shielded. */
+/**
+ * The contestant: the authored bitmap from the belt up, legs that scissor
+ * with the walk, and a two-handed gun turned to the aim with a muzzle flash
+ * at its end; a blink while invulnerable, a bubble while shielded.
+ */
 export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: number, flashT: number): void {
   if (!run.alive) return;
   const p = run.player;
   if (p.invuln > 0 && Math.floor(clock * 14) % 2 === 0 && p.invuln < RESPAWN_INVULN) ctx.globalAlpha = 0.4;
-  shadow(ctx, p.x, p.y, p.r);
-  // Legs, scissoring while moving.
+  shadow(ctx, p.x, p.y + 6, p.r);
+  // Legs, scissoring while moving: dark trousers, boots.
   const step = p.moving ? Math.sin(clock * 16) * 4 : 0;
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(p.x - 8, p.y + 9 + step, 8, 10);
+  ctx.fillRect(p.x, p.y + 9 - step, 8, 10);
   ctx.fillStyle = '#1f2937';
-  ctx.fillRect(p.x - 6, p.y + 4 + step, 4, 7);
-  ctx.fillRect(p.x + 2, p.y + 4 - step, 4, 7);
-  // Jumpsuit.
-  ctx.fillStyle = '#fbbf24';
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, p.r - 1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#92400e';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  // Contestant number.
-  ctx.fillStyle = '#7c2d12';
-  ctx.fillRect(p.x - 3, p.y + 1, 6, 3);
-  // Head.
-  ctx.fillStyle = '#fcd34d';
-  ctx.beginPath();
-  ctx.arc(p.x, p.y - 4, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#3f2a14';
-  ctx.beginPath();
-  ctx.arc(p.x, p.y - 6, 4.2, Math.PI, Math.PI * 2);
-  ctx.fill();
-  // Gun along the aim.
-  const a = p.aim;
-  ctx.strokeStyle = '#111827';
-  ctx.lineWidth = 4;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(p.x + a.x * 4, p.y + a.y * 4);
-  ctx.lineTo(p.x + a.x * 18, p.y + a.y * 18);
-  ctx.stroke();
-  ctx.lineCap = 'butt';
+  ctx.fillRect(p.x - 6, p.y + 9 + step, 4, 6);
+  ctx.fillRect(p.x + 2, p.y + 9 - step, 4, 6);
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(p.x - 6, p.y + 15 + step, 4, 3);
+  ctx.fillRect(p.x + 2, p.y + 15 - step, 4, 3);
+  drawSprite(ctx, sprite('player', PLAYER), p.x, p.y - 4, p.aim.x < 0);
+  // The gun, held in both hands at the belt and turned to the aim.
+  const a = Math.atan2(p.aim.y, p.aim.x);
+  ctx.save();
+  ctx.translate(Math.round(p.x), Math.round(p.y) + 6);
+  ctx.rotate(a);
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(2, -5, 24, 10);
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(4, -3, 20, 6);
+  ctx.fillStyle = '#6b7280';
+  ctx.fillRect(14, -2, 12, 4);
+  ctx.fillStyle = SKIN_TONE;
+  ctx.fillRect(4, -5, 5, 10);
+  ctx.fillRect(12, -4, 4, 8);
   if (flashT > 0) {
     ctx.fillStyle = '#fef08a';
     ctx.shadowColor = '#fde047';
-    ctx.shadowBlur = 10;
-    ctx.beginPath();
-    ctx.arc(p.x + a.x * 22, p.y + a.y * 22, 4 + flashT * 30, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.shadowBlur = 12;
+    const r = 4 + flashT * 40;
+    ctx.fillRect(26, -r / 2, r, r);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(27, -r / 4, r / 2, r / 2);
     ctx.shadowBlur = 0;
   }
+  ctx.restore();
   ctx.globalAlpha = 1;
   if (p.shield > 0) {
     const fade = p.shield < 2 ? 0.3 + 0.7 * Math.abs(Math.sin(clock * 10)) : 1;
@@ -299,7 +300,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
     ctx.fillStyle = `rgba(34, 211, 238, ${0.15 * fade})`;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 2, 19 + Math.sin(clock * 5) * 1.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 24 + Math.sin(clock * 5) * 1.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   }
@@ -309,55 +310,17 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
     for (let i = 0; i < 3; i++) {
       const o = (i - 1) * 6;
       ctx.beginPath();
-      ctx.moveTo(p.x - p.facing.x * 12 - p.facing.y * o, p.y - p.facing.y * 12 + p.facing.x * o);
-      ctx.lineTo(p.x - p.facing.x * 24 - p.facing.y * o, p.y - p.facing.y * 24 + p.facing.x * o);
+      ctx.moveTo(p.x - p.facing.x * 14 - p.facing.y * o, p.y - p.facing.y * 14 + p.facing.x * o);
+      ctx.lineTo(p.x - p.facing.x * 26 - p.facing.y * o, p.y - p.facing.y * 26 + p.facing.x * o);
       ctx.stroke();
     }
   }
 }
 
 function drawGrunt(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
-  const wob = Math.sin(clock * 12 + e.jitter) * 2;
-  const step = Math.sin(clock * 14 + e.jitter) * 3;
-  shadow(ctx, e.x, e.y, e.r);
-  // Legs, scissoring.
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(e.x - 5, e.y + 3 + step, 4, 7);
-  ctx.fillRect(e.x + 1, e.y + 3 - step, 4, 7);
-  // The club, swinging over the shoulder.
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(e.x + 6, e.y - 1);
-  ctx.lineTo(e.x + 13, e.y - 10 + wob);
-  ctx.stroke();
-  ctx.lineCap = 'butt';
-  ctx.fillStyle = '#475569';
-  ctx.beginPath();
-  ctx.arc(e.x + 13, e.y - 10 + wob, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  // Torso: a hunched blue shirt, wider than tall.
-  ctx.fillStyle = ENEMY_COLOR.grunt;
-  ctx.beginPath();
-  ctx.ellipse(e.x, e.y + 1, e.r - 1, e.r - 3, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#1e3a8a';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  // Arms out to the sides.
-  ctx.fillStyle = '#e2c4a0';
-  ctx.beginPath();
-  ctx.arc(e.x - e.r + 1, e.y + 1, 2.5, 0, Math.PI * 2);
-  ctx.arc(e.x + e.r - 1, e.y + 1, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-  // Bald head with a red visor.
-  ctx.fillStyle = '#e2c4a0';
-  ctx.beginPath();
-  ctx.arc(e.x, e.y - 5, 4.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#ef4444';
-  ctx.fillRect(e.x - 4, e.y - 6, 8, 2);
+  shadow(ctx, e.x, e.y + 6, e.r);
+  const frame = Math.floor(clock * 8 + e.jitter) % 2;
+  drawSprite(ctx, sprite(`grunt${frame}`, GRUNT[frame]), e.x, e.y - 2, e.vx < 0);
 }
 
 function drawOrb(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
@@ -500,130 +463,75 @@ function drawSnake(ctx: CanvasRenderingContext2D, e: Enemy): void {
 }
 
 function drawMutoid(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: number): void {
-  shadow(ctx, e.x, e.y + 10, e.r);
+  shadow(ctx, e.x, e.y + 22, e.r * 1.2);
   const stage = bossStage(e);
-  // Tank base.
-  ctx.fillStyle = '#1f2937';
-  ctx.fillRect(e.x - 36, e.y + 8, 72, 22);
-  ctx.fillStyle = '#4b5563';
-  const roll = (clock * 20) % 10;
-  for (let x = -34 + roll; x < 34; x += 10) ctx.fillRect(e.x + x, e.y + 10, 4, 18);
+  // Tank base: treads rolling, a steel hull.
+  ctx.fillStyle = '#0b0b12';
+  ctx.fillRect(e.x - 48, e.y + 14, 96, 30);
   ctx.fillStyle = '#374151';
-  ctx.fillRect(e.x - 30, e.y + 4, 60, 10);
-  // Torso.
-  ctx.fillStyle = stage ? '#cbd5e1' : ENEMY_COLOR.mutoid;
-  ctx.beginPath();
-  ctx.arc(e.x, e.y - 6, 28, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  // Arm cannons toward the contestant.
+  ctx.fillRect(e.x - 46, e.y + 16, 92, 26);
+  ctx.fillStyle = '#1f2937';
+  const roll = (clock * 24) % 12;
+  for (let x = -44 + roll; x < 44; x += 12) ctx.fillRect(e.x + x, e.y + 17, 5, 24);
+  ctx.fillStyle = '#4b5563';
+  ctx.fillRect(e.x - 36, e.y + 8, 72, 10);
+  // Arm cannons toward the contestant, slung under the steel shoulders.
   const a = Math.atan2(player.y - e.y, player.x - e.x);
-  for (const s of [-0.55, 0.55]) {
-    ctx.strokeStyle = '#111827';
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.moveTo(e.x + Math.cos(a + s) * 16, e.y - 6 + Math.sin(a + s) * 16);
-    ctx.lineTo(e.x + Math.cos(a + s * 0.6) * 40, e.y - 6 + Math.sin(a + s * 0.6) * 40);
-    ctx.stroke();
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.translate(e.x + side * 34, e.y + 2);
+    ctx.rotate(a);
+    ctx.fillStyle = '#0b0b12';
+    ctx.fillRect(-4, -7, 38, 14);
+    ctx.fillStyle = stage ? '#7f1d1d' : '#4b5563';
+    ctx.fillRect(-2, -5, 34, 10);
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(26, -4, 10, 8);
+    ctx.fillStyle = stage ? '#ef4444' : '#facc15';
+    ctx.fillRect(34, -2, 3, 4);
+    ctx.restore();
   }
-  // Face.
-  ctx.fillStyle = '#fca5a5';
-  ctx.beginPath();
-  ctx.arc(e.x, e.y - 14, 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = stage ? '#ef4444' : '#111827';
-  ctx.fillRect(e.x - 8, e.y - 18, 5, 3);
-  ctx.fillRect(e.x + 3, e.y - 18, 5, 3);
-  ctx.fillStyle = '#fff';
-  for (let i = -3; i <= 3; i++) ctx.fillRect(e.x + i * 2.5 - 1, e.y - 9, 2, 3);
+  drawSprite(ctx, sprite('mutoid', MUTOID), e.x, e.y - 14);
   if (e.t < 1.4) return;
   if (stage) {
     // Sparks off the damaged torso.
     ctx.fillStyle = Math.floor(clock * 16) % 2 ? '#fde047' : '#f97316';
-    ctx.fillRect(e.x + Math.sin(clock * 9) * 14, e.y - 20 + Math.cos(clock * 7) * 8, 3, 3);
+    ctx.fillRect(e.x + Math.sin(clock * 9) * 20, e.y - 18 + Math.cos(clock * 7) * 12, 4, 4);
+    ctx.fillRect(e.x - 18 + Math.cos(clock * 11) * 12, e.y - 4 + Math.sin(clock * 13) * 8, 3, 3);
   }
 }
 
 function drawScarface(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
-  const shake = e.phase === SCARFACE_PHASE.windup ? Math.sin(clock * 60) * 4 : 0;
-  const x = e.x + shake;
-  shadow(ctx, x, e.y + 14, e.r);
-  ctx.fillStyle = e.phase === SCARFACE_PHASE.charge ? '#fde68a' : ENEMY_COLOR.scarface;
-  ctx.beginPath();
-  ctx.ellipse(x, e.y, e.r, e.r * 1.1, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#92400e';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  // The scar.
-  ctx.strokeStyle = '#b91c1c';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(x - 12, e.y - 22);
-  ctx.lineTo(x + 6, e.y + 10);
-  ctx.stroke();
-  for (let i = 0; i < 4; i++) {
-    ctx.beginPath();
-    ctx.moveTo(x - 12 + i * 5, e.y - 18 + i * 8);
-    ctx.lineTo(x - 6 + i * 5, e.y - 22 + i * 8);
-    ctx.stroke();
+  const winding = e.phase === SCARFACE_PHASE.windup;
+  const shake = winding ? Math.sin(clock * 60) * 4 : 0;
+  const hover = Math.sin(clock * 3 + e.jitter) * 3;
+  shadow(ctx, e.x, e.y + 26, e.r);
+  const frame = winding || e.phase === SCARFACE_PHASE.charge ? 1 : 0;
+  drawSprite(ctx, sprite(`scarface${frame}`, SCARFACE[frame]), e.x + shake, e.y + hover, e.vx < 0);
+  if (e.phase === SCARFACE_PHASE.charge) {
+    // Speed lines behind the charge.
+    const speed = Math.hypot(e.vx, e.vy) || 1;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 2;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(e.x - (e.vx / speed) * 30 - (e.vy / speed) * i * 14, e.y - (e.vy / speed) * 30 + (e.vx / speed) * i * 14);
+      ctx.lineTo(e.x - (e.vx / speed) * 50 - (e.vy / speed) * i * 14, e.y - (e.vy / speed) * 50 + (e.vx / speed) * i * 14);
+      ctx.stroke();
+    }
   }
-  // Eyes and a grin, wide in the wind-up.
-  const open = e.phase === SCARFACE_PHASE.windup ? 6 : 4;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.ellipse(x - 10, e.y - 8, 6, open, 0, 0, Math.PI * 2);
-  ctx.ellipse(x + 10, e.y - 8, 6, open, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#111827';
-  ctx.beginPath();
-  ctx.arc(x - 10 + Math.sign(e.vx) * 2, e.y - 8, 2.5, 0, Math.PI * 2);
-  ctx.arc(x + 10 + Math.sign(e.vx) * 2, e.y - 8, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#7f1d1d';
-  ctx.fillRect(x - 12, e.y + 10, 24, 6);
-  ctx.fillStyle = '#fff';
-  for (let i = -2; i <= 2; i++) ctx.fillRect(x + i * 4.5 - 1.5, e.y + 10, 3, 3);
 }
 
 function drawCobra(ctx: CanvasRenderingContext2D, e: Enemy): void {
   const tail = e.tail ?? [];
+  const seg = sprite('cobra-seg', COBRA_SEGMENT);
   for (let i = tail.length - 1; i >= 0; i--) {
     const s = tail[i];
-    const rr = e.r * 0.72 - i * 0.5;
-    ctx.fillStyle = i % 2 === 0 ? '#15803d' : ENEMY_COLOR.cobra;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fde047';
-    ctx.fillRect(s.x - 1.5, s.y - 1.5, 3, 3);
+    const prev = i === 0 ? e : tail[i - 1];
+    drawSprite(ctx, seg, s.x, s.y, false, Math.atan2(prev.y - s.y, prev.x - s.x));
   }
-  shadow(ctx, e.x, e.y + 8, e.r);
-  const a = Math.atan2(e.vy, e.vx);
-  // Hood.
-  ctx.fillStyle = '#166534';
-  ctx.beginPath();
-  ctx.ellipse(e.x, e.y, e.r * 1.35, e.r, a + Math.PI / 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = ENEMY_COLOR.cobra;
-  ctx.beginPath();
-  ctx.arc(e.x, e.y, e.r * 0.8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#ef4444';
-  for (const s of [-0.5, 0.5]) {
-    ctx.beginPath();
-    ctx.arc(e.x + Math.cos(a + s) * 9, e.y + Math.sin(a + s) * 9, 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Tongue.
-  ctx.strokeStyle = '#f87171';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(e.x + Math.cos(a) * e.r * 0.8, e.y + Math.sin(a) * e.r * 0.8);
-  ctx.lineTo(e.x + Math.cos(a) * (e.r + 10), e.y + Math.sin(a) * (e.r + 10));
-  ctx.stroke();
+  shadow(ctx, e.x, e.y + 12, e.r);
+  drawSprite(ctx, sprite('cobra-head', COBRA_HEAD), e.x, e.y, false, Math.atan2(e.vy, e.vx));
 }
 
 export function drawEnemies(ctx: CanvasRenderingContext2D, run: RunState, clock: number): void {

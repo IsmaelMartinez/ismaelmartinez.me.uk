@@ -29,7 +29,7 @@ import { showsDrafts, type DraftEnv } from '../utils/drafts';
 import type { ChainGameId } from './arcadeCabinets';
 
 /** Cabinets open to the public, counted from the front of `UNLOCK_CHAIN`. */
-export const RELEASED = 0;
+export const RELEASED = 6;
 
 /** The chain prefix the public site carries; the whole chain in dev and previews. */
 export function releasedChain(env?: DraftEnv, count = RELEASED): readonly ChainGameId[] {

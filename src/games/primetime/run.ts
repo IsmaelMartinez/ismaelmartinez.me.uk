@@ -130,9 +130,10 @@ export type HostLine = 'bigMoney' | 'bigPrizes' | 'loveIt' | 'carnage' | 'goodLu
 
 export type RunEvent =
   | { type: 'cash'; amount: number; x: number; y: number; reason: 'kill' | 'prize' | 'boss' | 'bonus' }
-  | { type: 'kill'; kind: Enemy['kind']; x: number; y: number }
+  /** `dx`/`dy` is the way the killing blow travelled (a unit vector), for the body to tumble along; zero when it has none. */
+  | { type: 'kill'; kind: Enemy['kind']; x: number; y: number; dx: number; dy: number; armed: boolean }
   | { type: 'shot'; weapon: WeaponId; x: number; y: number }
-  | { type: 'hit'; x: number; y: number }
+  | { type: 'hit'; x: number; y: number; id: number }
   | { type: 'blast'; x: number; y: number; radius: number }
   | { type: 'pickup'; item: ItemId; x: number; y: number }
   | { type: 'death'; x: number; y: number }
@@ -398,13 +399,15 @@ function pay(run: RunState, amount: number, at: Pt, reason: 'kill' | 'prize' | '
  * contestant, since both exist to save them (a bomb taken beside a mine was
  * a death before this flag).
  */
-function kill(run: RunState, e: Enemy, events: RunEvent[], paid = true, harmless = false): void {
+function kill(run: RunState, e: Enemy, events: RunEvent[], paid = true, harmless = false, from: Pt = { x: 0, y: 0 }): void {
   const queue: Enemy[] = [e];
   while (queue.length > 0) {
     const victim = queue.shift()!;
     if (victim.hp === -Infinity) continue;
     victim.hp = -Infinity;
-    events.push({ type: 'kill', kind: victim.kind, x: victim.x, y: victim.y });
+    // Blast victims tumble away from the blast; the first body along the blow.
+    const away = victim === e ? from : toward(e, victim);
+    events.push({ type: 'kill', kind: victim.kind, x: victim.x, y: victim.y, dx: away.x, dy: away.y, armed: victim.armed });
     if (paid) {
       run.kills++;
       pay(run, victim.worth, victim, victim.boss ? 'boss' : 'kill', events);
@@ -533,7 +536,7 @@ function blast(run: RunState, at: Pt, radius: number, damage: number, events: Ru
     if (e.hp === -Infinity) continue;
     if (dist(e, at) > radius + e.r) continue;
     e.hp -= damage;
-    if (e.hp <= 0) kill(run, e, events);
+    if (e.hp <= 0) kill(run, e, events, true, false, toward(at, e));
   }
 }
 
@@ -651,8 +654,11 @@ function stepShots(run: RunState, dt: number, events: RunEvent[]): void {
       }
       s.hit.push(e.id);
       e.hp -= s.damage;
-      events.push({ type: 'hit', x: s.x, y: s.y });
-      if (e.hp <= 0) kill(run, e, events);
+      events.push({ type: 'hit', x: s.x, y: s.y, id: e.id });
+      if (e.hp <= 0) {
+        const speed = Math.hypot(s.vx, s.vy) || 1;
+        kill(run, e, events, true, false, { x: s.vx / speed, y: s.vy / speed });
+      }
       if (s.hit.length >= s.pierce) {
         spent = true;
         break;

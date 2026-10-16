@@ -193,3 +193,14 @@ is green and the review rounds stop finding anything the owner would notice.
   and white in the charge before a shot, a spiked mine with a hazard stripe,
   Mr Shrapnel as a red barrel on legs with a lit fuse, a tank hull with a
   turned turret, and a snake head and segments turned along their heading.
+  A third pass, at "you can do even better": the contestant has three bodies
+  (front, back, side) chosen by his aim, with the gun passing behind him when
+  he fires upward, and a fallen frame for the death under a bursting ring;
+  an enemy flashes white as its own silhouette when hit and tumbles along
+  the blow and fades when killed (`kill` events now carry the blow's
+  direction, `hit` events the enemy's id); blasts, deaths, boss stages and
+  the bomb shake the frame; clubbers wear a different kit per studio and
+  orbs spin a highlight round the sphere; Mutoid Man tears to the steel
+  under half health; and the studio floor has chevrons pointing at each
+  door, the show's logo ring, scuffs, and two spotlights sweeping from the
+  top corners.

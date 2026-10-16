@@ -29,8 +29,13 @@ import {
   DOME_THEME,
   ENEMY_COLOR,
   THEMES,
+  CORPSE_SECONDS,
   drawBanner,
   drawBossBar,
+  drawCorpses,
+  drawPlayerDeath,
+  drawSpotlights,
+  type Corpse,
   drawDomeHud,
   drawDoorContents,
   drawDoors,
@@ -133,6 +138,12 @@ export function initPrimeTimeGame(): void {
   let shock: { x: number; y: number; t: number; radius: number } | null = null;
   /** A white flash over the floor (the smart bomb). */
   let whiteout = 0;
+  /** Screen shake left, in px. */
+  let shake = 0;
+  /** Enemies hit in the last few frames, by id, with the clock they stop flashing at. */
+  const hitUntil = new Map<number, number>();
+  /** Bodies tumbling off the floor. */
+  let corpses: Corpse[] = [];
   /** The DOM test's hand on the sticks; null means the real ones. */
   let devInput: RunInput | null = null;
   /** Seconds until a won run's overlay goes up; 0 is none pending. */
@@ -209,6 +220,9 @@ export function initPrimeTimeGame(): void {
     whiteout = 0;
     flashT = 0;
     pendingEnd = 0;
+    shake = 0;
+    hitUntil.clear();
+    corpses = [];
     setTheme(themeFor(run));
     board.beginRun();
     recordEl.textContent = dollars(board.best());
@@ -249,6 +263,20 @@ export function initPrimeTimeGame(): void {
           const big = ev.kind === 'tank' || ev.kind === 'shrapnel' || ev.kind === 'snake';
           fx.burst(ev.x, ev.y, big ? 14 : 6, ENEMY_COLOR[ev.kind], big ? { speed: 160, life: 0.6, size: 2.5 } : {});
           if (ev.kind in ENEMIES) sound.play(big ? 'bigKill' : 'kill');
+          // The body tumbles along the blow, a little faster for the small fry.
+          const kick = ev.kind === 'grunt' || ev.kind === 'orb' ? 260 : 140;
+          corpses.push({
+            kind: ev.kind,
+            x: ev.x,
+            y: ev.y,
+            vx: ev.dx * kick + (Math.random() - 0.5) * 40,
+            vy: ev.dy * kick + (Math.random() - 0.5) * 40 - 30,
+            t: 0,
+            armed: ev.armed,
+            kit: run.circuit,
+            spin: Math.random() < 0.5 ? -1 : 1
+          });
+          if (ev.kind === 'mutoid' || ev.kind === 'scarface' || ev.kind === 'cobra') shake = Math.max(shake, 10);
           break;
         }
         case 'shot':
@@ -256,6 +284,7 @@ export function initPrimeTimeGame(): void {
           sound.play(ev.weapon);
           break;
         case 'hit':
+          hitUntil.set(ev.id, clock + 0.07);
           fx.burst(ev.x, ev.y, 2, '#fff', { speed: 60, life: 0.2, size: 1.2 });
           if (run.boss && Math.hypot(ev.x - run.boss.x, ev.y - run.boss.y) <= run.boss.r + 8) sound.play('bossHit');
           break;
@@ -263,6 +292,7 @@ export function initPrimeTimeGame(): void {
           fx.burst(ev.x, ev.y, 26, '#fb923c', { speed: ev.radius * 2.4, life: 0.5, size: 3, glow: true });
           fx.burst(ev.x, ev.y, 10, '#fef3c7', { speed: ev.radius * 1.2, life: 0.3, size: 2 });
           sound.play('blast');
+          shake = Math.max(shake, 5);
           break;
         case 'pickup': {
           const def = ITEMS[ev.item];
@@ -279,6 +309,7 @@ export function initPrimeTimeGame(): void {
           break;
         }
         case 'death':
+          shake = Math.max(shake, 8);
           fx.burst(ev.x, ev.y, 30, '#ef4444', { speed: 180, life: 0.8, size: 3 });
           fx.burst(ev.x, ev.y, 12, '#fbbf24', { speed: 90, life: 0.6, size: 2.5 });
           sound.play('death');
@@ -314,6 +345,7 @@ export function initPrimeTimeGame(): void {
         case 'bossStage':
           if (run.boss) fx.burst(run.boss.x, run.boss.y, 24, '#fff', { speed: 200, life: 0.5, size: 2.5, glow: true });
           sound.play('bigKill');
+          shake = Math.max(shake, 6);
           break;
         case 'bossDown':
           for (let i = 0; i < 5; i++) {
@@ -329,6 +361,7 @@ export function initPrimeTimeGame(): void {
           break;
         case 'bomb':
           whiteout = 0.5;
+          shake = Math.max(shake, 8);
           sound.play('bomb');
           break;
         case 'dome':
@@ -401,6 +434,16 @@ export function initPrimeTimeGame(): void {
     banner.life = Math.max(0, banner.life - dt);
     whiteout = Math.max(0, whiteout - dt);
     if (shock) shock.t += dt;
+    shake = Math.max(0, shake - 30 * dt);
+    for (const c of corpses) {
+      c.t += dt;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      c.vx *= 1 - 3 * dt;
+      c.vy *= 1 - 3 * dt;
+    }
+    corpses = corpses.filter(c => c.t < CORPSE_SECONDS);
+    for (const [id, until] of hitUntil) if (until <= clock) hitUntil.delete(id);
     fx.update(dt);
     if (phase !== 'play') return;
     if (pendingEnd > 0) {
@@ -417,16 +460,29 @@ export function initPrimeTimeGame(): void {
   }
 
   function render() {
+    // The shake moves the whole frame; the gap it opens at the edge is black.
+    const shaking = shake > 0 && run.phase !== 'map';
+    if (shaking) {
+      ctx.fillStyle = '#06060b';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.save();
+      ctx.translate(Math.round((Math.random() - 0.5) * 2 * shake), Math.round((Math.random() - 0.5) * 2 * shake));
+    }
     ground.draw(ctx);
     if (run.phase === 'map') {
       drawMap(ctx, run, { studio: strings.studio, dome: strings.dome }, theme);
     } else {
+      drawSpotlights(ctx, clock, theme);
       drawDoors(ctx, run, clock, theme);
       drawDoorContents(ctx, run);
       drawItems(ctx, run.items, clock);
-      drawEnemies(ctx, run, clock);
+      drawCorpses(ctx, corpses, clock);
+      const flashes = new Set<number>();
+      for (const [id, until] of hitUntil) if (until > clock) flashes.add(id);
+      drawEnemies(ctx, run, clock, flashes);
       drawShots(ctx, run);
       drawPlayer(ctx, run, clock, flashT);
+      drawPlayerDeath(ctx, run, clock);
       fx.draw(ctx);
       drawShock(ctx, shock);
       drawBossBar(ctx, run);
@@ -438,6 +494,7 @@ export function initPrimeTimeGame(): void {
       drawBanner(ctx, banner.text, banner.life, banner.colour);
       drawSticks(ctx, sticks.move, sticks.fire);
     }
+    if (shaking) ctx.restore();
     if (phase === 'paused') drawPaused(ctx, strings.paused);
   }
 

@@ -11,6 +11,7 @@
  * would need a label.
  */
 import type { Effects } from '../engine';
+import { hash01 } from '../engine';
 import {
   ARENA,
   CANVAS_H,
@@ -19,6 +20,7 @@ import {
   SIDES,
   WALL,
   dirIndex,
+  doorCentre,
   doorRect,
   inwardOf,
   type Pt
@@ -28,27 +30,34 @@ import { ORB_CHARGE, type Enemy } from './enemies';
 import {
   COBRA_HEAD,
   COBRA_SEGMENT,
-  GRUNT,
   MINE,
   MUTOID,
-  ORB,
-  ORB_ARMED,
-  ORB_CHARGING,
-  PLAYER,
+  MUTOID_HURT,
+  ORB_FRAMES,
+  PLAYER_BACK,
+  PLAYER_DOWN,
+  PLAYER_FRONT,
+  PLAYER_SIDE,
   SCARFACE,
   SHRAPNEL,
   SNAKE_HEAD,
   SNAKE_SEGMENT,
   TANK,
   drawSprite,
-  sprite
+  flashDef,
+  gruntSprite,
+  orbSprite,
+  sprite,
+  type SpriteDef
 } from './sprites';
+import { DEATH_SECONDS } from './run';
 
 /** The contestant's skin, for the hands on the gun. */
 const SKIN_TONE = '#f1c27d';
 import type { Item, ItemId } from './items';
 import { CIRCUITS, DOME_SECONDS, neighbour, type RoomDef } from './rooms';
 import { MAP_SECONDS, RESPAWN_INVULN, type RunState, type Shot } from './run';
+import type { EnemyKind } from './enemies';
 import type { Stick } from './input';
 import { STICK_RANGE } from './input';
 
@@ -150,6 +159,50 @@ export function paintStudio(ctx: CanvasRenderingContext2D, theme: StudioTheme): 
     ctx.fillStyle = g;
     ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
   }
+  // Floor markings: a chevron on the floor pointing at each door, the show's
+  // logo ring in the middle, scuffs where the crowds have walked.
+  for (const side of SIDES) {
+    const c = doorCentre(side);
+    const inward = inwardOf(side);
+    for (let i = 0; i < 2; i++) {
+      const px = c.x + inward.x * (60 + i * 22);
+      const py = c.y + inward.y * (60 + i * 22);
+      ctx.strokeStyle = `${theme.trim}${i === 0 ? '55' : '33'}`;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      if (inward.x === 0) {
+        ctx.moveTo(px - 14, py + inward.y * 8);
+        ctx.lineTo(px, py - inward.y * 6);
+        ctx.lineTo(px + 14, py + inward.y * 8);
+      } else {
+        ctx.moveTo(px + inward.x * 8, py - 14);
+        ctx.lineTo(px - inward.x * 6, py);
+        ctx.lineTo(px + inward.x * 8, py + 14);
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = `${theme.trim}30`;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(CANVAS_W / 2, CANVAS_H / 2, 70, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = `${theme.trim2}22`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(CANVAS_W / 2, CANVAS_H / 2, 84, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = `${theme.trim}30`;
+  ctx.font = 'bold 64px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('$', CANVAS_W / 2, CANVAS_H / 2 + 2);
+  for (let i = 0; i < 40; i++) {
+    const sx = ARENA.x + 20 + hash01(i, 1) * (ARENA.w - 40);
+    const sy = ARENA.y + 20 + hash01(i, 2) * (ARENA.h - 40);
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.12 + hash01(i, 3) * 0.12})`;
+    ctx.fillRect(sx, sy, 6 + hash01(i, 4) * 14, 2 + hash01(i, 5) * 3);
+  }
   // Walls.
   ctx.fillStyle = theme.wall;
   ctx.fillRect(0, 0, CANVAS_W, WALL);
@@ -196,6 +249,35 @@ export function paintStudio(ctx: CanvasRenderingContext2D, theme: StudioTheme): 
     ctx.fillStyle = '#050508';
     ctx.fillRect(r.x, r.y, r.w, r.h);
   }
+}
+
+/**
+ * The studio's lighting rig: two spotlights sweeping slowly from the top
+ * corners, drawn additively over the floor each frame. Cheap (two gradients)
+ * and the one thing on the floor that moves when nothing else does.
+ */
+export function drawSpotlights(ctx: CanvasRenderingContext2D, clock: number, theme: StudioTheme): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const beams: [number, number, number, string][] = [
+    [ARENA.x, ARENA.y, Math.PI / 4 + Math.sin(clock * 0.35) * 0.45, theme.trim],
+    [ARENA.x + ARENA.w, ARENA.y, (3 * Math.PI) / 4 + Math.sin(clock * 0.28 + 2) * 0.45, theme.trim2]
+  ];
+  for (const [x, y, a, colour] of beams) {
+    const len = 520;
+    const half = 0.16;
+    const g = ctx.createLinearGradient(x, y, x + Math.cos(a) * len, y + Math.sin(a) * len);
+    g.addColorStop(0, `${colour}26`);
+    g.addColorStop(1, `${colour}00`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a - half) * len, y + Math.sin(a - half) * len);
+    ctx.lineTo(x + Math.cos(a + half) * len, y + Math.sin(a + half) * len);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** Shadow under every body on the floor. */
@@ -264,9 +346,11 @@ export function drawDoors(ctx: CanvasRenderingContext2D, run: RunState, clock: n
 }
 
 /**
- * The contestant: the authored bitmap from the belt up, legs that scissor
- * with the walk, and a two-handed gun turned to the aim with a muzzle flash
- * at its end; a blink while invulnerable, a bubble while shielded.
+ * The contestant: a body chosen by the aim (front for a downward aim, back for
+ * an upward one, side for east and west), legs that scissor with the walk, and
+ * a two-handed gun turned to the aim with a muzzle flash at its end. The gun
+ * passes behind him when he fires upward; a blink while invulnerable, a
+ * bubble while shielded.
  */
 export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: number, flashT: number): void {
   if (!run.alive) return;
@@ -284,32 +368,39 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
   ctx.fillStyle = '#374151';
   ctx.fillRect(p.x - 6, p.y + 15 + step, 4, 3);
   ctx.fillRect(p.x + 2, p.y + 15 - step, 4, 3);
-  drawSprite(ctx, sprite('player', PLAYER), p.x, p.y - 4, p.aim.x < 0);
-  // The gun, held in both hands at the belt and turned to the aim.
-  const a = Math.atan2(p.aim.y, p.aim.x);
-  ctx.save();
-  ctx.translate(Math.round(p.x), Math.round(p.y) + 6);
-  ctx.rotate(a);
-  ctx.fillStyle = '#0b0b12';
-  ctx.fillRect(2, -5, 24, 10);
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(4, -3, 20, 6);
-  ctx.fillStyle = '#6b7280';
-  ctx.fillRect(14, -2, 12, 4);
-  ctx.fillStyle = SKIN_TONE;
-  ctx.fillRect(4, -5, 5, 10);
-  ctx.fillRect(12, -4, 4, 8);
-  if (flashT > 0) {
-    ctx.fillStyle = '#fef08a';
-    ctx.shadowColor = '#fde047';
-    ctx.shadowBlur = 12;
-    const r = 4 + flashT * 40;
-    ctx.fillRect(26, -r / 2, r, r);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(27, -r / 4, r / 2, r / 2);
-    ctx.shadowBlur = 0;
-  }
-  ctx.restore();
+  const dir = dirIndex(p.aim);
+  const up = dir >= 5;
+  const body = dir === 0 || dir === 4 ? PLAYER_SIDE : up ? PLAYER_BACK : PLAYER_FRONT;
+  const name = dir === 0 || dir === 4 ? 'player-side' : up ? 'player-back' : 'player-front';
+  const gun = () => {
+    const a = Math.atan2(p.aim.y, p.aim.x);
+    ctx.save();
+    ctx.translate(Math.round(p.x), Math.round(p.y) + (up ? 2 : 6));
+    ctx.rotate(a);
+    ctx.fillStyle = '#0b0b12';
+    ctx.fillRect(2, -5, 24, 10);
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(4, -3, 20, 6);
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(14, -2, 12, 4);
+    ctx.fillStyle = SKIN_TONE;
+    ctx.fillRect(4, -5, 5, 10);
+    ctx.fillRect(12, -4, 4, 8);
+    if (flashT > 0) {
+      ctx.fillStyle = '#fef08a';
+      ctx.shadowColor = '#fde047';
+      ctx.shadowBlur = 12;
+      const r = 4 + flashT * 40;
+      ctx.fillRect(26, -r / 2, r, r);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(27, -r / 4, r / 2, r / 2);
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  };
+  if (up) gun();
+  drawSprite(ctx, sprite(name, body), p.x, p.y - 4, p.aim.x < 0);
+  if (!up) gun();
   ctx.globalAlpha = 1;
   if (p.shield > 0) {
     const fade = p.shield < 2 ? 0.3 + 0.7 * Math.abs(Math.sin(clock * 10)) : 1;
@@ -334,10 +425,107 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
   }
 }
 
-function drawGrunt(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
+/** The death: a white ring bursting out, the contestant down on the floor, flickering out. */
+export function drawPlayerDeath(ctx: CanvasRenderingContext2D, run: RunState, clock: number): void {
+  if (run.phase !== 'dying') return;
+  const p = run.player;
+  const t = run.phaseT / DEATH_SECONDS;
+  if (t < 0.5) {
+    ctx.strokeStyle = `rgba(255, 255, 255, ${1 - t * 2})`;
+    ctx.lineWidth = 8 * (1 - t * 2) + 1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 10 + t * 160, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (Math.floor(clock * 10) % 3 === 0 && t > 0.6) return;
+  shadow(ctx, p.x, p.y + 8, p.r);
+  drawSprite(ctx, sprite('player-down', PLAYER_DOWN), p.x, p.y + 4, p.facing.x < 0);
+}
+
+/** A body on its way out: the sprite of what died, tumbling along the blow and fading. */
+export interface Corpse {
+  kind: EnemyKind | 'mutoid' | 'scarface' | 'cobra';
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  t: number;
+  armed: boolean;
+  kit: number;
+  spin: number;
+}
+
+/** Seconds a tumbling body stays on the floor. */
+export const CORPSE_SECONDS = 0.45;
+
+/** The main bitmap for an enemy kind, as the live draw and the flash and the tumble all need it. */
+function kindSprite(kind: Corpse['kind'], armed: boolean, kit: number, clock: number, stage = 0): { name: string; def: SpriteDef } {
+  switch (kind) {
+    case 'grunt':
+      return { name: `grunt-${kit}-0`, def: gruntSprite(kit, 0) };
+    case 'orb':
+      return { name: armed ? 'orb-armed-0' : 'orb-quiet-0', def: orbSprite(armed ? 'armed' : 'quiet', 0) };
+    case 'mine':
+      return { name: 'mine', def: MINE };
+    case 'shrapnel':
+      return { name: 'shrapnel0', def: SHRAPNEL[0] };
+    case 'tank':
+      return { name: 'tank', def: TANK };
+    case 'snake':
+      return { name: 'snake-head', def: SNAKE_HEAD };
+    case 'mutoid':
+      return stage ? { name: 'mutoid-hurt', def: MUTOID_HURT } : { name: 'mutoid', def: MUTOID };
+    case 'scarface':
+      return { name: `scarface${Math.floor(clock) % 2 === 0 ? 0 : 1}`, def: SCARFACE[0] };
+    case 'cobra':
+      return { name: 'cobra-head', def: COBRA_HEAD };
+  }
+}
+
+export function drawCorpses(ctx: CanvasRenderingContext2D, corpses: readonly Corpse[], clock: number): void {
+  for (const c of corpses) {
+    const k = Math.min(1, c.t / CORPSE_SECONDS);
+    ctx.globalAlpha = 1 - k * k;
+    const { name, def } = kindSprite(c.kind, c.armed, c.kit, clock);
+    drawSprite(ctx, sprite(name, def), c.x, c.y, false, c.spin * c.t * 14);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** The white flash of an enemy that has just been hit: its own silhouette over it. */
+function drawFlash(ctx: CanvasRenderingContext2D, e: Enemy, clock: number, kit: number): void {
+  const { name, def } = kindSprite(e.kind as Corpse['kind'], e.armed, kit, clock, e.boss ? bossStage(e) : 0);
+  const at = spriteAnchor(e, clock);
+  ctx.globalAlpha = 0.85;
+  drawSprite(ctx, sprite(`${name}-flash`, flashDef(def)), e.x + at.dx, e.y + at.dy, at.flip, at.angle);
+  ctx.globalAlpha = 1;
+}
+
+/** Where each kind's main bitmap sits relative to its body, so the flash lands on the drawing. */
+function spriteAnchor(e: Enemy, clock: number): { dx: number; dy: number; flip: boolean; angle: number } {
+  switch (e.kind) {
+    case 'grunt':
+      return { dx: 0, dy: -4, flip: e.vx < 0, angle: 0 };
+    case 'orb':
+      return { dx: 0, dy: Math.sin(clock * 4 + e.jitter) * 2, flip: false, angle: 0 };
+    case 'shrapnel':
+      return { dx: 0, dy: -4, flip: e.vx < 0, angle: 0 };
+    case 'snake':
+    case 'cobra':
+      return { dx: 0, dy: 0, flip: false, angle: Math.atan2(e.vy, e.vx) };
+    case 'mutoid':
+      return { dx: 0, dy: -14, flip: false, angle: 0 };
+    case 'scarface':
+      return { dx: 0, dy: Math.sin(clock * 3 + e.jitter) * 3, flip: e.vx < 0, angle: 0 };
+    default:
+      return { dx: 0, dy: 0, flip: false, angle: 0 };
+  }
+}
+
+function drawGrunt(ctx: CanvasRenderingContext2D, e: Enemy, clock: number, kit: number): void {
   shadow(ctx, e.x, e.y + 6, e.r);
   const frame = [0, 1, 2, 1][Math.floor(clock * 9 + e.jitter) % 4];
-  drawSprite(ctx, sprite(`grunt${frame}`, GRUNT[frame]), e.x, e.y - 4, e.vx < 0);
+  drawSprite(ctx, sprite(`grunt-${kit}-${frame}`, gruntSprite(kit, frame)), e.x, e.y - 4, e.vx < 0);
 }
 
 function drawOrb(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
@@ -353,12 +541,13 @@ function drawOrb(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
   g.addColorStop(1, `${colour}00`);
   ctx.fillStyle = g;
   ctx.fillRect(e.x - e.r - 10, e.y + hover - e.r - 10, e.r * 2 + 20, e.r * 2 + 20);
-  const def = charging ? ORB_CHARGING : e.armed ? ORB_ARMED : ORB;
-  const name = charging ? 'orb-charging' : e.armed ? 'orb-armed' : 'orb';
-  drawSprite(ctx, sprite(name, def), e.x, e.y + hover, Math.floor(clock * 3 + e.jitter) % 2 === 0);
-  if (!charging && pulse > 0.85) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.fillRect(e.x - 8, e.y + hover - 8, 2, 2);
+  const state = charging ? 'charging' : e.armed ? 'armed' : 'quiet';
+  const frame = Math.floor(clock * 6 + e.jitter) % ORB_FRAMES;
+  drawSprite(ctx, sprite(`orb-${state}-${frame}`, orbSprite(state, frame)), e.x, e.y + hover);
+  if (pulse > 0.95) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillRect(e.x - e.r - 2, e.y + hover - 1, 2, 2);
+    ctx.fillRect(e.x + e.r, e.y + hover - 1, 2, 2);
   }
 }
 
@@ -450,7 +639,7 @@ function drawMutoid(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: 
     ctx.fillRect(34, -2, 3, 4);
     ctx.restore();
   }
-  drawSprite(ctx, sprite('mutoid', MUTOID), e.x, e.y - 14);
+  drawSprite(ctx, stage ? sprite('mutoid-hurt', MUTOID_HURT) : sprite('mutoid', MUTOID), e.x, e.y - 14);
   if (e.t < 1.4) return;
   if (stage) {
     // Sparks off the damaged torso.
@@ -493,14 +682,15 @@ function drawCobra(ctx: CanvasRenderingContext2D, e: Enemy): void {
   drawSprite(ctx, sprite('cobra-head', COBRA_HEAD), e.x, e.y, false, Math.atan2(e.vy, e.vx));
 }
 
-export function drawEnemies(ctx: CanvasRenderingContext2D, run: RunState, clock: number): void {
+export function drawEnemies(ctx: CanvasRenderingContext2D, run: RunState, clock: number, flashes: ReadonlySet<number>): void {
   // Mines first, so the crowd walks over them; bosses last, over everything.
   const order = (e: Enemy) => (e.kind === 'mine' ? 0 : e.boss ? 2 : 1);
   const sorted = [...run.enemies].sort((a, b) => order(a) - order(b) || a.y - b.y);
+  const kit = run.circuit;
   for (const e of sorted) {
     switch (e.kind) {
       case 'grunt':
-        drawGrunt(ctx, e, clock);
+        drawGrunt(ctx, e, clock, kit);
         break;
       case 'orb':
         drawOrb(ctx, e, clock);
@@ -527,6 +717,7 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, run: RunState, clock:
         drawCobra(ctx, e);
         break;
     }
+    if (flashes.has(e.id)) drawFlash(ctx, e, clock, kit);
   }
 }
 

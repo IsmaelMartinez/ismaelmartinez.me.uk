@@ -18,11 +18,16 @@ export interface Rect {
   h: number;
 }
 
-/** Logical canvas size; CSS scales it, `setupHiDpiCanvas` keeps it crisp. */
-export const CANVAS_W = 660;
-export const CANVAS_H = 420;
+/**
+ * Logical canvas size; CSS scales it, `setupHiDpiCanvas` keeps it crisp. The
+ * walls are as thick as the arcade's steel frame (about 30 of 684, as the
+ * original's were 22 of 390), and the floor inside them is the same 624 x
+ * 384 it was behind 18-pixel walls, so widening the frame moved no balance.
+ */
+export const CANVAS_W = 684;
+export const CANVAS_H = 444;
 /** Wall thickness around the floor. */
-export const WALL = 18;
+export const WALL = 30;
 /** The floor the contestant can stand on. */
 export const ARENA: Rect = { x: WALL, y: WALL, w: CANVAS_W - WALL * 2, h: CANVAS_H - WALL * 2 };
 /** Width of the gap in a wall that is a door. */

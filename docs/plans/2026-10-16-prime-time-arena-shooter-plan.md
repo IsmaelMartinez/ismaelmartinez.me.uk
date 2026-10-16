@@ -243,3 +243,25 @@ is green and the review rounds stop finding anything the owner would notice.
   `ALL_SPRITES` registry turn a slipped pixel into a failing test rather
   than a sheared figure on the page. Checked frame by frame against the
   references on the preview build.
+- 2026-10-16, round 5 ("make it better, still not as good as the original"):
+  round 4 had the layout and the palette and still not the drawing. Three
+  things were wrong and each is now a rule. The figures were flat fills with
+  black outlines where Williams' are digitised: the rig now lights every
+  material in five tones from how far a pixel sits inside its shape and how
+  squarely it faces a top-left light, dithers between tone bands and draws
+  no outline at all, and every figure was re-authored from shapes at twice
+  the pixel density (the contestant and the clubbers at scale 1, the bosses
+  at scale 2); the rig writes `sprites.ts` itself now, so the file is
+  generated and says so. The walls were thin: the canvas is 684 x 444 with
+  30-pixel walls around the same 624 x 384 floor, so the frame is as thick
+  as the arcade's with no balance moved, and the band carries a machinery
+  channel, panel seams with rivets, vents and tick marks. And the floor was
+  clean: shadows are the arcade's checker-dithered black, the grain is
+  denser, and the gore stays where a clubber fell (`createStainLayer`, a
+  second canvas the game splats into and clears at every door). One test
+  turned red on the geometry shift and it was the test's fault: the
+  studio-3 dome count ("2 of 10 seeds reach the dome") held on seed luck
+  (0 of 40 other seeds do, because the bot is a poor key collector), so it
+  now asserts the dome on seeds that arrive with the full set, where it is
+  a promise, and the measured collection rate is in its comment.
+

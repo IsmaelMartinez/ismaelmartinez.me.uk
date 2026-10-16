@@ -35,6 +35,7 @@ import {
   drawCorpses,
   drawPlayerDeath,
   drawWallLamps,
+  createStainLayer,
   type Corpse,
   drawDomeHud,
   drawDoorContents,
@@ -123,6 +124,9 @@ export function initPrimeTimeGame(): void {
   let theme: StudioTheme = THEMES[0];
   const ground = createStaticLayer(CANVAS_W, CANVAS_H, target => paintStudio(target, theme));
   const hidpi = setupHiDpiCanvas(canvas, ctx, CANVAS_W, CANVAS_H, { onApply: ground.rebuild });
+  // The gore the clubbers leave, cleared at every door.
+  const stains = createStainLayer();
+  let splats = 0;
   function setTheme(next: StudioTheme) {
     if (next === theme) return;
     theme = next;
@@ -223,6 +227,7 @@ export function initPrimeTimeGame(): void {
     shake = 0;
     hitUntil.clear();
     corpses = [];
+    stains.clear();
     setTheme(themeFor(run));
     board.beginRun();
     recordEl.textContent = dollars(board.best());
@@ -261,6 +266,7 @@ export function initPrimeTimeGame(): void {
           break;
         case 'kill': {
           const big = ev.kind === 'tank' || ev.kind === 'shrapnel' || ev.kind === 'snake';
+          if (ev.kind === 'grunt') stains.splat(ev.x, ev.y, ++splats * 97);
           fx.burst(ev.x, ev.y, big ? 14 : 6, ENEMY_COLOR[ev.kind], big ? { speed: 160, life: 0.6, size: 2.5 } : {});
           if (ev.kind in ENEMIES) sound.play(big ? 'bigKill' : 'kill');
           // The body tumbles along the blow, a little faster for the small fry.
@@ -335,6 +341,7 @@ export function initPrimeTimeGame(): void {
           say(strings.host[ev.line], ev.line === 'carnage' ? '#ef4444' : ev.line === 'newCar' ? '#facc15' : theme.trim);
           break;
         case 'enterRoom':
+          stains.clear();
           setTheme(themeFor(run));
           audio.setScene(ev.boss ? SCENES.boss : null);
           // A scene change takes the score out of the danger variant (see
@@ -469,6 +476,7 @@ export function initPrimeTimeGame(): void {
       ctx.translate(Math.round((Math.random() - 0.5) * 2 * shake), Math.round((Math.random() - 0.5) * 2 * shake));
     }
     ground.draw(ctx);
+    if (run.phase !== 'map') stains.draw(ctx);
     if (run.phase === 'map') {
       drawMap(ctx, run, { studio: strings.studio, dome: strings.dome }, theme);
     } else {

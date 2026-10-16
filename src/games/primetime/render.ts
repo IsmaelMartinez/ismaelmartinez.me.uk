@@ -2,8 +2,11 @@
  * PRIME TIME's picture: Smash TV's television studio as the arcade drew it,
  * a charcoal floor inside thick riveted steel walls, a channel of grating
  * running in from each door, an octagon emblem with red chevrons in the
- * middle, and every figure on it a bitmap from `sprites.ts`. The floor and
- * the walls are baked once per studio into a static layer (`paintStudio`);
+ * middle, and every figure on it a bitmap from `sprites.ts`. Shadows are
+ * checker-dithered black, as the arcade's were. The floor and the walls are
+ * baked once per studio into a static layer (`paintStudio`); the gore the
+ * clubbers leave accumulates in a second layer (`createStainLayer`) that the
+ * game clears at every door;
  * everything that moves is drawn per frame by the functions below, each
  * reading the run and nothing else, so `game.ts` only decides the order.
  *
@@ -26,10 +29,8 @@ import {
   MUTOID,
   MUTOID_HURT,
   ORB_FRAMES,
-  PLAYER_BACK,
+  PLAYER,
   PLAYER_DOWN,
-  PLAYER_FRONT,
-  PLAYER_SIDE,
   SCARFACE,
   SHRAPNEL,
   SKULL,
@@ -247,49 +248,85 @@ function paintEmblem(ctx: CanvasRenderingContext2D, theme: StudioTheme): void {
   ctx.fill();
 }
 
-/** The steel walls: the band, a bright outer rim, a dark inner lip, panel seams, rivets and red tick marks. */
+/**
+ * The steel walls, as thick as the arcade's frame: a bright outer rim, the
+ * band itself with a darker machinery channel down its middle, panel seams
+ * with a rivet at each, red tick marks and small vents, and a dark inner lip
+ * where the floor begins.
+ */
 function paintWalls(ctx: CanvasRenderingContext2D, theme: StudioTheme): void {
   ctx.fillStyle = theme.wall;
   ctx.fillRect(0, 0, CANVAS_W, WALL);
   ctx.fillRect(0, CANVAS_H - WALL, CANVAS_W, WALL);
   ctx.fillRect(0, 0, WALL, CANVAS_H);
   ctx.fillRect(CANVAS_W - WALL, 0, WALL, CANVAS_H);
+  // Outer rim: two steps of light.
   ctx.fillStyle = theme.wallLight;
-  ctx.fillRect(0, 0, CANVAS_W, 3);
-  ctx.fillRect(0, CANVAS_H - 3, CANVAS_W, 3);
-  ctx.fillRect(0, 0, 3, CANVAS_H);
-  ctx.fillRect(CANVAS_W - 3, 0, 3, CANVAS_H);
+  ctx.fillRect(0, 0, CANVAS_W, 4);
+  ctx.fillRect(0, CANVAS_H - 4, CANVAS_W, 4);
+  ctx.fillRect(0, 0, 4, CANVAS_H);
+  ctx.fillRect(CANVAS_W - 4, 0, 4, CANVAS_H);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.fillRect(4, 4, CANVAS_W - 8, 2);
+  ctx.fillRect(4, 4, 2, CANVAS_H - 8);
+  // The machinery channel down the middle of the band.
+  const mid = Math.floor(WALL / 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+  ctx.fillRect(8, mid - 4, CANVAS_W - 16, 8);
+  ctx.fillRect(8, CANVAS_H - mid - 4, CANVAS_W - 16, 8);
+  ctx.fillRect(mid - 4, 8, 8, CANVAS_H - 16);
+  ctx.fillRect(CANVAS_W - mid - 4, 8, 8, CANVAS_H - 16);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.fillRect(8, mid + 4, CANVAS_W - 16, 1);
+  ctx.fillRect(8, CANVAS_H - mid + 4, CANVAS_W - 16, 1);
+  ctx.fillRect(mid + 4, 8, 1, CANVAS_H - 16);
+  ctx.fillRect(CANVAS_W - mid + 4, 8, 1, CANVAS_H - 16);
+  // Panel seams every 48 px with a rivet at each end, a red tick between.
+  for (let x = 48; x < CANVAS_W; x += 48) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(x, 6, 1, WALL - 10);
+    ctx.fillRect(x, CANVAS_H - WALL + 4, 1, WALL - 10);
+    ctx.fillStyle = theme.wallDark;
+    ctx.fillRect(x - 2, 8, 3, 3);
+    ctx.fillRect(x - 2, CANVAS_H - 11, 3, 3);
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(x + 20, mid - 1, 8, 2);
+    ctx.fillRect(x + 20, CANVAS_H - mid - 1, 8, 2);
+  }
+  for (let y = 48; y < CANVAS_H; y += 48) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(6, y, WALL - 10, 1);
+    ctx.fillRect(CANVAS_W - WALL + 4, y, WALL - 10, 1);
+    ctx.fillStyle = theme.wallDark;
+    ctx.fillRect(8, y - 2, 3, 3);
+    ctx.fillRect(CANVAS_W - 11, y - 2, 3, 3);
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(mid - 1, y + 20, 2, 8);
+    ctx.fillRect(CANVAS_W - mid - 1, y + 20, 2, 8);
+  }
+  // Vents: three slots in every other panel.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  for (let x = 72; x < CANVAS_W - 40; x += 96) {
+    for (let k = 0; k < 3; k++) {
+      ctx.fillRect(x + k * 4, mid - 2, 2, 4);
+      ctx.fillRect(x + k * 4, CANVAS_H - mid - 2, 2, 4);
+    }
+  }
+  for (let y = 72; y < CANVAS_H - 40; y += 96) {
+    for (let k = 0; k < 3; k++) {
+      ctx.fillRect(mid - 2, y + k * 4, 4, 2);
+      ctx.fillRect(CANVAS_W - mid - 2, y + k * 4, 4, 2);
+    }
+  }
+  // Inner lip: a dark step down to the floor, with a thin light edge above it.
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+  ctx.fillRect(ARENA.x - 5, ARENA.y - 5, ARENA.w + 10, 1);
+  ctx.fillRect(ARENA.x - 5, ARENA.y - 5, 1, ARENA.h + 10);
   ctx.fillStyle = theme.wallDark;
-  ctx.fillRect(ARENA.x - 3, ARENA.y - 3, ARENA.w + 6, 3);
-  ctx.fillRect(ARENA.x - 3, ARENA.y + ARENA.h, ARENA.w + 6, 3);
-  ctx.fillRect(ARENA.x - 3, ARENA.y - 3, 3, ARENA.h + 6);
-  ctx.fillRect(ARENA.x + ARENA.w, ARENA.y - 3, 3, ARENA.h + 6);
-  // Panel seams and rivets.
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-  for (let x = 60; x < CANVAS_W; x += 60) {
-    ctx.fillRect(x, 3, 1, WALL - 6);
-    ctx.fillRect(x, CANVAS_H - WALL + 3, 1, WALL - 6);
-  }
-  for (let y = 60; y < CANVAS_H; y += 60) {
-    ctx.fillRect(3, y, WALL - 6, 1);
-    ctx.fillRect(CANVAS_W - WALL + 3, y, WALL - 6, 1);
-  }
-  for (let x = 30; x < CANVAS_W; x += 60) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(x - 1, 6, 2, 2);
-    ctx.fillRect(x - 1, CANVAS_H - 8, 2, 2);
-    ctx.fillStyle = theme.accent;
-    ctx.fillRect(x + 12, 10, 6, 1);
-    ctx.fillRect(x + 12, CANVAS_H - 11, 6, 1);
-  }
-  for (let y = 30; y < CANVAS_H; y += 60) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(6, y - 1, 2, 2);
-    ctx.fillRect(CANVAS_W - 8, y - 1, 2, 2);
-    ctx.fillStyle = theme.accent;
-    ctx.fillRect(10, y + 12, 1, 6);
-    ctx.fillRect(CANVAS_W - 11, y + 12, 1, 6);
-  }
+  ctx.fillRect(ARENA.x - 4, ARENA.y - 4, ARENA.w + 8, 4);
+  ctx.fillRect(ARENA.x - 4, ARENA.y + ARENA.h, ARENA.w + 8, 4);
+  ctx.fillRect(ARENA.x - 4, ARENA.y - 4, 4, ARENA.h + 8);
+  ctx.fillRect(ARENA.x + ARENA.w, ARENA.y - 4, 4, ARENA.h + 8);
 }
 
 /** The baked studio: floor, grating channels, emblem, walls and the door gaps. */
@@ -297,11 +334,12 @@ export function paintStudio(ctx: CanvasRenderingContext2D, theme: StudioTheme): 
   ctx.fillStyle = theme.floor;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   // Grain, then faint large panels, then the scuffs of a thousand clubbers.
-  for (let i = 0; i < 900; i++) {
-    const sx = ARENA.x + hash01(i, 11) * ARENA.w;
-    const sy = ARENA.y + hash01(i, 12) * ARENA.h;
-    ctx.fillStyle = hash01(i, 13) < 0.5 ? 'rgba(255, 255, 255, 0.035)' : 'rgba(0, 0, 0, 0.12)';
-    ctx.fillRect(sx, sy, 2, 2);
+  for (let i = 0; i < 2200; i++) {
+    const sx = Math.floor(ARENA.x + hash01(i, 11) * ARENA.w);
+    const sy = Math.floor(ARENA.y + hash01(i, 12) * ARENA.h);
+    const k = hash01(i, 13);
+    ctx.fillStyle = k < 0.45 ? 'rgba(255, 255, 255, 0.05)' : k < 0.55 ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.14)';
+    ctx.fillRect(sx, sy, k < 0.55 && k > 0.45 ? 1 : 2, k < 0.55 && k > 0.45 ? 1 : 2);
   }
   ctx.fillStyle = theme.floorLine;
   for (let x = ARENA.x + PANEL; x < ARENA.x + ARENA.w; x += PANEL) ctx.fillRect(x, ARENA.y, 1, ARENA.h);
@@ -394,12 +432,78 @@ export function drawWallLamps(ctx: CanvasRenderingContext2D, clock: number, them
   for (const s of LAMPS) if (s.i % 2 === 0) ctx.fillRect(s.x - 6, s.y, 12, 1);
 }
 
-/** Shadow under every body on the floor. */
+let ditherPattern: CanvasPattern | null | undefined;
+
+/** A 2 x 2 black checker, the arcade's shadow. */
+function dither(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  if (ditherPattern === undefined) {
+    const c = document.createElement('canvas');
+    c.width = 2;
+    c.height = 2;
+    const g = c.getContext('2d');
+    if (g) {
+      g.fillStyle = '#000000';
+      g.fillRect(0, 0, 1, 1);
+      g.fillRect(1, 1, 1, 1);
+    }
+    ditherPattern = g ? ctx.createPattern(c, 'repeat') : null;
+  }
+  return ditherPattern;
+}
+
+/** Shadow under every body on the floor: a checker-dithered black ellipse, as the arcade drew them. */
 function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.fillStyle = dither(ctx) ?? 'rgba(0, 0, 0, 0.45)';
   ctx.beginPath();
-  ctx.ellipse(x + 2, y + r * 0.7, r * 1.05, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + 2, y + r * 0.7, r * 1.1, r * 0.5, 0, 0, Math.PI * 2);
   ctx.fill();
+}
+
+export interface StainLayer {
+  /** A clubber's blood where he fell: red pixels thrown round the spot, seeded so the frame is deterministic. */
+  splat(x: number, y: number, seed: number): void;
+  clear(): void;
+  draw(ctx: CanvasRenderingContext2D): void;
+}
+
+/**
+ * The gore that stays on the floor, as Smash TV's did: an offscreen canvas
+ * the size of the frame that the game splats into at every clubber's death
+ * and clears at every door, drawn over the static floor once per frame.
+ */
+export function createStainLayer(): StainLayer {
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_W;
+  canvas.height = CANVAS_H;
+  const g = canvas.getContext('2d');
+  let count = 0;
+  return {
+    splat(x, y, seed) {
+      if (!g) return;
+      count++;
+      for (let i = 0; i < 30; i++) {
+        const a = hash01(seed + i, 21) * Math.PI * 2;
+        const d = hash01(seed + i, 22) ** 1.6 * 24;
+        const sx = Math.round(x + Math.cos(a) * d);
+        const sy = Math.round(y + Math.sin(a) * d * 0.75);
+        if (sx < ARENA.x || sy < ARENA.y || sx >= ARENA.x + ARENA.w || sy >= ARENA.y + ARENA.h) continue;
+        const size = hash01(seed + i, 23) < 0.3 ? 3 : 2;
+        g.fillStyle = hash01(seed + i, 24) < 0.55 ? '#b81a1a' : '#7a0c0c';
+        g.fillRect(sx, sy, size, size);
+      }
+      g.fillStyle = '#9c1414';
+      g.fillRect(Math.round(x) - 4, Math.round(y) - 2, 8, 5);
+      g.fillStyle = '#d02828';
+      g.fillRect(Math.round(x) - 2, Math.round(y) - 1, 4, 2);
+    },
+    clear() {
+      g?.clearRect(0, 0, CANVAS_W, CANVAS_H);
+      count = 0;
+    },
+    draw(ctx) {
+      if (count > 0) ctx.drawImage(canvas, 0, 0);
+    }
+  };
 }
 
 /**
@@ -461,26 +565,17 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
   const p = run.player;
   if (p.invuln > 0 && Math.floor(clock * 14) % 2 === 0 && p.invuln < RESPAWN_INVULN) ctx.globalAlpha = 0.4;
   shadow(ctx, p.x, p.y + 6, p.r);
-  // Legs, scissoring while moving: blue jeans, dark boots.
-  const step = p.moving ? Math.sin(clock * 16) * 4 : 0;
-  ctx.fillStyle = '#0b0b12';
-  ctx.fillRect(p.x - 8, p.y + 9 + step, 8, 11);
-  ctx.fillRect(p.x, p.y + 9 - step, 8, 11);
-  ctx.fillStyle = '#2a4fc9';
-  ctx.fillRect(p.x - 6, p.y + 9 + step, 4, 7);
-  ctx.fillRect(p.x + 2, p.y + 9 - step, 4, 7);
-  ctx.fillStyle = '#1a1a22';
-  ctx.fillRect(p.x - 6, p.y + 16 + step, 4, 3);
-  ctx.fillRect(p.x + 2, p.y + 16 - step, 4, 3);
   const dir = dirIndex(p.aim);
   const up = dir >= 5;
   const side = dir === 0 || dir === 4;
-  const body = side ? PLAYER_SIDE : up ? PLAYER_BACK : PLAYER_FRONT;
-  const name = side ? 'player-side' : up ? 'player-back' : 'player-front';
+  const view = side ? 'side' : up ? 'back' : 'front';
+  const frame = p.moving ? Math.floor(clock * 8) % 2 : 0;
+  const body = PLAYER[view][frame];
+  const name = `player-${view}-${frame}`;
   const gun = () => {
     const a = Math.atan2(p.aim.y, p.aim.x);
     ctx.save();
-    ctx.translate(Math.round(p.x), Math.round(p.y) + (up ? 0 : side ? 1 : 5));
+    ctx.translate(Math.round(p.x), Math.round(p.y) + (up ? -8 : side ? -5 : -3));
     ctx.rotate(a);
     // A long thin barrel, the arcade's rifle: two hands on it, a dark muzzle.
     ctx.fillStyle = '#0b0b12';
@@ -507,7 +602,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
     ctx.restore();
   };
   if (up) gun();
-  drawSprite(ctx, sprite(name, body), p.x, p.y - 4, p.aim.x < 0);
+  drawSprite(ctx, sprite(name, body), p.x, p.y - 6, p.aim.x < 0);
   if (!up) gun();
   ctx.globalAlpha = 1;
   if (p.shield > 0) {
@@ -670,10 +765,10 @@ function drawMine(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void 
   if (Math.floor(clock * rate + e.jitter) % 2 === 0) {
     ctx.fillStyle = '#ffffff';
     for (const [sx, sy] of [
-      [-9, -9],
-      [9, -9],
-      [-9, 9],
-      [9, 9]
+      [-8, -8],
+      [8, -8],
+      [-8, 8],
+      [8, 8]
     ])
       ctx.fillRect(e.x + sx - 1, e.y + sy - 1, 2, 2);
   }
@@ -696,8 +791,8 @@ function drawTank(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: nu
   // Tread motion: a dark bar rolling along each tread.
   const roll = Math.floor((clock * 16 + e.jitter) % 9) * 4;
   ctx.fillStyle = '#0b0b12';
-  ctx.fillRect(e.x - 16 + roll, e.y - 10, 2, 4);
-  ctx.fillRect(e.x - 16 + roll, e.y + 6, 2, 4);
+  ctx.fillRect(e.x - 16 + roll, e.y - 12, 2, 4);
+  ctx.fillRect(e.x - 16 + roll, e.y + 8, 2, 4);
   // The turret, turned to the contestant.
   const a = Math.atan2(player.y - e.y, player.x - e.x);
   ctx.save();
@@ -731,7 +826,7 @@ function drawMutoid(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): voi
   // Tread motion along the base.
   const roll = Math.floor((clock * 10) % 3) * 3;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  for (let x = -40 + roll; x < 40; x += 9) ctx.fillRect(e.x + x, e.y + 46, 3, 14);
+  for (let x = -40 + roll; x < 40; x += 9) ctx.fillRect(e.x + x, e.y + 44, 3, 12);
   if (e.t < 1.4) return;
   if (stage) {
     // Sparks off the torn torso.

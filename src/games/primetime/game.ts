@@ -271,6 +271,7 @@ export function initPrimeTimeGame(): void {
             audio.playStinger(ev.item === 'car' ? STINGERS.car : STINGERS.prize);
           } else {
             sound.play('pickup');
+            if (ev.item === 'life') audio.playStinger(STINGERS.extraLife);
             const name = def.weapon ? strings.weapons[def.weapon] : strings.gear[ev.item];
             if (name) showToast(name);
           }
@@ -292,7 +293,11 @@ export function initPrimeTimeGame(): void {
           }
           break;
         case 'roomClear':
-          audio.playStinger(STINGERS.roomClear);
+          // A boss room's clear is the boss's fall, which has its own phrase;
+          // the generic clear stinger would cut it (the clear can also trail
+          // the fall by the sweep of the boss's last shots, so the room is
+          // read, not the batch).
+          if (!CIRCUITS[run.circuit].rooms[run.roomKey].boss) audio.playStinger(STINGERS.roomClear);
           sound.play('doors');
           break;
         case 'host':
@@ -360,6 +365,8 @@ export function initPrimeTimeGame(): void {
     }
   }
   listenUntilSwap(document, 'keydown', e => {
+    // A held key repeats, and a repeat would resume what the press paused.
+    if (e.repeat) return;
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
       if (phase === 'play') setPaused(true);
       else if (phase === 'paused') setPaused(false);

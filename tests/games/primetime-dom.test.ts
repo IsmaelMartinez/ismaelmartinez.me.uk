@@ -288,6 +288,46 @@ describe('PRIME TIME through the page', () => {
     expect(mockAudio.playEnding).toHaveBeenCalledWith(ENDINGS.winner);
   });
 
+  it('stays paused while the pause key is held: a key repeat is not a second press', () => {
+    startRun();
+    quiet(run());
+    pressKey(document.body, 'p');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true, cancelable: true, repeat: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true, cancelable: true, repeat: true }));
+    const t0 = run().t;
+    advance(0.5);
+    expect(run().t).toBe(t0);
+    expect(mockAudio.setPaused).toHaveBeenLastCalledWith(true);
+  });
+
+  it("lets a boss's fall be the room's fanfare, and plays the extra-life phrase on a life", () => {
+    startRun();
+    const r = run();
+    jumpToRoom(r, 0, CIRCUITS[0].boss);
+    quiet(r);
+    const boss = spawnEnemy(5000, 'mine', 0, 0, rng);
+    // A one-shot boss standing on the contestant's line of fire.
+    // Past his entrance, with his fan and his grunt call both far off, so the
+    // only thing left in the room is the boss himself.
+    Object.assign(boss, { kind: 'mutoid', boss: true, hp: 1, maxHp: 150, x: r.player.x + 80, y: r.player.y, r: 34, worth: 25000, t: 5, timer: 100, phase: 100 });
+    r.enemies = [boss];
+    r.boss = boss;
+    mockAudio.playStinger.mockClear();
+    dev().setInput({ moveX: 0, moveY: 0, fireX: 1, fireY: 0 });
+    advance(0.5);
+    dev().setInput(null);
+    // The clear waits for the boss's last shots to leave the floor.
+    advance(4);
+    expect(run().phase).toBe('cleared');
+    const played = mockAudio.playStinger.mock.calls.map(c => c[0]);
+    expect(played).toContain('bossDown');
+    expect(played).not.toContain('roomClear');
+    // An extra life has its own phrase.
+    run().items.push({ id: 77, item: 'life', x: run().player.x, y: run().player.y, ttl: 9, r: 14 });
+    advance(0.25);
+    expect(mockAudio.playStinger).toHaveBeenCalledWith('extraLife');
+  });
+
   it('pauses from the header button too, for a touch player with no keyboard', () => {
     startRun();
     document.getElementById('pause-btn')!.click();

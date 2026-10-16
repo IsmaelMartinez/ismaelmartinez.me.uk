@@ -425,6 +425,10 @@ function kill(run: RunState, e: Enemy, events: RunEvent[], paid = true, harmless
         if (other.hp === -Infinity || other === victim) continue;
         if (dist(other, victim) > MINE_BLAST + other.r) continue;
         if (other.boss) {
+          // An unpaid chain is the respawn shockwave, which exists to save
+          // the contestant, not to fight for him: a boss inside it keeps his
+          // health and is reset by `afterDeath`, never killed for nothing.
+          if (!paid) continue;
           other.hp -= MINE_BOSS_DAMAGE;
           if (other.hp <= 0) queue.push(other);
         } else {

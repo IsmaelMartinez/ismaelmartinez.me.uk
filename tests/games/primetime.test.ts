@@ -656,6 +656,38 @@ describe('the run', () => {
     expect(run.alive).toBe(true);
   });
 
+  it('spares a boss from the mines a respawn shockwave sets off, and still lets a smart bomb hurt him through one', () => {
+    // A boss on his last ten points beside a mine beside the contestant, and
+    // a grunt on the contestant: the death's shockwave chains the mine, and
+    // the boss must come out of it with his health untouched and reset to his
+    // entrance rather than dead for nothing.
+    const run = quietRoom();
+    const boss = spawnBoss(730, 'scarface', rng());
+    boss.x = run.player.x + 50;
+    boss.y = run.player.y;
+    boss.hp = 10;
+    run.boss = boss;
+    run.enemies.push(boss, spawnEnemy(731, 'mine', run.player.x + 25, run.player.y, rng()), spawnEnemy(732, 'grunt', run.player.x, run.player.y, rng()));
+    const events = advance(run, DEATH_SECONDS + 2 * TICK);
+    expect(events.map(e => e.type)).toContain('respawn');
+    expect(events.map(e => e.type)).not.toContain('bossDown');
+    expect(run.boss).toBe(boss);
+    expect(boss.hp).toBe(10);
+    expect(run.enemies.filter(e => e.kind === 'mine')).toEqual([]);
+    expect(run.enemies).toContain(boss);
+    // A bomb is a weapon: its mine chain still damages him, and pays.
+    boss.x = run.player.x + 50;
+    boss.y = run.player.y;
+    run.player.invuln = 99;
+    run.enemies.push(spawnEnemy(733, 'mine', run.player.x + 25, run.player.y, rng()));
+    run.items.push({ id: 2, item: 'bomb', x: run.player.x, y: run.player.y, ttl: 9, r: ITEM_R });
+    const cashBefore = run.cash;
+    const bombed = advance(run, TICK);
+    expect(bombed.map(e => e.type)).toContain('bossDown');
+    expect(run.boss).toBeNull();
+    expect(run.cash - cashBefore).toBeGreaterThanOrEqual(BOSSES.scarface.worth);
+  });
+
   it('keeps an enemy inside the walls once it has entered, so it can never circle out of reach', () => {
     const run = quietRoom();
     // An orb heading straight at the far wall from mid-floor.

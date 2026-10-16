@@ -204,3 +204,42 @@ is green and the review rounds stop finding anything the owner would notice.
   under half health; and the studio floor has chevrons pointing at each
   door, the show's logo ring, scuffs, and two spotlights sweeping from the
   top corners.
+- 2026-10-16, round 4 ("needs to look closer to the original"): the three
+  passes above had drawn a cabinet, not Smash TV, so this one started by
+  fetching the arcade and SNES screenshots (Hardcore Gaming 101's set) and
+  rebuilding against them. The studio is the arcade's: a flat charcoal floor
+  with faint large panels, grain and scuffs inside thick riveted steel walls
+  with a bright rim and a dark lip, a channel of slatted grating running in
+  from each door (long from the side doors, short from the top and bottom,
+  as the arcade's), six vent grilles, and the octagon emblem with its four
+  red chevrons in the middle; the second studio wears red caution walls with
+  chasing yellow bulbs over deep blue, the third lavender steel over slate
+  with a red-washed centre, the prize room gold. The spotlights, the neon
+  trim, the chequerboard and the dollar ring are gone. The HUD in the page is
+  styled as the arcade's counters, blue LED digits on black in a steel frame
+  with a red segment bar under each. Every sprite was redrawn to the
+  reference: the contestant is the blue-haired, red-shirted first player with
+  blue jeans and a long thin grey rifle; the clubbers are the green-suited
+  bald grunts with a club over the shoulder (orange with blue heads in studio
+  2, purple with yellow heads in 3); orbs are the lilac spheres; mines are
+  the grey four-pronged jacks with red tips; Mr Shrapnel a grey robot with a
+  red core; the tank the grey hover-tank with its orange pilot; snakes cyan.
+  Mutoid Man is now the whole figure, bald flesh head on a steel yoke over
+  green bulk and fists on a grey tank with cockpit, gun pods and treads, 108
+  by 138 at scale 3, the hurt stage torn to the steel; Scarface is the olive
+  face inside a riveted steel sphere, red-eyed and open-mouthed for the
+  charge, the crown blown off to show the brain in his second stage; Cobra
+  Death a lumpy red head with a pink maw over green segments with purple
+  spots. The prizes stopped being emoji: cash is a banded bundle, the
+  toaster and the VCR are their boxes, the car a red roof, and every piece
+  of gear a framed plaque with a glyph as the arcade drew its pick-ups, with
+  the same icons at scale 1 on the map and over the doors and a skull for
+  the boss room. Shots are white four-point sparkles with a fading trail,
+  hostile shots yellow balls with an orange rim, the open exits chase yellow
+  and white arrows out through the door. The large bitmaps were composed in
+  a small shape rig (`scripts/primetime-sprite-rig.py`: circles, polygons,
+  an automatic outline, a gallery PNG for review) and are kept in
+  `sprites.ts` as the literal rows it emitted; `validateSprite` and an
+  `ALL_SPRITES` registry turn a slipped pixel into a failing test rather
+  than a sheared figure on the page. Checked frame by frame against the
+  references on the preview build.

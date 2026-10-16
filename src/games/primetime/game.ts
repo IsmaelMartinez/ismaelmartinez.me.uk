@@ -34,7 +34,7 @@ import {
   drawBossBar,
   drawCorpses,
   drawPlayerDeath,
-  drawSpotlights,
+  drawWallLamps,
   type Corpse,
   drawDomeHud,
   drawDoorContents,
@@ -472,15 +472,15 @@ export function initPrimeTimeGame(): void {
     if (run.phase === 'map') {
       drawMap(ctx, run, { studio: strings.studio, dome: strings.dome }, theme);
     } else {
-      drawSpotlights(ctx, clock, theme);
+      drawWallLamps(ctx, clock, theme);
       drawDoors(ctx, run, clock, theme);
       drawDoorContents(ctx, run);
       drawItems(ctx, run.items, clock);
-      drawCorpses(ctx, corpses, clock);
+      drawCorpses(ctx, corpses);
       const flashes = new Set<number>();
       for (const [id, until] of hitUntil) if (until > clock) flashes.add(id);
       drawEnemies(ctx, run, clock, flashes);
-      drawShots(ctx, run);
+      drawShots(ctx, run, clock);
       drawPlayer(ctx, run, clock, flashT);
       drawPlayerDeath(ctx, run, clock);
       fx.draw(ctx);

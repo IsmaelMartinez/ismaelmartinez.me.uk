@@ -1,35 +1,27 @@
 /**
- * PRIME TIME's picture: a neon-trimmed television studio drawn with canvas
- * primitives, the way every non-framebuffer cabinet on the floor draws. The
- * floor, the walls and the lighting are baked once per studio into a static
- * layer (`paintStudio`); everything that moves is drawn per frame by the
- * functions below, each reading the run and nothing else, so `game.ts` only
- * decides the order.
+ * PRIME TIME's picture: Smash TV's television studio as the arcade drew it,
+ * a charcoal floor inside thick riveted steel walls, a channel of grating
+ * running in from each door, an octagon emblem with red chevrons in the
+ * middle, and every figure on it a bitmap from `sprites.ts`. The floor and
+ * the walls are baked once per studio into a static layer (`paintStudio`);
+ * everything that moves is drawn per frame by the functions below, each
+ * reading the run and nothing else, so `game.ts` only decides the order.
  *
- * Prizes are emoji, the one place the cabinet uses text as a sprite: a
- * banknote, a cassette and a car read at twenty pixels where a primitive
- * would need a label.
+ * Three studios wear three liveries after the arcade's three circuits: grey
+ * steel over charcoal, then red caution walls with chasing bulbs over deep
+ * blue, then lavender steel over slate with a red-washed centre; the prize
+ * room is gold. The HUD stays in the page's DOM (the cabinet convention),
+ * styled there as the arcade's blue LED counters.
  */
 import type { Effects } from '../engine';
 import { hash01 } from '../engine';
-import {
-  ARENA,
-  CANVAS_H,
-  CANVAS_W,
-  DOOR_W,
-  SIDES,
-  WALL,
-  dirIndex,
-  doorCentre,
-  doorRect,
-  inwardOf,
-  type Pt
-} from './arena';
+import { ARENA, CANVAS_H, CANVAS_W, DOOR_W, SIDES, WALL, dirIndex, doorCentre, doorRect, inwardOf, type Pt } from './arena';
 import { SCARFACE_PHASE, bossStage } from './bosses';
 import { ORB_CHARGE, type Enemy } from './enemies';
 import {
   COBRA_HEAD,
   COBRA_SEGMENT,
+  ITEM_SPRITES,
   MINE,
   MUTOID,
   MUTOID_HURT,
@@ -40,6 +32,7 @@ import {
   PLAYER_SIDE,
   SCARFACE,
   SHRAPNEL,
+  SKULL,
   SNAKE_HEAD,
   SNAKE_SEGMENT,
   TANK,
@@ -51,57 +44,113 @@ import {
   type SpriteDef
 } from './sprites';
 import { DEATH_SECONDS } from './run';
-
-/** The contestant's skin, for the hands on the gun. */
-const SKIN_TONE = '#f1c27d';
 import type { Item, ItemId } from './items';
 import { CIRCUITS, DOME_SECONDS, neighbour, type RoomDef } from './rooms';
-import { MAP_SECONDS, RESPAWN_INVULN, type RunState, type Shot } from './run';
+import { MAP_SECONDS, RESPAWN_INVULN, type RunState } from './run';
 import type { EnemyKind } from './enemies';
 import type { Stick } from './input';
 import { STICK_RANGE } from './input';
 
+/** The contestant's skin, for the hands on the gun. */
+const SKIN_TONE = '#f1b98a';
+
 export interface StudioTheme {
-  floorA: string;
-  floorB: string;
+  /** The floor, its faint panel seams, and the octagon emblem's plate. */
+  floor: string;
+  floorLine: string;
+  emblem: string;
+  /** The door channels' grating and its rails. */
+  grate: string;
+  grateRail: string;
+  /** The wall band, its bright outer rim and its dark inner lip. */
+  wall: string;
+  wallLight: string;
+  wallDark: string;
+  /** The lamps on the wall and how they behave. */
+  lamp: string;
+  lampStyle: 'leds' | 'bulbs' | 'strip';
+  /** The red of the emblem's chevrons and the wall's tick marks. */
+  accent: string;
+  /** Text accents: the banners and the map title, and a second for the host. */
   trim: string;
   trim2: string;
-  wall: string;
 }
 
-/** One palette per studio, and a golden one for the prize room. */
+/** One livery per studio, and a golden one for the prize room. */
 export const THEMES: readonly StudioTheme[] = [
-  { floorA: '#1c1c36', floorB: '#121226', trim: '#ec4899', trim2: '#22d3ee', wall: '#232340' },
-  { floorA: '#241a2e', floorB: '#17111f', trim: '#f59e0b', trim2: '#a855f7', wall: '#2c2040' },
-  { floorA: '#2a171d', floorB: '#1a0f13', trim: '#ef4444', trim2: '#2dd4bf', wall: '#3a1a26' }
+  {
+    floor: '#2c2c30',
+    floorLine: 'rgba(255, 255, 255, 0.05)',
+    emblem: '#3a3a40',
+    grate: '#222226',
+    grateRail: '#5c5c66',
+    wall: '#8e8e98',
+    wallLight: '#c6c6ce',
+    wallDark: '#4a4a54',
+    lamp: '#ef4444',
+    lampStyle: 'leds',
+    accent: '#c0281c',
+    trim: '#3fa9ff',
+    trim2: '#ff4fd8'
+  },
+  {
+    floor: '#1c1a4e',
+    floorLine: 'rgba(255, 255, 255, 0.07)',
+    emblem: '#2a2860',
+    grate: '#15133a',
+    grateRail: '#4a4890',
+    wall: '#b4261a',
+    wallLight: '#e65a40',
+    wallDark: '#5a1008',
+    lamp: '#ffd34a',
+    lampStyle: 'bulbs',
+    accent: '#e03030',
+    trim: '#ffd34a',
+    trim2: '#3fa9ff'
+  },
+  {
+    floor: '#262a30',
+    floorLine: 'rgba(120, 200, 200, 0.09)',
+    emblem: '#5a2a30',
+    grate: '#1a2a2a',
+    grateRail: '#3a6a6a',
+    wall: '#8a8ad8',
+    wallLight: '#c0c0ff',
+    wallDark: '#3a3a90',
+    lamp: '#4ade80',
+    lampStyle: 'strip',
+    accent: '#c0281c',
+    trim: '#c0c0ff',
+    trim2: '#4ade80'
+  }
 ];
-export const DOME_THEME: StudioTheme = { floorA: '#2a2210', floorB: '#1f1a0c', trim: '#facc15', trim2: '#fb7185', wall: '#4a3a12' };
-
-export const ITEM_GLYPH: Record<ItemId, string> = {
-  cash: '💵',
-  toaster: '🍞',
-  vcr: '📼',
-  car: '🚗',
-  key: '🔑',
-  spread: '🔱',
-  grenade: '🧨',
-  rocket: '🚀',
-  shield: '🛡️',
-  boots: '👟',
-  bomb: '💣',
-  life: '❤️'
+export const DOME_THEME: StudioTheme = {
+  floor: '#2a2410',
+  floorLine: 'rgba(255, 220, 100, 0.09)',
+  emblem: '#4a3c10',
+  grate: '#1e1a0a',
+  grateRail: '#8a7020',
+  wall: '#b8860b',
+  wallLight: '#f0c040',
+  wallDark: '#5a4208',
+  lamp: '#ffffff',
+  lampStyle: 'bulbs',
+  accent: '#e03030',
+  trim: '#f0c040',
+  trim2: '#ffffff'
 };
 
+/** The colour each kind's particles burst in: a clubber bleeds, steel sparks grey. */
 export const ENEMY_COLOR: Record<Enemy['kind'], string> = {
-  grunt: '#5b7cfa',
-  orb: '#22d3ee',
-  mine: '#64748b',
-  shrapnel: '#ef4444',
-  tank: '#84cc16',
-  snake: '#d946ef',
-  mutoid: '#94a3b8',
-  scarface: '#fbbf24',
-  cobra: '#22c55e'
+  grunt: '#d9342b',
+  orb: '#8c80b0',
+  mine: '#9a9aa4',
+  shrapnel: '#9a9aa4',
+  tank: '#9a9aa4',
+  snake: '#38bdf8',
+  mutoid: '#2fa84a',
+  scarface: '#b8b830',
+  cobra: '#c0281c'
 };
 
 /** The proper names on the boss bar; names, so the same in every locale. */
@@ -111,173 +160,238 @@ export const BOSS_NAME: Record<'mutoid' | 'scarface' | 'cobra', string> = {
   cobra: 'COBRA DEATH'
 };
 
-const TILE = 48;
+/** Floor panels are large and faint; the arcade's floor is nearly flat. */
+const PANEL = 96;
+/** How far each door's channel of grating runs onto the floor. */
+const CHANNEL_LEN: Record<(typeof SIDES)[number], number> = { n: 66, s: 66, e: 150, w: 150 };
+const CHANNEL_W = DOOR_W - 14;
 
-/** The baked studio: floor tiles, spotlight pools, walls and their neon trim. */
-export function paintStudio(ctx: CanvasRenderingContext2D, theme: StudioTheme): void {
-  ctx.fillStyle = '#06060b';
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  // Floor tiles.
-  for (let y = 0; y < ARENA.h; y += TILE) {
-    for (let x = 0; x < ARENA.w; x += TILE) {
-      const even = ((x / TILE + y / TILE) & 1) === 0;
-      ctx.fillStyle = even ? theme.floorA : theme.floorB;
-      ctx.fillRect(ARENA.x + x, ARENA.y + y, Math.min(TILE, ARENA.w - x), Math.min(TILE, ARENA.h - y));
-    }
+/** A channel of slatted grating from a door onto the floor, as the arcade's doors ran into the arena. */
+function paintChannel(ctx: CanvasRenderingContext2D, theme: StudioTheme, side: (typeof SIDES)[number], fromWall: number, len: number): void {
+  const c = doorCentre(side);
+  const inward = inwardOf(side);
+  const vertical = inward.x === 0;
+  // Start `fromWall` in from the wall's outer edge (negative reaches into the gap).
+  const sx = c.x + inward.x * (fromWall - WALL);
+  const sy = c.y + inward.y * (fromWall - WALL);
+  const x0 = vertical ? sx - CHANNEL_W / 2 : Math.min(sx, sx + inward.x * len);
+  const y0 = vertical ? Math.min(sy, sy + inward.y * len) : sy - CHANNEL_W / 2;
+  const w = vertical ? CHANNEL_W : len;
+  const h = vertical ? len : CHANNEL_W;
+  ctx.fillStyle = theme.grate;
+  ctx.fillRect(x0, y0, w, h);
+  // Slats across the direction of travel.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  if (vertical) for (let y = y0 + 3; y < y0 + h; y += 6) ctx.fillRect(x0 + 4, y, w - 8, 2);
+  else for (let x = x0 + 3; x < x0 + w; x += 6) ctx.fillRect(x, y0 + 4, 2, h - 8);
+  // Rails along both long edges, with a lit inner lip.
+  ctx.fillStyle = theme.grateRail;
+  if (vertical) {
+    ctx.fillRect(x0, y0, 3, h);
+    ctx.fillRect(x0 + w - 3, y0, 3, h);
+  } else {
+    ctx.fillRect(x0, y0, w, 3);
+    ctx.fillRect(x0, y0 + h - 3, w, 3);
   }
-  // Tile seams.
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
-  ctx.lineWidth = 1;
-  for (let x = TILE; x < ARENA.w; x += TILE) {
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  if (vertical) ctx.fillRect(x0, inward.y > 0 ? y0 + h - 2 : y0, w, 2);
+  else ctx.fillRect(inward.x > 0 ? x0 + w - 2 : x0, y0, 2, h);
+}
+
+/** The octagon emblem in the middle of the floor, with the red chevrons pointing in from its four sides. */
+function paintEmblem(ctx: CanvasRenderingContext2D, theme: StudioTheme): void {
+  const cx = CANVAS_W / 2;
+  const cy = CANVAS_H / 2;
+  const octagon = (r: number) => {
     ctx.beginPath();
-    ctx.moveTo(ARENA.x + x + 0.5, ARENA.y);
-    ctx.lineTo(ARENA.x + x + 0.5, ARENA.y + ARENA.h);
-    ctx.stroke();
-  }
-  for (let y = TILE; y < ARENA.h; y += TILE) {
-    ctx.beginPath();
-    ctx.moveTo(ARENA.x, ARENA.y + y + 0.5);
-    ctx.lineTo(ARENA.x + ARENA.w, ARENA.y + y + 0.5);
-    ctx.stroke();
-  }
-  // Studio lighting: a warm pool in the middle, coloured pools in the corners.
-  const centre = ctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, 40, CANVAS_W / 2, CANVAS_H / 2, 360);
-  centre.addColorStop(0, 'rgba(255, 255, 255, 0.07)');
-  centre.addColorStop(1, 'rgba(0, 0, 0, 0.35)');
-  ctx.fillStyle = centre;
-  ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
-  const corners: [number, number, string][] = [
-    [ARENA.x, ARENA.y, theme.trim],
-    [ARENA.x + ARENA.w, ARENA.y, theme.trim2],
-    [ARENA.x, ARENA.y + ARENA.h, theme.trim2],
-    [ARENA.x + ARENA.w, ARENA.y + ARENA.h, theme.trim]
-  ];
-  for (const [cx, cy, colour] of corners) {
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 190);
-    g.addColorStop(0, `${colour}33`);
-    g.addColorStop(1, `${colour}00`);
-    ctx.fillStyle = g;
-    ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
-  }
-  // Floor markings: a chevron on the floor pointing at each door, the show's
-  // logo ring in the middle, scuffs where the crowds have walked.
-  for (const side of SIDES) {
-    const c = doorCentre(side);
-    const inward = inwardOf(side);
-    for (let i = 0; i < 2; i++) {
-      const px = c.x + inward.x * (60 + i * 22);
-      const py = c.y + inward.y * (60 + i * 22);
-      ctx.strokeStyle = `${theme.trim}${i === 0 ? '55' : '33'}`;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      if (inward.x === 0) {
-        ctx.moveTo(px - 14, py + inward.y * 8);
-        ctx.lineTo(px, py - inward.y * 6);
-        ctx.lineTo(px + 14, py + inward.y * 8);
-      } else {
-        ctx.moveTo(px + inward.x * 8, py - 14);
-        ctx.lineTo(px - inward.x * 6, py);
-        ctx.lineTo(px + inward.x * 8, py + 14);
-      }
-      ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = Math.PI / 8 + (i * Math.PI) / 4;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
-  }
-  ctx.strokeStyle = `${theme.trim}30`;
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(CANVAS_W / 2, CANVAS_H / 2, 70, 0, Math.PI * 2);
+    ctx.closePath();
+  };
+  octagon(62);
+  ctx.fillStyle = theme.emblem;
+  ctx.fill();
+  ctx.strokeStyle = theme.grateRail;
+  ctx.lineWidth = 3;
   ctx.stroke();
-  ctx.strokeStyle = `${theme.trim2}22`;
+  octagon(54);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(CANVAS_W / 2, CANVAS_H / 2, 84, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = `${theme.trim}30`;
-  ctx.font = 'bold 64px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('$', CANVAS_W / 2, CANVAS_H / 2 + 2);
-  for (let i = 0; i < 40; i++) {
-    const sx = ARENA.x + 20 + hash01(i, 1) * (ARENA.w - 40);
-    const sy = ARENA.y + 20 + hash01(i, 2) * (ARENA.h - 40);
-    ctx.fillStyle = `rgba(0, 0, 0, ${0.12 + hash01(i, 3) * 0.12})`;
-    ctx.fillRect(sx, sy, 6 + hash01(i, 4) * 14, 2 + hash01(i, 5) * 3);
+  ctx.fillStyle = theme.accent;
+  for (const [dx, dy] of [
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [1, 0]
+  ]) {
+    const bx = cx + dx * 46;
+    const by = cy + dy * 46;
+    const ax = cx + dx * 22;
+    const ay = cy + dy * 22;
+    ctx.beginPath();
+    ctx.moveTo(bx - dy * 13, by - dx * 13);
+    ctx.lineTo(bx + dy * 13, by + dx * 13);
+    ctx.lineTo(ax, ay);
+    ctx.closePath();
+    ctx.fill();
   }
-  // Walls.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** The steel walls: the band, a bright outer rim, a dark inner lip, panel seams, rivets and red tick marks. */
+function paintWalls(ctx: CanvasRenderingContext2D, theme: StudioTheme): void {
   ctx.fillStyle = theme.wall;
   ctx.fillRect(0, 0, CANVAS_W, WALL);
   ctx.fillRect(0, CANVAS_H - WALL, CANVAS_W, WALL);
   ctx.fillRect(0, 0, WALL, CANVAS_H);
   ctx.fillRect(CANVAS_W - WALL, 0, WALL, CANVAS_H);
-  // Caution hatching on the walls' outer half.
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, CANVAS_W, CANVAS_H);
-  ctx.rect(ARENA.x - 6, ARENA.y - 6, ARENA.w + 12, ARENA.h + 12);
-  ctx.clip('evenodd');
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-  ctx.lineWidth = 4;
-  for (let d = -CANVAS_H; d < CANVAS_W + CANVAS_H; d += 16) {
-    ctx.beginPath();
-    ctx.moveTo(d, 0);
-    ctx.lineTo(d + CANVAS_H, CANVAS_H);
-    ctx.stroke();
+  ctx.fillStyle = theme.wallLight;
+  ctx.fillRect(0, 0, CANVAS_W, 3);
+  ctx.fillRect(0, CANVAS_H - 3, CANVAS_W, 3);
+  ctx.fillRect(0, 0, 3, CANVAS_H);
+  ctx.fillRect(CANVAS_W - 3, 0, 3, CANVAS_H);
+  ctx.fillStyle = theme.wallDark;
+  ctx.fillRect(ARENA.x - 3, ARENA.y - 3, ARENA.w + 6, 3);
+  ctx.fillRect(ARENA.x - 3, ARENA.y + ARENA.h, ARENA.w + 6, 3);
+  ctx.fillRect(ARENA.x - 3, ARENA.y - 3, 3, ARENA.h + 6);
+  ctx.fillRect(ARENA.x + ARENA.w, ARENA.y - 3, 3, ARENA.h + 6);
+  // Panel seams and rivets.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  for (let x = 60; x < CANVAS_W; x += 60) {
+    ctx.fillRect(x, 3, 1, WALL - 6);
+    ctx.fillRect(x, CANVAS_H - WALL + 3, 1, WALL - 6);
   }
-  ctx.restore();
-  // Neon trim along the inner edge of the walls, cut at the doors.
-  ctx.save();
-  ctx.beginPath();
-  for (const side of SIDES) {
-    const r = doorRect(side);
-    ctx.rect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+  for (let y = 60; y < CANVAS_H; y += 60) {
+    ctx.fillRect(3, y, WALL - 6, 1);
+    ctx.fillRect(CANVAS_W - WALL + 3, y, WALL - 6, 1);
   }
-  ctx.rect(0, 0, CANVAS_W, CANVAS_H);
-  ctx.clip('evenodd');
-  ctx.shadowColor = theme.trim;
-  ctx.shadowBlur = 10;
-  ctx.strokeStyle = theme.trim;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(ARENA.x - 1, ARENA.y - 1, ARENA.w + 2, ARENA.h + 2);
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(ARENA.x - 0.5, ARENA.y - 0.5, ARENA.w + 1, ARENA.h + 1);
-  ctx.restore();
-  // The door recesses.
-  for (const side of SIDES) {
-    const r = doorRect(side);
-    ctx.fillStyle = '#050508';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
+  for (let x = 30; x < CANVAS_W; x += 60) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x - 1, 6, 2, 2);
+    ctx.fillRect(x - 1, CANVAS_H - 8, 2, 2);
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(x + 12, 10, 6, 1);
+    ctx.fillRect(x + 12, CANVAS_H - 11, 6, 1);
+  }
+  for (let y = 30; y < CANVAS_H; y += 60) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(6, y - 1, 2, 2);
+    ctx.fillRect(CANVAS_W - 8, y - 1, 2, 2);
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(10, y + 12, 1, 6);
+    ctx.fillRect(CANVAS_W - 11, y + 12, 1, 6);
   }
 }
 
-/**
- * The studio's lighting rig: two spotlights sweeping slowly from the top
- * corners, drawn additively over the floor each frame. Cheap (two gradients)
- * and the one thing on the floor that moves when nothing else does.
- */
-export function drawSpotlights(ctx: CanvasRenderingContext2D, clock: number, theme: StudioTheme): void {
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const beams: [number, number, number, string][] = [
-    [ARENA.x, ARENA.y, Math.PI / 4 + Math.sin(clock * 0.35) * 0.45, theme.trim],
-    [ARENA.x + ARENA.w, ARENA.y, (3 * Math.PI) / 4 + Math.sin(clock * 0.28 + 2) * 0.45, theme.trim2]
-  ];
-  for (const [x, y, a, colour] of beams) {
-    const len = 520;
-    const half = 0.16;
-    const g = ctx.createLinearGradient(x, y, x + Math.cos(a) * len, y + Math.sin(a) * len);
-    g.addColorStop(0, `${colour}26`);
-    g.addColorStop(1, `${colour}00`);
-    ctx.fillStyle = g;
+/** The baked studio: floor, grating channels, emblem, walls and the door gaps. */
+export function paintStudio(ctx: CanvasRenderingContext2D, theme: StudioTheme): void {
+  ctx.fillStyle = theme.floor;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  // Grain, then faint large panels, then the scuffs of a thousand clubbers.
+  for (let i = 0; i < 900; i++) {
+    const sx = ARENA.x + hash01(i, 11) * ARENA.w;
+    const sy = ARENA.y + hash01(i, 12) * ARENA.h;
+    ctx.fillStyle = hash01(i, 13) < 0.5 ? 'rgba(255, 255, 255, 0.035)' : 'rgba(0, 0, 0, 0.12)';
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+  ctx.fillStyle = theme.floorLine;
+  for (let x = ARENA.x + PANEL; x < ARENA.x + ARENA.w; x += PANEL) ctx.fillRect(x, ARENA.y, 1, ARENA.h);
+  for (let y = ARENA.y + PANEL; y < ARENA.y + ARENA.h; y += PANEL) ctx.fillRect(ARENA.x, y, ARENA.w, 1);
+  for (let i = 0; i < 28; i++) {
+    const sx = ARENA.x + 30 + hash01(i, 1) * (ARENA.w - 60);
+    const sy = ARENA.y + 30 + hash01(i, 2) * (ARENA.h - 60);
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.1 + hash01(i, 3) * 0.14})`;
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(a - half) * len, y + Math.sin(a - half) * len);
-    ctx.lineTo(x + Math.cos(a + half) * len, y + Math.sin(a + half) * len);
-    ctx.closePath();
+    ctx.ellipse(sx, sy, 8 + hash01(i, 4) * 22, 3 + hash01(i, 5) * 6, hash01(i, 6) * Math.PI, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.restore();
+  // Six vent grilles on the floor between the channels.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  for (const [fx, fy] of [
+    [0.3, 0.28],
+    [0.7, 0.28],
+    [0.3, 0.72],
+    [0.7, 0.72],
+    [0.12, 0.5],
+    [0.88, 0.5]
+  ]) {
+    const vx = Math.round(ARENA.x + fx * ARENA.w);
+    const vy = Math.round(ARENA.y + fy * ARENA.h);
+    for (let k = -1; k <= 1; k++) ctx.fillRect(vx + k * 4 - 1, vy - 6, 2, 12);
+  }
+  for (const side of SIDES) paintChannel(ctx, theme, side, 0, CHANNEL_LEN[side] + WALL);
+  paintEmblem(ctx, theme);
+  paintWalls(ctx, theme);
+  // The door gaps: the channel runs out through the wall, under a dark lintel.
+  for (const side of SIDES) {
+    const r = doorRect(side);
+    ctx.fillStyle = '#0e0e12';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    paintChannel(ctx, theme, side, 2, WALL - 1);
+  }
+}
+
+/** Where the lamps sit along each wall, skipping the door gaps. */
+function lampSpots(): { x: number; y: number; i: number }[] {
+  const spots: { x: number; y: number; i: number }[] = [];
+  let i = 0;
+  const gapN = doorRect('n');
+  const gapW = doorRect('w');
+  for (let x = 45; x < CANVAS_W - 20; x += 30) {
+    if (x > gapN.x - 6 && x < gapN.x + gapN.w + 6) continue;
+    spots.push({ x, y: WALL / 2 + 2, i: i++ });
+    spots.push({ x, y: CANVAS_H - WALL / 2 - 2, i: i++ });
+  }
+  for (let y = 45; y < CANVAS_H - 20; y += 30) {
+    if (y > gapW.y - 6 && y < gapW.y + gapW.h + 6) continue;
+    spots.push({ x: WALL / 2 - 2, y, i: i++ });
+    spots.push({ x: CANVAS_W - WALL / 2 + 2, y, i: i++ });
+  }
+  return spots;
+}
+const LAMPS = lampSpots();
+
+/**
+ * The lamps on the walls: the one thing on the studio that moves when
+ * nothing else does. Studio 1's steel carries small status LEDs that blink
+ * on their own clocks; studio 2's red caution walls chase yellow bulbs
+ * round the room like the arcade's; studio 3's strip pulses.
+ */
+export function drawWallLamps(ctx: CanvasRenderingContext2D, clock: number, theme: StudioTheme): void {
+  if (theme.lampStyle === 'leds') {
+    for (const s of LAMPS) {
+      if (s.i % 3 !== 0) continue;
+      const on = Math.floor(clock * (1 + (s.i % 4) * 0.5) + s.i) % 2 === 0;
+      ctx.fillStyle = on ? (s.i % 2 ? theme.lamp : '#4ade80') : 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(s.x - 1, s.y - 1, 2, 2);
+    }
+    return;
+  }
+  if (theme.lampStyle === 'bulbs') {
+    const step = Math.floor(clock * 6) % 3;
+    for (const s of LAMPS) {
+      const lit = s.i % 3 === step;
+      ctx.fillStyle = lit ? theme.lamp : 'rgba(0, 0, 0, 0.45)';
+      ctx.fillRect(s.x - 2, s.y - 2, 4, 4);
+      if (lit) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillRect(s.x - 1, s.y - 1, 1, 1);
+      }
+    }
+    return;
+  }
+  const pulse = 0.35 + 0.35 * Math.sin(clock * 2.5);
+  ctx.fillStyle = `rgba(74, 222, 128, ${pulse})`;
+  for (const s of LAMPS) if (s.i % 2 === 0) ctx.fillRect(s.x - 6, s.y, 12, 1);
 }
 
 /** Shadow under every body on the floor. */
@@ -289,8 +403,9 @@ function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number):
 }
 
 /**
- * The doors: red warning bars while enemies pour through them, bright green
- * chevrons pointing out once the room is cleared and that door is an exit.
+ * The doors: a red bar across the gap while the room is still sending
+ * enemies through it, and yellow arrows chasing out through an exit once
+ * the room is cleared, as the arcade's exits lit.
  */
 export function drawDoors(ctx: CanvasRenderingContext2D, run: RunState, clock: number, theme: StudioTheme): void {
   for (const side of SIDES) {
@@ -300,56 +415,45 @@ export function drawDoors(ctx: CanvasRenderingContext2D, run: RunState, clock: n
     const cx = r.x + r.w / 2;
     const cy = r.y + r.h / 2;
     if (open) {
-      const pulse = 0.55 + 0.45 * Math.sin(clock * 6);
-      ctx.strokeStyle = `rgba(74, 222, 128, ${pulse})`;
-      ctx.lineWidth = 3;
-      ctx.shadowColor = '#4ade80';
-      ctx.shadowBlur = 8;
-      // Three chevrons marching outward.
+      const lit = Math.floor(clock * 4) % 2 === 0;
+      ctx.fillStyle = lit ? '#ffd34a' : '#ffffff';
+      // Three chevrons marching outward along the channel and through the gap.
       for (let i = 0; i < 3; i++) {
-        const t = ((clock * 1.5 + i / 3) % 1) * 18 - 9;
-        const px = cx - inward.x * t;
-        const py = cy - inward.y * t;
+        const t = ((clock * 1.4 + i / 3) % 1) * 54;
+        const px = cx + inward.x * (36 - t);
+        const py = cy + inward.y * (36 - t);
         ctx.beginPath();
-        if (side === 'n' || side === 's') {
-          ctx.moveTo(px - 10, py + inward.y * 5);
-          ctx.lineTo(px, py - inward.y * 5);
-          ctx.lineTo(px + 10, py + inward.y * 5);
+        if (inward.x === 0) {
+          ctx.moveTo(px - 12, py + inward.y * 7);
+          ctx.lineTo(px, py - inward.y * 2);
+          ctx.lineTo(px + 12, py + inward.y * 7);
+          ctx.lineTo(px, py + inward.y * 3);
         } else {
-          ctx.moveTo(px + inward.x * 5, py - 10);
-          ctx.lineTo(px - inward.x * 5, py);
-          ctx.lineTo(px + inward.x * 5, py + 10);
+          ctx.moveTo(px + inward.x * 7, py - 12);
+          ctx.lineTo(px - inward.x * 2, py);
+          ctx.lineTo(px + inward.x * 7, py + 12);
+          ctx.lineTo(px + inward.x * 3, py);
         }
-        ctx.stroke();
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.shadowBlur = 0;
     } else {
-      const lit = run.phase === 'room' && run.schedule.length > 0;
-      const glow = lit ? 0.5 + 0.5 * Math.sin(clock * 10 + (side === 'n' ? 0 : side === 'e' ? 1 : side === 's' ? 2 : 3)) : 0.25;
-      ctx.fillStyle = lit ? `rgba(248, 113, 113, ${0.25 + glow * 0.5})` : `${theme.trim}55`;
-      if (side === 'n' || side === 's') ctx.fillRect(r.x + 6, cy - 2, r.w - 12, 4);
-      else ctx.fillRect(cx - 2, r.y + 6, 4, r.h - 12);
+      const live = run.phase === 'room' && run.schedule.length > 0;
+      if (!live) continue;
+      const glow = 0.45 + 0.4 * Math.sin(clock * 8 + (side === 'n' ? 0 : side === 'e' ? 1 : side === 's' ? 2 : 3));
+      ctx.fillStyle = `rgba(224, 48, 48, ${glow})`;
+      if (inward.x === 0) ctx.fillRect(r.x + 4, cy + inward.y * 6 - 1, r.w - 8, 3);
+      else ctx.fillRect(cx + inward.x * 6 - 1, r.y + 4, 3, r.h - 8);
     }
   }
-  // The ON AIR lamp, top left on the wall.
-  const on = Math.floor(clock * 2) % 2 === 0;
-  ctx.fillStyle = on ? '#ef4444' : '#5a1111';
-  ctx.beginPath();
-  ctx.arc(WALL / 2 + 2, WALL / 2, 4, 0, Math.PI * 2);
-  ctx.fill();
-  if (on) {
-    ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 8;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
+  void theme;
 }
 
 /**
  * The contestant: a body chosen by the aim (front for a downward aim, back for
- * an upward one, side for east and west), legs that scissor with the walk, and
- * a two-handed gun turned to the aim with a muzzle flash at its end. The gun
- * passes behind him when he fires upward; a blink while invulnerable, a
+ * an upward one, side for east and west), jeans that scissor with the walk,
+ * and the long grey gun turned to the aim with a muzzle flash at its end. The
+ * gun passes behind him when he fires upward; a blink while invulnerable, a
  * bubble while shielded.
  */
 export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: number, flashT: number): void {
@@ -357,43 +461,47 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
   const p = run.player;
   if (p.invuln > 0 && Math.floor(clock * 14) % 2 === 0 && p.invuln < RESPAWN_INVULN) ctx.globalAlpha = 0.4;
   shadow(ctx, p.x, p.y + 6, p.r);
-  // Legs, scissoring while moving: dark trousers, boots.
+  // Legs, scissoring while moving: blue jeans, dark boots.
   const step = p.moving ? Math.sin(clock * 16) * 4 : 0;
   ctx.fillStyle = '#0b0b12';
-  ctx.fillRect(p.x - 8, p.y + 9 + step, 8, 10);
-  ctx.fillRect(p.x, p.y + 9 - step, 8, 10);
-  ctx.fillStyle = '#1f2937';
-  ctx.fillRect(p.x - 6, p.y + 9 + step, 4, 6);
-  ctx.fillRect(p.x + 2, p.y + 9 - step, 4, 6);
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(p.x - 6, p.y + 15 + step, 4, 3);
-  ctx.fillRect(p.x + 2, p.y + 15 - step, 4, 3);
+  ctx.fillRect(p.x - 8, p.y + 9 + step, 8, 11);
+  ctx.fillRect(p.x, p.y + 9 - step, 8, 11);
+  ctx.fillStyle = '#2a4fc9';
+  ctx.fillRect(p.x - 6, p.y + 9 + step, 4, 7);
+  ctx.fillRect(p.x + 2, p.y + 9 - step, 4, 7);
+  ctx.fillStyle = '#1a1a22';
+  ctx.fillRect(p.x - 6, p.y + 16 + step, 4, 3);
+  ctx.fillRect(p.x + 2, p.y + 16 - step, 4, 3);
   const dir = dirIndex(p.aim);
   const up = dir >= 5;
-  const body = dir === 0 || dir === 4 ? PLAYER_SIDE : up ? PLAYER_BACK : PLAYER_FRONT;
-  const name = dir === 0 || dir === 4 ? 'player-side' : up ? 'player-back' : 'player-front';
+  const side = dir === 0 || dir === 4;
+  const body = side ? PLAYER_SIDE : up ? PLAYER_BACK : PLAYER_FRONT;
+  const name = side ? 'player-side' : up ? 'player-back' : 'player-front';
   const gun = () => {
     const a = Math.atan2(p.aim.y, p.aim.x);
     ctx.save();
-    ctx.translate(Math.round(p.x), Math.round(p.y) + (up ? 2 : 6));
+    ctx.translate(Math.round(p.x), Math.round(p.y) + (up ? 0 : side ? 1 : 5));
     ctx.rotate(a);
+    // A long thin barrel, the arcade's rifle: two hands on it, a dark muzzle.
     ctx.fillStyle = '#0b0b12';
-    ctx.fillRect(2, -5, 24, 10);
-    ctx.fillStyle = '#374151';
-    ctx.fillRect(4, -3, 20, 6);
-    ctx.fillStyle = '#6b7280';
-    ctx.fillRect(14, -2, 12, 4);
+    ctx.fillRect(0, -3, 31, 6);
+    ctx.fillStyle = '#55555e';
+    ctx.fillRect(2, -2, 27, 4);
+    ctx.fillStyle = '#9a9aa4';
+    ctx.fillRect(8, -1, 20, 1);
+    ctx.fillStyle = '#0b0b12';
+    ctx.fillRect(28, -3, 3, 6);
     ctx.fillStyle = SKIN_TONE;
-    ctx.fillRect(4, -5, 5, 10);
-    ctx.fillRect(12, -4, 4, 8);
+    ctx.fillRect(3, -4, 4, 8);
+    ctx.fillRect(12, -3, 4, 6);
     if (flashT > 0) {
-      ctx.fillStyle = '#fef08a';
-      ctx.shadowColor = '#fde047';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#bfefff';
       ctx.shadowBlur = 12;
       const r = 4 + flashT * 40;
-      ctx.fillRect(26, -r / 2, r, r);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(27, -r / 4, r / 2, r / 2);
+      ctx.fillRect(31, -r / 2, r, r);
+      ctx.fillStyle = '#bfefff';
+      ctx.fillRect(32, -r / 4, r / 2, r / 2);
       ctx.shadowBlur = 0;
     }
     ctx.restore();
@@ -404,12 +512,15 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
   ctx.globalAlpha = 1;
   if (p.shield > 0) {
     const fade = p.shield < 2 ? 0.3 + 0.7 * Math.abs(Math.sin(clock * 10)) : 1;
-    ctx.strokeStyle = `rgba(34, 211, 238, ${0.8 * fade})`;
-    ctx.fillStyle = `rgba(34, 211, 238, ${0.15 * fade})`;
+    ctx.strokeStyle = `rgba(74, 222, 128, ${0.85 * fade})`;
+    ctx.fillStyle = `rgba(74, 222, 128, ${0.12 * fade})`;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 24 + Math.sin(clock * 5) * 1.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
     ctx.stroke();
   }
   if (p.boots > 0 && p.moving) {
@@ -458,8 +569,14 @@ export interface Corpse {
 /** Seconds a tumbling body stays on the floor. */
 export const CORPSE_SECONDS = 0.45;
 
+/** Scarface's face for his state: the second stage shows the brain, a wind-up or charge the open mouth. */
+function scarfaceFrame(e: Enemy): 'calm' | 'rage' | 'hurt' {
+  if (bossStage(e)) return 'hurt';
+  return e.phase === SCARFACE_PHASE.windup || e.phase === SCARFACE_PHASE.charge ? 'rage' : 'calm';
+}
+
 /** The main bitmap for an enemy kind, as the live draw and the flash and the tumble all need it. */
-function kindSprite(kind: Corpse['kind'], armed: boolean, kit: number, clock: number, stage = 0): { name: string; def: SpriteDef } {
+function kindSprite(kind: Corpse['kind'], armed: boolean, kit: number, stage = 0, face: 'calm' | 'rage' | 'hurt' = 'calm'): { name: string; def: SpriteDef } {
   switch (kind) {
     case 'grunt':
       return { name: `grunt-${kit}-0`, def: gruntSprite(kit, 0) };
@@ -476,17 +593,17 @@ function kindSprite(kind: Corpse['kind'], armed: boolean, kit: number, clock: nu
     case 'mutoid':
       return stage ? { name: 'mutoid-hurt', def: MUTOID_HURT } : { name: 'mutoid', def: MUTOID };
     case 'scarface':
-      return { name: `scarface${Math.floor(clock) % 2 === 0 ? 0 : 1}`, def: SCARFACE[0] };
+      return { name: `scarface-${face}`, def: SCARFACE[face] };
     case 'cobra':
       return { name: 'cobra-head', def: COBRA_HEAD };
   }
 }
 
-export function drawCorpses(ctx: CanvasRenderingContext2D, corpses: readonly Corpse[], clock: number): void {
+export function drawCorpses(ctx: CanvasRenderingContext2D, corpses: readonly Corpse[]): void {
   for (const c of corpses) {
     const k = Math.min(1, c.t / CORPSE_SECONDS);
     ctx.globalAlpha = 1 - k * k;
-    const { name, def } = kindSprite(c.kind, c.armed, c.kit, clock);
+    const { name, def } = kindSprite(c.kind, c.armed, c.kit, 0, 'hurt');
     drawSprite(ctx, sprite(name, def), c.x, c.y, false, c.spin * c.t * 14);
   }
   ctx.globalAlpha = 1;
@@ -494,7 +611,7 @@ export function drawCorpses(ctx: CanvasRenderingContext2D, corpses: readonly Cor
 
 /** The white flash of an enemy that has just been hit: its own silhouette over it. */
 function drawFlash(ctx: CanvasRenderingContext2D, e: Enemy, clock: number, kit: number): void {
-  const { name, def } = kindSprite(e.kind as Corpse['kind'], e.armed, kit, clock, e.boss ? bossStage(e) : 0);
+  const { name, def } = kindSprite(e.kind as Corpse['kind'], e.armed, kit, e.boss ? bossStage(e) : 0, e.kind === 'scarface' ? scarfaceFrame(e) : 'calm');
   const at = spriteAnchor(e, clock);
   ctx.globalAlpha = 0.85;
   drawSprite(ctx, sprite(`${name}-flash`, flashDef(def)), e.x + at.dx, e.y + at.dy, at.flip, at.angle);
@@ -514,7 +631,7 @@ function spriteAnchor(e: Enemy, clock: number): { dx: number; dy: number; flip: 
     case 'cobra':
       return { dx: 0, dy: 0, flip: false, angle: Math.atan2(e.vy, e.vx) };
     case 'mutoid':
-      return { dx: 0, dy: -14, flip: false, angle: 0 };
+      return { dx: 0, dy: -8, flip: false, angle: 0 };
     case 'scarface':
       return { dx: 0, dy: Math.sin(clock * 3 + e.jitter) * 3, flip: e.vx < 0, angle: 0 };
     default:
@@ -529,38 +646,36 @@ function drawGrunt(ctx: CanvasRenderingContext2D, e: Enemy, clock: number, kit: 
 }
 
 function drawOrb(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
-  const colour = e.armed ? '#f87171' : ENEMY_COLOR.orb;
   // An armed orb about to shoot flares white: the telegraph.
   const charging = e.armed && e.timer <= ORB_CHARGE;
-  const pulse = charging ? 1 : 0.5 + 0.5 * Math.sin(clock * 6 + e.jitter);
   const hover = Math.sin(clock * 4 + e.jitter) * 2;
   shadow(ctx, e.x, e.y + 10, e.r * 0.8);
-  // The glow under the sphere, the one thing about it that is not a block.
-  const g = ctx.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, e.r + 10);
-  g.addColorStop(0, `${colour}${charging ? 'aa' : '55'}`);
-  g.addColorStop(1, `${colour}00`);
-  ctx.fillStyle = g;
-  ctx.fillRect(e.x - e.r - 10, e.y + hover - e.r - 10, e.r * 2 + 20, e.r * 2 + 20);
+  if (charging) {
+    const g = ctx.createRadialGradient(e.x, e.y + hover, 2, e.x, e.y + hover, e.r + 12);
+    g.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
+    g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(e.x - e.r - 12, e.y + hover - e.r - 12, e.r * 2 + 24, e.r * 2 + 24);
+  }
   const state = charging ? 'charging' : e.armed ? 'armed' : 'quiet';
   const frame = Math.floor(clock * 6 + e.jitter) % ORB_FRAMES;
   drawSprite(ctx, sprite(`orb-${state}-${frame}`, orbSprite(state, frame)), e.x, e.y + hover);
-  if (pulse > 0.95) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.fillRect(e.x - e.r - 2, e.y + hover - 1, 2, 2);
-    ctx.fillRect(e.x + e.r, e.y + hover - 1, 2, 2);
-  }
 }
 
 function drawMine(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
   shadow(ctx, e.x, e.y + 4, e.r - 2);
-  drawSprite(ctx, sprite('mine', MINE), e.x, e.y, false, Math.floor(clock * 2 + e.jitter) % 2 ? Math.PI / 4 : 0);
+  drawSprite(ctx, sprite('mine', MINE), e.x, e.y);
+  // The tip lamps blink, faster once the mine has been hit.
   const rate = e.hp < e.maxHp ? 10 : 3;
   if (Math.floor(clock * rate + e.jitter) % 2 === 0) {
-    ctx.fillStyle = '#ef4444';
-    ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 8;
-    ctx.fillRect(e.x - 2, e.y - 2, 4, 4);
-    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    for (const [sx, sy] of [
+      [-9, -9],
+      [9, -9],
+      [-9, 9],
+      [9, 9]
+    ])
+      ctx.fillRect(e.x + sx - 1, e.y + sy - 1, 2, 2);
   }
 }
 
@@ -568,12 +683,11 @@ function drawShrapnel(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): v
   shadow(ctx, e.x, e.y + 8, e.r);
   const frame = Math.floor(clock * 6 + e.jitter) % 2;
   drawSprite(ctx, sprite(`shrapnel${frame}`, SHRAPNEL[frame]), e.x, e.y - 4, e.vx < 0);
-  // The spark on the fuse.
-  ctx.fillStyle = Math.floor(clock * 20) % 2 === 0 ? '#fde047' : '#f97316';
-  ctx.shadowColor = '#fde047';
-  ctx.shadowBlur = 6;
-  ctx.fillRect(e.x + (e.vx < 0 ? 1 : -3), e.y - 22, 3, 3);
-  ctx.shadowBlur = 0;
+  // The core pulses.
+  if (Math.floor(clock * 8) % 2 === 0) {
+    ctx.fillStyle = '#ff7a6a';
+    ctx.fillRect(e.x - 2, e.y - 4, 4, 4);
+  }
 }
 
 function drawTank(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: number): void {
@@ -590,11 +704,11 @@ function drawTank(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: nu
   ctx.translate(Math.round(e.x), Math.round(e.y));
   ctx.rotate(a);
   ctx.fillStyle = '#0b0b12';
-  ctx.fillRect(0, -4, 24, 8);
-  ctx.fillStyle = '#365314';
-  ctx.fillRect(2, -2, 20, 4);
+  ctx.fillRect(4, -4, 22, 8);
+  ctx.fillStyle = '#5a5a66';
+  ctx.fillRect(6, -2, 18, 4);
   ctx.fillStyle = '#0b0b12';
-  ctx.fillRect(20, -3, 5, 6);
+  ctx.fillRect(22, -3, 5, 6);
   ctx.restore();
 }
 
@@ -610,42 +724,20 @@ function drawSnake(ctx: CanvasRenderingContext2D, e: Enemy): void {
   drawSprite(ctx, sprite('snake-head', SNAKE_HEAD), e.x, e.y, false, Math.atan2(e.vy, e.vx));
 }
 
-function drawMutoid(ctx: CanvasRenderingContext2D, e: Enemy, player: Pt, clock: number): void {
-  shadow(ctx, e.x, e.y + 22, e.r * 1.2);
+function drawMutoid(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): void {
+  shadow(ctx, e.x, e.y + 44, e.r * 1.3);
   const stage = bossStage(e);
-  // Tank base: treads rolling, a steel hull.
-  ctx.fillStyle = '#0b0b12';
-  ctx.fillRect(e.x - 48, e.y + 14, 96, 30);
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(e.x - 46, e.y + 16, 92, 26);
-  ctx.fillStyle = '#1f2937';
-  const roll = (clock * 24) % 12;
-  for (let x = -44 + roll; x < 44; x += 12) ctx.fillRect(e.x + x, e.y + 17, 5, 24);
-  ctx.fillStyle = '#4b5563';
-  ctx.fillRect(e.x - 36, e.y + 8, 72, 10);
-  // Arm cannons toward the contestant, slung under the steel shoulders.
-  const a = Math.atan2(player.y - e.y, player.x - e.x);
-  for (const side of [-1, 1]) {
-    ctx.save();
-    ctx.translate(e.x + side * 34, e.y + 2);
-    ctx.rotate(a);
-    ctx.fillStyle = '#0b0b12';
-    ctx.fillRect(-4, -7, 38, 14);
-    ctx.fillStyle = stage ? '#7f1d1d' : '#4b5563';
-    ctx.fillRect(-2, -5, 34, 10);
-    ctx.fillStyle = '#111827';
-    ctx.fillRect(26, -4, 10, 8);
-    ctx.fillStyle = stage ? '#ef4444' : '#facc15';
-    ctx.fillRect(34, -2, 3, 4);
-    ctx.restore();
-  }
-  drawSprite(ctx, stage ? sprite('mutoid-hurt', MUTOID_HURT) : sprite('mutoid', MUTOID), e.x, e.y - 14);
+  drawSprite(ctx, stage ? sprite('mutoid-hurt', MUTOID_HURT) : sprite('mutoid', MUTOID), e.x, e.y - 8);
+  // Tread motion along the base.
+  const roll = Math.floor((clock * 10) % 3) * 3;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  for (let x = -40 + roll; x < 40; x += 9) ctx.fillRect(e.x + x, e.y + 46, 3, 14);
   if (e.t < 1.4) return;
   if (stage) {
-    // Sparks off the damaged torso.
+    // Sparks off the torn torso.
     ctx.fillStyle = Math.floor(clock * 16) % 2 ? '#fde047' : '#f97316';
-    ctx.fillRect(e.x + Math.sin(clock * 9) * 20, e.y - 18 + Math.cos(clock * 7) * 12, 4, 4);
-    ctx.fillRect(e.x - 18 + Math.cos(clock * 11) * 12, e.y - 4 + Math.sin(clock * 13) * 8, 3, 3);
+    ctx.fillRect(e.x + Math.sin(clock * 9) * 20, e.y - 6 + Math.cos(clock * 7) * 12, 4, 4);
+    ctx.fillRect(e.x - 18 + Math.cos(clock * 11) * 12, e.y + 8 + Math.sin(clock * 13) * 8, 3, 3);
   }
 }
 
@@ -653,9 +745,9 @@ function drawScarface(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): v
   const winding = e.phase === SCARFACE_PHASE.windup;
   const shake = winding ? Math.sin(clock * 60) * 4 : 0;
   const hover = Math.sin(clock * 3 + e.jitter) * 3;
-  shadow(ctx, e.x, e.y + 26, e.r);
-  const frame = winding || e.phase === SCARFACE_PHASE.charge ? 1 : 0;
-  drawSprite(ctx, sprite(`scarface${frame}`, SCARFACE[frame]), e.x + shake, e.y + hover, e.vx < 0);
+  shadow(ctx, e.x, e.y + 40, e.r);
+  const face = scarfaceFrame(e);
+  drawSprite(ctx, sprite(`scarface-${face}`, SCARFACE[face]), e.x + shake, e.y + hover, e.vx < 0);
   if (e.phase === SCARFACE_PHASE.charge) {
     // Speed lines behind the charge.
     const speed = Math.hypot(e.vx, e.vy) || 1;
@@ -663,8 +755,8 @@ function drawScarface(ctx: CanvasRenderingContext2D, e: Enemy, clock: number): v
     ctx.lineWidth = 2;
     for (let i = -1; i <= 1; i++) {
       ctx.beginPath();
-      ctx.moveTo(e.x - (e.vx / speed) * 30 - (e.vy / speed) * i * 14, e.y - (e.vy / speed) * 30 + (e.vx / speed) * i * 14);
-      ctx.lineTo(e.x - (e.vx / speed) * 50 - (e.vy / speed) * i * 14, e.y - (e.vy / speed) * 50 + (e.vx / speed) * i * 14);
+      ctx.moveTo(e.x - (e.vx / speed) * 50 - (e.vy / speed) * i * 18, e.y - (e.vy / speed) * 50 + (e.vx / speed) * i * 18);
+      ctx.lineTo(e.x - (e.vx / speed) * 74 - (e.vy / speed) * i * 18, e.y - (e.vy / speed) * 74 + (e.vx / speed) * i * 18);
       ctx.stroke();
     }
   }
@@ -675,10 +767,10 @@ function drawCobra(ctx: CanvasRenderingContext2D, e: Enemy): void {
   const seg = sprite('cobra-seg', COBRA_SEGMENT);
   for (let i = tail.length - 1; i >= 0; i--) {
     const s = tail[i];
-    const prev = i === 0 ? e : tail[i - 1];
-    drawSprite(ctx, seg, s.x, s.y, false, Math.atan2(prev.y - s.y, prev.x - s.x));
+    shadow(ctx, s.x, s.y + 10, 14);
+    drawSprite(ctx, seg, s.x, s.y);
   }
-  shadow(ctx, e.x, e.y + 12, e.r);
+  shadow(ctx, e.x, e.y + 14, e.r);
   drawSprite(ctx, sprite('cobra-head', COBRA_HEAD), e.x, e.y, false, Math.atan2(e.vy, e.vx));
 }
 
@@ -708,7 +800,7 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, run: RunState, clock:
         drawSnake(ctx, e);
         break;
       case 'mutoid':
-        drawMutoid(ctx, e, run.player, clock);
+        drawMutoid(ctx, e, clock);
         break;
       case 'scarface':
         drawScarface(ctx, e, clock);
@@ -721,110 +813,124 @@ export function drawEnemies(ctx: CanvasRenderingContext2D, run: RunState, clock:
   }
 }
 
-const SHOT_COLOR: Record<Shot['weapon'], string> = {
-  machine: '#fde047',
-  spread: '#fb923c',
-  grenade: '#86efac',
-  rocket: '#f472b6'
-};
+/** A four-point sparkle, the arcade's white round. */
+function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, colour: string, core: string): void {
+  const cx = Math.round(x);
+  const cy = Math.round(y);
+  ctx.fillStyle = colour;
+  ctx.fillRect(cx - size, cy - 1, size * 2 + 1, 2);
+  ctx.fillRect(cx - 1, cy - size, 2, size * 2 + 1);
+  ctx.fillStyle = core;
+  ctx.fillRect(cx - 1, cy - 1, 3, 3);
+}
 
-export function drawShots(ctx: CanvasRenderingContext2D, run: RunState): void {
+/**
+ * The contestant's rounds are white sparkles with a fading trail, a spread
+ * shot's a warmer white, a grenade a grey ball on a lob, a rocket a white
+ * streak with a flame. Hostile shots are yellow balls with an orange rim,
+ * the most lethal thing on the floor and the one thing drawn hot.
+ */
+export function drawShots(ctx: CanvasRenderingContext2D, run: RunState, clock: number): void {
   for (const s of run.shots) {
     const speed = Math.hypot(s.vx, s.vy) || 1;
     const ux = s.vx / speed;
     const uy = s.vy / speed;
-    ctx.strokeStyle = SHOT_COLOR[s.weapon];
-    ctx.lineWidth = s.weapon === 'grenade' ? 5 : s.r * 1.6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(s.x - ux * (s.weapon === 'rocket' ? 14 : 8), s.y - uy * (s.weapon === 'rocket' ? 14 : 8));
-    ctx.lineTo(s.x, s.y);
-    ctx.stroke();
     if (s.weapon === 'grenade') {
-      ctx.fillStyle = '#166534';
+      ctx.fillStyle = '#0b0b12';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r + 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#9a9aa4';
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(s.x - 2, s.y - 2, 2, 2);
+      continue;
     }
+    if (s.weapon === 'rocket') {
+      ctx.fillStyle = Math.floor(clock * 30) % 2 ? '#ff7a1a' : '#ffd34a';
+      ctx.fillRect(s.x - ux * 12 - 3, s.y - uy * 12 - 3, 6, 6);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(s.x - ux * 6 - 2, s.y - uy * 6 - 2, 4, 4);
+      sparkle(ctx, s.x, s.y, 5, '#ffffff', '#bfefff');
+      continue;
+    }
+    sparkle(ctx, s.x - ux * 9, s.y - uy * 9, 2, 'rgba(255, 255, 255, 0.45)', 'rgba(255, 255, 255, 0.45)');
+    sparkle(ctx, s.x, s.y, 4, '#ffffff', s.weapon === 'spread' ? '#fff1a8' : '#bfefff');
   }
-  ctx.lineCap = 'butt';
-  // Hostile shots are the most lethal thing on the floor, so they are the one
-  // thing in hot orange with a dark rim: rose on the pink-walled studio read
-  // as decoration.
   for (const f of run.flak) {
     const speed = Math.hypot(f.vx, f.vy) || 1;
-    ctx.strokeStyle = 'rgba(251, 146, 60, 0.5)';
+    ctx.strokeStyle = 'rgba(255, 211, 74, 0.4)';
     ctx.lineWidth = f.r;
     ctx.beginPath();
     ctx.moveTo(f.x - (f.vx / speed) * 12, f.y - (f.vy / speed) * 12);
     ctx.lineTo(f.x, f.y);
     ctx.stroke();
-    ctx.fillStyle = '#1c0a00';
+    ctx.fillStyle = '#7a3000';
     ctx.beginPath();
     ctx.arc(f.x, f.y, f.r + 1.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#ff7a1a';
+    ctx.fillStyle = '#ffd34a';
     ctx.beginPath();
     ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#fff7ed';
+    ctx.fillStyle = '#fff7d0';
     ctx.beginPath();
-    ctx.arc(f.x, f.y, f.r * 0.45, 0, Math.PI * 2);
+    ctx.arc(f.x - f.r * 0.25, f.y - f.r * 0.25, f.r * 0.4, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+/** An item's bitmap at a scale, cached per scale. */
+function itemSprite(item: ItemId, scale: number) {
+  return sprite(`item-${item}-${scale}`, { ...ITEM_SPRITES[item], scale });
 }
 
 export function drawItems(ctx: CanvasRenderingContext2D, items: readonly Item[], clock: number): void {
-  ctx.font = '20px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   for (const it of items) {
     // About to be taken back: blink.
     if (it.ttl < 3 && Math.floor(clock * 6) % 2 === 0) continue;
-    const bob = Math.sin(clock * 4 + it.id) * 2;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.lineDashOffset = -clock * 20;
-    ctx.beginPath();
-    ctx.arc(it.x, it.y, it.r + 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    const bob = Math.sin(clock * 4 + it.id) * 1.5;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
-    ctx.ellipse(it.x, it.y + 10, 9, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(it.x, it.y + 10, 10, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillText(ITEM_GLYPH[it.item], it.x, it.y + bob - 1);
+    drawSprite(ctx, itemSprite(it.item, 2), it.x, it.y + bob - 1);
   }
 }
 
-/** The boss's health bar across the top wall, with its name. */
+/** The boss's health across the top wall as the arcade's red LED bar, with his name in blue. */
 export function drawBossBar(ctx: CanvasRenderingContext2D, run: RunState): void {
   const boss = run.boss;
   if (!boss) return;
-  const w = 280;
+  const w = 300;
   const x = CANVAS_W / 2 - w / 2;
-  const y = 4;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.fillRect(x - 2, y - 1, w + 4, 12);
+  const y = 3;
+  ctx.fillStyle = '#4a4a54';
+  ctx.fillRect(x - 3, y - 1, w + 6, 14);
+  ctx.fillStyle = '#0a0a10';
+  ctx.fillRect(x - 1, y, w + 2, 12);
   const frac = Math.max(0, boss.hp / boss.maxHp);
-  ctx.fillStyle = frac > 0.5 ? '#ef4444' : '#f97316';
-  ctx.fillRect(x, y, w * frac, 10);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 9);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 9px monospace';
+  const segments = 24;
+  const lit = Math.ceil(frac * segments);
+  const segW = (w - 2) / segments;
+  for (let i = 0; i < segments; i++) {
+    ctx.fillStyle = i < lit ? (frac > 0.5 ? '#e03030' : '#ff7a1a') : '#2a1010';
+    ctx.fillRect(x + 1 + i * segW, y + 8, segW - 1, 3);
+  }
+  ctx.fillStyle = '#3fa9ff';
+  ctx.font = 'bold 8px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(BOSS_NAME[boss.kind as keyof typeof BOSS_NAME], CANVAS_W / 2, y + 5.5);
+  ctx.fillText(BOSS_NAME[boss.kind as keyof typeof BOSS_NAME], CANVAS_W / 2, y + 4);
 }
 
 /** The touch sticks, where the thumbs are. */
 export function drawSticks(ctx: CanvasRenderingContext2D, move: Stick | null, fire: Stick | null): void {
   for (const [stick, colour] of [
     [move, '#ffffff'],
-    [fire, '#fb7185']
+    [fire, '#ffd34a']
   ] as const) {
     if (!stick) continue;
     ctx.strokeStyle = `${colour}66`;
@@ -862,12 +968,15 @@ export function drawBanner(ctx: CanvasRenderingContext2D, text: string, life: nu
   ctx.globalAlpha = 1;
 }
 
-/** A room's prizes and gear as glyphs, three at most. */
-export function roomGlyphs(room: RoomDef): string {
-  return room.script.items
-    .slice(0, 3)
-    .map(i => ITEM_GLYPH[i.item])
-    .join('');
+/** A row of a room's first three prizes as small icons, or the skull for a boss room, centred on (x, y). */
+function drawRoomIcons(ctx: CanvasRenderingContext2D, room: RoomDef, x: number, y: number): void {
+  if (room.boss) {
+    drawSprite(ctx, sprite('skull-1', { ...SKULL, scale: 1 }), x, y);
+    return;
+  }
+  const items = room.script.items.slice(0, 3).map(i => i.item);
+  const step = 12;
+  items.forEach((item, i) => drawSprite(ctx, itemSprite(item, 1), x + (i - (items.length - 1) / 2) * step, y));
 }
 
 /**
@@ -878,23 +987,21 @@ export function drawDoorContents(ctx: CanvasRenderingContext2D, run: RunState): 
   if (run.openDoors.length === 0) return;
   const circuit = CIRCUITS[run.circuit];
   const room = circuit.rooms[run.roomKey];
-  ctx.font = '16px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   for (const side of run.openDoors) {
     const next = neighbour(circuit, room, side);
     if (!next) continue;
     const r = doorRect(side);
     const inward = inwardOf(side);
-    const x = r.x + r.w / 2 + inward.x * 34;
-    const y = r.y + r.h / 2 + inward.y * 30;
-    const text = next.boss ? '💀' : roomGlyphs(next);
-    if (!text) continue;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.beginPath();
-    ctx.roundRect(x - 10 * Math.max(1, text.length / 2) - 8, y - 12, 20 * Math.max(1, text.length / 2) + 16, 24, 6);
-    ctx.fill();
-    ctx.fillText(text, x, y + 1);
+    const x = r.x + r.w / 2 + inward.x * 60;
+    const y = r.y + r.h / 2 + inward.y * 58;
+    const n = next.boss ? 1 : Math.min(3, next.script.items.length);
+    if (n === 0) continue;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x - 6 * n - 5, y - 9, 12 * n + 10, 18);
+    ctx.fillStyle = '#4a4a54';
+    ctx.fillRect(x - 6 * n - 5, y - 9, 12 * n + 10, 1);
+    ctx.fillRect(x - 6 * n - 5, y + 8, 12 * n + 10, 1);
+    drawRoomIcons(ctx, next, x, y);
   }
 }
 
@@ -950,25 +1057,26 @@ export function drawMap(ctx: CanvasRenderingContext2D, run: RunState, strings: M
     const c = centreOf(r);
     const visited = run.visited.includes(`${run.circuit}:${r.key}`);
     const current = r.key === run.roomKey;
-    ctx.fillStyle = current ? theme.trim : visited ? '#334155' : r.boss ? '#7f1d1d' : '#1e293b';
-    ctx.beginPath();
-    ctx.roundRect(c.x - 24, c.y - 18, 48, 36, 5);
-    ctx.fill();
-    ctx.strokeStyle = current ? '#fff' : 'rgba(255, 255, 255, 0.35)';
+    // Steel plaques, the current one lit in the studio's accent.
+    ctx.fillStyle = current ? theme.trim : visited ? '#3a3a42' : r.boss ? '#5a1010' : '#1e1e26';
+    ctx.fillRect(c.x - 24, c.y - 18, 48, 36);
+    ctx.strokeStyle = current ? '#ffffff' : '#8e8e98';
     ctx.lineWidth = current ? 2 : 1;
-    ctx.stroke();
+    ctx.strokeRect(c.x - 23.5, c.y - 17.5, 47, 35);
     if (r.boss) {
-      ctx.font = '18px sans-serif';
-      ctx.fillText('💀', c.x, c.y + 1);
+      drawSprite(ctx, sprite('skull-2', SKULL), c.x, c.y);
     } else if (visited && !current) {
-      ctx.font = 'bold 14px monospace';
-      ctx.fillStyle = '#86efac';
-      ctx.fillText('✓', c.x, c.y + 1);
+      ctx.strokeStyle = '#4ade80';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(c.x - 8, c.y);
+      ctx.lineTo(c.x - 2, c.y + 6);
+      ctx.lineTo(c.x + 9, c.y - 7);
+      ctx.stroke();
     } else if (!visited) {
       // What the room holds, so the long way round can be seen to be the
       // rich one: the choice the map exists to offer (`rooms.ts`).
-      ctx.font = '11px sans-serif';
-      ctx.fillText(roomGlyphs(r), c.x, c.y + 1);
+      drawRoomIcons(ctx, r, c.x, c.y);
     }
   }
   // The token slides from the room just left toward where the exit leads.
@@ -980,8 +1088,8 @@ export function drawMap(ctx: CanvasRenderingContext2D, run: RunState, strings: M
   const ease = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
   const tx = a.x + (b.x - a.x) * ease;
   const ty = a.y + (b.y - a.y) * ease;
-  ctx.fillStyle = '#fbbf24';
-  ctx.shadowColor = '#fbbf24';
+  ctx.fillStyle = '#ffd34a';
+  ctx.shadowColor = '#ffd34a';
   ctx.shadowBlur = 12;
   ctx.beginPath();
   ctx.arc(tx, ty, 8, 0, Math.PI * 2);
@@ -995,8 +1103,8 @@ export function drawDomeHud(ctx: CanvasRenderingContext2D, run: RunState, string
   ctx.font = 'bold 22px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#facc15';
-  ctx.shadowColor = '#facc15';
+  ctx.fillStyle = '#f0c040';
+  ctx.shadowColor = '#f0c040';
   ctx.shadowBlur = 14;
   ctx.fillText(`${strings.dome}  ${left.toFixed(1)}`, CANVAS_W / 2, ARENA.y + 22);
   ctx.shadowBlur = 0;

@@ -67,6 +67,7 @@ import {
 import { GAME_KEYS, composeInput, readGamepad, stickVector, STICK_RANGE } from '../../src/games/primetime/input';
 import { seededRandom } from './seeded-random';
 import { TICK, competent, idle, playRun, turret } from './primetime-policies';
+import { ALL_SPRITES, GRUNT_KITS, validateSprite } from '../../src/games/primetime/sprites';
 
 const rng = () => seededRandom(7);
 
@@ -967,3 +968,21 @@ describe('playing PRIME TIME', () => {
 });
 
 export type { Side };
+
+describe('sprites', () => {
+  it('every bitmap has rows of one width and a colour for every letter', () => {
+    // sprite() runs the same check before drawing, but only on a page: this
+    // is what turns a slipped pixel in sprites.ts into a failing test.
+    expect(Object.keys(ALL_SPRITES).length).toBeGreaterThan(40);
+    for (const [name, def] of Object.entries(ALL_SPRITES)) {
+      expect(() => validateSprite(name, def)).not.toThrow();
+      expect(def.scale).toBeGreaterThanOrEqual(1);
+    }
+    expect(GRUNT_KITS.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('refuses a sheared row and an unnamed colour', () => {
+    expect(() => validateSprite('bad', { scale: 2, palette: { k: '#000' }, rows: ['kk', 'k'] })).toThrow(/2 wide|1 wide/);
+    expect(() => validateSprite('bad', { scale: 2, palette: { k: '#000' }, rows: ['kz'] })).toThrow(/no colour for "z"/);
+  });
+});

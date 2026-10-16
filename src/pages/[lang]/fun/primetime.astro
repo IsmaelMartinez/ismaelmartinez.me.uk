@@ -107,7 +107,7 @@ const t = useTranslations(lang);
               <p class="final-stats">
                 {t('fun.primetime.finalScore')}: <strong id="final-score">$0</strong>
               </p>
-              <HighScoreTable gameId="primetime" lang={lang} accent="#ec4899" />
+              <HighScoreTable gameId="primetime" lang={lang} accent="#3fa9ff" />
               <button id="again-btn" class="btn btn-primary btn-large">
                 {t('fun.primetime.playAgain')}
               </button>
@@ -146,35 +146,76 @@ const t = useTranslations(lang);
 
   @keyframes onAir {
     0%, 100% { filter: drop-shadow(0 0 0 transparent); }
-    50% { filter: drop-shadow(0 0 8px #ec4899); }
+    50% { filter: drop-shadow(0 0 8px #e03030); }
+  }
+
+  /* The readouts are the arcade's: blue LED digits on black inside a riveted
+     steel frame, with a red segment bar under each, the way Smash TV's score
+     boxes sat in its top wall. */
+  .scores {
+    gap: var(--space-sm);
+  }
+
+  .score-item {
+    min-width: 5.5rem;
+    padding: 0.2rem 0.5rem 0.35rem;
+    background: #0a0a10;
+    border: 2px solid #8e8e98;
+    border-top-color: #c6c6ce;
+    border-left-color: #c6c6ce;
+    box-shadow: inset 0 0 0 1px #2a2a30, 0 1px 0 #4a4a54;
+    position: relative;
+  }
+
+  .score-item::after {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.15rem;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, #e03030 0 6px, transparent 6px 8px);
+  }
+
+  .score-label {
+    color: #8e8e98;
+    font-size: 0.6rem;
   }
 
   .score-value {
-    color: #ec4899;
-  }
-
-  .score-value.cash {
-    color: #facc15;
+    display: block;
+    color: #3fa9ff;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 1.25rem;
+    line-height: 1.4rem;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 6px rgba(63, 169, 255, 0.7);
     font-variant-numeric: tabular-nums;
   }
 
+  .score-value.cash {
+    color: #3fa9ff;
+  }
+
   .score-value.lives {
-    color: #f87171;
+    color: #3fa9ff;
   }
 
   .score-value.keys {
-    color: #fbbf24;
+    color: #ffd34a;
+    text-shadow: 0 0 6px rgba(255, 211, 74, 0.7);
   }
 
   .score-value.weapon {
-    color: #22d3ee;
-    font-size: 1rem;
-    line-height: 1.35rem;
+    color: #ff4fd8;
+    text-shadow: 0 0 6px rgba(255, 79, 216, 0.7);
+    font-size: 0.85rem;
+    line-height: 1.4rem;
     text-transform: uppercase;
   }
 
   .score-value.studio {
-    color: #a855f7;
+    color: #3fa9ff;
   }
 
   #game-canvas {
@@ -199,7 +240,9 @@ const t = useTranslations(lang);
 
   .overlay-content h2 {
     margin: 0 0 var(--space-xs);
-    color: #ec4899;
+    color: #3fa9ff;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    text-shadow: 0 0 10px rgba(63, 169, 255, 0.6);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -210,7 +253,7 @@ const t = useTranslations(lang);
   }
 
   .overlay-content .tagline {
-    color: #facc15;
+    color: #ff4fd8;
     font-weight: 600;
   }
 
@@ -224,7 +267,7 @@ const t = useTranslations(lang);
   }
 
   .final-stats strong {
-    color: #facc15;
+    color: #3fa9ff;
   }
 
   @media (max-width: 600px) {
@@ -234,12 +277,16 @@ const t = useTranslations(lang);
       gap: var(--space-sm) var(--space-md);
     }
 
+    .score-item {
+      min-width: 4.4rem;
+    }
+
     .score-value {
-      font-size: 1.1rem;
+      font-size: 1rem;
     }
 
     .score-value.weapon {
-      font-size: 0.85rem;
+      font-size: 0.7rem;
     }
   }
 </style>

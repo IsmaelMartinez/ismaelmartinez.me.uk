@@ -319,7 +319,7 @@ describe('PRIME TIME through the page', () => {
     // The clear waits for the boss's last shots to leave the floor.
     advance(4);
     expect(run().phase).toBe('cleared');
-    const played = mockAudio.playStinger.mock.calls.map(c => c[0]);
+    const played = mockAudio.playStinger.mock.calls.map(c => (c as unknown[])[0]);
     expect(played).toContain('bossDown');
     expect(played).not.toContain('roomClear');
     // An extra life has its own phrase.

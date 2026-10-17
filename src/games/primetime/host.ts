@@ -19,6 +19,20 @@
  * decision is the pure `hostDecision`, which the tests exercise with a fake
  * speaker; the real one is `browserSpeaker`, null wherever the API is missing
  * (jsdom included), and the host is then silent and never throws.
+ *
+ * Three details of the Web Speech API shape the bookkeeping (PR #464's
+ * review). A line is "sounding" from the moment it is handed over until its
+ * own end callback fires, not while `speechSynthesis.speaking` reads true:
+ * an utterance sits queued before that flag rises, and polling it let a
+ * catchphrase cut the boss warning before it had begun. Each line carries a
+ * token so the late end of a line that was cut cannot clear the one that cut
+ * it, and a line whose end never arrives is given up after `MAX_LINE_MS`.
+ * `cancel()` empties the queue but leaves the synthesizer's pause state
+ * alone, and that state is shared by the whole page, so wherever the host
+ * cuts a line while paused it resumes the synthesizer too, or the next
+ * cabinet would queue lines into silence. And the effects button only
+ * touches WebAudio, so `refresh()` is called from its click and cuts what is
+ * sounding when the toggle has just muted.
  */
 import type { GameAudio } from '../engine';
 import type { HostLine } from './run';
@@ -52,20 +66,25 @@ export interface VoiceSettings {
 
 /** What the host speaks through: the browser's synthesis, or a test's fake. */
 export interface Speaker {
-  speak(text: string, voice: VoiceSettings): void;
+  /** Say `text`; call `onDone` once when it has ended, errored or been cancelled. */
+  speak(text: string, voice: VoiceSettings, onDone: () => void): void;
   cancel(): void;
   pause(): void;
   resume(): void;
-  speaking(): boolean;
 }
 
 export interface Host {
   /** Say a line, subject to the mute and to what is already being said. */
   call(line: HostLine): void;
   setPaused(on: boolean): void;
+  /** Re-read the effects mute: cuts what is sounding when it has just muted. */
+  refresh(): void;
   /** Cut whatever is sounding; the page is going away. */
   dispose(): void;
 }
+
+/** A line whose end callback never arrives is given up after this long. */
+export const MAX_LINE_MS = 6000;
 
 /** Whether `incoming` is spoken over `current` (null when nothing is sounding) or dropped. */
 export function hostDecision(current: HostLine | null, incoming: HostLine): 'speak' | 'drop' {
@@ -79,11 +98,13 @@ export function browserSpeaker(): Speaker | null {
   const synth = window.speechSynthesis;
   if (!synth) return null;
   return {
-    speak(text, voice) {
+    speak(text, voice, onDone) {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = voice.lang;
       u.rate = voice.rate;
       u.pitch = voice.pitch;
+      u.onend = onDone;
+      u.onerror = onDone;
       // The voice list fills asynchronously in some browsers; when it has a
       // voice in the page's language, use it, else the utterance's `lang`
       // lets the browser pick.
@@ -93,8 +114,7 @@ export function browserSpeaker(): Speaker | null {
     },
     cancel: () => synth.cancel(),
     pause: () => synth.pause(),
-    resume: () => synth.resume(),
-    speaking: () => synth.speaking
+    resume: () => synth.resume()
   };
 }
 
@@ -102,10 +122,29 @@ export function createHost(
   audio: Pick<GameAudio, 'isSfxMuted'>,
   lines: Readonly<Record<HostLine, string>>,
   lang: string,
-  speaker: Speaker | null = browserSpeaker()
+  speaker: Speaker | null = browserSpeaker(),
+  now: () => number = () => Date.now()
 ): Host {
   let current: HostLine | null = null;
-  const sounding = (): HostLine | null => (current !== null && speaker?.speaking() ? current : (current = null));
+  let token = 0;
+  let startedAt = 0;
+  let paused = false;
+
+  const sounding = (): HostLine | null => {
+    if (current !== null && now() - startedAt > MAX_LINE_MS) current = null;
+    return current;
+  };
+
+  /** Cut the line; a paused synthesizer is resumed so the cut lands and the next page is not left mute. */
+  function cut(): void {
+    if (!speaker) return;
+    speaker.cancel();
+    if (paused) {
+      speaker.resume();
+      paused = false;
+    }
+    current = null;
+  }
 
   return {
     call(line) {
@@ -115,17 +154,29 @@ export function createHost(
       if (hostDecision(sounding(), line) === 'drop') return;
       speaker.cancel();
       const d = DELIVERY[line];
-      speaker.speak(text, { lang, rate: d.rate, pitch: d.pitch });
+      const mine = ++token;
       current = line;
+      startedAt = now();
+      speaker.speak(text, { lang, rate: d.rate, pitch: d.pitch }, () => {
+        if (token === mine) current = null;
+      });
     },
     setPaused(on) {
       if (!speaker) return;
-      if (on) speaker.pause();
-      else speaker.resume();
+      if (on) {
+        if (!paused) speaker.pause();
+        paused = true;
+      } else if (audio.isSfxMuted()) {
+        // Muted while paused: the line must not come back with the game.
+        cut();
+      } else {
+        if (paused) speaker.resume();
+        paused = false;
+      }
     },
-    dispose() {
-      speaker?.cancel();
-      current = null;
-    }
+    refresh() {
+      if (audio.isSfxMuted()) cut();
+    },
+    dispose: cut
   };
 }

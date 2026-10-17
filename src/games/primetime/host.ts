@@ -129,6 +129,8 @@ export function createHost(
   let token = 0;
   let startedAt = 0;
   let paused = false;
+  /** The clock when the pause began; the give-up timer does not run while paused. */
+  let pausedAt = 0;
 
   const sounding = (): HostLine | null => {
     if (current !== null && now() - startedAt > MAX_LINE_MS) current = null;
@@ -164,13 +166,20 @@ export function createHost(
     setPaused(on) {
       if (!speaker) return;
       if (on) {
-        if (!paused) speaker.pause();
+        if (!paused) {
+          speaker.pause();
+          pausedAt = now();
+        }
         paused = true;
       } else if (audio.isSfxMuted()) {
         // Muted while paused: the line must not come back with the game.
         cut();
       } else {
-        if (paused) speaker.resume();
+        if (paused) {
+          speaker.resume();
+          // The line was not sounding while paused, so that span does not count against it.
+          startedAt += now() - pausedAt;
+        }
         paused = false;
       }
     },

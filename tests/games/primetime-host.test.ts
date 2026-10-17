@@ -132,6 +132,23 @@ describe('the host through a speaker', () => {
     expect(said(speaker)).toEqual(["GOOD LUCK. YOU'LL NEED IT.", 'BIG MONEY!']);
   });
 
+  it('does not count time spent paused against a line', () => {
+    const speaker = fakeSpeaker();
+    let t = 0;
+    const host = createHost(unmuted, LINES, 'en', speaker, () => t);
+    host.call('goodLuck');
+    t += 1000;
+    host.setPaused(true);
+    t += MAX_LINE_MS * 2;
+    host.setPaused(false);
+    // The warning had sounded for a second before the pause: it still holds the floor.
+    host.call('bigMoney');
+    expect(speaker.spoken).toHaveLength(1);
+    t += MAX_LINE_MS;
+    host.call('bigMoney');
+    expect(said(speaker)).toEqual(["GOOD LUCK. YOU'LL NEED IT.", 'BIG MONEY!']);
+  });
+
   it('says nothing while effects are muted, and nothing for a line the page did not give it', () => {
     const speaker = fakeSpeaker();
     let muted = true;

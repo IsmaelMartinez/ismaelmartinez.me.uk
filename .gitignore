@@ -36,3 +36,6 @@ npm-debug.log*
 
 # Arcade jukebox renders (scripts/render-music.js)
 /music-renders/
+
+# Piper voices scripts/primetime-host-voice.mts downloads on first run
+/scripts/.piper-voices/

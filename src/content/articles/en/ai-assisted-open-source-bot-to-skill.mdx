@@ -8,7 +8,7 @@ draft: true
 
 ## The Bot I Built and Then Took Apart
 
-In [the first article](/en/articles/ai-assisted-open-source-maintenance) I mentioned in passing a bot I built and later retired. This is its story. I put it together to help me triage teams-for-linux issues. It ended up running serverless on Google Cloud, with embeddings over the issue history and the documentation, and for a few months it did more or less what I asked of it. Then I took most of it apart. The interesting part wasn't building it, it was deciding what to remove.
+In [the first article](/en/articles/ai-assisted-open-source-maintenance) I mentioned in passing [a bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) I built and later retired. This is its story. I put it together to help me triage teams-for-linux issues. It ended up running serverless on Google Cloud, with embeddings over the issue history and the documentation, and for a few months it did more or less what I asked of it. Then I took most of it apart. The interesting part wasn't building it, it was deciding what to remove.
 
 ## What It Grew Into
 
@@ -46,7 +46,7 @@ The skill doesn't need the shadow repos, because I call it when I want to. Maybe
 
 Of all that apparatus, the one thing that proved it earned its place was the embeddings. Having the issue history vectorised and linked really does help find related issues that would otherwise slip past me. That's the piece I'm keeping.
 
-Right now I'm in the middle of moving those embeddings out of the repository and into something more local, with the config or information inside teams-for-linux itself, driven from the skill. Will it hold? I don't know. Only time will tell.
+The plan is to move those embeddings out of the bot and into teams-for-linux itself, as a small committed index the skill reads directly and a CI job refreshes, with no server or database behind it. Even that is a bridge: in May 2026 GitHub shipped native semantic issue search in Copilot Chat, which is the same capability with no infrastructure on my side, and the day it is reachable from an API the index goes too. Will it hold? I don't know. Only time will tell.
 
 ## Closing Thought
 

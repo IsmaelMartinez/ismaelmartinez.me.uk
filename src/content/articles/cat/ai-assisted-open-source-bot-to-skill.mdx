@@ -8,7 +8,7 @@ draft: true
 
 ## El bot que vaig construir i després vaig desmuntar
 
-A [el primer article](/cat/articles/ai-assisted-open-source-maintenance) vaig esmentar de passada un bot que vaig construir i després vaig retirar. Aquesta és la seva història. El vaig muntar per ajudar-me a triar les issues de teams-for-linux. Va acabar corrent en serverless a Google Cloud, amb embeddings sobre l'historial d'issues i la documentació, i durant uns mesos va fer més o menys el que li demanava. Després en vaig desmuntar gairebé tot. La part interessant no va ser construir-lo, va ser decidir què treure.
+A [el primer article](/cat/articles/ai-assisted-open-source-maintenance) vaig esmentar de passada [un bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) que vaig construir i després vaig retirar. Aquesta és la seva història. El vaig muntar per ajudar-me a triar les issues de teams-for-linux. Va acabar corrent en serverless a Google Cloud, amb embeddings sobre l'historial d'issues i la documentació, i durant uns mesos va fer més o menys el que li demanava. Després en vaig desmuntar gairebé tot. La part interessant no va ser construir-lo, va ser decidir què treure.
 
 ## El que va arribar a ser
 
@@ -46,7 +46,7 @@ El skill no necessita els shadow repos, perquè el crido jo quan vull. Potser al
 
 De tot aquell aparell, l'única cosa que va demostrar guanyar-se el seu lloc van ser els embeddings. Tenir l'historial d'issues vectoritzat i enllaçat sí que ajuda a trobar issues relacionades que d'altra manera se m'escaparien. Aquesta és la peça que conservo.
 
-Ara estic en la transició de treure aquests embeddings del repositori i moure'ls a una cosa més local, amb la configuració o la informació dins del mateix teams-for-linux, conduït des del skill. Aguantarà? No ho sé. Això només es veu amb el temps.
+El pla és treure aquests embeddings del bot i portar-los al mateix teams-for-linux, com un índex petit i versionat que el skill llegeix directament i que una feina de CI refresca, sense servidor ni base de dades al darrere. I fins i tot això és un pont: el maig del 2026 GitHub va llançar cerca semàntica nativa d'issues a Copilot Chat, que és la mateixa capacitat sense infraestructura per part meva, i el dia que es pugui cridar des d'una API l'índex també se'n va. Aguantarà? No ho sé. Això només es veu amb el temps.
 
 ## Reflexió final
 

@@ -8,7 +8,7 @@ draft: true
 
 ## El bot que construí y luego desmonté
 
-En [el primer artículo](/es/articles/ai-assisted-open-source-maintenance) mencioné de pasada un bot que construí y luego retiré. Esta es su historia. Lo monté para ayudarme a triar los issues de teams-for-linux. Acabó corriendo en serverless en Google Cloud, con embeddings sobre el historial de issues y la documentación, y durante unos meses hizo más o menos lo que le pedí. Después desmonté casi todo. La parte interesante no fue construirlo, fue decidir qué quitar.
+En [el primer artículo](/es/articles/ai-assisted-open-source-maintenance) mencioné de pasada [un bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) que construí y luego retiré. Esta es su historia. Lo monté para ayudarme a triar los issues de teams-for-linux. Acabó corriendo en serverless en Google Cloud, con embeddings sobre el historial de issues y la documentación, y durante unos meses hizo más o menos lo que le pedí. Después desmonté casi todo. La parte interesante no fue construirlo, fue decidir qué quitar.
 
 ## Lo que llegó a ser
 
@@ -46,7 +46,7 @@ El skill no necesita los shadow repos, porque lo llamo yo cuando quiero. Quizá 
 
 De todo aquel aparato, lo único que demostró ganarse su sitio fueron los embeddings. Tener el historial de issues vectorizado y enlazado sí ayuda a encontrar issues relacionados que de otra forma se me escaparían. Esa es la pieza que conservo.
 
-Ahora estoy en la transición de sacar esos embeddings del repositorio y moverlos a algo más local, con la configuración o la información dentro del propio teams-for-linux, conducido desde el skill. ¿Aguantará? No lo sé. Eso solo se ve con el tiempo.
+El plan es sacar esos embeddings del bot y llevarlos al propio teams-for-linux, como un índice pequeño y versionado que el skill lee directamente y que un job de CI refresca, sin servidor ni base de datos detrás. Y hasta eso es un puente: en mayo de 2026 GitHub lanzó búsqueda semántica nativa de issues en Copilot Chat, que es la misma capacidad sin infraestructura por mi parte, y el día que se pueda llamar desde una API el índice también se va. ¿Aguantará? No lo sé. Eso solo se ve con el tiempo.
 
 ## Reflexión final
 

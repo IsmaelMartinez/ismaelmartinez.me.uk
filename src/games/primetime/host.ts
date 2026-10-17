@@ -126,6 +126,8 @@ export function sampleSpeaker(
   const bytes = new Map<HostLine, Promise<ArrayBuffer | null>>();
   const decoded = new Map<HostLine, AudioBuffer>();
   let playing: AudioBufferSourceNode | null = null;
+  /** The end callback of the line in hand, loading or sounding; a cut completes it. */
+  let pending: (() => void) | null = null;
   let token = 0;
 
   const load = (line: HostLine): Promise<ArrayBuffer | null> => {
@@ -146,8 +148,15 @@ export function sampleSpeaker(
   };
   for (const line of HOST_LINES) void load(line);
 
+  /**
+   * Cut the line in hand and complete it: a cut line, sounding or still
+   * loading, releases its priority at once rather than holding the floor until
+   * `MAX_LINE_MS` runs out on a line nothing is playing.
+   */
   function cut(): void {
     token++;
+    const done = pending;
+    pending = null;
     if (playing) {
       const src = playing;
       playing = null;
@@ -158,6 +167,7 @@ export function sampleSpeaker(
         // Already ended.
       }
     }
+    done?.();
   }
 
   return {
@@ -169,6 +179,7 @@ export function sampleSpeaker(
         onDone();
         return;
       }
+      pending = onDone;
       void (async () => {
         let buffer = decoded.get(u.line) ?? null;
         if (!buffer) {
@@ -183,8 +194,9 @@ export function sampleSpeaker(
             }
           }
         }
-        if (mine !== token) return; // Cut or replaced while loading: the newer line owns the floor.
+        if (mine !== token) return; // Cut or replaced while loading: the cut already completed this line.
         if (!buffer) {
+          pending = null;
           onDone();
           return;
         }
@@ -196,6 +208,7 @@ export function sampleSpeaker(
         gain.connect(bus.out);
         src.onended = () => {
           if (playing === src) playing = null;
+          if (pending === onDone) pending = null;
           onDone();
         };
         playing = src;

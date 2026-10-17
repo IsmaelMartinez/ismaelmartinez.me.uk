@@ -93,6 +93,10 @@ function render(model: string, text: string, rate: number, pitch: number, out: s
   // then the tempo is restored so the drop costs no time.
   const factor = 0.86 + 0.1 * pitch;
   const filters = [
+    // The voices do not share a sample rate (the Catalan one is 16 kHz), and
+    // `asetrate` relabels samples rather than converting them, so everything
+    // is brought to RATE first or a 16 kHz voice plays a quarter fast and sharp.
+    `aresample=${RATE}`,
     `asetrate=${RATE}*${factor.toFixed(4)}`,
     `aresample=${RATE}`,
     `atempo=${(1 / factor).toFixed(4)}`,

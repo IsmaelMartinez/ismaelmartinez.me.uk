@@ -293,19 +293,38 @@ describe('the sample player', () => {
     expect(sources).toHaveLength(2);
   });
 
-  it('stops the sounding line on cancel and on pause, and a line cut while loading never plays', async () => {
+  it('stops the sounding line on cancel and on pause, completing it, and a line cut while loading completes without playing', async () => {
     const { bus, sources } = fakeBus();
     const s = sampleSpeaker({ effectsBus: () => bus }, 'ca', okFetch());
-    s.speak(u('goodLuck'), vi.fn());
+    const first = vi.fn();
+    s.speak(u('goodLuck'), first);
     await flush();
     s.pause();
     expect(sources[0].stopped).toBe(true);
+    expect(first).toHaveBeenCalledTimes(1);
     const late = vi.fn();
     s.speak(u('newCar'), late);
     s.cancel();
+    expect(late).toHaveBeenCalledTimes(1);
     await flush();
     expect(sources).toHaveLength(1);
-    expect(late).not.toHaveBeenCalled();
+    expect(late).toHaveBeenCalledTimes(1);
+  });
+
+  it('through the host, a paused boss warning gives the floor back on resume', async () => {
+    const { bus, sources } = fakeBus();
+    const audio = { isSfxMuted: () => false, effectsBus: () => bus };
+    const host = createHost(audio, LINES, 'ca', sampleSpeaker(audio, 'ca', okFetch()));
+    host.call('goodLuck');
+    await flush();
+    expect(sources).toHaveLength(1);
+    host.setPaused(true);
+    host.setPaused(false);
+    // The pause cut the warning; nothing is sounding, so a catchphrase goes out at once.
+    host.call('bigMoney');
+    await flush();
+    expect(sources).toHaveLength(2);
+    expect(sources[1].started).toBe(true);
   });
 
   it('ends a line at once, without a sound, when the file is missing, fails to decode, or there is no audio', async () => {

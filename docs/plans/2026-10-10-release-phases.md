@@ -39,7 +39,7 @@ keep running for cabinets the public build leaves out.
 | Relaunch | redesign, terminal, article 1 of the AI-Assisted Open Source series | 0 |
 | ~~Wave 1~~ | ~~Tank Duel, Snake, Cascade~~ | ~~3~~ |
 | ~~Wave 2~~ | ~~Microcity, CALCIO '90, PRIME TIME~~ | ~~6~~ |
-| Wave 3 | Critter Rescue, Line Hold | 8 |
+| ~~Wave 3~~ | ~~Critter Rescue, Line Hold~~ | ~~8~~ |
 
 The series has four parts, published weekly by flipping `draft: false` in all
 three locales and setting `publishedDate` to the publish date (the home page and
@@ -69,3 +69,6 @@ either for a later wave is the three edits recorded in CLAUDE.md plus a bump of
   (`docs/plans/2026-10-16-prime-time-arena-shooter-plan.md`).
 - 2026-10-16: waves 1 and 2 shipped together, `RELEASED = 6`; PRIME TIME wears
   the "New" ribbon.
+- 2026-10-17: wave 3 shipped, `RELEASED = 8`: the whole chain, which is every
+  cabinet the public floor carried before the relaunch plus PRIME TIME, the one
+  cabinet that keeps the "New" ribbon.

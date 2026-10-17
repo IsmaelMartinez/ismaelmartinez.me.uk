@@ -1,0 +1,191 @@
+/**
+ * PRIME TIME's host: the presenter's calls, spoken.
+ *
+ * The run already announces the show in text (`host` events, drawn as the
+ * banner), and this module gives those lines a voice. There is no legal
+ * source for the arcade's samples and a WebAudio "voice" is not intelligible,
+ * so the host speaks through the browser's own speech synthesis, the one
+ * voice a cabinet can have without shipping audio files. It is not WebAudio,
+ * so nothing here goes through `effectsBus()`: the module reads the effects
+ * toggle itself (`isSfxMuted()`) before every line, pauses with the game, and
+ * is cancelled on the page swap, so a line never outlives the cabinet.
+ *
+ * The lines come in from the page, already localized through `useTranslations`
+ * like every other string, and are spoken in the page's language. What this
+ * module decides on its own is delivery (`DELIVERY`): a game-show announcer
+ * sits low and quick, a boss warning slows down, and every line carries a
+ * priority so a room-clear catchphrase never cuts the boss warning or the car,
+ * while anything at least as important as what is sounding cuts in. The
+ * decision is the pure `hostDecision`, which the tests exercise with a fake
+ * speaker; the real one is `browserSpeaker`, null wherever the API is missing
+ * (jsdom included), and the host is then silent and never throws.
+ *
+ * Three details of the Web Speech API shape the bookkeeping (PR #464's
+ * review). A line is "sounding" from the moment it is handed over until its
+ * own end callback fires, not while `speechSynthesis.speaking` reads true:
+ * an utterance sits queued before that flag rises, and polling it let a
+ * catchphrase cut the boss warning before it had begun. Each line carries a
+ * token so the late end of a line that was cut cannot clear the one that cut
+ * it, and a line whose end never arrives is given up after `MAX_LINE_MS`.
+ * `cancel()` empties the queue but leaves the synthesizer's pause state
+ * alone, and that state is shared by the whole page, so wherever the host
+ * cuts a line while paused it resumes the synthesizer too, or the next
+ * cabinet would queue lines into silence. And the effects button only
+ * touches WebAudio, so `refresh()` is called from its click and cuts what is
+ * sounding when the toggle has just muted.
+ */
+import type { GameAudio } from '../engine';
+import type { HostLine } from './run';
+
+export interface Delivery {
+  /** Speech rate, 1 being the voice's own pace. */
+  rate: number;
+  /** Speech pitch, 1 being the voice's own; lower is the announcer's chest voice. */
+  pitch: number;
+  /** A line cuts in on anything of equal or lower priority and is dropped under anything higher. */
+  priority: number;
+}
+
+export const DELIVERY: Record<HostLine, Delivery> = {
+  welcome: { rate: 1.05, pitch: 0.8, priority: 1 },
+  bigMoney: { rate: 1.15, pitch: 0.8, priority: 1 },
+  bigPrizes: { rate: 1.15, pitch: 0.8, priority: 1 },
+  loveIt: { rate: 1.1, pitch: 0.85, priority: 1 },
+  carnage: { rate: 1.05, pitch: 0.7, priority: 2 },
+  extraLife: { rate: 1.1, pitch: 0.9, priority: 2 },
+  noKeys: { rate: 1.0, pitch: 0.8, priority: 2 },
+  newCar: { rate: 1.0, pitch: 0.95, priority: 3 },
+  goodLuck: { rate: 0.9, pitch: 0.7, priority: 3 }
+};
+
+export interface VoiceSettings {
+  lang: string;
+  rate: number;
+  pitch: number;
+}
+
+/** What the host speaks through: the browser's synthesis, or a test's fake. */
+export interface Speaker {
+  /** Say `text`; call `onDone` once when it has ended, errored or been cancelled. */
+  speak(text: string, voice: VoiceSettings, onDone: () => void): void;
+  cancel(): void;
+  pause(): void;
+  resume(): void;
+}
+
+export interface Host {
+  /** Say a line, subject to the mute and to what is already being said. */
+  call(line: HostLine): void;
+  setPaused(on: boolean): void;
+  /** Re-read the effects mute: cuts what is sounding when it has just muted. */
+  refresh(): void;
+  /** Cut whatever is sounding; the page is going away. */
+  dispose(): void;
+}
+
+/** A line whose end callback never arrives is given up after this long. */
+export const MAX_LINE_MS = 6000;
+
+/** Whether `incoming` is spoken over `current` (null when nothing is sounding) or dropped. */
+export function hostDecision(current: HostLine | null, incoming: HostLine): 'speak' | 'drop' {
+  if (current === null) return 'speak';
+  return DELIVERY[incoming].priority >= DELIVERY[current].priority ? 'speak' : 'drop';
+}
+
+/** The Web Speech API, or null where there is none. */
+export function browserSpeaker(): Speaker | null {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return null;
+  const synth = window.speechSynthesis;
+  if (!synth) return null;
+  return {
+    speak(text, voice, onDone) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = voice.lang;
+      u.rate = voice.rate;
+      u.pitch = voice.pitch;
+      u.onend = onDone;
+      u.onerror = onDone;
+      // The voice list fills asynchronously in some browsers; when it has a
+      // voice in the page's language, use it, else the utterance's `lang`
+      // lets the browser pick.
+      const match = synth.getVoices().find(v => v.lang.toLowerCase().startsWith(voice.lang.toLowerCase()));
+      if (match) u.voice = match;
+      synth.speak(u);
+    },
+    cancel: () => synth.cancel(),
+    pause: () => synth.pause(),
+    resume: () => synth.resume()
+  };
+}
+
+export function createHost(
+  audio: Pick<GameAudio, 'isSfxMuted'>,
+  lines: Readonly<Record<HostLine, string>>,
+  lang: string,
+  speaker: Speaker | null = browserSpeaker(),
+  now: () => number = () => Date.now()
+): Host {
+  let current: HostLine | null = null;
+  let token = 0;
+  let startedAt = 0;
+  let paused = false;
+  /** The clock when the pause began; the give-up timer does not run while paused. */
+  let pausedAt = 0;
+
+  const sounding = (): HostLine | null => {
+    if (current !== null && now() - startedAt > MAX_LINE_MS) current = null;
+    return current;
+  };
+
+  /** Cut the line; a paused synthesizer is resumed so the cut lands and the next page is not left mute. */
+  function cut(): void {
+    if (!speaker) return;
+    speaker.cancel();
+    if (paused) {
+      speaker.resume();
+      paused = false;
+    }
+    current = null;
+  }
+
+  return {
+    call(line) {
+      if (!speaker || audio.isSfxMuted()) return;
+      const text = lines[line];
+      if (!text) return;
+      if (hostDecision(sounding(), line) === 'drop') return;
+      speaker.cancel();
+      const d = DELIVERY[line];
+      const mine = ++token;
+      current = line;
+      startedAt = now();
+      speaker.speak(text, { lang, rate: d.rate, pitch: d.pitch }, () => {
+        if (token === mine) current = null;
+      });
+    },
+    setPaused(on) {
+      if (!speaker) return;
+      if (on) {
+        if (!paused) {
+          speaker.pause();
+          pausedAt = now();
+        }
+        paused = true;
+      } else if (audio.isSfxMuted()) {
+        // Muted while paused: the line must not come back with the game.
+        cut();
+      } else {
+        if (paused) {
+          speaker.resume();
+          // The line was not sounding while paused, so that span does not count against it.
+          startedAt += now() - pausedAt;
+        }
+        paused = false;
+      }
+    },
+    refresh() {
+      if (audio.isSfxMuted()) cut();
+    },
+    dispose: cut
+  };
+}

@@ -126,7 +126,7 @@ interface ScheduledItem {
   at: number;
 }
 
-export type HostLine = 'bigMoney' | 'bigPrizes' | 'loveIt' | 'carnage' | 'goodLuck' | 'newCar' | 'noKeys' | 'extraLife';
+export type HostLine = 'welcome' | 'bigMoney' | 'bigPrizes' | 'loveIt' | 'carnage' | 'goodLuck' | 'newCar' | 'noKeys' | 'extraLife';
 
 export type RunEvent =
   | { type: 'cash'; amount: number; x: number; y: number; reason: 'kill' | 'prize' | 'boss' | 'bonus' }

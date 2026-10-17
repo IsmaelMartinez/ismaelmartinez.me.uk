@@ -53,6 +53,7 @@ import {
 } from './render';
 import { CIRCUITS } from './rooms';
 import { NO_INPUT, createRun, tickRun, type HostLine, type RunEvent, type RunInput, type RunState } from './run';
+import { createHost } from './host';
 import { createArenaSound } from './sound';
 import type { WeaponId } from './weapons';
 
@@ -85,6 +86,7 @@ export function initPrimeTimeGame(): void {
   const t = (key: string): string => root.dataset[key] ?? '';
   const strings = {
     host: {
+      welcome: t('tWelcome'),
       bigMoney: t('tBigMoney'),
       bigPrizes: t('tBigPrizes'),
       loveIt: t('tLoveIt'),
@@ -172,6 +174,10 @@ export function initPrimeTimeGame(): void {
   const audio = createGameAudio(PRIMETIME_MUSIC);
   wireSoundToggles(audio);
   const sound = createArenaSound(audio);
+  // The presenter's voice: the page's language is the html lang the layout
+  // sets from `localeMeta` (`ca` for the cat route).
+  const host = createHost(audio, strings.host, document.documentElement.lang || 'en');
+  document.addEventListener('astro:before-swap', () => host.dispose(), { once: true });
 
   const sticks = createTwinStick(canvas, hidpi.toLogical, listenUntilSwap, () => phase === 'play');
 
@@ -237,6 +243,7 @@ export function initPrimeTimeGame(): void {
     audio.setScene(null);
     audio.start();
     say(strings.studio.replace('{n}', '1'));
+    host.call('welcome');
     updateHud();
   }
 
@@ -339,6 +346,7 @@ export function initPrimeTimeGame(): void {
           break;
         case 'host':
           say(strings.host[ev.line], ev.line === 'carnage' ? '#ef4444' : ev.line === 'newCar' ? '#facc15' : theme.trim);
+          host.call(ev.line);
           break;
         case 'enterRoom':
           stains.clear();
@@ -399,9 +407,11 @@ export function initPrimeTimeGame(): void {
       phase = 'paused';
       sticks.release();
       audio.setPaused(true);
+      host.setPaused(true);
     } else if (!on && phase === 'paused') {
       phase = 'play';
       audio.setPaused(false);
+      host.setPaused(false);
     }
   }
   listenUntilSwap(document, 'keydown', e => {

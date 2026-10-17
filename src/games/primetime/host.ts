@@ -2,37 +2,36 @@
  * PRIME TIME's host: the presenter's calls, spoken.
  *
  * The run already announces the show in text (`host` events, drawn as the
- * banner), and this module gives those lines a voice. There is no legal
- * source for the arcade's samples and a WebAudio "voice" is not intelligible,
- * so the host speaks through the browser's own speech synthesis, the one
- * voice a cabinet can have without shipping audio files. It is not WebAudio,
- * so nothing here goes through `effectsBus()`: the module reads the effects
- * toggle itself (`isSfxMuted()`) before every line, pauses with the game, and
- * is cancelled on the page swap, so a line never outlives the cabinet.
+ * banner), and this module gives those lines a voice. The arcade's own
+ * announcer recordings are Williams/Midway property and are not used; the
+ * lines are rendered by `scripts/primetime-host-voice.mts` from open
+ * text-to-speech voices into one MP3 per line per language under
+ * `public/fun/primetime/host/`, credited in the CREDITS.txt beside them, and
+ * `sampleSpeaker` plays them through the engine's effects bus. That bus is the
+ * reason they are files: it follows the 🔊 toggle live and sits in the
+ * AudioContext the Start tap unlocked, so the host sounds on a phone, where
+ * the browser speech synthesis this module first used (PR #464) was dropped
+ * for starting outside a tap, and sounds the same on every device.
  *
  * The lines come in from the page, already localized through `useTranslations`
- * like every other string, and are spoken in the page's language. What this
- * module decides on its own is delivery (`DELIVERY`): a game-show announcer
- * sits low and quick, a boss warning slows down, and every line carries a
- * priority so a room-clear catchphrase never cuts the boss warning or the car,
- * while anything at least as important as what is sounding cuts in. The
- * decision is the pure `hostDecision`, which the tests exercise with a fake
- * speaker; the real one is `browserSpeaker`, null wherever the API is missing
- * (jsdom included), and the host is then silent and never throws.
+ * like every other string, and the file played is the page's language's. What
+ * this module decides on its own is delivery (`DELIVERY`, baked into the
+ * files by the renderer): a game-show announcer sits low and quick, a boss
+ * warning slows down, and every line carries a priority so a room-clear
+ * catchphrase never cuts the boss warning or the car, while anything at least
+ * as important as what is sounding cuts in. The decision is the pure
+ * `hostDecision`, which the tests exercise with a fake speaker.
  *
- * Three details of the Web Speech API shape the bookkeeping (PR #464's
- * review). A line is "sounding" from the moment it is handed over until its
- * own end callback fires, not while `speechSynthesis.speaking` reads true:
- * an utterance sits queued before that flag rises, and polling it let a
- * catchphrase cut the boss warning before it had begun. Each line carries a
- * token so the late end of a line that was cut cannot clear the one that cut
- * it, and a line whose end never arrives is given up after `MAX_LINE_MS`.
- * `cancel()` empties the queue but leaves the synthesizer's pause state
- * alone, and that state is shared by the whole page, so wherever the host
- * cuts a line while paused it resumes the synthesizer too, or the next
- * cabinet would queue lines into silence. And the effects button only
- * touches WebAudio, so `refresh()` is called from its click and cuts what is
- * sounding when the toggle has just muted.
+ * Three pieces of bookkeeping came out of PR #464's review and still hold
+ * for samples. A line is "sounding" from the moment it is handed over until
+ * its own end callback fires, which for a file includes the fetch and decode
+ * in front of it: a catchphrase arriving in that gap must not cut the boss
+ * warning before it has begun. Each line carries a token so the late end of
+ * a line that was cut cannot clear the one that cut it, and a line whose end
+ * never arrives is given up after `MAX_LINE_MS`, not counting time paused.
+ * And the effects button is read through `refresh()` from its click, which
+ * cuts what is sounding when the toggle has just muted (the bus already
+ * silences it; the cut frees the floor for the next line).
  */
 import type { GameAudio } from '../engine';
 import type { HostLine } from './run';
@@ -58,16 +57,28 @@ export const DELIVERY: Record<HostLine, Delivery> = {
   goodLuck: { rate: 0.9, pitch: 0.7, priority: 3 }
 };
 
-export interface VoiceSettings {
+/** Every line the host has, in one place for the renderer and the preload. */
+export const HOST_LINES = Object.keys(DELIVERY) as readonly HostLine[];
+
+/** Where the rendered lines live, under `public/`; the language tag and `<line>.mp3` follow. */
+export const HOST_AUDIO_BASE = '/fun/primetime/host/';
+
+export function hostAudioUrl(lang: string, line: HostLine, base = HOST_AUDIO_BASE): string {
+  return `${base}${lang}/${line}.mp3`;
+}
+
+export interface Utterance {
+  line: HostLine;
+  text: string;
   lang: string;
   rate: number;
   pitch: number;
 }
 
-/** What the host speaks through: the browser's synthesis, or a test's fake. */
+/** What the host speaks through: the sample player, or a test's fake. */
 export interface Speaker {
-  /** Say `text`; call `onDone` once when it has ended, errored or been cancelled. */
-  speak(text: string, voice: VoiceSettings, onDone: () => void): void;
+  /** Say the line; call `onDone` once when it has ended, failed or been cancelled. */
+  speak(u: Utterance, onDone: () => void): void;
   cancel(): void;
   pause(): void;
   resume(): void;
@@ -86,43 +97,124 @@ export interface Host {
 /** A line whose end callback never arrives is given up after this long. */
 export const MAX_LINE_MS = 6000;
 
+/** The voice over the stock effects: a touch above the bus's reference peak. */
+const VOICE_GAIN = 1.2;
+
 /** Whether `incoming` is spoken over `current` (null when nothing is sounding) or dropped. */
 export function hostDecision(current: HostLine | null, incoming: HostLine): 'speak' | 'drop' {
   if (current === null) return 'speak';
   return DELIVERY[incoming].priority >= DELIVERY[current].priority ? 'speak' : 'drop';
 }
 
-/** The Web Speech API, or null where there is none. */
-export function browserSpeaker(): Speaker | null {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return null;
-  const synth = window.speechSynthesis;
-  if (!synth) return null;
+type Fetch = (url: string) => Promise<{ ok: boolean; arrayBuffer(): Promise<ArrayBuffer> }>;
+
+/**
+ * Plays the rendered lines through the effects bus. The files are fetched at
+ * creation (a few kilobytes each) and decoded on first play, once the bus
+ * exists, since decoding needs the context the Start tap creates. A pause
+ * cuts the line rather than holding it: a line is a second or two long, and a
+ * buffer source cannot be paused. Everything that can fail (no `fetch` on
+ * this platform, a relative URL outside a browser, a missing file, a decode
+ * error, no audio) ends the line at once instead of throwing, so the host is
+ * then silent and the banner still shows.
+ */
+export function sampleSpeaker(
+  audio: Pick<GameAudio, 'effectsBus'>,
+  lang: string,
+  fetchImpl: Fetch | undefined = typeof fetch === 'function' ? url => fetch(url) : undefined
+): Speaker {
+  const bytes = new Map<HostLine, Promise<ArrayBuffer | null>>();
+  const decoded = new Map<HostLine, AudioBuffer>();
+  let playing: AudioBufferSourceNode | null = null;
+  let token = 0;
+
+  const load = (line: HostLine): Promise<ArrayBuffer | null> => {
+    let p = bytes.get(line);
+    if (!p) {
+      p = (async () => {
+        try {
+          if (!fetchImpl) return null;
+          const res = await fetchImpl(hostAudioUrl(lang, line));
+          return res.ok ? await res.arrayBuffer() : null;
+        } catch {
+          return null;
+        }
+      })();
+      bytes.set(line, p);
+    }
+    return p;
+  };
+  for (const line of HOST_LINES) void load(line);
+
+  function cut(): void {
+    token++;
+    if (playing) {
+      const src = playing;
+      playing = null;
+      src.onended = null;
+      try {
+        src.stop();
+      } catch {
+        // Already ended.
+      }
+    }
+  }
+
   return {
-    speak(text, voice, onDone) {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = voice.lang;
-      u.rate = voice.rate;
-      u.pitch = voice.pitch;
-      u.onend = onDone;
-      u.onerror = onDone;
-      // The voice list fills asynchronously in some browsers; when it has a
-      // voice in the page's language, use it, else the utterance's `lang`
-      // lets the browser pick.
-      const match = synth.getVoices().find(v => v.lang.toLowerCase().startsWith(voice.lang.toLowerCase()));
-      if (match) u.voice = match;
-      synth.speak(u);
+    speak(u, onDone) {
+      cut();
+      const mine = token;
+      const bus = audio.effectsBus();
+      if (!bus) {
+        onDone();
+        return;
+      }
+      void (async () => {
+        let buffer = decoded.get(u.line) ?? null;
+        if (!buffer) {
+          const data = await load(u.line);
+          if (data) {
+            try {
+              // decodeAudioData detaches the buffer it is given; decode a copy so a replay can decode again.
+              buffer = await bus.ctx.decodeAudioData(data.slice(0));
+              decoded.set(u.line, buffer);
+            } catch {
+              buffer = null;
+            }
+          }
+        }
+        if (mine !== token) return; // Cut or replaced while loading: the newer line owns the floor.
+        if (!buffer) {
+          onDone();
+          return;
+        }
+        const src = bus.ctx.createBufferSource();
+        src.buffer = buffer;
+        const gain = bus.ctx.createGain();
+        gain.gain.value = Math.min(1, bus.level * VOICE_GAIN);
+        src.connect(gain);
+        gain.connect(bus.out);
+        src.onended = () => {
+          if (playing === src) playing = null;
+          onDone();
+        };
+        playing = src;
+        src.start();
+      })();
     },
-    cancel: () => synth.cancel(),
-    pause: () => synth.pause(),
-    resume: () => synth.resume()
+    cancel: cut,
+    pause: cut,
+    resume() {
+      // Nothing to resume: a pause cuts the line.
+    }
   };
 }
 
 export function createHost(
-  audio: Pick<GameAudio, 'isSfxMuted'>,
+  audio: Pick<GameAudio, 'isSfxMuted' | 'effectsBus'>,
   lines: Readonly<Record<HostLine, string>>,
   lang: string,
-  speaker: Speaker | null = browserSpeaker(),
+  speaker: Speaker = sampleSpeaker(audio, lang),
   now: () => number = () => Date.now()
 ): Host {
   let current: HostLine | null = null;
@@ -137,9 +229,8 @@ export function createHost(
     return current;
   };
 
-  /** Cut the line; a paused synthesizer is resumed so the cut lands and the next page is not left mute. */
+  /** Cut the line; a paused speaker is resumed so the cut lands and the next page is not left mute. */
   function cut(): void {
-    if (!speaker) return;
     speaker.cancel();
     if (paused) {
       speaker.resume();
@@ -150,7 +241,7 @@ export function createHost(
 
   return {
     call(line) {
-      if (!speaker || audio.isSfxMuted()) return;
+      if (audio.isSfxMuted()) return;
       const text = lines[line];
       if (!text) return;
       if (hostDecision(sounding(), line) === 'drop') return;
@@ -159,12 +250,11 @@ export function createHost(
       const mine = ++token;
       current = line;
       startedAt = now();
-      speaker.speak(text, { lang, rate: d.rate, pitch: d.pitch }, () => {
+      speaker.speak({ line, text, lang, rate: d.rate, pitch: d.pitch }, () => {
         if (token === mine) current = null;
       });
     },
     setPaused(on) {
-      if (!speaker) return;
       if (on) {
         if (!paused) {
           speaker.pause();

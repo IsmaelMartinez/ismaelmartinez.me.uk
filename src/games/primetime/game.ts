@@ -175,11 +175,11 @@ export function initPrimeTimeGame(): void {
   wireSoundToggles(audio);
   const sound = createArenaSound(audio);
   // The presenter's voice: the page's language is the html lang the layout
-  // sets from `localeMeta` (`ca` for the cat route).
+  // sets from `localeMeta` (`ca` for the cat route), which picks the files.
   const host = createHost(audio, strings.host, document.documentElement.lang || 'en');
   document.addEventListener('astro:before-swap', () => host.dispose(), { once: true });
-  // Speech is outside WebAudio, so the effects toggle cannot silence it on its
-  // own: listening after `wireSoundToggles` reads the state the click just set.
+  // A mute cuts the sounding line so the floor is free for the next one;
+  // listening after `wireSoundToggles` reads the state the click just set.
   document.getElementById('sfx-btn')?.addEventListener('click', () => host.refresh());
 
   const sticks = createTwinStick(canvas, hidpi.toLogical, listenUntilSwap, () => phase === 'play');

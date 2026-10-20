@@ -17,7 +17,7 @@
  *   for f in before/*.png; do cmp "$f" "after/$(basename "$f")"; done
  *
  * Usage: node scripts/screenshot-games.js <outDir> [game...]
- * (games: linehold city snake tanks primetime; default all. `park` and `syndicate` are
+ * (games: linehold city snake tanks primetime fighter; default all. `park` and `syndicate` are
  * parked — their pages are unrouted, so they are skipped by the default run
  * and only attempted when named explicitly, after un-parking the page.)
  * Serves ./dist via a tiny static server on 4173. The Chromium path below
@@ -174,6 +174,25 @@ if (run('primetime')) {
   await page.keyboard.up('d');
   await page.keyboard.up('w');
   await page.keyboard.up('ArrowRight');
+  await page.close();
+}
+
+// --- STREET CHAMPION -----------------------------------------------------
+if (run('fighter')) {
+  const page = await openGame('/en/fun/fighter/');
+  await page.click('#start-btn');
+  // Pick the first fighter and sit through the map and the VS screen.
+  await step(page, 2, 250);
+  await page.keyboard.press('KeyU');
+  await step(page, 24, 250);
+  await snap(page, 'fighter-round');
+  // Walk in and throw a fierce punch.
+  await page.keyboard.down('KeyD');
+  await step(page, 4, 250);
+  await page.keyboard.up('KeyD');
+  await page.keyboard.press('KeyO');
+  await step(page, 2, 250);
+  await snap(page, 'fighter-fight');
   await page.close();
 }
 

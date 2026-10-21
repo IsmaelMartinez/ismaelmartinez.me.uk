@@ -88,7 +88,7 @@ export interface Look {
  */
 const LOOKS: Record<CharId, { main: Look; alt: Partial<Look> }> = {
   kenji: {
-    main: { skin: '#e0a070', hair: '#3a2416', top: '#eeeade', sleeves: 'none', pants: '#eeeade', pantsStyle: 'gi', belt: '#1c1c22', hairStyle: 'short' },
+    main: { skin: '#e0a070', hair: '#3a2416', top: '#eeeade', sleeves: 'none', pants: '#eeeade', pantsStyle: 'gi', belt: '#1c1c22', hairStyle: 'spiky', accent: '#d02828' },
     alt: { top: '#e8e0a0', pants: '#e8e0a0' }
   },
   ace: {
@@ -108,15 +108,15 @@ const LOOKS: Record<CharId, { main: Look; alt: Partial<Look> }> = {
     alt: { pants: '#d8d8e0' }
   },
   tora: {
-    main: { skin: '#eab08a', hair: '#1a1a22', top: '#1c3070', sleeves: 'none', pants: '#1c3070', pantsStyle: 'tight', bands: '#1a1a22', hairStyle: 'blond' },
-    alt: { top: '#7a2020', pants: '#7a2020' }
+    main: { skin: '#eab08a', hair: '#1a1a22', top: null, sleeves: 'none', pants: '#1c3070', pantsStyle: 'gi', belt: '#d82828', hairStyle: 'short' },
+    alt: { pants: '#7a2020', belt: '#2848c8' }
   },
   rio: {
-    main: { skin: '#5a9a3a', hair: '#e86a1a', top: '#e86a1a', sleeves: 'short', pants: '#6a4a26', pantsStyle: 'tight', hairStyle: 'mask', accent: '#e86a1a' },
-    alt: { skin: '#c89a40', hair: '#3a2a8a', top: '#3a2a8a', accent: '#3a2a8a' }
+    main: { skin: '#5a9a3a', hair: '#e86a1a', top: null, sleeves: 'none', pants: '#6a4a26', pantsStyle: 'gi', belt: '#4a4a52', hairStyle: 'mane' },
+    alt: { skin: '#c89a40', hair: '#3a2a8a' }
   },
   duke: {
-    main: { skin: '#e2a47a', hair: '#e8d050', top: '#6a7c40', sleeves: 'long', pants: '#6a7c40', pantsStyle: 'cargo', shoes: '#2a2620', belt: '#3a2a1a', hairStyle: 'short' },
+    main: { skin: '#e2a47a', hair: '#e8d050', top: '#4e6a2a', sleeves: 'none', pants: '#6a7c40', pantsStyle: 'cargo', shoes: '#2a2620', belt: '#3a2a1a', hairStyle: 'short' },
     alt: { top: '#3a4a6a', pants: '#3a4a6a', hair: '#7a4a20' }
   },
   rocko: {
@@ -124,16 +124,16 @@ const LOOKS: Record<CharId, { main: Look; alt: Partial<Look> }> = {
     alt: { pants: '#d8d8d8', bands: '#2848b8' }
   },
   varga: {
-    main: { skin: '#eab48c', hair: '#3a1a10', top: '#6a2a8a', sleeves: 'long', pants: '#6a2a8a', pantsStyle: 'cargo', shoes: '#e8c040', hairStyle: 'short' },
-    alt: { top: '#204a8a', pants: '#204a8a' }
+    main: { skin: '#eab48c', hair: '#3a1a10', top: null, sleeves: 'none', pants: '#6a2a8a', pantsStyle: 'gi', belt: '#d82424', shoes: '#e8c040', hairStyle: 'short' },
+    alt: { pants: '#204a8a', belt: '#e8c040' }
   },
   sakda: {
-    main: { skin: '#b07a4a', hair: '#f0ece0', top: '#5a2a8a', sleeves: 'none', pants: '#5a2a8a', pantsStyle: 'tight', bands: '#f0ece0', hairStyle: 'mask', accent: '#f0ece0' },
-    alt: { top: '#b01818', pants: '#b01818' }
+    main: { skin: '#b07a4a', hair: '#1a1a1a', top: null, sleeves: 'none', pants: '#5a2a8a', pantsStyle: 'gi', belt: '#f0ece0', hairStyle: 'spiky', accent: '#f0ece0' },
+    alt: { pants: '#b01818' }
   },
   zar: {
-    main: { skin: '#e0a07a', hair: '#2a2a2a', top: '#2a2a2a', sleeves: 'short', pants: '#a01828', pantsStyle: 'tight', belt: '#e8c040', hairStyle: 'mask', accent: '#2a2a2a' },
-    alt: { pants: '#304878' }
+    main: { skin: '#e0a07a', hair: '#1a1a1a', top: '#a01828', sleeves: 'none', pants: '#a01828', pantsStyle: 'gi', belt: '#e8c040', shoes: '#242424', hairStyle: 'short' },
+    alt: { top: '#304878', pants: '#304878' }
   }
 };
 

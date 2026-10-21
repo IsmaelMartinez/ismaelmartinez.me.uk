@@ -161,3 +161,11 @@ behind the start screen.
   cels each), recoloured per fighter with a second colourway, by
   `scripts/fighter-sprites.py`; the 3D body stays as the stand-in while a
   sheet loads.
+- 2026-10-21, round 5 (closer to the arcade, from the owner's "I do want them
+  looking closer to the original"): the arcade's sheets were studied as
+  reference (Ryu stands about 100 px, heroic bulk, warm hue-shifted ramps,
+  edges in each material's darkest tone, no black outline) and the cast was
+  rebuilt to match from puffolotti's 171 px CC0 karate model, downscaled to
+  each fighter's height with that finish applied; MEI stays on the 78 px
+  body. No Capcom pixel is used or traced.
+

@@ -18,6 +18,8 @@ import { drawText, drawTextCentred, drawTextRight, textWidth } from '../football
 import type { ArcadeState } from './arcade';
 import { BONUS_TIME, FLOOR_Y, ROUNDS_TO_WIN, SCREEN_H, SCREEN_W, type FightState, type FighterState, type Projectile, type Target } from './fight';
 import { drawBody, landmarks3 } from './body';
+import { celFor } from './frames';
+import { SHEETS } from './sheets';
 import { Raster, drawPortrait, lookFor, signatureColour, type Look } from './figure';
 import { STYLE, drawDisplay, type DisplayStyle } from './display';
 import { DUST_FRAMES, SPARK_FRAMES, blit, breathStream, dizzyBird, dizzyStar, dust, flameTongue, hitSpark, projectileArt, whirl, type HitKind } from './effects-art';
@@ -159,6 +161,9 @@ function flagFor(home: HomeId, k = 1) {
   return flagArt(FLAG_OF[home], k);
 }
 
+/** Where the CC0 fighter sheets are served from, under `public/`. */
+const SPRITE_BASE = '/fun/fighter/sprites';
+
 /** A cached fighter sprite and where its top-left sits relative to the feet. */
 interface Sprite {
   canvas: HTMLCanvasElement;
@@ -225,6 +230,49 @@ export function createRenderer(): Renderer {
     spriteCache.set(key, sprite);
     if (spriteCache.size > SPRITE_CACHE_MAX) spriteCache.delete(spriteCache.keys().next().value as string);
     return sprite;
+  }
+
+  /**
+   * The sprite sheets of the fighters drawn from puffolotti's CC0 cels,
+   * loaded on first use; until a sheet arrives (or if it never does) the
+   * fighter is drawn with the 3D body instead. Each keeps a white silhouette
+   * copy for the hit flash and an electric one for the beast's charge.
+   */
+  const sheets = new Map<string, { img: HTMLImageElement; ready: boolean; white?: HTMLCanvasElement; electric?: HTMLCanvasElement }>();
+  function sheetFor(id: CharId, alt: boolean) {
+    const key = alt ? `${id}-alt` : id;
+    let s = sheets.get(key);
+    if (!s) {
+      const img = new Image();
+      const entry = { img, ready: false } as { img: HTMLImageElement; ready: boolean; white?: HTMLCanvasElement; electric?: HTMLCanvasElement };
+      img.onload = () => (entry.ready = true);
+      img.src = `${SPRITE_BASE}/${key}.png`;
+      sheets.set(key, entry);
+      s = entry;
+    }
+    return s.ready ? s : null;
+  }
+  function tinted(s: { img: HTMLImageElement; white?: HTMLCanvasElement; electric?: HTMLCanvasElement }, kind: 'white' | 'electric'): HTMLCanvasElement {
+    const have = s[kind];
+    if (have) return have;
+    const c = makeCanvas(s.img.width, s.img.height);
+    const x = ctx2d(c);
+    x.drawImage(s.img, 0, 0);
+    x.globalCompositeOperation = 'source-atop';
+    if (kind === 'white') {
+      x.globalAlpha = 0.8;
+      x.fillStyle = '#ffffff';
+      x.fillRect(0, 0, c.width, c.height);
+    } else {
+      x.globalAlpha = 0.75;
+      for (let yy = 0; yy < c.height; yy++)
+        for (let xx = 0; xx < c.width; xx += 2) {
+          x.fillStyle = (xx + yy) % 4 < 2 ? '#fafa78' : '#283cdc';
+          x.fillRect(xx, yy, 2, 1);
+        }
+    }
+    s[kind] = c;
+    return c;
   }
 
   /** A head-and-shoulders portrait, cached per fighter, colourway and mood. */
@@ -338,7 +386,10 @@ export function createRenderer(): Renderer {
     const t = f.action?.t ?? 0;
     const electric = special?.kind === 'rapid' && f.def.build === 'beast';
     const flash = f.flash > 0 && f.flash % 2 === 0 ? 'white' : electric && clock % 4 < 2 ? 'electric' : 'none';
-    const sprite = renderFighter(slot, f.def, look, pose, flash);
+    const cel = celFor(f, clock);
+    const sheet = cel !== null ? sheetFor(f.id, alt) : null;
+    const rect = cel !== null ? SHEETS[f.id]?.frames[cel] : undefined;
+    const sprite = sheet && rect ? null : renderFighter(slot, f.def, look, pose, flash);
     const sx = Math.round(f.x - cam + SCREEN_W / 2);
     const sy = Math.round(FLOOR_Y - f.y);
     // A hit fighter shudders through the hitstop.
@@ -350,7 +401,11 @@ export function createRenderer(): Renderer {
     ctx.translate(sx + jitter, sy);
     if (mirrored) ctx.scale(-1, 1);
     if (special) auraBack(ctx, f, t, clock);
-    ctx.drawImage(sprite.canvas, sprite.ox, sprite.oy);
+    if (sprite) ctx.drawImage(sprite.canvas, sprite.ox, sprite.oy);
+    else if (sheet && rect) {
+      const src = flash === 'none' ? sheet.img : tinted(sheet, flash);
+      ctx.drawImage(src, rect[0], rect[1], rect[2], rect[3], rect[4], rect[5], rect[2], rect[3]);
+    }
     if (special) auraFront(ctx, f, t, clock, pose);
     ctx.restore();
     if (electric && t >= 6 && t <= (f.action?.until ?? 0)) bolts(ctx, sx, sy - f.def.height * 0.5, f.def.height, clock);
@@ -955,6 +1010,9 @@ export function createRenderer(): Renderer {
       ctx.drawImage(versusBackdrop(), 0, 0);
       const a = s.chosen[0] as CharId;
       const b = (s.mode === 'versus' ? s.chosen[1] : s.ladder[s.stage]) as CharId;
+      // Fetch both fighters' sheets while the VS screen holds, so the fight opens on them.
+      sheetFor(a, false);
+      sheetFor(b, a === b);
       const slide = Math.max(0, 40 - s.frame) * 5;
       // Speed streaks pouring toward the middle.
       for (let i = 0; i < 14; i++) {

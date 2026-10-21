@@ -152,3 +152,12 @@ behind the start screen.
   whirlwind kick, the lariat, the bird kick) as real turns of the body. On
   the owner's "the legs and arms are far too fat" the limbs came down to
   about three quarters of the flat figure's radii.
+- 2026-10-21, round 4 (the sprites, from the owner's "still pretty poor, look
+  and see if you can find the original sprites"): the arcade's sheets exist
+  as ROM reconstructions (Fabien Sanglard's CPSS) and as fan rips, but they
+  are Capcom's art, so they were studied and not shipped; the owner chose a
+  CC0 pack instead. Every fighter is now a sprite sheet cut from puffolotti's
+  Mustermenschen bodies (78 to 86 px tall, the arcade's scale, hundreds of
+  cels each), recoloured per fighter with a second colourway, by
+  `scripts/fighter-sprites.py`; the 3D body stays as the stand-in while a
+  sheet loads.

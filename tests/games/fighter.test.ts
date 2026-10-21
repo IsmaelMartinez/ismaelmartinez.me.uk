@@ -3,7 +3,10 @@ import { cpuInput, createCpu } from '../../src/games/fighter/ai';
 import { BONUS_AFTER, continueCredit, createArcade, createDemo, levelFor, tickArcade, type ArcadeEvent, type ArcadeState } from '../../src/games/fighter/arcade';
 import { createBonus, createFight, hitbox, hurtboxes, tickFight, type FightEvent, type FightState, type FighterState } from '../../src/games/fighter/fight';
 import { HK, HP, LK, LP, MK, MP, NO_INPUT, createBuffer, motionDone, numpad, pushFrame, type FrameInput } from '../../src/games/fighter/motion';
+import { celFor } from '../../src/games/fighter/frames';
 import { poseFor } from '../../src/games/fighter/poses';
+import { SHEETS } from '../../src/games/fighter/sheets';
+import SETS from '../../src/games/fighter/sprite-sets.json';
 import { BOSSES, FIGHTERS, SELECTABLE, type CharId } from '../../src/games/fighter/roster';
 import { GLYPHS, normaliseText } from '../../src/games/football/font';
 import { translations } from '../../src/i18n/translations';
@@ -432,6 +435,36 @@ describe('CPU against CPU', () => {
 });
 
 describe('the pictures', () => {
+  it('gives every fighter a sprite sheet with every animation the cel picker asks for', () => {
+    const needed = ['idle', 'walk', 'crouch', 'crouchIn', 'guard', 'crouchGuard', 'prejump', 'jumpUp', 'jumpTop', 'jumpDown', 'flip', 'land', 'airP', 'airK', 'hitHigh', 'hitLow', 'hitCrouch', 'fall', 'down', 'getup', 'dizzy', 'win', 'lose', 'ko', 'fireball', 'uppercut', 'spinKick', 'throw', 'thrown'];
+    for (const posture of ['stand', 'crouch'])
+      for (const b of ['P', 'K']) for (const st of [0, 1, 2]) needed.push(`${posture}${b}${st}`);
+    for (const id of ALL) {
+      const sheet = SHEETS[id];
+      expect(sheet, id).toBeDefined();
+      const anims = SETS[sheet!.set].anims as Record<string, number[]>;
+      for (const key of needed) {
+        expect(anims[key]?.length, `${id} ${key}`).toBeGreaterThan(0);
+        for (const f of anims[key]) expect(sheet!.frames[f], `${id} ${key} cel ${f}`).toBeDefined();
+      }
+    }
+  });
+
+  it('lands every frame of a fight on a cel the fighter\'s sheet has', () => {
+    for (const id of ALL) {
+      const f = createFight(id, id === 'mei' ? 'boris' : 'mei');
+      const cpus = [createCpu(0.9, 3), createCpu(0.9, 4)];
+      for (let t = 0; t < 2400 && f.phase !== 'matchEnd'; t++) {
+        tickFight(f, [cpuInput(cpus[0], f, 0), cpuInput(cpus[1], f, 1)]);
+        for (const x of f.fighters) {
+          if (!x) continue;
+          const cel = celFor(x, t);
+          expect(cel !== null && SHEETS[x.id]!.frames[cel] !== undefined, `${x.id} ${x.state} frame ${x.frame}`).toBe(true);
+        }
+      }
+    }
+  });
+
   it('has a pose for every state every fighter can be in, with no joint lost', () => {
     for (const id of ALL) {
       const f = createFight(id, 'kenji').fighters[0];

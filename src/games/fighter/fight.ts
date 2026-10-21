@@ -93,7 +93,7 @@ const HITSTOP = [6, 9, 12] as const;
 const PUSHBACK = [2.2, 2.8, 3.4] as const;
 /** Frames lying down after a knockdown, then rising (invulnerable throughout). */
 const DOWN_FRAMES = 34;
-const GETUP_FRAMES = 22;
+export const GETUP_FRAMES = 22;
 /** Frames since the last hit before the dizzy meter starts to drain. */
 const STUN_HOLD = 100;
 const DIZZY_FRAMES = 170;

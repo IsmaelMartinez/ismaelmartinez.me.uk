@@ -1,0 +1,11 @@
+STREET CHAMPION's fighter sprites, built by scripts/fighter-sprites.py.
+
+Every fighter is drawn from puffolotti's "Mustermenschen" fighting-game characters
+(Sprite created by Puffolotti Accident), released under CC0 1.0 (public domain dedication):
+  https://opengameart.org/content/musternenschen-v1-complete-collection
+
+Bodies used, each recoloured into a fighter's costume and cut down to the frames the game plays:
+  Antony Nagasaki (KENJI, ACE), Larissa Disaster (MEI), George Nguyen (DUKE), Byron Verlaine (VARGA),
+  Danny Van Damage (BORIS, RAJ, ROCKO), Kelvin Zone (TORA, SAKDA), Kelvin Area (RIO, ZAR).
+
+No sprite from the arcade game this cabinet homages is used.

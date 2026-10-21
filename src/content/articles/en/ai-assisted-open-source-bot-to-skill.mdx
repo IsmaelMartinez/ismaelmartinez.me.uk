@@ -14,7 +14,7 @@ In [the first article](/en/articles/ai-assisted-open-source-maintenance) I menti
 
 The bot started small and out of curiosity. Bit by bit it grew. A first phase read the issue against the bug template and flagged what was missing (reproduction steps, logs), with no AI involved. Another searched the documentation for known solutions. Another looked for similar issues in the history. And for feature requests, it gathered the relevant context: roadmap, ADRs, research documents. Since this project depends on Electron, I added the issues from there to give it more context. So it was worth fitting it with a RAG and feeding in the new issues as they came.
 
-Since I didn't trust letting it loose near real people, I kept adding scaffolding. First in silent mode, storing everything in a database and a dashboard so I could watch it without it publishing anything. Then some shadow repos that acted as an approval gate: the bot left its draft there and I promoted it or discarded it. On top of that, two safety layers (a validator and a second LLM reviewing the first) and an escalation to me if it went round in circles without progressing. And at first it could even promote responses to the main repo and reply to issues.
+Since I didn't trust letting it loose near real people, I kept adding scaffolding. First in silent mode, storing everything in a database and a dashboard so I could watch it without it publishing anything. Then some shadow repos that acted as an approval gate: the bot left its draft there and I promoted it or discarded it. On top of that, two safety layers (a validator and a second LLM reviewing the first) and an escalation to me if it went round in circles without progressing.
 
 Then I kept adding: an MCP server, a skill to install it and one to use it, a GitHub App, an Action, OpenAPI specs, disaster recovery, even an A2A spec so repo-butler could talk to it (a story for another day, though the butler is partly what killed it, like in an Agatha Christie novel). I let it run loose for a week and some of it landed, but it was a "meh": it worked, and it gave me headaches. So I moved it to Cloud Run and Neon, added OpenTelemetry and dashboards for visibility, and an LLM to review what it generated. It was starting to get fairly accurate, and I liked it.
 
@@ -30,13 +30,13 @@ The idea was to let it grow organically, but I'd run out of things that would ma
 
 ## The Human Part You Couldn't Automate
 
-But the underlying reason wasn't technical. When we created the bot, it could promote things to the main repo and reply to issues. That created bad feeling. People didn't like a bot trying to answer their issues, even when in many cases it did it better or faster than me. I couldn't sell it, and maybe there was no way to sell it.
+But the underlying reason wasn't technical. When I created the bot, it could promote things to the main repo and reply to issues. That created bad feeling. People didn't like a bot trying to answer their issues, even when in many cases it did it better or faster than me. I couldn't sell it, and maybe there was no way to sell it.
 
 So I brought it back under my hand: I turned it into a skill and stripped the extras away until that was all that was left, a skill I keep improving and that I control.
 
 ## Remaking It as a Skill
 
-So I remade it as a skill, starting simpler. In a couple of afternoons it had everything I'd accumulated. It needs no shadow repos, because I call it when I want to; it has no infrastructure behind it, so no latency; and a plain `gh issue list` gets you a long way, in Electron's tracker as well as ours.
+In a couple of afternoons it had everything I'd accumulated. It needs no shadow repos, because I call it when I want to; it has no infrastructure behind it, so no latency; and a plain `gh issue list` gets you a long way, in Electron's tracker as well as ours.
 
 ## The One Thing That Earned Its Place
 

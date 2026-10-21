@@ -85,7 +85,17 @@ export const CABINETS: Record<ChainGameId, CabinetMeta> = {
     icon: '📺',
     color: '#ec4899',
     path: '/fun/primetime',
-    estYear: 1990,
+    estYear: 1990
+  },
+  fighter: {
+    title: 'STREET CHAMPION',
+    taglineKey: 'fun.fighter.description',
+    genreKey: 'fun.arcade.genre.fighter',
+    twoPlayer: true,
+    icon: '🥊',
+    color: '#ef4444',
+    path: '/fun/fighter',
+    estYear: 1991,
     isNew: true
   },
   lemmings: {

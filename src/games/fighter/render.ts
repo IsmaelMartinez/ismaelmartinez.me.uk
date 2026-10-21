@@ -158,24 +158,72 @@ function flagFor(home: HomeId, k = 1) {
   return flagArt(FLAG_OF[home], k);
 }
 
+/** A cached fighter sprite and where its top-left sits relative to the feet. */
+interface Sprite {
+  canvas: HTMLCanvasElement;
+  ox: number;
+  oy: number;
+}
+
 export function createRenderer(): Renderer {
   const SPR = 208;
   const ANCHOR_X = SPR / 2;
   const ANCHOR_Y = SPR - 24;
   const rasters = [new Raster(SPR, SPR), new Raster(SPR, SPR)];
-  const sprites = [makeCanvas(SPR, SPR), makeCanvas(SPR, SPR)];
-  const images = sprites.map(c => ctx2d(c).createImageData(SPR, SPR));
+  const images = [0, 1].map(() => ctx2d(makeCanvas(1, 1)).createImageData(SPR, SPR));
   const portraits = new Map<string, HTMLCanvasElement>();
   const backdrops = new Map<string, HTMLCanvasElement>();
   let worldMap: HTMLCanvasElement | null = null;
 
-  function renderFighter(slot: number, def: FighterState['def'], look: Look, pose: Pose, flash: 'none' | 'white' | 'electric'): HTMLCanvasElement {
+  /**
+   * Rasterised sprites, kept per fighter, colourway, flash and pose. Poses
+   * are held keyframes, so most frames repeat one already drawn, and the
+   * software raster (a millisecond or more a figure) runs only on a pose
+   * change. Each sprite is cropped to its outline to keep the cache small,
+   * and the oldest entries go once it is full.
+   */
+  const spriteCache = new Map<string, Sprite>();
+  const SPRITE_CACHE_MAX = 320;
+
+  function renderFighter(slot: number, def: FighterState['def'], look: Look, pose: Pose, flash: 'none' | 'white' | 'electric'): Sprite {
+    const key = `${def.id}|${look.skin}${look.top}${look.pants}${look.hair}${look.accent}|${flash}|${JSON.stringify(pose)}`;
+    const hit = spriteCache.get(key);
+    if (hit) {
+      // Refresh its place so the cache drops the least recently used.
+      spriteCache.delete(key);
+      spriteCache.set(key, hit);
+      return hit;
+    }
     const r = rasters[slot];
     r.clear();
     drawFigure(r, def, look, pose, ANCHOR_X, ANCHOR_Y);
     r.toImage(images[slot], flash);
-    ctx2d(sprites[slot]).putImageData(images[slot], 0, 0);
-    return sprites[slot];
+    // The outline sits one pixel outside the drawn parts.
+    let x0 = SPR;
+    let y0 = SPR;
+    let x1 = -1;
+    let y1 = -1;
+    for (let y = 0; y < SPR; y++) {
+      for (let x = 0; x < SPR; x++) {
+        if (!r.mat[y * SPR + x]) continue;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+    x0 = Math.max(0, x0 - 1);
+    y0 = Math.max(0, y0 - 1);
+    x1 = Math.min(SPR - 1, x1 + 1);
+    y1 = Math.min(SPR - 1, y1 + 1);
+    const w = Math.max(1, x1 - x0 + 1);
+    const h = Math.max(1, y1 - y0 + 1);
+    const canvas = makeCanvas(w, h);
+    ctx2d(canvas).putImageData(images[slot], -x0, -y0, x0, y0, w, h);
+    const sprite: Sprite = { canvas, ox: x0 - ANCHOR_X, oy: y0 - ANCHOR_Y };
+    spriteCache.set(key, sprite);
+    if (spriteCache.size > SPRITE_CACHE_MAX) spriteCache.delete(spriteCache.keys().next().value as string);
+    return sprite;
   }
 
   /** A head-and-shoulders portrait, cached per fighter, colourway and mood. */
@@ -301,7 +349,7 @@ export function createRenderer(): Renderer {
     ctx.translate(sx + jitter, sy);
     if (mirrored) ctx.scale(-1, 1);
     if (special) auraBack(ctx, f, t, clock);
-    ctx.drawImage(sprite, -ANCHOR_X, -ANCHOR_Y);
+    ctx.drawImage(sprite.canvas, sprite.ox, sprite.oy);
     if (special) auraFront(ctx, f, t, clock, pose);
     ctx.restore();
     if (electric && t >= 6 && t <= (f.action?.until ?? 0)) bolts(ctx, sx, sy - f.def.height * 0.5, f.def.height, clock);
@@ -684,8 +732,8 @@ export function createRenderer(): Renderer {
       }
       case 'ko': {
         if (c.t % 16 < 12 || c.t > 50) {
-          const h = c.t < 4 ? 80 - c.t * 6 : 56;
-          drawDisplay(ctx, c.text, SCREEN_W / 2, y - 16 + (56 - h) / 2, h, STYLE.ko, 'ko');
+          const h = c.t < 4 ? 72 - c.t * 6 : 50;
+          drawDisplay(ctx, c.text, SCREEN_W / 2, y - 4 + (50 - h) / 2, h, STYLE.ko, 'ko');
         }
         break;
       }
@@ -703,7 +751,7 @@ export function createRenderer(): Renderer {
 
   function tally(ctx: CanvasRenderingContext2D, v: FightView): void {
     const t = v.tally;
-    if (!t || t.t < 40) return;
+    if (!t || t.t < 40 || (v.fight.phase !== 'roundEnd' && v.fight.phase !== 'matchEnd')) return;
     const L = v.labels;
     const rows: [string, number][] = [
       [L.timeBonus, t.time],
@@ -766,14 +814,13 @@ export function createRenderer(): Renderer {
       ctx.drawImage(titleBackdrop(), 0, 0);
       drawDisplay(ctx, 'STREET', SCREEN_W / 2 - 4, 30, 30, { ...STYLE.chrome, italic: 0.18 }, 'logoStreet');
       // The brush stroke behind the big word.
-      ctx.drawImage(swoosh(), 18, 100);
+      ctx.drawImage(swoosh(), 18, 104);
       drawDisplay(ctx, 'CHAMPION', SCREEN_W / 2, 70, 44, { ...STYLE.fire, italic: 0.12 }, 'logoChampion');
       label(ctx, 'WORLD TOUR 1991', SCREEN_W / 2, 136, '#f8e8b0', 'centre', 1, '#401000');
       // A glint running across the logo.
       const g = (clock * 5) % 520;
       if (g < 360) for (let i = 0; i < 6; i++) rect(ctx, 12 + g - i * 2, 74 + i * 7, 2, 6, '#ffffff');
       if (clock % 60 < 40) label(ctx, labels.pressStart, SCREEN_W / 2, 170, '#f8f8f8', 'centre', 2, '#101040');
-      label(ctx, '1991 STREET CHAMPION', SCREEN_W / 2, 208, '#8890c8', 'centre');
     },
 
     select(ctx, s, clock, labels) {
@@ -837,7 +884,7 @@ export function createRenderer(): Renderer {
         const flag = flagFor(home);
         ctx.drawImage(flag.canvas, p === 0 ? bx + big - 16 : bx, 104 + big - 12);
       }
-      if (s.mode === 'versus') drawDisplay(ctx, labels.versusMode, SCREEN_W / 2, 24, 12, STYLE.red, 'red');
+      if (s.mode === 'versus') drawDisplay(ctx, labels.versusMode, SCREEN_W / 2, 30, 12, STYLE.red, 'red');
       else {
         const id = s.chosen[0] ?? SELECTABLE[s.cursor[0]];
         const home = FIGHTERS[id].home;
@@ -1055,11 +1102,11 @@ let swooshArt: HTMLCanvasElement | null = null;
 function swoosh(): HTMLCanvasElement {
   if (swooshArt) return swooshArt;
   const W = SCREEN_W - 36;
-  const b = new PixBuf(W, 16);
+  const b = new PixBuf(W, 26);
   for (let x = 0; x < W; x++) {
     const t = x / W;
-    const thick = Math.max(0, Math.sin(t * Math.PI) * 9 + (hash(x * 0.3) - 0.5) * 2);
-    const top = 8 - thick / 2 + t * 3 - 1.5;
+    const thick = Math.max(0, Math.sin(t * Math.PI) ** 0.6 * 15 + (hash(x * 0.3) - 0.5) * 3);
+    const top = 13 - thick / 2 + (t - 0.5) * 8;
     for (let y = Math.floor(top); y < top + thick; y++) {
       const f = (y - top) / Math.max(1, thick);
       if (t > 0.85 && bayer(x, y) < (t - 0.85) * 7) continue;

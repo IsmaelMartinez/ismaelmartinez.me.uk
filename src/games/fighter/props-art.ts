@@ -154,7 +154,7 @@ function paintCar(stage: number): PixBuf {
     for (let x = 64; x < 112; x += 6) buf.poly([[X(x), Y(x, rf + 2)], [X(x + 3), Y(x, rf - 1)], [X(x + 6), Y(x, rf + 2)]], P.dark);
   }
   // Wheel arches.
-  for (const cx of [38, 140]) {
+  for (const cx of wreck ? [] : [38, 140]) {
     const cy = FY - 13 + tilt(cx);
     for (let y = Math.floor(cy - 17); y < FY + 2; y++)
       for (let x = Math.floor(X(cx) - 17); x <= X(cx) + 17; x++) {

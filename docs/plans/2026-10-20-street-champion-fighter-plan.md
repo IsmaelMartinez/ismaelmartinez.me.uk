@@ -125,3 +125,15 @@ behind the start screen.
   the grappler closes in and grabs, rushes became a long punishable recovery
   with the sumo bouncing off, and the soldier's numbers came down. Settled at
   30% to 70% for the eight and 45% to 73% for the bosses.
+- 2026-10-21, round 2 (the art, from the owner's "the graphics are pretty bad,
+  you can do much much better"): the figures became swept muscle profiles
+  with hands, feet, cloth folds, a profile face cut in under the hairline and
+  a five-tone hue-shifted ramp with a shine and a rim light; the fourteen
+  stages were repainted with dense props, 27 px spectators and textured
+  floors; the sparks, projectiles, HUD, calls, screens and the bonus car and
+  drums were redrawn (`effects-art.ts`, `props-art.ts`, `display.ts`, a
+  display font with accents, `pixbuf.ts`). A human-speed keyboard test found
+  that a stick released a beat before the button turned specials into
+  normals, and that a walk forward into a fireball read as a dragon punch;
+  both fixed in `motion.ts`. Fighter sprites are now cached per pose, since a
+  figure costs about a millisecond to rasterise and poses are held keyframes.

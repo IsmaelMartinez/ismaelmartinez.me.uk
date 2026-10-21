@@ -46,21 +46,15 @@ Decidir qué construir y qué no construir requiere entender la dirección del p
 
 La gestión de la comunidad es trabajo completamente humano. Cuando los usuarios empezaron a quejarse de la frecuencia de actualizaciones (la conversación de "calma con las actualizaciones"), eso requería empatía, leer el ambiente y hacer un juicio sobre la cadencia de lanzamientos.
 
-Las decisiones arquitectónicas están en la misma categoría. Cuándo refactorizar versus cuándo parchear. Dónde trazar los límites de los módulos. Cuánta compatibilidad hacia atrás mantener y cuándo romperla. Estas decisiones dan forma al proyecto durante años y no se pueden delegar a una herramienta que optimiza para la tarea inmediata.
-
-El criterio de lanzamiento es más matizado de lo que parece. ¿Está lista esta versión? ¿Debería acumular más correcciones primero? ¿Es la corrección de Wayland lo suficientemente estable para publicar, o necesita otra semana de pruebas? Estas decisiones requieren contexto al que ninguna herramienta tiene acceso. A veces es un "feeling" difícil de explicar. 
+La arquitectura y los lanzamientos son el mismo tipo de decisión. Cuándo refactorizar en vez de parchear, cuándo romper la compatibilidad hacia atrás, si la corrección de Wayland está lista para publicar o necesita otra semana: son decisiones que dan forma al proyecto durante años y requieren un contexto que ninguna herramienta tiene. A veces es un "feeling" difícil de explicar. 
 
 Y luego está decir no a las peticiones de funcionalidades. Eso es quizás la parte más difícil de mantener un proyecto, y es enteramente una habilidad humana. La IA lo intentará todo, todo, todo para ayudar al usuario, pero a veces es mejor decir no que tirarte semanas cavando un túnel sin salida. 
 
 ## La realidad del mantenedor en solitario
 
-teams-for-linux es un proyecto de un solo mantenedor con cientos de miles de usuarios activos diariamente. Esa proporción es el desafío fundamental.
+teams-for-linux es un solo mantenedor y cientos de miles de usuarios activos al día. Esa proporción es todo el desafío. Sin herramientas de IA las matemáticas no cuadran: las issues esperan, los lanzamientos se espacian, los parches de seguridad se quedan en la cola y al final el proyecto o se abandona o se queda años parado. Con ellas puedo seguir el ritmo y mantener el proyecto con un puñado de bugs abiertos, la mayoría a la espera de otros frameworks o librerías.
 
-Sin herramientas de IA, las matemáticas no cuadran. Responder a los issues lleva más tiempo. Los lanzamientos ocurren con menos frecuencia. Los parches de seguridad se quedan en la cola. Al final, se acumulan y el proyecto o se abandona o los usuarios empiezan a tener que esperar años para ver cambios.
-
-Con herramientas de IA, puedo seguirle el ritmo. Puedo mantener el proyecto con muy pocos bugs abiertos (muchos de ellos dependen de otros frameworks o librerías).
-
-La realidad es que la IA está aquí para quedarse. Para mantenedores de código abierto en solitario, la IA es una herramienta de sostenibilidad, no un atajo. Puede ayudar a redirigir esos proyectos que tienen cientos de issues abiertas, porque a nadie le gusta eso. Ni a los mantenedores ni a los usuarios.
+Para un mantenedor en solitario, la IA es una herramienta de sostenibilidad, no un atajo. A nadie le gusta un proyecto con cientos de issues abiertas, ni al mantenedor ni a los usuarios.
 
 ## Reflexión final
 

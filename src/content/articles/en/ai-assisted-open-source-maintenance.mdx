@@ -46,21 +46,15 @@ Deciding what to build and what not to build requires understanding the project'
 
 Community management is entirely human work. When users started pushing back on update frequency (the "chill with updates" conversation), it took empathy, reading the room, and a judgement call about release cadence.
 
-Architectural decisions sit in the same category. When to refactor versus when to patch. Where to draw module boundaries. How much backwards compatibility to maintain and when to break it. These choices shape the project for years and can't be delegated to a tool that optimises for the immediate task.
-
-Release judgement is more nuanced than it sounds. Is this build ready? Should I batch more fixes first? Is the Wayland fix stable enough to ship, or does it need another week of testing? These decisions require context that no tool has access to. Sometimes it's a gut feeling that's hard to explain.
+Architecture and releases are the same kind of call. When to refactor rather than patch, when to break backwards compatibility, whether the Wayland fix is ready to ship or needs another week: these decisions shape the project for years and need context no tool has. Sometimes it's a gut feeling that's hard to explain.
 
 And then there's saying no to feature requests. That's perhaps the hardest part of maintaining a project, and it's entirely a human skill. AI will try everything, everything, everything to help the user, but sometimes saying no beats spending weeks digging a tunnel with no way out.
 
 ## Solo Maintainer Reality
 
-teams-for-linux is a single-maintainer project with hundreds of thousands of daily active users. That ratio is the core challenge.
+teams-for-linux is one maintainer and hundreds of thousands of daily active users. That ratio is the whole challenge. Without AI tooling the maths doesn't work: issues wait, releases slow down, security patches sit in the queue, and eventually the project is either abandoned or stuck for years. With it I can keep up, and hold the project at a handful of open bugs, most of them waiting on other frameworks or libraries.
 
-Without AI tooling, the maths doesn't work. Responding to issues takes longer. Releases happen less often. Security patches sit in the queue. Eventually they pile up, and either the project gets abandoned or users end up waiting years for changes.
-
-With AI tooling, I can keep up. I can hold the project at very few open bugs (many of them ones that depend on other frameworks or libraries).
-
-The reality is that AI is here to stay. For solo open-source maintainers, it's a sustainability tool, not a shortcut. It can help turn around those projects sitting on hundreds of open issues, because nobody enjoys that. Not the maintainers, and not the users.
+For a solo maintainer, AI is a sustainability tool, not a shortcut. Nobody enjoys a project sitting on hundreds of open issues, neither the maintainer nor the users.
 
 ## Closing Thought
 

@@ -8,45 +8,41 @@ draft: true
 
 ## The Bot I Built and Then Took Apart
 
-In [the first article](/en/articles/ai-assisted-open-source-maintenance) I mentioned in passing a bot I built and later retired. This is its story. I put it together to help me triage teams-for-linux issues. It ended up running serverless on Google Cloud, with embeddings over the issue history and the documentation, and for a few months it did more or less what I asked of it. Then I took most of it apart. The interesting part wasn't building it, it was deciding what to remove.
+In [the first article](/en/articles/ai-assisted-open-source-maintenance) I mentioned in passing [a bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) I built and later retired. This is its story. I put it together to help me triage teams-for-linux issues. It ended up running serverless on Google Cloud, with embeddings over the issue history and the documentation, and for a few months it did more or less what I asked of it. Then I took most of it apart. The interesting part wasn't building it, it was deciding what to remove.
 
 ## What It Grew Into
 
 The bot started small and out of curiosity. Bit by bit it grew. A first phase read the issue against the bug template and flagged what was missing (reproduction steps, logs), with no AI involved. Another searched the documentation for known solutions. Another looked for similar issues in the history. And for feature requests, it gathered the relevant context: roadmap, ADRs, research documents. Since this project depends on Electron, I added the issues from there to give it more context. So it was worth fitting it with a RAG and feeding in the new issues as they came.
 
-Since I didn't trust letting it loose near real people, I kept adding scaffolding. First in silent mode, storing everything in a database and a dashboard so I could watch it without it publishing anything. Then some shadow repos that acted as an approval gate: the bot left its draft there and I promoted it or discarded it. On top of that, two safety layers (a validator and a second LLM reviewing the first) and an escalation to me if it went round in circles without progressing. And at first it could even promote responses to the main repo and reply to issues.
+Since I didn't trust letting it loose near real people, I kept adding scaffolding. First in silent mode, storing everything in a database and a dashboard so I could watch it without it publishing anything. Then some shadow repos that acted as an approval gate: the bot left its draft there and I promoted it or discarded it. On top of that, two safety layers (a validator and a second LLM reviewing the first) and an escalation to me if it went round in circles without progressing.
 
-And, well, I let myself add a few more features: an MCP, skills (one for installing it and one for using it), a github bot, an action... swagger specs, disaster recovery... and the good thing is they complemented each other well. I even had an a2a spec for repo-butler (we'll talk about that another day, but the butler partly killed it, like in an Agatha Christie novel).
-
-I actually left it running loose for a week and some of it landed, but it was a "meh" sort of thing. Works, but gives you headaches. So I changed the architecture and decided to use Google Cloud serverless and Neon DB, because... because not. After all, it's just a few prompts here and there, and even dashboards, so I get better visibility. And honestly, I liked it: it worked well and was starting to get pretty accurate. I added OTel for more observability, and an automatic issue-reporting system. It used an LLM to review what was generated.
+Then I kept adding: an MCP server, a skill to install it and one to use it, a GitHub App, an Action, OpenAPI specs, disaster recovery, even an A2A spec so repo-butler could talk to it (a story for another day, though the butler is partly what killed it, like in an Agatha Christie novel). I let it run loose for a week and some of it landed, but it was a "meh": it worked, and it gave me headaches. So I moved it to Cloud Run and Neon, added OpenTelemetry and dashboards for visibility, and an LLM to review what it generated. It was starting to get fairly accurate, and I liked it.
 
 ## Why It Stopped Paying Off
 
-It seemed to be improving, but very slowly, and something was starting not to add up. So I did what I reckon is the best thing: I left it in the drawer for a few days and forgot about it. A few weeks later, having had it collecting data and generating issue reports in the shadow repo, I decided to take another look and work out what was going on.
+It was improving, but slowly, and something didn't add up. So I did what usually works: I put it in a drawer for a few weeks while it kept collecting data and drafting reports in the shadow repo, then came back and looked at what it had actually done.
 
-I'd clearly overdone it, though these are learning exercises. I'm telling you, it all fit together, but like a system that's been around a long time, it had things that work but that you don't really need.
+I'd clearly overdone it. Everything fitted together, but like any system that has been around a while, it was full of things that worked and that nobody needed.
 
-The shadow repos became a pain to maintain. Cloud Run sometimes took a while to start, and that cold start added latency. There were quite a few false positives, and some came from the Electron side, different versions that look alike in the symptoms but don't share the cause. I also tried other bots to find similar issues and they threw too many false positives. It got too complicated for what it gave back. A Death Star, the kind I talk about in the other articles.
+The shadow repos became a pain to maintain. Cloud Run sometimes took a while to start, and that cold start added latency. There were quite a few false positives, and some came from the Electron side, different versions that look alike in the symptoms but don't share the cause. I also tried other bots to find similar issues and they threw too many false positives. It got too complicated for what it gave back: a Death Star, the kind of thing that works but nobody can afford to keep.
 
-The idea from the start was to let it grow organically, and maybe one day I'll revive it, but I'd run out of things to build to make it better. It was dead easy to add features, but when the next thing on the list was home automation, I figured I'd gone a couple of villages too far. The exercise had lasted a few months, but it had piled up the complexity you'd normally pile up over years.
+The idea was to let it grow organically, but I'd run out of things that would make it better. Adding features was dead easy, and when the next one on the list was home automation I knew I'd gone too far. In a few months it had piled up the complexity you'd normally accumulate over years.
 
 ## The Human Part You Couldn't Automate
 
-But the underlying reason wasn't technical. When we created the bot, it could promote things to the main repo and reply to issues. That created bad feeling. People didn't like a bot trying to answer their issues, even when in many cases it did it better or faster than me. I couldn't sell it, and maybe there was no way to sell it.
+But the underlying reason wasn't technical. When I created the bot, it could promote things to the main repo and reply to issues. That created bad feeling. People didn't like a bot trying to answer their issues, even when in many cases it did it better or faster than me. I couldn't sell it, and maybe there was no way to sell it.
 
-So I brought it back to run it myself. I verify every draft it creates, every review it does, and I steer it. That part, the judgement and the dealing with people, couldn't be automated, or at least not now. It's the same pattern as the other two articles, I decide, the AI executes, I review, applied to triage. The autonomous bot ended up being a skill that I drive.
+So I brought it back under my hand: I turned it into a skill and stripped the extras away until that was all that was left, a skill I keep improving and that I control.
 
 ## Remaking It as a Skill
 
-So I remade it, this time as a skill. Start simpler. And honestly, in a couple of afternoons I trained the skill with all the information I'd accumulated.
-
-The skill doesn't need the shadow repos, because I call it when I want to. Maybe one day I'll hand them over to an agent, but for now I don't need that. A skill with no infrastructure behind it has no latency problems, and the `gh issue list` command doesn't do too badly either and gives better results. And this applies to the Electron issues too.
+In a couple of afternoons it had everything I'd accumulated. It needs no shadow repos, because I call it when I want to; it has no infrastructure behind it, so no latency; and a plain `gh issue list` gets you a long way, in Electron's tracker as well as ours.
 
 ## The One Thing That Earned Its Place
 
 Of all that apparatus, the one thing that proved it earned its place was the embeddings. Having the issue history vectorised and linked really does help find related issues that would otherwise slip past me. That's the piece I'm keeping.
 
-Right now I'm in the middle of moving those embeddings out of the repository and into something more local, with the config or information inside teams-for-linux itself, driven from the skill. Will it hold? I don't know. Only time will tell.
+The plan is to move those embeddings out of the bot and into teams-for-linux itself, as a small committed index the skill reads directly and a CI job refreshes, with no server or database behind it. Even that is a bridge: in May 2026 GitHub shipped native semantic issue search in Copilot Chat, which is the same capability with no infrastructure on my side, and the day it is reachable from an API the index goes too. Will it hold? I don't know. Only time will tell.
 
 ## Closing Thought
 

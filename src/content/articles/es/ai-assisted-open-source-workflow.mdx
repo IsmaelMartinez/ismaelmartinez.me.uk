@@ -18,27 +18,27 @@ Este proyecto tiene varios niveles de documentación. Primero, los documentos t�
 
 Luego están los documentos para el contribuidor. El clásico CONTRIBUTING.md, al que ahora le puedo quitar parte de la paja técnica, que ya vive en esos otros documentos.
 
-También tengo otra categoría para la investigación, para esos proyectos o partes que requieren una fase de implementación. A veces incluso subo los planes de implementación, aunque estos dos tipos de documentos los trato de forma más efímera: una vez que la fase o el proyecto se acaba, actualizo los demás documentos o creo nuevos, y los borro. Si necesito esos detalles, siempre puedo mirar el historial de git.
+Los documentos de investigación y los planes de implementación son la tercera capa, para el trabajo que necesita más de una sesión. Son efímeros, y vuelvo a ellos más abajo.
 
 Y, por último, están los documentos para los usuarios. Una documentación buena y concisa es esencial cuando mantienes cientos de miles de usuarios. No quiero que la gente pierda el tiempo abriendo issues en el repositorio cuando hay una opción de configuración que resuelve su problema.
 
-Todos estos documentos están vivos, o lo intento, y van mejorando poco a poco con cada iteración. Quizá sea la parte de la que menos se habla, pero es donde la IA ayuda más y con menos esfuerzo, y de la que, en mi opinión, más depende. Mi consejo es que vayan al grano: concisos y centrados en lo actual. Así no te lías tú ni lías a la IA.
+Todos estos documentos están vivos, o lo intento, y mejoran un poco con cada iteración. Es la parte de la que menos se habla y de la que más depende la IA. Que vayan al grano: concisos y centrados en lo actual, para no liarte tú ni liar a la IA.
 
 ## Investigar antes de programar
 
 Con esta base, lo primero que hago siempre es investigar. La IA es muy buena buscando y reuniendo información, sobre todo si está bien estructurada (y no, no necesitas un RAG para eso). Todas las issues y peticiones las paso por la IA para ver si ya lo hemos resuelto o probado. Muchas veces hay algo al respecto, y eso me ahorra un montón de tiempo: con la IA analizo en minutos lo que tardaría días (y que, si no, acabaría dejando para luego, o resolviendo de memoria o a ojo).
 
-Si entonces creo que hay un bug o que se puede añadir una funcionalidad, hago una investigación. Es importante centrar siempre las primeras iteraciones en investigar, recoger datos y evaluar hipótesis. Todo esto lo delego en el agente de IA. Describo el problema ("compartir pantalla falla en Wayland con la última actualización de Electron") y el agente investiga el código relevante, el registro de cambios y las issues de upstream, y me trae un informe. Lo corrijo si hace falta y, para lo que no tengo claro, le pido un prototipo desechable que pruebe la hipótesis.
+Si hay un bug de verdad o una funcionalidad que merece la pena, las primeras iteraciones van a recoger datos y evaluar hipótesis, y las delego en el agente. Describo el problema ("compartir pantalla falla en Wayland con la última actualización de Electron"), investiga el código relevante, el registro de cambios y las issues de upstream, y me trae un informe. Lo corrijo si hace falta y, para lo que no tengo claro, le pido un prototipo desechable.
 
 A veces es una sola iteración; otras, varias sesiones. Para eso tengo también documentos de investigación en el repositorio. Cuando un enfoque parece viable, le pido al agente que escriba un plan de acción. Lo reviso y abro otra conversación para reducir riesgos y ganar claridad. Solo entonces empieza la implementación.
 
-Para lo sencillo, esa conversación se acaba enseguida; en algunos casos, como actualizar dependencias, el proceso es casi automático y no hacen falta prototipos ni nada de eso. Para lo complejo puede alargarse varias sesiones, así que el documento de investigación se divide en fases. Pocas veces las implementamos todas: que la IA pueda generarlas sin esfuerzo no significa que las necesites, y eso es complejidad regalada. El proceso se adapta; lo que no cambia es que entiendo qué está pasando antes de comprometerme con un enfoque.
+Para lo sencillo, como actualizar dependencias, es casi automático y no hace falta prototipo. Para lo complejo se alarga varias sesiones y el documento de investigación se divide en fases, y pocas veces las implementamos todas: que la IA pueda generarlas sin esfuerzo no significa que las necesites. Lo que no cambia es que entiendo qué está pasando antes de comprometerme con un enfoque.
 
 ## Funcionalidades y el hábito de contexto limpio
 
 Cuando una funcionalidad recibe luz verde, el flujo es siempre el mismo: una especificación clara que incluye lo que *no* hay que hacer, implementación incremental en trozos revisables, tests escritos en paralelo (la IA sigue los patrones documentados en CLAUDE.md) y una lectura completa de cada diff. La IA produce buen código casi siempre, pero "casi siempre" no basta para miles de usuarios.
 
-Cuando el trabajo termina, el resultado se convierte en un ADR y la investigación que llevó hasta él se borra. Git recuerda los callejones sin salida; el directorio de trabajo no tiene por qué. Si guardas documentos de investigación viejos, suelen confundir a la IA más que ayudarla: se pierde menos si le das lo actual y dejas los detalles históricos en el historial de git.
+Cuando el trabajo termina, el resultado se convierte en un ADR y la investigación que llevó hasta él se borra. Git recuerda los callejones sin salida; el directorio de trabajo no tiene por qué, y los documentos de investigación viejos confunden a la IA más de lo que la ayudan.
 
 ## Mantener el ritmo
 
@@ -54,6 +54,6 @@ Cuando ya has puesto suficientes restricciones alrededor de la IA (CLAUDE.md, el
 
 Este flujo de trabajo no es una plantilla. Es lo que me funciona a mí en un proyecto concreto con un mantenedor concreto. Tu versión será distinta. Pero el patrón de fondo es portable: un humano al principio, un humano al final, la herramienta en medio. Sáltate cualquiera de esos dos extremos y o no estás aprovechando bien la IA o no estás manteniendo la calidad que tus usuarios merecen.
 
-El [artículo de principios](/es/articles/ai-assisted-open-source-maintenance) cubrió el porqué. Este artículo cubrió el cómo. Juntos son la imagen completa.
+El [artículo de principios](/es/articles/ai-assisted-open-source-maintenance) cubrió el porqué. Este artículo cubrió el cómo.
 
-(\*) Nota: otros sistemas usan AGENTS.md y, si alguien de Anthropic lee esto, creo que ya es hora de estandarizar con los demás.
+(\*) Nota: otras herramientas usan AGENTS.md. Cuando escribí el primer borrador le pedía a Anthropic que estandarizara con los demás, y desde septiembre de 2026 Claude Code también lee AGENTS.md, como alternativa cuando el repositorio no tiene CLAUDE.md.

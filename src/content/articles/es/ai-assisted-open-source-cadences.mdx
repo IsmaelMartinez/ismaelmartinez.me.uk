@@ -1,8 +1,8 @@
 ---
 title: "Código abierto asistido por IA: cadencias y señales"
-description: "Qué cambia cuando llevas varios proyectos a distintas velocidades: vida larga, estacional, efímero, reactivo. La disciplina es la misma; las restricciones tienen que doblarse con el ciclo de vida, y las señales se convierten en la verdadera limitación."
+description: "Qué cambia cuando llevas varios proyectos a distintas velocidades: vida larga, estacional, efímero, reactivo, heredado. La disciplina es la misma; las restricciones tienen que doblarse con el ciclo de vida, y las señales se convierten en la verdadera limitación."
 publishedDate: 2026-03-18
-tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux", "Votescot", "Wifisentinel"]
+tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux", "Votescot", "Wifisentinel", "PR-Agent"]
 draft: true
 ---
 
@@ -10,19 +10,21 @@ draft: true
 
 Mantener bien un proyecto de código abierto es una cadencia estable y de vida larga: un solo código, un solo ritmo. Llevar varios a la vez es un problema distinto. La asistencia de IA hace factible mantener varios proyectos en marcha en paralelo, a distintas velocidades, y eso cambia lo que el flujo de trabajo tiene que manejar, porque ninguna cadencia única les sirve a todos.
 
-## Cuatro cadencias
+## Cinco cadencias
 
-[teams-for-linux](https://github.com/IsmaelMartinez/teams-for-linux) es el de vida larga: siete años de historia, cientos de miles de usuarios activos, todas las restricciones.
+[teams-for-linux](https://github.com/IsmaelMartinez/teams-for-linux) es el de vida larga: ocho años de historia, cientos de miles de usuarios activos, todas las restricciones.
 
 [bonnie-wee-plot](https://github.com/IsmaelMartinez/bonnie-wee-plot) es estacional, una aplicación escocesa de huerto donde las funcionalidades que importan en marzo (ventanas de siembra) no son las que importan en agosto (cosecha, vigilancia del tizón). El código crece por capítulos, y es el año hortícola el que dicta qué toca construir a continuación.
 
-[votescot](https://github.com/IsmaelMartinez/votescot) es efímero, una brújula de voto de código abierto construida para las elecciones del Parlamento Escocés de 2026. La ventana de relevancia es estrecha: el código tiene que ser sólido mientras dura, pero el ciclo de vida trae su final de fábrica.
+[votescot](https://github.com/IsmaelMartinez/votescot) fue efímero, una brújula de voto de código abierto construida para las elecciones al Parlamento Escocés de mayo de 2026. La ventana de relevancia era estrecha: el código tenía que ser sólido mientras durase, y el ciclo de vida traía su final de fábrica. Las elecciones ya han pasado, las sincronizaciones de datos programadas están apagadas y el repositorio está archivado, con la web en pie como registro de solo lectura. Con la IA, más proyectos deberían tratarse así: construidos para su momento, no mantenidos vivos por una reutilización que nunca llega. Borrar es el mantenimiento más barato que existe.
 
-[wifisentinel](https://github.com/IsmaelMartinez/wifisentinel) es reactivo, construido deprisa porque una situación concreta lo pedía (un Airbnb sospechoso en Ámsterdam donde quería saber qué había de verdad en la red). Lo que empezó como una herramienta puntual creció hasta convertirse en un kit completo, una vez resuelto el problema original.
+[wifisentinel](https://github.com/IsmaelMartinez/wifisentinel) es reactivo, construido deprisa porque una situación concreta lo pedía (un Airbnb sospechoso en Ámsterdam donde quería saber qué había de verdad en la red). Lo que empezó como una herramienta puntual creció hasta convertirse en un kit completo una vez resuelto el problema original: puntuación de cumplimiento, análisis de radiofrecuencia, reconocimiento externo de un dominio, historial de escaneos y un panel.
+
+[PR-Agent](https://github.com/the-pr-agent/pr-agent) es heredado: el revisor de código abierto de Qodo, donado a la comunidad en 2026 con 13.000 estrellas y años de historia en los que no participé, y que ahora ayudo a mantener. La cadencia la marcan los pull requests de otros y un código que todavía estoy aprendiendo, así que el trabajo es sobre todo revisar, publicar y decir que no, sobre código que nunca fue mío. Ese merece su propio artículo.
 
 ## Ajusta las restricciones a la cadencia
 
-Las restricciones completas son adecuadas para un proyecto de siete años y excesivas para una brújula de voto de un mes. Meterle todo el proceso a un código efímero es burocracia disfrazada de rigor. Pero "menos restricciones" no es "ninguna restricción": votescot sigue teniendo CI, linter y revisión manual de cada diff. Los estándares que protegen al usuario de que algo se rompa se aplican en todas las cadencias; los que protegen un código de vida larga de la confusión del yo futuro no hacen falta cuando no hay yo futuro al que confundir. La disciplina está en ajustar las restricciones al ciclo de vida, no en aplicar la ceremonia máxima en todo.
+Las restricciones completas son adecuadas para un proyecto de ocho años y excesivas para una brújula de voto de un mes. Meterle todo el proceso a un código efímero es burocracia disfrazada de rigor. Pero "menos restricciones" no es "ninguna restricción": votescot tuvo CI, linter y revisión manual de cada diff hasta el final. Los estándares que protegen al usuario de que algo se rompa se aplican en todas las cadencias; los que protegen un código de vida larga de la confusión del yo futuro no hacen falta cuando no hay yo futuro al que confundir. La disciplina está en ajustar las restricciones al ciclo de vida, no en aplicar la ceremonia máxima en todo.
 
 ## La Estrella de la Muerte sigue siendo real
 
@@ -30,8 +32,8 @@ Los errores se esconden en la complejidad. La IA no anula esa regla; la hace má
 
 ## Las señales son la limitación
 
-Con asistencia de IA y las restricciones del tamaño adecuado, el cuello de botella se desplaza. Ya no es cuánto código puedes publicar; eso está resuelto. Es si puedes detectar a tiempo cuándo algo ha ido mal. Los tests son una señal, igual que el CI, la revisión manual o los ADRs. Las restricciones existen para producir señal, y el flujo de trabajo existe para actuar sobre ella. Es el mismo bucle que describía [el artículo del flujo de trabajo](/es/articles/ai-assisted-open-source-workflow): construyes confianza con datos, añades solidez con el tiempo y retiras lo que deja de ganarse su sitio. La IA solo acelera los ciclos, así que la calidad de la señal tiene que seguirles el ritmo. Y si escatimas ahí, la IA deja de amplificar tu productividad y empieza a amplificar el caos.
+Con asistencia de IA y las restricciones del tamaño adecuado, el cuello de botella se desplaza. Ya no es cuánto código puedes publicar; es si puedes detectar a tiempo cuándo algo ha ido mal. Los tests, el CI, la revisión manual y los ADRs son señal: las restricciones existen para producirla y el flujo de trabajo para actuar sobre ella, el mismo bucle que describía [el artículo del flujo de trabajo](/es/articles/ai-assisted-open-source-workflow). La IA acelera los ciclos, así que la calidad de la señal tiene que seguirles el ritmo. Si escatimas ahí, la IA deja de amplificar tu productividad y empieza a amplificar el caos.
 
 ## Reflexión final
 
-Misma disciplina, ciclos de vida muy distintos. Las restricciones se doblan, la cadencia dicta la forma y las señales se convierten en lo que optimizas. Esto no está cerrado: seguramente aparezcan cadencias nuevas que no encajen en estas cuatro, y la Estrella de la Muerte seguirá siendo una tentación. Lo que cambia es lo rápido que te mueves por los ciclos, y si la calidad de tu señal sigue el ritmo de tu velocidad.
+Misma disciplina, ciclos de vida muy distintos. Las restricciones se doblan a la cadencia, y la señal es lo que optimizas. Esto no está cerrado: aparecerán cadencias nuevas que no encajen en estas cinco, y la Estrella de la Muerte seguirá siendo una tentación.

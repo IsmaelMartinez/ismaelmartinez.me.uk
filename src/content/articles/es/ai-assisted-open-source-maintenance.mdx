@@ -1,16 +1,16 @@
 ---
 title: "Código abierto asistido por IA: qué cambia y qué no"
-description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto de código abierto de 7 años: qué acelera, qué no puede reemplazar y por qué existe el archivo CLAUDE.md."
+description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto de código abierto de 8 años: qué acelera, qué no puede reemplazar y por qué existe el archivo CLAUDE.md."
 publishedDate: 2026-03-03
 tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
 draft: true
 ---
 
-## Siete años y aún creciendo
+## Ocho años y aún creciendo
 
-teams-for-linux empezó en 2018. Microsoft no tenía un cliente para Linux y la aplicación web ni siquiera enviaba notificaciones, lo que la hacía bastante inútil como aplicación de chat, así que resucité un wrapper Electron para cubrir una necesidad propia. No esperaba mucho más allá de eso, pero la comunidad me empujó a mantenerlo. Ahora roza las 5.000 estrellas, 365 forks y más de 100 personas que han hecho un commit.
+teams-for-linux empezó en 2018. Microsoft no tenía un cliente para Linux y la aplicación web ni siquiera enviaba notificaciones, lo que la hacía bastante inútil como aplicación de chat, así que resucité un wrapper Electron para cubrir una necesidad propia. No esperaba mucho más allá de eso, pero la comunidad me empujó a mantenerlo. Ahora supera las 5.000 estrellas y los 400 forks, con más de 100 personas que han hecho un commit.
 
-Ese número de contribuidores aún me sorprende. Personas con las que nunca he hablado aparecen con una corrección, un informe de error o un PR para añadir nuevas funcionalidades. De vez en cuando llega una donación de alguien que no sabía que lo usaba, que siempre es bienvenida. Siete años después, el código abierto sigue funcionando así, y lo poco que ha cambiado la IA es que algunas de esas contribuciones vienen hechas con la ayuda de IA, y en eso hay gente que la usa mejor que otros, porque todos estamos aprendiendo.
+Ese número de contribuidores aún me sorprende. Personas con las que nunca he hablado aparecen con una corrección, un informe de error o un PR para añadir nuevas funcionalidades. De vez en cuando llega una donación de alguien que no sabía que lo usaba, que siempre es bienvenida. Ocho años después, el código abierto sigue funcionando así, y lo poco que ha cambiado la IA es que algunas de esas contribuciones vienen hechas con la ayuda de IA, y en eso hay gente que la usa mejor que otros, porque todos estamos aprendiendo.
 
 Lo que la IA ha cambiado es si una sola persona puede mantener el ritmo de un proyecto de este tamaño. Adoptarla no fue la historia de origen. El código, la arquitectura y las decisiones son anteriores a las herramientas en años. Gracias a la IA puedo mejorar el soporte y la calidad de este producto mientras la demanda aumenta. El resto de este artículo muestra cómo se ve eso en la práctica: qué acelera, qué no puede tocar y otros detalles, como por qué hay un archivo CLAUDE.md en el repositorio. Son una serie de artículos: este trata el porqué, y [el siguiente](/es/articles/ai-assisted-open-source-workflow) es el cómo del día a día.
 
@@ -46,21 +46,15 @@ Decidir qué construir y qué no construir requiere entender la dirección del p
 
 La gestión de la comunidad es trabajo completamente humano. Cuando los usuarios empezaron a quejarse de la frecuencia de actualizaciones (la conversación de "calma con las actualizaciones"), eso requería empatía, leer el ambiente y hacer un juicio sobre la cadencia de lanzamientos.
 
-Las decisiones arquitectónicas están en la misma categoría. Cuándo refactorizar versus cuándo parchear. Dónde trazar los límites de los módulos. Cuánta compatibilidad hacia atrás mantener y cuándo romperla. Estas decisiones dan forma al proyecto durante años y no se pueden delegar a una herramienta que optimiza para la tarea inmediata.
-
-El criterio de lanzamiento es más matizado de lo que parece. ¿Está lista esta versión? ¿Debería acumular más correcciones primero? ¿Es la corrección de Wayland lo suficientemente estable para publicar, o necesita otra semana de pruebas? Estas decisiones requieren contexto al que ninguna herramienta tiene acceso. A veces es un "feeling" difícil de explicar. 
+La arquitectura y los lanzamientos son el mismo tipo de decisión. Cuándo refactorizar en vez de parchear, cuándo romper la compatibilidad hacia atrás, si la corrección de Wayland está lista para publicar o necesita otra semana: son decisiones que dan forma al proyecto durante años y requieren un contexto que ninguna herramienta tiene. A veces es un "feeling" difícil de explicar. 
 
 Y luego está decir no a las peticiones de funcionalidades. Eso es quizás la parte más difícil de mantener un proyecto, y es enteramente una habilidad humana. La IA lo intentará todo, todo, todo para ayudar al usuario, pero a veces es mejor decir no que tirarte semanas cavando un túnel sin salida. 
 
 ## La realidad del mantenedor en solitario
 
-teams-for-linux es un proyecto de un solo mantenedor con cientos de miles de usuarios activos diariamente. Esa proporción es el desafío fundamental.
+teams-for-linux es un solo mantenedor y cientos de miles de usuarios activos al día. Esa proporción es todo el desafío. Sin herramientas de IA las matemáticas no cuadran: las issues esperan, los lanzamientos se espacian, los parches de seguridad se quedan en la cola y al final el proyecto o se abandona o se queda años parado. Con ellas puedo seguir el ritmo y mantener el proyecto con un puñado de bugs abiertos, la mayoría a la espera de otros frameworks o librerías.
 
-Sin herramientas de IA, las matemáticas no cuadran. Responder a los issues lleva más tiempo. Los lanzamientos ocurren con menos frecuencia. Los parches de seguridad se quedan en la cola. Al final, se acumulan y el proyecto o se abandona o los usuarios empiezan a tener que esperar años para ver cambios.
-
-Con herramientas de IA, puedo seguirle el ritmo. Puedo mantener el proyecto con muy pocos bugs abiertos (muchos de ellos dependen de otros frameworks o librerías).
-
-La realidad es que la IA está aquí para quedarse. Para mantenedores de código abierto en solitario, la IA es una herramienta de sostenibilidad, no un atajo. Puede ayudar a redirigir esos proyectos que tienen cientos de issues abiertas, porque a nadie le gusta eso. Ni a los mantenedores ni a los usuarios.
+Para un mantenedor en solitario, la IA es una herramienta de sostenibilidad, no un atajo. A nadie le gusta un proyecto con cientos de issues abiertas, ni al mantenedor ni a los usuarios.
 
 ## Reflexión final
 

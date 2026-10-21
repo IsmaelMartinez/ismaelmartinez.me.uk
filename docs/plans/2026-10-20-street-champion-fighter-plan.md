@@ -137,3 +137,18 @@ behind the start screen.
   normals, and that a walk forward into a fireball read as a dragon punch;
   both fixed in `motion.ts`. Fighter sprites are now cached per pose, since a
   figure costs about a millisecond to rasterise and poses are held keyframes.
+- 2026-10-21, round 3 (the bodies and the movement, from the owner's "the
+  movements are far too simple and the characters not realistic enough"):
+  the flat swept-profile figure was replaced by a 3D body (`body.ts`): a
+  posed 3D skeleton whose chest turns three quarters to the viewer and twists
+  into punches, every muscle mass an ellipsoid and every bone a tapered
+  capsule through a depth buffer, inner outlines drawn from depth, clothes
+  as clipped shells, a face placed in the head's frame. Fighters were drawn
+  10% larger. `poses.ts` was rewritten so a move is a sequence (wind-up,
+  chamber, contact, follow-through, recoil, an in-between home) mapped onto
+  its frame data, with an eight-frame walk that bobs and counter-turns,
+  jumps that gather and reach, hit reactions that snap the head before the
+  body, knockdowns, get-ups, throws, per-fighter wins, and the spins (the
+  whirlwind kick, the lariat, the bird kick) as real turns of the body. On
+  the owner's "the legs and arms are far too fat" the limbs came down to
+  about three quarters of the flat figure's radii.

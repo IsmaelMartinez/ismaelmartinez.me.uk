@@ -17,7 +17,8 @@
 import { drawText, drawTextCentred, drawTextRight, textWidth } from '../football/font';
 import type { ArcadeState } from './arcade';
 import { BONUS_TIME, FLOOR_Y, ROUNDS_TO_WIN, SCREEN_H, SCREEN_W, type FightState, type FighterState, type Projectile, type Target } from './fight';
-import { Raster, drawFigure, drawPortrait, landmarks, lookFor, signatureColour, type Look } from './figure';
+import { drawBody, landmarks3 } from './body';
+import { Raster, drawPortrait, lookFor, signatureColour, type Look } from './figure';
 import { STYLE, drawDisplay, type DisplayStyle } from './display';
 import { DUST_FRAMES, SPARK_FRAMES, blit, breathStream, dizzyBird, dizzyStar, dust, flameTongue, hitSpark, projectileArt, whirl, type HitKind } from './effects-art';
 import { bands, checker, ctx2d, disc, hash, makeCanvas, rect } from './pix';
@@ -183,7 +184,7 @@ export function createRenderer(): Renderer {
    * and the oldest entries go once it is full.
    */
   const spriteCache = new Map<string, Sprite>();
-  const SPRITE_CACHE_MAX = 320;
+  const SPRITE_CACHE_MAX = 480;
 
   function renderFighter(slot: number, def: FighterState['def'], look: Look, pose: Pose, flash: 'none' | 'white' | 'electric'): Sprite {
     const key = `${def.id}|${look.skin}${look.top}${look.pants}${look.hair}${look.accent}|${flash}|${JSON.stringify(pose)}`;
@@ -196,8 +197,8 @@ export function createRenderer(): Renderer {
     }
     const r = rasters[slot];
     r.clear();
-    drawFigure(r, def, look, pose, ANCHOR_X, ANCHOR_Y);
-    r.toImage(images[slot], flash);
+    drawBody(r, def, look, pose, ANCHOR_X, ANCHOR_Y);
+    r.toImage3(images[slot], flash, 2.5);
     // The outline sits one pixel outside the drawn parts.
     let x0 = SPR;
     let y0 = SPR;
@@ -403,7 +404,7 @@ export function createRenderer(): Renderer {
     if (s.kind === 'spin' && t >= 6) blit(ctx, whirl(44, 8, clock >> 1, 'front', 'blue'), 0, -h * (f.def.build === 'slim' ? 0.75 : 0.42));
     if (s.kind === 'flip' && t >= 3 && t < 18) flipArc(ctx, h, t);
     if (s.kind === 'breath' && t >= 14 && t < 36) {
-      const lm = landmarks(f.def, pose);
+      const lm = landmarks3(f.def, pose);
       const img = breathStream(clock >> 1, false);
       const grow = Math.min(1, (t - 13) / 6);
       const cut = t >= 30 ? Math.min(1, (t - 30) / 6) : 0;

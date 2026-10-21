@@ -343,9 +343,9 @@ export const FIGHTERS: Record<CharId, Fighter> = {
     walk: [2.2, 1.9],
     jumpX: 2.4,
     reach: 1.1,
-    power: 1.25,
-    health: 195,
-    stunMax: 50,
+    power: 1.3,
+    health: 205,
+    stunMax: 52,
     boxer: true,
     build: 'muscle',
     specials: [

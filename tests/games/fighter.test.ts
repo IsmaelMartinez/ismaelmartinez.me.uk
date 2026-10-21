@@ -60,6 +60,20 @@ describe('motion', () => {
     expect(motionDone(feed([2, 1], 4), 'qcb', 'P')).toBe(true);
   });
 
+  it('reads a motion whose stick was let go a beat before the button', () => {
+    // On a keyboard the thumb leaves the stick first: 2, 3, 6, neutral, press.
+    expect(motionDone(feed([2, 2, 3, 3, 6, 6, 5, 5], 5), 'qcf', 'P')).toBe(true);
+    expect(motionDone(feed([6, 6, 2, 2, 3, 3, 5], 5), 'dp', 'P')).toBe(true);
+    // ...but not one let go long ago.
+    expect(motionDone(feed([2, 3, 6, ...Array(12).fill(5)], 5), 'qcf', 'P')).toBe(false);
+  });
+
+  it('reads a walk forward into a fireball as a fireball, not a dragon punch', () => {
+    const walkIn = feed([6, 6, 6, 2, 2, 3, 3, 6], 6);
+    expect(motionDone(walkIn, 'qcf', 'P')).toBe(true);
+    expect(motionDone(walkIn, 'dp', 'P')).toBe(false);
+  });
+
   it('forgets a motion that took too long', () => {
     expect(motionDone(feed([2, ...Array(30).fill(3)], 6), 'qcf', 'P')).toBe(false);
   });

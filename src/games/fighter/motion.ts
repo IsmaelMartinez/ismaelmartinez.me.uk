@@ -76,6 +76,13 @@ const HCB_WINDOW = 26;
 export const CHARGE_FRAMES = 45;
 /** Frames between releasing the charge and the button. */
 const CHARGE_GRACE = 10;
+/**
+ * Frames the motion's last direction may be let go before the button lands.
+ * A thumb comes off the stick a beat before the finger hits the button, on a
+ * keyboard above all, and the arcade's reader allowed for it; requiring the
+ * stick to still be held on the press frame turned real fireballs into jabs.
+ */
+const RELEASE_GRACE = 8;
 /** Presses needed, and the window they must land in, for a mash special. */
 const MASH_PRESSES = 4;
 const MASH_WINDOW = 24;
@@ -128,9 +135,11 @@ export function pushFrame(buf: CommandBuffer, dir: number, pressed: number): voi
  * sit between steps, as long as the order holds — which is how loose the
  * arcade's reader was, and why a rolled thumb still throws a fireball.
  */
-function sequenceIn(dirs: readonly number[], seq: readonly number[], window: number): boolean {
+function sequenceIn(dirs: readonly number[], seq: readonly number[], window: number, lastWithin = RELEASE_GRACE): boolean {
   let i = seq.length - 1;
   for (let f = dirs.length - 1; f >= 0 && f >= dirs.length - window; f--) {
+    // The final direction has to be recent; earlier steps only in order.
+    if (i === seq.length - 1 && f < dirs.length - lastWithin) return false;
     if (dirs[f] === seq[i]) {
       i--;
       if (i < 0) return true;
@@ -146,22 +155,33 @@ function sequenceIn(dirs: readonly number[], seq: readonly number[], window: num
  */
 export function motionDone(buf: CommandBuffer, motion: Motion, kind: 'P' | 'K'): boolean {
   const dirs = buf.dirs;
-  const now = dirs[dirs.length - 1] ?? 5;
+  const recent = (test: (d: number) => boolean): boolean => {
+    for (let f = dirs.length - 1; f >= 0 && f >= dirs.length - RELEASE_GRACE; f--) if (test(dirs[f])) return true;
+    return false;
+  };
+  // The last direction the stick held before the button, so a walk forward
+  // into a fireball (6, 2, 3, 6) is not read as a dragon punch (6, 2, 3).
+  let last = 5;
+  for (let f = dirs.length - 1; f >= 0 && f >= dirs.length - RELEASE_GRACE; f--) {
+    if (dirs[f] !== 5) {
+      last = dirs[f];
+      break;
+    }
+  }
   switch (motion) {
     case 'qcf':
-      return sequenceIn(dirs, [2, 3, 6], MOTION_WINDOW) && isForward(now);
+      return sequenceIn(dirs, [2, 3, 6], MOTION_WINDOW) && last !== 3;
     case 'qcb':
-      return sequenceIn(dirs, [2, 1, 4], MOTION_WINDOW) && isBack(now);
+      return sequenceIn(dirs, [2, 1, 4], MOTION_WINDOW);
     case 'dp':
-      // The dragon punch: forward, down, down-forward. A held 3 at the end
-      // still counts, so the press may come a frame late.
-      return sequenceIn(dirs, [6, 2, 3], MOTION_WINDOW) && (now === 3 || now === 6);
+      // The dragon punch: forward, down, down-forward.
+      return sequenceIn(dirs, [6, 2, 3], MOTION_WINDOW) && last === 3;
     case 'hcb':
-      return sequenceIn(dirs, [6, 2, 4], HCB_WINDOW) && (isBack(now) || isUp(now));
+      return sequenceIn(dirs, [6, 2, 4], HCB_WINDOW);
     case 'chargeBF':
-      return buf.backCharge >= CHARGE_FRAMES && isForward(now);
+      return buf.backCharge >= CHARGE_FRAMES && recent(isForward);
     case 'chargeDU':
-      return buf.downCharge >= CHARGE_FRAMES && isUp(now);
+      return buf.downCharge >= CHARGE_FRAMES && recent(isUp);
     case 'mash': {
       const mask = kind === 'P' ? PUNCHES : KICKS;
       let presses = 0;

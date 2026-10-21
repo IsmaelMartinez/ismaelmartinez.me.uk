@@ -4,13 +4,19 @@
  *
  * A software rasteriser rather than canvas paths, because canvas fills are
  * anti-aliased and anti-aliasing is the one thing a CPS-1 sprite never has.
- * Every limb is a tapered capsule and every body a few ellipses and
- * polygons, filled pixel by pixel into a small buffer; each pixel's tone is
- * its surface normal against one key light, quantised to four tones per
- * material with a checker dither where two tones meet. Then two passes make
- * it a sprite: a dark rim wherever a part in front borders a part behind
- * (the inner outlines that separate an arm from the chest it crosses), and a
- * one-pixel outer outline in the darkest tone of whatever it borders.
+ * Every limb is a **swept muscle profile** (a radius and an offset that vary
+ * along the bone, so a biceps swells in front of the upper arm and a calf
+ * behind the shin), every body a few ellipses and polygons, filled pixel by
+ * pixel into a small buffer. A pixel's tone is its surface normal against one
+ * key light, quantised to five tones per material with a checker dither where
+ * two meet; the ramp is hue-shifted the way the arcade's palettes were (skin
+ * falls into warm red-brown, cloth into cool indigo, and the top tone is a
+ * specular shine), and the back edge catches a rim light. Then two passes make
+ * it a sprite: a dark rim wherever a part in front borders a part behind (the
+ * inner outlines that separate an arm from the chest it crosses), and a
+ * one-pixel outer outline in the darkest tone of whatever it borders. Muscle
+ * separations, knuckles, toes and cloth folds are creases painted into the
+ * parts they belong to.
  *
  * `poses.ts` says where the joints go; this module owns proportions (per
  * build), costumes (per fighter, with a second colourway for the mirror
@@ -30,14 +36,26 @@ export function hexRgb(hex: string): Rgb {
 }
 
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-const WARM_LIGHT: Rgb = [255, 248, 224];
-const COOL_DARK: Rgb = [20, 12, 40];
+const WARM_LIGHT: Rgb = [255, 244, 214];
+/** Shadow tints: skin falls toward a warm crimson-brown, everything else toward indigo. */
+const WARM_SHADOW: Rgb = [92, 24, 34];
+const COOL_SHADOW: Rgb = [26, 22, 72];
 
-/** Four tones (deep, shade, base, light) and an outline, from one base colour. */
+/** Whether a colour reads as skin (warm, red over green over blue), which shades warm. */
+function warm(c: Rgb): boolean {
+  return c[0] > c[1] && c[1] >= c[2] * 0.9 && c[0] - c[2] > 40;
+}
+
+/**
+ * Six entries from one base colour: deep, shade, base, light, shine, and the
+ * outline. Shadows shift hue as well as value, which is what makes a palette
+ * read as painted rather than as a darkened copy of itself.
+ */
 export function ramp(hex: string): Rgb[] {
   const base = hexRgb(hex);
-  const deep = mix(base, COOL_DARK, 0.58);
-  return [deep, mix(base, COOL_DARK, 0.3), base, mix(base, WARM_LIGHT, 0.36), mix(deep, [0, 0, 0], 0.55)];
+  const tint = warm(base) ? WARM_SHADOW : COOL_SHADOW;
+  const deep = mix(base, tint, 0.62);
+  return [deep, mix(base, tint, 0.34), base, mix(base, WARM_LIGHT, 0.3), mix(base, WARM_LIGHT, 0.64), mix(deep, [8, 4, 12], 0.6)];
 }
 
 // --- Looks ------------------------------------------------------------------------
@@ -175,10 +193,16 @@ const BUILDS = Object.fromEntries(
 
 /** Light from above, in front, a little toward the opponent. */
 const LIGHT = (() => {
-  const v = [0.42, -0.68, 0.6];
+  const v = [0.44, -0.66, 0.6];
   const m = Math.hypot(v[0], v[1], v[2]);
   return v.map(x => x / m) as [number, number, number];
 })();
+
+/** A radius and an offset (toward the anterior side) at a point along a bone. */
+export type Profile = (t: number) => readonly [number, number];
+
+/** A smooth bump of height 1 at `c`, `w` wide each side. */
+export const bump = (t: number, c: number, w: number): number => Math.max(0, 1 - ((t - c) / w) ** 2);
 
 /** A software framebuffer of material ids, tones and part groups. */
 export class Raster {
@@ -216,37 +240,59 @@ export class Raster {
 
   private put(x: number, y: number, m: number, g: number, light: number): void {
     const i = y * this.w + x;
-    const v = light + ((x + y) & 1 ? 0.07 : -0.07);
+    const v = light + ((x + y) & 1 ? 0.06 : -0.06);
     this.mat[i] = m;
     this.grp[i] = g;
-    this.tone[i] = v > 0.8 ? 3 : v > 0.4 ? 2 : v > 0.04 ? 1 : 0;
+    this.tone[i] = v > 0.95 ? 4 : v > 0.7 ? 3 : v > 0.38 ? 2 : v > 0.08 ? 1 : 0;
   }
 
-  /** A tapered capsule from (ax, ay) radius ar to (bx, by) radius br. */
-  capsule(ax: number, ay: number, ar: number, bx: number, by: number, br: number, m: number, g: number, bias = 0): void {
-    const x0 = Math.max(0, Math.floor(Math.min(ax - ar, bx - br)));
-    const x1 = Math.min(this.w - 1, Math.ceil(Math.max(ax + ar, bx + br)));
-    const y0 = Math.max(0, Math.floor(Math.min(ay - ar, by - br)));
-    const y1 = Math.min(this.h - 1, Math.ceil(Math.max(ay + ar, by + br)));
+  /**
+   * A bone swept from (ax, ay) to (bx, by) with a profile: at each fraction t
+   * along it, a radius and an offset toward the anterior side (the side
+   * opposite the bone's left perpendicular, which is the front of an arm or a
+   * leg in any pose; `posterior` flips it, for a torso, whose front is the
+   * other way round). The ends are round, like a capsule's.
+   */
+  limb(ax: number, ay: number, bx: number, by: number, prof: Profile, m: number, g: number, bias = 0, posterior = false): void {
     const dx = bx - ax;
     const dy = by - ay;
-    const len2 = dx * dx + dy * dy || 1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    // The anterior direction.
+    const sx = posterior ? -uy : uy;
+    const sy = posterior ? ux : -ux;
+    let reach = 0;
+    for (let k = 0; k <= 8; k++) {
+      const [r, o] = prof(k / 8);
+      reach = Math.max(reach, r + Math.abs(o));
+    }
+    const x0 = Math.max(0, Math.floor(Math.min(ax, bx) - reach));
+    const x1 = Math.min(this.w - 1, Math.ceil(Math.max(ax, bx) + reach));
+    const y0 = Math.max(0, Math.floor(Math.min(ay, by) - reach));
+    const y1 = Math.min(this.h - 1, Math.ceil(Math.max(ay, by) + reach));
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const px = x + 0.5 - ax;
         const py = y + 0.5 - ay;
-        const t = Math.max(0, Math.min(1, (px * dx + py * dy) / len2));
-        const cx = px - dx * t;
-        const cy = py - dy * t;
-        const r = ar + (br - ar) * t;
-        const d2 = cx * cx + cy * cy;
+        const along = px * ux + py * uy;
+        const t = Math.max(0, Math.min(1, along / len));
+        const [r, off] = prof(t);
+        const side = px * sx + py * sy - off;
+        const over = along < 0 ? along : along > len ? along - len : 0;
+        const d2 = side * side + over * over;
         if (d2 > r * r) continue;
-        const nx = cx / r;
-        const ny = cy / r;
+        const nx = (side * sx + over * ux) / r;
+        const ny = (side * sy + over * uy) / r;
         const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
         this.put(x, y, m, g, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2] + bias);
       }
     }
+  }
+
+  /** A tapered capsule from (ax, ay) radius ar to (bx, by) radius br. */
+  capsule(ax: number, ay: number, ar: number, bx: number, by: number, br: number, m: number, g: number, bias = 0): void {
+    this.limb(ax, ay, bx, by, t => [ar + (br - ar) * t, 0], m, g, bias);
   }
 
   /** An ellipse rotated by `ang` radians. */
@@ -262,7 +308,6 @@ export class Raster {
         const v = (-px * s + py * c) / ry;
         const d = u * u + v * v;
         if (d > 1) continue;
-        // The normal in screen space, rotated back from the ellipse's frame.
         const nx = u * c - v * s;
         const ny = u * s + v * c;
         const nz = Math.sqrt(Math.max(0, 1 - d));
@@ -298,7 +343,7 @@ export class Raster {
     }
   }
 
-  /** Set a pixel to a material's tone outright (faces, creases). */
+  /** Set a pixel to a material's tone outright (faces, eyes). */
   dot(x: number, y: number, m: number, tone: number, g?: number): void {
     const xi = Math.round(x);
     const yi = Math.round(y);
@@ -309,21 +354,37 @@ export class Raster {
     if (g !== undefined) this.grp[i] = g;
   }
 
-  /** Darken a line of pixels already drawn in `group` (muscle creases). */
-  crease(ax: number, ay: number, bx: number, by: number, group: number): void {
+  /**
+   * Darken a line of pixels already drawn in `group` (muscle separations,
+   * knuckles, cloth folds). `depth` is how many tones it takes off.
+   */
+  crease(ax: number, ay: number, bx: number, by: number, group: number, depth = 2): void {
     const n = Math.max(1, Math.round(Math.max(Math.abs(bx - ax), Math.abs(by - ay))));
     for (let k = 0; k <= n; k++) {
       const x = Math.round(ax + ((bx - ax) * k) / n);
       const y = Math.round(ay + ((by - ay) * k) / n);
       if (x < 0 || y < 0 || x >= this.w || y >= this.h) continue;
       const i = y * this.w + x;
-      if (this.grp[i] === group && this.mat[i]) this.tone[i] = Math.max(0, this.tone[i] - 2);
+      if (this.grp[i] === group && this.mat[i]) this.tone[i] = Math.max(0, this.tone[i] - depth);
+    }
+  }
+
+  /** Lift a line of pixels in `group` a tone (the lit lip of a fold). */
+  lift(ax: number, ay: number, bx: number, by: number, group: number): void {
+    const n = Math.max(1, Math.round(Math.max(Math.abs(bx - ax), Math.abs(by - ay))));
+    for (let k = 0; k <= n; k++) {
+      const x = Math.round(ax + ((bx - ax) * k) / n);
+      const y = Math.round(ay + ((by - ay) * k) / n);
+      if (x < 0 || y < 0 || x >= this.w || y >= this.h) continue;
+      const i = y * this.w + x;
+      if (this.grp[i] === group && this.mat[i]) this.tone[i] = Math.min(3, this.tone[i] + 1);
     }
   }
 
   /**
-   * Resolve to RGBA: the inner rims, the outer outline, and an optional
-   * flash (a hit whitens the whole figure for a frame or two).
+   * Resolve to RGBA: the rim light on the back edge, the inner rims, the
+   * outer outline, and an optional flash (a hit whitens the whole figure for
+   * a frame or two).
    */
   toImage(img: ImageData, flash: 'none' | 'white' | 'electric'): void {
     const { w, h, mat, tone, grp } = this;
@@ -337,18 +398,20 @@ export class Raster {
         if (m) {
           const pal = this.palettes[m];
           let t = tone[i];
+          // The back edge, away from the key light, catches a rim of reflected light.
+          if (t <= 1 && x > 1 && !mat[i - 1] && mat[i + 1]) t = 2;
           // A part in front of another gets a dark rim where it overlaps.
           const g = grp[i];
+          let rim = false;
           if (g > 1) {
-            const n = [i - 1, i + 1, i - w, i + w];
-            for (const j of n) {
+            for (const j of [i - 1, i + 1, i - w, i + w]) {
               if (j >= 0 && j < mat.length && mat[j] && grp[j] < g && grp[j] !== 0) {
-                t = -1;
+                rim = true;
                 break;
               }
             }
           }
-          rgb = t < 0 ? pal[4] : pal[t];
+          rgb = rim ? pal[5] : pal[t];
         } else {
           // The outer outline: the darkest tone of whatever it borders.
           let edge = 0;
@@ -357,7 +420,7 @@ export class Raster {
           else if (y > 0 && mat[i - w]) edge = mat[i - w];
           else if (y < h - 1 && mat[i + w]) edge = mat[i + w];
           if (!edge) continue;
-          rgb = this.palettes[edge][4];
+          rgb = this.palettes[edge][5];
         }
         if (flash === 'white') rgb = mix(rgb, [255, 255, 255], 0.8);
         else if (flash === 'electric') rgb = mix(rgb, (x + y) % 4 < 2 ? [250, 250, 120] : [40, 60, 220], 0.75);
@@ -454,6 +517,26 @@ export function joints(pose: Pose, build: Build, k: number): Joints {
  * (the caller mirrors for facing left). `scale` multiplies the fighter's own
  * size, which the portraits use.
  */
+/** The arcade drew heads large; the skeleton's head is scaled up by this. */
+const HEAD_SCALE = 1.14;
+
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+const unit = (a: readonly [number, number], b: readonly [number, number]): [number, number] => {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const m = Math.hypot(dx, dy) || 1;
+  return [dx / m, dy / m];
+};
+const at2 = (p: readonly [number, number], d: readonly [number, number], k: number, q?: readonly [number, number], m = 0): [number, number] => [
+  p[0] + d[0] * k + (q ? q[0] * m : 0),
+  p[1] + d[1] * k + (q ? q[1] * m : 0)
+];
+
+/**
+ * Draw a fighter into the raster with its feet at (ax, ay), facing right
+ * (the caller mirrors for facing left). `scale` multiplies the fighter's own
+ * size.
+ */
 export function drawFigure(r: Raster, def: Fighter, look: Look, pose: Pose, ax: number, ay: number, scale = 1): Joints {
   const build = BUILDS[def.build];
   const k = (def.height / 90) * scale;
@@ -468,271 +551,407 @@ export function drawFigure(r: Raster, def: Fighter, look: Look, pose: Pose, ax: 
   const bands = look.bands ? r.material(look.bands) : 0;
   const accent = look.accent ? r.material(look.accent) : 0;
   const extras = new Set(look.extras ?? []);
-
+  const bare = !look.top;
   const torsoUp = dir(j.torsoAng);
   const torsoFw = dir(j.torsoAng - 90);
   const ang = (j.torsoAng - 180) * -RAD;
+  const baggy = look.pantsStyle === 'gi' || look.pantsStyle === 'cargo';
 
   // Groups are draw order: a later group in front of an earlier one gets a rim.
   let group = 1;
 
   // --- Behind everything: the cape.
   if (extras.has('cape')) {
-    const capeMat = r.material('#26262c');
+    const capeMat = r.material('#2a2830');
     const s = P(j.shoulderF);
     const hipP = P(j.hip);
-    const sway = Math.sin(j.hip[0] * 0.1) * 2;
+    const g = group++;
     r.poly(
       [
-        [s[0] - 6 * k, s[1] - 2 * k],
-        [s[0] + 6 * k, s[1] - 3 * k],
-        [hipP[0] - 4 * k + sway, hipP[1] + 28 * k],
-        [hipP[0] - 20 * k + sway, hipP[1] + 30 * k]
+        [s[0] - 7 * k, s[1] - 3 * k],
+        [s[0] + 7 * k, s[1] - 4 * k],
+        [hipP[0] - 2 * k, hipP[1] + 30 * k],
+        [hipP[0] - 24 * k, hipP[1] + 33 * k]
       ],
       capeMat,
-      group++,
-      -0.15
+      g,
+      -0.1
     );
+    for (const f of [0.35, 0.65]) r.crease(s[0] - 4 * k + 2 * k * f, s[1], hipP[0] - 24 * k * f, hipP[1] + 30 * k, g, 1);
   }
+
+  /** Fold lines across a stretch of cloth, a crease with a lit lip beside it. */
+  const folds = (a: [number, number], b: [number, number], width: number, g: number, at: number[], slant: number) => {
+    const u = unit(a, b);
+    const n: [number, number] = [-u[1], u[0]];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    for (const f of at) {
+      const c = at2(a, u, len * f);
+      const p0 = at2(c, n, -width * 0.7, u, -slant * width);
+      const p1 = at2(c, n, width * 0.55, u, slant * width);
+      r.crease(p0[0], p0[1], p1[0], p1[1], g, 2);
+      r.lift(p0[0] + u[0], p0[1] + u[1], p1[0] + u[0], p1[1] + u[1], g);
+    }
+  };
+
+  const hand = (E: [number, number], H: [number, number], g: number, bias: number, far: boolean) => {
+    const u = unit(E, H);
+    const n: [number, number] = [-u[1], u[0]];
+    const boxing = extras.has('boxing');
+    const fr = build.rFist * k * (boxing ? 1.55 : 1);
+    const mat = gloves;
+    if (boxing) {
+      r.ellipse(H[0] + u[0] * fr * 0.3, H[1] + u[1] * fr * 0.3, fr * 1.05, fr * 0.9, Math.atan2(u[1], u[0]), mat, g, bias);
+      const c0 = at2(H, u, -fr * 0.75);
+      r.capsule(c0[0] - n[0] * fr * 0.7, c0[1] - n[1] * fr * 0.7, fr * 0.3, c0[0] + n[0] * fr * 0.7, c0[1] + n[1] * fr * 0.7, fr * 0.3, r.material('#f4f0e8'), g, bias);
+      const lace = at2(H, u, fr * 0.2, n, fr * 0.2);
+      r.crease(lace[0], lace[1], lace[0] + u[0] * fr * 0.6, lace[1] + u[1] * fr * 0.6, g, 1);
+      return;
+    }
+    if (pose.hand === 'open') {
+      // Palm, four fingers together and the thumb splayed.
+      r.limb(H[0] - u[0] * fr * 0.2, H[1] - u[1] * fr * 0.2, H[0] + u[0] * fr * 0.7, H[1] + u[1] * fr * 0.7, t => [fr * lerp(0.78, 0.72, t), 0], mat, g, bias);
+      const f0 = at2(H, u, fr * 0.6);
+      r.limb(f0[0], f0[1], f0[0] + u[0] * fr * 1.15, f0[1] + u[1] * fr * 1.15, t => [fr * lerp(0.62, 0.42, t), 0], mat, g, bias);
+      for (const off of [-0.22, 0.12]) {
+        const a = at2(f0, n, fr * off, u, fr * 0.2);
+        r.crease(a[0], a[1], a[0] + u[0] * fr * 0.9, a[1] + u[1] * fr * 0.9, g, 1);
+      }
+      const th = at2(H, n, far ? fr * 0.55 : -fr * 0.55);
+      r.capsule(th[0], th[1], fr * 0.32, th[0] + u[0] * fr * 0.7 + n[0] * fr * (far ? 0.5 : -0.5), th[1] + u[1] * fr * 0.7 + n[1] * fr * (far ? 0.5 : -0.5), fr * 0.24, mat, g, bias);
+      return;
+    }
+    // A closed fist: a block of fingers, the knuckle ridge and the thumb across.
+    r.limb(H[0] - u[0] * fr * 0.35, H[1] - u[1] * fr * 0.35, H[0] + u[0] * fr * 0.55, H[1] + u[1] * fr * 0.55, t => [fr * lerp(0.92, 1, t), fr * 0.06], mat, g, bias);
+    const kn = at2(H, u, fr * 0.6);
+    for (const off of [-0.45, -0.05, 0.35]) {
+      const a = at2(kn, n, fr * off);
+      r.crease(a[0], a[1], a[0] - u[0] * fr * 0.55, a[1] - u[1] * fr * 0.55, g, 1);
+    }
+    const th0 = at2(H, n, far ? fr * 0.5 : -fr * 0.5, u, -fr * 0.2);
+    const th1 = at2(H, n, far ? fr * 0.1 : -fr * 0.1, u, fr * 0.45);
+    r.capsule(th0[0], th0[1], fr * 0.36, th1[0], th1[1], fr * 0.3, mat, g, bias + 0.05);
+    r.crease(th0[0], th0[1], th1[0], th1[1], g, 1);
+  };
 
   const arm = (s: [number, number], e: [number, number], h: [number, number], far: boolean) => {
     const g = group++;
-    const bias = far ? -0.32 : 0;
+    const bias = far ? -0.3 : 0;
     const S = P(s);
     const E = P(e);
     const H = P(h);
-    r.capsule(S[0], S[1], build.rUpper * k * 1.1, E[0], E[1], build.rFore * k * 1.05, skin, g, bias);
-    r.capsule(E[0], E[1], build.rFore * k, H[0], H[1], build.rFore * k * 0.85, skin, g, bias);
+    const rU = build.rUpper * k;
+    const rF = build.rFore * k;
+    const upper: Profile = t => [lerp(rU * 1.06, rF * 1.02, t) * (1 + 0.18 * bump(t, 0.5, 0.38)), rU * 0.24 * bump(t, 0.52, 0.36)];
+    const fore: Profile = t => [lerp(rF * 1.1, rF * 0.72, t) + rF * 0.16 * bump(t, 0.18, 0.3), -rF * 0.16 * bump(t, 0.22, 0.32)];
+    r.limb(S[0], S[1], E[0], E[1], upper, skin, g, bias);
+    r.limb(E[0], E[1], H[0], H[1], fore, skin, g, bias);
+    // The deltoid caps the shoulder.
+    const ua = unit(S, E);
+    const del = at2(S, ua, rU * 0.5);
+    r.ellipse(del[0], del[1], rU * 1.32, rU * 1.18, Math.atan2(ua[1], ua[0]), look.sleeves === 'none' ? skin : top, g, bias);
+    const un: [number, number] = [ua[1], -ua[0]];
+    const lenU = Math.hypot(E[0] - S[0], E[1] - S[1]);
     if (look.sleeves === 'long') {
-      r.capsule(S[0], S[1], build.rUpper * k * 1.25, E[0], E[1], build.rFore * k * 1.2, top, g, bias);
-      r.capsule(E[0], E[1], build.rFore * k * 1.2, H[0] - (H[0] - E[0]) * 0.2, H[1] - (H[1] - E[1]) * 0.2, build.rFore * k * 1.1, top, g, bias);
+      r.limb(S[0], S[1], E[0], E[1], t => [upper(t)[0] * 1.2, upper(t)[1] * 0.5], top, g, bias);
+      const H2 = at2(H, unit(E, H), -rF * 1.1);
+      r.limb(E[0], E[1], H2[0], H2[1], t => [fore(t)[0] * 1.2 + rF * 0.1 * t, 0], top, g, bias);
+      folds(S, E, rU, g, [0.4, 0.75], 0.5);
+      folds(E, H2, rF, g, [0.3, 0.7], -0.4);
     } else if (look.sleeves === 'short') {
-      const m: [number, number] = [S[0] + (E[0] - S[0]) * 0.55, S[1] + (E[1] - S[1]) * 0.55];
-      r.capsule(S[0], S[1], build.rUpper * k * 1.35, m[0], m[1], build.rUpper * k * 1.25, top, g, bias);
+      const m = at2(S, ua, lenU * 0.62);
+      r.limb(S[0], S[1], m[0], m[1], t => [rU * lerp(1.42, 1.38, t), rU * 0.15], top, g, bias);
+      folds(S, m, rU * 1.2, g, [0.45, 0.85], 0.6);
+    } else {
+      // Bare arms: the line between biceps and triceps, and the elbow.
+      const b0 = at2(S, ua, lenU * 0.35, un, -rU * 0.05);
+      const b1 = at2(S, ua, lenU * 0.82, un, rU * 0.25);
+      r.crease(b0[0], b0[1], b1[0], b1[1], g, 1);
+      const d0 = at2(S, ua, lenU * 0.28, un, rU * 0.9);
+      const d1 = at2(S, ua, lenU * 0.42, un, -rU * 0.4);
+      r.crease(d0[0], d0[1], d1[0], d1[1], g, 1);
     }
     if (bands) {
-      const b: [number, number] = [E[0] + (H[0] - E[0]) * 0.72, E[1] + (H[1] - E[1]) * 0.72];
-      r.capsule(b[0], b[1], build.rFore * k * 1.15, H[0] - (H[0] - E[0]) * 0.1, H[1] - (H[1] - E[1]) * 0.1, build.rFore * k * 1.1, bands, g, bias);
+      const fa = unit(E, H);
+      const b = at2(H, fa, -rF * 1.3);
+      r.capsule(b[0], b[1], rF * 0.98, H[0] - fa[0] * rF * 0.35, H[1] - fa[1] * rF * 0.35, rF * 0.92, bands, g, bias);
       if (extras.has('spikes')) {
         const sp = r.material('#e8e8f0');
-        r.dot(b[0], b[1] - build.rFore * k * 1.6, sp, 3);
-        r.dot(b[0] + 2, b[1] - build.rFore * k * 1.4, sp, 3);
+        const fn: [number, number] = [-fa[1], fa[0]];
+        for (const o of [-1, 1]) r.dot(b[0] + fn[0] * rF * 1.5 * o, b[1] + fn[1] * rF * 1.5 * o, sp, 4, g);
       }
     }
-    // The fist (or the boxing glove, the open palm).
-    const fistR = build.rFist * k * (extras.has('boxing') ? 1.55 : 1);
-    if (pose.hand === 'open' && !extras.has('boxing')) {
-      const d = [H[0] - E[0], H[1] - E[1]];
-      const m = Math.hypot(d[0], d[1]) || 1;
-      r.capsule(H[0], H[1], fistR * 0.75, H[0] + (d[0] / m) * fistR * 1.3, H[1] + (d[1] / m) * fistR * 1.3, fistR * 0.6, gloves === skin ? skin : gloves, g, bias);
-    } else {
-      r.ellipse(H[0], H[1], fistR, fistR * 0.92, 0, gloves, g, bias);
-    }
+    hand(E, H, g, bias, far);
     if (extras.has('claw') && !far) {
-      const d = [H[0] - E[0], H[1] - E[1]];
-      const m = Math.hypot(d[0], d[1]) || 1;
+      const u = unit(E, H);
+      const n: [number, number] = [-u[1], u[0]];
       const steel = r.material('#d8dce8');
       const cg = group++;
       for (const off of [-2, 0, 2]) {
-        const px = -d[1] / m;
-        const py = d[0] / m;
-        r.capsule(H[0] + px * off, H[1] + py * off, 0.9, H[0] + (d[0] / m) * 15 * k + px * off * 1.4, H[1] + (d[1] / m) * 15 * k + py * off * 1.4, 0.6, steel, cg, 0.2);
+        r.capsule(H[0] + n[0] * off * k, H[1] + n[1] * off * k, 0.9 * k, H[0] + u[0] * 17 * k + n[0] * off * 1.6 * k, H[1] + u[1] * 17 * k + n[1] * off * 1.6 * k, 0.5 * k, steel, cg, 0.25);
       }
     }
   };
 
   const leg = (hp: [number, number], kn: [number, number], an: [number, number], toe: [number, number], far: boolean) => {
     const g = group++;
-    const bias = far ? -0.32 : 0;
+    const bias = far ? -0.3 : 0;
     const Hh = P(hp);
     const K = P(kn);
     const A = P(an);
     const T = P(toe);
+    const rT = build.rThigh * k;
+    const rS = build.rShin * k;
     const style = look.pantsStyle;
     const skinLegs = style === 'trunks' || style === 'mawashi' || style === 'shorts';
-    r.capsule(Hh[0], Hh[1], build.rThigh * k, K[0], K[1], build.rShin * k * 1.05, skinLegs ? skin : pants, g, bias);
-    r.capsule(K[0], K[1], build.rShin * k, A[0], A[1], build.rShin * k * 0.72, skinLegs ? skin : pants, g, bias);
-    if (style === 'gi' || style === 'cargo') {
-      // Baggy trousers: wider than the leg, flaring at the knee and the ankle.
-      const wide = style === 'gi' ? 1.42 : 1.25;
-      r.capsule(Hh[0], Hh[1], build.rThigh * k * 1.15, K[0], K[1], build.rShin * k * wide, pants, g, bias);
-      r.capsule(K[0], K[1], build.rShin * k * wide, A[0] - (A[0] - K[0]) * 0.08, A[1] - (A[1] - K[1]) * 0.08, build.rShin * k * wide * 1.05, pants, g, bias);
+    const thigh: Profile = t => [lerp(rT * 1.02, rS * 1.04, t) * (1 + 0.1 * bump(t, 0.4, 0.45)), rT * 0.14 * bump(t, 0.42, 0.4)];
+    const shin: Profile = t => [lerp(rS * 0.92, rS * 0.58, t) + rS * 0.26 * bump(t, 0.28, 0.26), -rS * 0.3 * bump(t, 0.28, 0.3)];
+    const legMat = skinLegs ? skin : pants;
+    r.limb(Hh[0], Hh[1], K[0], K[1], thigh, legMat, g, bias);
+    r.limb(K[0], K[1], A[0], A[1], shin, legMat, g, bias);
+    const ut = unit(Hh, K);
+    const us = unit(K, A);
+    const nt: [number, number] = [ut[1], -ut[0]];
+    const ns: [number, number] = [us[1], -us[0]];
+    if (skinLegs) {
+      // The kneecap, and the long line between the calf's two heads.
+      const kc = at2(K, nt, rS * 0.5);
+      r.ellipse(kc[0], kc[1], rS * 0.6, rS * 0.5, 0, skin, g, bias + 0.12);
+      const c0 = at2(K, us, rS * 0.6, ns, -rS * 0.7);
+      const c1 = at2(A, us, -rS * 1.4, ns, -rS * 0.15);
+      r.crease(c0[0], c0[1], c1[0], c1[1], g, 1);
+      const q0 = at2(Hh, ut, rT * 1.2, nt, rT * 0.4);
+      const q1 = at2(K, ut, -rT * 0.8, nt, rT * 0.1);
+      r.crease(q0[0], q0[1], q1[0], q1[1], g, 1);
+    }
+    if (baggy) {
+      // Trousers: wider than the leg, flaring at the knee and the ankle, folded.
+      const wide = style === 'gi' ? 1.45 : 1.25;
+      r.limb(Hh[0], Hh[1], K[0], K[1], t => [thigh(t)[0] * 1.16 + rT * 0.05, thigh(t)[1] * 0.5], pants, g, bias);
+      const A2 = at2(A, us, -rS * 0.25);
+      r.limb(K[0], K[1], A2[0], A2[1], t => [rS * lerp(wide * 1.02, wide * 1.12, t), rS * 0.1 * t], pants, g, bias);
+      folds(Hh, K, rT * 1.15, g, [0.35, 0.7], 0.5);
+      folds(K, A2, rS * wide, g, [0.25, 0.55, 0.82], -0.45);
+    } else if (style === 'tight') {
+      folds(K, A, rS, g, [0.2], 0.3);
     }
     if (style === 'shorts') {
-      const m: [number, number] = [Hh[0] + (K[0] - Hh[0]) * 0.6, Hh[1] + (K[1] - Hh[1]) * 0.6];
-      r.capsule(Hh[0], Hh[1], build.rThigh * k * 1.2, m[0], m[1], build.rThigh * k * 1.1, pants, g, bias);
+      const m = at2(Hh, ut, Math.hypot(K[0] - Hh[0], K[1] - Hh[1]) * 0.58);
+      r.limb(Hh[0], Hh[1], m[0], m[1], t => [rT * lerp(1.22, 1.16, t), rT * 0.1], pants, g, bias);
+      folds(Hh, m, rT * 1.2, g, [0.88], 0);
     }
-    // Boots reach up the shin; bare feet are a short wedge.
+    // Feet: boots reach up the shin with a sole; bare feet have a heel and toes.
+    const fu = unit(A, T);
+    const fn: [number, number] = [-fu[1], fu[0]];
     if (look.shoes) {
-      const b: [number, number] = [A[0] + (K[0] - A[0]) * (look.pantsStyle === 'trunks' ? 0.45 : 0.25), A[1] + (K[1] - A[1]) * (look.pantsStyle === 'trunks' ? 0.45 : 0.25)];
-      r.capsule(b[0], b[1], build.rShin * k * 0.95, A[0], A[1], build.rShin * k * 0.85, shoes, g, bias);
+      const tall = style === 'trunks' ? 0.55 : 0.3;
+      const b: [number, number] = [lerp(A[0], K[0], tall), lerp(A[1], K[1], tall)];
+      r.limb(b[0], b[1], A[0], A[1], t => [rS * lerp(1.02, 0.86, t), 0], shoes, g, bias);
+      const T2 = at2(T, fu, rS * 0.2);
+      r.limb(A[0] - fu[0] * rS * 0.4, A[1] - fu[1] * rS * 0.4, T2[0], T2[1], t => [rS * lerp(0.78, 0.55, t), rS * 0.08], shoes, g, bias);
+      const s0 = at2(A, fn, rS * 0.62, fu, -rS * 0.4);
+      const s1 = at2(T2, fn, rS * 0.45);
+      r.crease(s0[0], s0[1], s1[0], s1[1], g, 3);
+      if (style !== 'trunks') r.lift(b[0] + fn[0], b[1] + fn[1], b[0] + fn[0] + fu[0] * 2, b[1] + fn[1] + fu[1] * 2, g);
+    } else {
+      r.ellipse(A[0] - fu[0] * rS * 0.15, A[1] - fu[1] * rS * 0.15, rS * 0.62, rS * 0.56, 0, skin, g, bias);
+      r.limb(A[0], A[1], T[0], T[1], t => [rS * lerp(0.56, 0.42, t), rS * 0.12 * t], skin, g, bias);
+      const tp = at2(T, fu, -rS * 0.15);
+      r.crease(tp[0] + fn[0] * rS * 0.2, tp[1] + fn[1] * rS * 0.2, tp[0] - fn[0] * rS * 0.3, tp[1] - fn[1] * rS * 0.3, g, 1);
     }
-    r.capsule(A[0], A[1], build.rShin * k * 0.7, T[0], T[1], build.rShin * k * 0.5, shoes, g, bias);
   };
 
   const torso = () => {
     const g = group++;
     const H = P(j.hip);
     const N = P(j.neck);
-    const chestC = add(H, torsoUp, build.torso * k * 0.66);
-    r.capsule(H[0], H[1], build.rHip * k, N[0], N[1], build.rChest * k * 0.7, top, g);
-    r.ellipse(chestC[0] + torsoFw[0] * 1.5 * k, chestC[1] + torsoFw[1] * 1.5 * k, build.rChest * k, build.rChest * k * 0.78, ang, top, g);
+    const rH = build.rHip * k;
+    const rC = build.rChest * k;
+    const torsoProf: Profile = t => [lerp(rH, rC * 0.7, t) + rC * 0.34 * bump(t, 0.72, 0.3) - rH * 0.08 * bump(t, 0.32, 0.18), rC * 0.16 * bump(t, 0.68, 0.32)];
+    r.limb(H[0], H[1], N[0], N[1], torsoProf, top, g, 0, true);
+    const tl = Math.hypot(N[0] - H[0], N[1] - H[1]);
+    const chestC = at2(H, torsoUp, tl * 0.68);
+    // The trapezius slopes from the neck down to each shoulder.
+    for (const s of [j.shoulderF, j.shoulderN]) {
+      const S = P(s);
+      r.capsule(N[0], N[1], rC * 0.42, S[0], S[1], build.rUpper * k * 1.05, top, g, -0.05);
+    }
     if (build.belly) {
-      const b = add(H, torsoUp, build.torso * k * 0.28);
-      r.ellipse(b[0] + torsoFw[0] * 3 * k, b[1] + torsoFw[1] * 3 * k, build.belly * k, build.belly * k * 0.9, ang, skin, g);
+      const b = at2(H, torsoUp, tl * 0.26, torsoFw, 3 * k);
+      r.ellipse(b[0], b[1], build.belly * k, build.belly * k * 0.92, ang, skin, g);
+      r.crease(b[0] - torsoFw[0] * build.belly * k * 0.2, b[1] + build.belly * k * 0.55, b[0] + torsoFw[0] * build.belly * k * 0.7, b[1] + build.belly * k * 0.4, g, 1);
     }
-    if (look.top && look.vNeck) {
-      // The gi's open front, chest showing.
-      const a = add(N, torsoFw, build.rChest * k * 0.55);
-      const b2 = add(add(N, torsoUp, -build.torso * k * 0.5), torsoFw, build.rChest * k * 0.75);
-      const c = add(N, torsoFw, -build.rChest * k * 0.1);
-      r.poly([a, b2, c], skin, g);
-    }
-    if (!look.top) {
-      // Pecs and abs: the creases a sprite artist painted in.
-      const pec = add(chestC, torsoUp, -build.rChest * k * 0.35);
-      r.crease(pec[0] - torsoFw[0] * 3 * k, pec[1] - torsoFw[1] * 3 * k, pec[0] + torsoFw[0] * build.rChest * k, pec[1] + torsoFw[1] * build.rChest * k, g);
+    if (bare) {
+      // Pecs, the line under them, the abdominals and the oblique.
+      const pec = at2(chestC, torsoFw, rC * 0.45, torsoUp, rC * 0.05);
+      r.ellipse(pec[0], pec[1], rC * 0.72, rC * 0.5, ang + 0.15, skin, g, 0.04);
+      const pl0 = at2(pec, torsoFw, -rC * 0.7, torsoUp, -rC * 0.3);
+      const pl1 = at2(pec, torsoFw, rC * 0.6, torsoUp, -rC * 0.45);
+      r.crease(pl0[0], pl0[1], pl1[0], pl1[1], g, 2);
       if (!build.belly) {
-        for (const f of [0.25, 0.4]) {
-          const a = add(H, torsoUp, build.torso * k * f);
-          r.crease(a[0] + torsoFw[0] * 2 * k, a[1] + torsoFw[1] * 2 * k, a[0] + torsoFw[0] * 6 * k, a[1] + torsoFw[1] * 6 * k, g);
+        const line0 = at2(H, torsoUp, tl * 0.15, torsoFw, rH * 0.62);
+        const line1 = at2(H, torsoUp, tl * 0.5, torsoFw, rC * 0.75);
+        r.crease(line0[0], line0[1], line1[0], line1[1], g, 1);
+        for (const f of [0.22, 0.34, 0.46]) {
+          const a = at2(H, torsoUp, tl * f, torsoFw, rH * 0.25 + rC * 0.4 * f);
+          r.crease(a[0], a[1], a[0] + torsoFw[0] * rC * 0.45, a[1] + torsoFw[1] * rC * 0.45, g, 1);
         }
+        const ob0 = at2(H, torsoUp, tl * 0.08, torsoFw, -rH * 0.1);
+        const ob1 = at2(H, torsoUp, tl * 0.45, torsoFw, rH * 0.2);
+        r.crease(ob0[0], ob0[1], ob1[0], ob1[1], g, 1);
       }
+    } else {
+      // A cloth top: the lapel or the hem, and folds across the waist.
+      if (look.vNeck) {
+        const a = at2(N, torsoFw, rC * 0.62);
+        const b2 = at2(N, torsoUp, -tl * 0.5, torsoFw, rC * 0.72);
+        const c = at2(N, torsoFw, -rC * 0.05);
+        r.poly([a, b2, c], skin, g);
+        r.crease(c[0], c[1], b2[0], b2[1], g, 2);
+        r.crease(a[0], a[1], b2[0], b2[1], g, 1);
+        const pl0 = at2(b2, torsoFw, -rC * 0.3, torsoUp, tl * 0.2);
+        r.crease(pl0[0], pl0[1], pl0[0] + torsoFw[0] * rC * 0.35, pl0[1] + torsoFw[1] * rC * 0.35, g, 1);
+      }
+      folds(H, N, rC, g, [0.2, 0.42], 0.6);
     }
     // Pelvis: trunks, mawashi, the top of the trousers.
-    const pelvisR = build.rHip * k * (build.belly ? 1.05 : 1.12);
-    r.ellipse(H[0], H[1] + 1 * k, pelvisR, build.rHip * k * 0.7, ang, pants, g);
+    const pelvisR = rH * (build.belly ? 1.05 : 1.12);
+    r.ellipse(H[0], H[1] + 1 * k, pelvisR, rH * 0.72, ang, pants, g);
+    if (look.pantsStyle === 'trunks') {
+      r.crease(H[0] - pelvisR * 0.8, H[1] + rH * 0.55, H[0] + pelvisR * 0.8, H[1] + rH * 0.5, g, 1);
+    }
     if (look.pantsStyle === 'mawashi') {
-      const front = add(H, torsoFw, pelvisR * 0.6);
-      r.capsule(front[0], front[1], 2.6 * k, front[0], front[1] + 9 * k, 2.2 * k, pants, g);
+      const front = at2(H, torsoFw, pelvisR * 0.6);
+      r.capsule(front[0], front[1], 2.8 * k, front[0], front[1] + 11 * k, 2.2 * k, pants, g);
+      for (let i = -1; i <= 1; i++) r.capsule(front[0] + i * 1.6 * k, front[1] + 6 * k, 0.6 * k, front[0] + i * 1.8 * k, front[1] + 14 * k, 0.5 * k, pants, g, 0.2);
     }
     if (look.belt) {
       const belt = r.material(look.belt);
-      const b = add(H, torsoUp, 5 * k);
-      const a1 = add(b, torsoFw, -build.rHip * k * 1.1);
-      const a2 = add(b, torsoFw, build.rHip * k * 1.1);
-      r.capsule(a1[0], a1[1], 1.8 * k, a2[0], a2[1], 1.8 * k, belt, g);
+      const b = at2(H, torsoUp, 5 * k);
+      const a1 = at2(b, torsoFw, -rH * 1.12);
+      const a2 = at2(b, torsoFw, rH * 1.12);
+      r.capsule(a1[0], a1[1], 1.9 * k, a2[0], a2[1], 1.9 * k, belt, g);
       if (look.pantsStyle === 'gi') {
-        const knot = add(a2, torsoFw, -2 * k);
-        r.capsule(knot[0], knot[1], 1.2 * k, knot[0] + 2 * k, knot[1] + 9 * k, 1 * k, belt, g);
-      }
+        // The knot, and two tails that hang and swing.
+        const knot = at2(a2, torsoFw, -2.4 * k);
+        r.ellipse(knot[0], knot[1], 2.2 * k, 1.9 * k, 0, belt, g, 0.1);
+        r.capsule(knot[0], knot[1], 1.2 * k, knot[0] - 1.5 * k, knot[1] + 10 * k, 1.1 * k, belt, g);
+        r.capsule(knot[0], knot[1], 1.2 * k, knot[0] + 2.5 * k, knot[1] + 9 * k, 1.1 * k, belt, g);
+      } else r.lift(a1[0], a1[1] - k, a2[0], a2[1] - k, g);
     }
     if (extras.has('skirt')) {
-      const front = add(H, torsoFw, build.rHip * k * 0.4);
+      const front = at2(H, torsoFw, rH * 0.4);
       r.poly(
         [
           [front[0] - 3 * k, front[1] - 2 * k],
-          [front[0] + 5 * k, front[1] - 2 * k],
-          [front[0] + 7 * k, front[1] + 18 * k],
-          [front[0] - 2 * k, front[1] + 18 * k]
+          [front[0] + 6 * k, front[1] - 2 * k],
+          [front[0] + 8 * k, front[1] + 20 * k],
+          [front[0] - 2 * k, front[1] + 20 * k]
         ],
         top,
         g
       );
+      r.crease(front[0] + 2 * k, front[1], front[0] + 3 * k, front[1] + 19 * k, g, 1);
+      const gold = r.material('#e8c040');
+      r.capsule(front[0] - 2 * k, front[1] + 18 * k, 0.7 * k, front[0] + 7.5 * k, front[1] + 18 * k, 0.7 * k, gold, g);
     }
     if (extras.has('skulls')) {
       const bone = r.material('#ece4cc');
-      for (let s = 0; s < 4; s++) {
-        const p = add(add(N, torsoUp, -(4 + s * 3.2) * k), torsoFw, (2 + s * 1.6) * k);
-        r.ellipse(p[0], p[1], 1.9 * k, 1.7 * k, 0, bone, g, 0.1);
+      for (let s = 0; s < 5; s++) {
+        const p = at2(N, torsoUp, -(3 + s * 3) * k, torsoFw, (1.5 + s * 1.4) * k);
+        r.ellipse(p[0], p[1], 1.9 * k, 1.8 * k, 0, bone, g, 0.15);
+        r.dot(p[0] + 0.6 * k, p[1] + 0.2 * k, bone, 0, g);
       }
     }
     if (extras.has('tags')) {
       const steel = r.material('#c8ccd4');
-      const p = add(add(N, torsoUp, -7 * k), torsoFw, 4 * k);
-      r.ellipse(p[0], p[1], 1.2 * k, 1.6 * k, 0, steel, g, 0.2);
+      const p = at2(N, torsoUp, -8 * k, torsoFw, 4 * k);
+      r.capsule(N[0] + torsoFw[0] * 2 * k, N[1], 0.4 * k, p[0], p[1], 0.4 * k, steel, g);
+      r.ellipse(p[0], p[1], 1.3 * k, 1.8 * k, 0, steel, g, 0.3);
     }
   };
 
   const head = () => {
     const g = group++;
+    const kk = k * HEAD_SCALE;
     const C = P(j.head);
     const N = P(j.neck);
-    const hr = build.head * k;
+    const hr = build.head * kk;
     const hUp = dir(j.headAng);
     const hFw = dir(j.headAng - 90);
-    const at = (fx: number, uy: number): [number, number] => [C[0] + hFw[0] * fx * k + hUp[0] * uy * k, C[1] + hFw[1] * fx * k + hUp[1] * uy * k];
+    const at = (fx: number, uy: number): [number, number] => [C[0] + hFw[0] * fx * kk + hUp[0] * uy * kk, C[1] + hFw[1] * fx * kk + hUp[1] * uy * kk];
     const headAngRad = (j.headAng - 180) * -RAD;
-    r.capsule(N[0], N[1], hr * 0.62, C[0], C[1], hr * 0.55, skin, g);
-    // The jaw sits forward and low; the skull behind and high.
-    const jaw = at(1.5, -3);
-    r.ellipse(jaw[0], jaw[1], hr * 0.8, hr * 0.62, headAngRad, skin, g);
-    r.ellipse(C[0], C[1], hr, hr * 0.95, headAngRad, skin, g);
-    const nose = at(7, -0.5);
-    r.ellipse(nose[0], nose[1], 1.3 * k, 1.1 * k, 0, skin, g, 0.1);
-
+    r.capsule(N[0], N[1], hr * 0.66, C[0] - hFw[0] * kk, C[1] - hFw[1] * kk, hr * 0.56, skin, g, -0.08);
+    // The skull behind and high, the jaw forward and low, the chin.
+    r.ellipse(C[0], C[1], hr * 0.98, hr * 0.94, headAngRad, skin, g);
+    // Hair sits on the crown and the back of the skull, clear of the brow and
+    // the eye, which is what lets a face read at this size.
+    const atH = (fx: number, uy: number): [number, number] => at(fx * 0.86 - 2.1, uy * 0.9 + 1.9);
+    const hrH = hr * 0.86;
     const hairG = group++;
     switch (look.hairStyle) {
       case 'spiky':
       case 'blond': {
-        const c = at(-1.5, 2.5);
-        r.ellipse(c[0], c[1], hr * 0.98, hr * 0.78, headAngRad, hair, hairG);
+        const c = atH(-1.5, 2.5);
+        r.ellipse(c[0], c[1], hrH * 0.98, hrH * 0.78, headAngRad, hair, hairG);
         const spikes: [number, number][] = look.hairStyle === 'spiky' ? [[-6, 6], [-2, 8.5], [2, 8], [5, 6]] : [[-8, 2], [-7, -4], [-4, 7], [1, 8], [5, 6]];
         for (const [fx, uy] of spikes) {
-          const a = at(fx * 0.6, uy * 0.6);
-          const b = at(fx, uy + (look.hairStyle === 'blond' && uy < 0 ? -4 : 2));
-          r.capsule(a[0], a[1], 2.4 * k, b[0], b[1], 0.6 * k, hair, hairG);
+          const a = atH(fx * 0.6, uy * 0.6);
+          const b = atH(fx, uy + (look.hairStyle === 'blond' && uy < 0 ? -4 : 2));
+          r.capsule(a[0], a[1], 2.4 * kk, b[0], b[1], 0.6 * kk, hair, hairG);
         }
         if (look.hairStyle === 'blond') {
-          const back = at(-5, -2);
-          r.ellipse(back[0], back[1], hr * 0.6, hr * 0.9, headAngRad, hair, hairG);
+          const back = atH(-5, -2);
+          r.ellipse(back[0], back[1], hrH * 0.6, hrH * 0.9, headAngRad, hair, hairG);
         }
         if (look.accent && look.hairStyle === 'spiky') {
-          const a = at(-7.5, 2.2);
-          const b = at(6.5, 3.4);
-          r.capsule(a[0], a[1], 1.3 * k, b[0], b[1], 1.3 * k, accent, hairG);
-          const tail = at(-16, -1);
-          r.capsule(a[0], a[1], 1.3 * k, tail[0], tail[1], 0.8 * k, accent, hairG);
-          const tail2 = at(-14, -5);
-          r.capsule(a[0], a[1], 1.2 * k, tail2[0], tail2[1], 0.7 * k, accent, hairG);
+          const a = atH(-7.5, 2.2);
+          const b = atH(6.5, 3.4);
+          r.capsule(a[0], a[1], 1.3 * kk, b[0], b[1], 1.3 * kk, accent, hairG);
+          const tail = atH(-16, -1);
+          r.capsule(a[0], a[1], 1.3 * kk, tail[0], tail[1], 0.8 * kk, accent, hairG);
+          const tail2 = atH(-14, -5);
+          r.capsule(a[0], a[1], 1.2 * kk, tail2[0], tail2[1], 0.7 * kk, accent, hairG);
         }
         break;
       }
       case 'buns': {
-        const c = at(-1.5, 2.5);
-        r.ellipse(c[0], c[1], hr * 0.95, hr * 0.75, headAngRad, hair, hairG);
+        const c = atH(-1.5, 2.5);
+        r.ellipse(c[0], c[1], hrH * 0.95, hrH * 0.75, headAngRad, hair, hairG);
         for (const [fx, uy] of [
           [-5.5, 6],
           [1.5, 8]
         ] as const) {
-          const b = at(fx, uy);
-          r.ellipse(b[0], b[1], 3.3 * k, 3.3 * k, 0, hair, hairG);
-          r.ellipse(b[0], b[1] + 1.2 * k, 3.4 * k, 1.4 * k, 0, accent, hairG, 0.2);
+          const b = atH(fx, uy);
+          r.ellipse(b[0], b[1], 3.3 * kk, 3.3 * kk, 0, hair, hairG);
+          r.ellipse(b[0], b[1] + 1.2 * kk, 3.4 * kk, 1.4 * kk, 0, accent, hairG, 0.2);
         }
         break;
       }
       case 'mohawk': {
-        const a = at(-6, 6);
-        const b = at(4, 8.5);
-        r.capsule(a[0], a[1], 2.3 * k, b[0], b[1], 2.6 * k, hair, hairG);
-        const beard = at(2.5, -4.5);
-        r.ellipse(beard[0], beard[1], 5.2 * k, 3.8 * k, headAngRad, hair, hairG);
-        const brow = at(5, 2.4);
-        r.capsule(brow[0] - 2 * k, brow[1], 0.9 * k, brow[0] + 1.5 * k, brow[1] + 0.3 * k, 0.9 * k, hair, hairG);
+        const a = atH(-6, 6);
+        const b = atH(4, 8.5);
+        r.capsule(a[0], a[1], 2.3 * kk, b[0], b[1], 2.6 * kk, hair, hairG);
+        const beard = atH(2.5, -4.5);
+        r.ellipse(beard[0], beard[1], 5.2 * kk, 3.8 * kk, headAngRad, hair, hairG);
+        const brow = atH(5, 2.4);
+        r.capsule(brow[0] - 2 * kk, brow[1], 0.9 * kk, brow[0] + 1.5 * kk, brow[1] + 0.3 * kk, 0.9 * kk, hair, hairG);
         break;
       }
       case 'bald': {
         const mark = r.material('#d82424');
         for (const uy of [3, 4.5]) {
-          const m = at(4.5, uy);
+          const m = atH(4.5, uy);
           r.dot(m[0], m[1], mark, 2, g);
         }
         break;
       }
       case 'topknot': {
-        const c = at(-1.5, 2.5);
-        r.ellipse(c[0], c[1], hr * 0.96, hr * 0.7, headAngRad, hair, hairG);
-        const k1 = at(-3, 8);
-        const k2 = at(-7, 10);
-        r.capsule(k1[0], k1[1], 2.2 * k, k2[0], k2[1], 1.6 * k, hair, hairG);
-        if (extras.has('paint')) {
-          const a = at(1, 1);
-          const b = at(7, -1);
-          r.capsule(a[0], a[1], 0.9 * k, b[0], b[1], 0.9 * k, accent, hairG);
-          const c2 = at(3, -3);
-          const d = at(7, -4);
-          r.capsule(c2[0], c2[1], 0.8 * k, d[0], d[1], 0.8 * k, accent, hairG);
-        }
+        const c = atH(-1.5, 2.5);
+        r.ellipse(c[0], c[1], hrH * 0.96, hrH * 0.7, headAngRad, hair, hairG);
+        const k1 = atH(-3, 8);
+        const k2 = atH(-7, 10);
+        r.capsule(k1[0], k1[1], 2.2 * kk, k2[0], k2[1], 1.6 * kk, hair, hairG);
         break;
       }
       case 'mane': {
@@ -744,80 +963,113 @@ export function drawFigure(r: Raster, def: Fighter, look: Look, pose: Pose, ax: 
           [3, 6, 6],
           [-3, -6, 8]
         ] as const) {
-          const a = at(fx * 0.5, uy * 0.5);
-          const b = at(fx + (fx < 0 ? -len * 0.4 : 1), uy + (uy > 0 ? len * 0.35 : -len * 0.2));
-          r.capsule(a[0], a[1], 3.2 * k, b[0], b[1], 0.8 * k, hair, hairG);
+          const a = atH(fx * 0.5, uy * 0.5);
+          const b = atH(fx + (fx < 0 ? -len * 0.4 : 1), uy + (uy > 0 ? len * 0.35 : -len * 0.2));
+          r.capsule(a[0], a[1], 3.2 * kk, b[0], b[1], 0.8 * kk, hair, hairG);
         }
         break;
       }
       case 'flattop': {
-        const c = at(-1.5, 3);
-        r.ellipse(c[0], c[1], hr * 0.95, hr * 0.7, headAngRad, hair, hairG);
-        r.poly([at(-6.5, 4), at(5, 5), at(5.5, 11.5), at(-6, 11)], hair, hairG);
+        const c = atH(-1.5, 3);
+        r.ellipse(c[0], c[1], hrH * 0.95, hrH * 0.7, headAngRad, hair, hairG);
+        r.poly([atH(-6.5, 4), atH(5, 5), atH(5.5, 11.5), atH(-6, 11)], hair, hairG);
         break;
       }
       case 'short': {
-        const c = at(-1.5, 2.8);
-        r.ellipse(c[0], c[1], hr * 0.96, hr * 0.68, headAngRad, hair, hairG);
+        const c = atH(-1.5, 2.8);
+        r.ellipse(c[0], c[1], hrH * 0.96, hrH * 0.68, headAngRad, hair, hairG);
         break;
       }
       case 'mask': {
-        const c = at(-2.5, 2);
-        r.ellipse(c[0], c[1], hr * 0.95, hr * 0.8, headAngRad, hair, hairG);
-        const tailA = at(-7, 1);
-        const tailB = at(-12, -12);
-        r.capsule(tailA[0], tailA[1], 2.2 * k, tailB[0], tailB[1], 1.2 * k, hair, hairG);
-        const m = at(4, 0.5);
-        r.ellipse(m[0], m[1], 4.6 * k, 5.6 * k, headAngRad, accent, hairG, 0.15);
+        const c = atH(-2.5, 2);
+        r.ellipse(c[0], c[1], hrH * 0.95, hrH * 0.8, headAngRad, hair, hairG);
+        const tailA = atH(-7, 1);
+        const tailB = atH(-12, -12);
+        r.capsule(tailA[0], tailA[1], 2.2 * kk, tailB[0], tailB[1], 1.2 * kk, hair, hairG);
+        const m = atH(4, 0.5);
+        r.ellipse(m[0], m[1], 4.6 * kk, 5.6 * kk, headAngRad, accent, hairG, 0.15);
         break;
       }
       case 'patch': {
-        const strapA = at(-7, 4);
-        const strapB = at(5, 1);
-        r.capsule(strapA[0], strapA[1], 0.7 * k, strapB[0], strapB[1], 0.7 * k, accent, hairG);
-        const p = at(4.2, 1);
-        r.ellipse(p[0], p[1], 1.8 * k, 1.6 * k, 0, accent, hairG);
+        const strapA = atH(-7, 4);
+        const strapB = atH(5, 1);
+        r.capsule(strapA[0], strapA[1], 0.7 * kk, strapB[0], strapB[1], 0.7 * kk, accent, hairG);
+        const p = atH(4.2, 1);
+        r.ellipse(p[0], p[1], 1.8 * kk, 1.6 * kk, 0, accent, hairG);
         break;
       }
       case 'cap': {
-        const c = at(-1, 5);
-        r.ellipse(c[0], c[1], hr * 1.08, hr * 0.62, headAngRad, top, hairG);
-        const visorA = at(1, 3.2);
-        const visorB = at(9, 2.4);
-        r.capsule(visorA[0], visorA[1], 1.4 * k, visorB[0], visorB[1], 1 * k, r.material('#1a1a1e'), hairG);
-        const badge = at(3, 6.5);
-        r.ellipse(badge[0], badge[1], 1.4 * k, 1.2 * k, 0, accent, hairG, 0.3);
+        const c = atH(-1, 5);
+        r.ellipse(c[0], c[1], hrH * 1.08, hrH * 0.62, headAngRad, top, hairG);
+        const visorA = atH(1, 3.2);
+        const visorB = atH(9, 2.4);
+        r.capsule(visorA[0], visorA[1], 1.4 * kk, visorB[0], visorB[1], 1 * kk, r.material('#1a1a1e'), hairG);
+        const badge = atH(3, 6.5);
+        r.ellipse(badge[0], badge[1], 1.4 * kk, 1.2 * kk, 0, accent, hairG, 0.3);
         break;
       }
     }
-    // The face: brow, eye, mouth.
-    const dark = r.material('#14100c');
-    const eye = at(4.3, 1);
-    const browL = at(2.8, 2.6);
-    const browR = at(6, 2.2);
-    const face = pose.face ?? 'calm';
-    if (look.hairStyle !== 'mask') {
-      r.crease(browL[0], browL[1], browR[0], browR[1], g);
-      r.crease(browL[0], browL[1], browR[0], browR[1], hairG);
-      if (face === 'hurt') {
-        r.dot(eye[0], eye[1], dark, 0);
-        r.dot(eye[0] + 1, eye[1] - 1, dark, 0);
-      } else if (look.hairStyle !== 'patch') {
-        r.dot(eye[0], eye[1], dark, 0);
-        r.dot(eye[0], eye[1] + 1, dark, 0);
-      }
-    } else {
-      r.dot(eye[0], eye[1], dark, 0);
+
+    // The face is cut in over the front of the hair, which is what draws the hairline.
+    const faceC = at(2.9, -1.3);
+    r.ellipse(faceC[0], faceC[1], 4.5 * kk, 4.1 * kk, headAngRad, skin, g);
+    // The sumo's kumadori paint goes on over the face.
+    if (extras.has('paint')) {
+      const a = at(1, 1);
+      const b = at(7, -1);
+      r.capsule(a[0], a[1], 0.9 * kk, b[0], b[1], 0.9 * kk, accent, g);
+      const c2 = at(3, -3);
+      const d = at(7, -4);
+      r.capsule(c2[0], c2[1], 0.8 * kk, d[0], d[1], 0.8 * kk, accent, g);
     }
-    const mouth = at(5.4, -3.8);
-    if (face === 'shout' || face === 'hurt') {
-      const red = r.material('#7a1010');
-      r.dot(mouth[0], mouth[1], red, 1);
-      r.dot(mouth[0] + 1, mouth[1], red, 0);
-      r.dot(mouth[0], mouth[1] + 1, red, 0);
+    r.poly([at(-2, -2), at(5.4, -1.5), at(5.8, -5.4), at(3.4, -7), at(-0.5, -6.2), at(-3, -3.5)], skin, g);
+    // Brow ridge, nose and ear.
+    const brow = at(4.6, 2.2);
+    r.ellipse(brow[0], brow[1], 2.4 * kk, 1.3 * kk, headAngRad, skin, g, 0.08);
+    r.poly([at(5.8, 1.2), at(8, -1.8), at(6, -2.4)], skin, g, 0.1);
+    const ear = at(-1.6, 0);
+    r.ellipse(ear[0], ear[1], 1.6 * kk, 2.2 * kk, headAngRad, skin, g, -0.05);
+    r.crease(ear[0] + hFw[0] * 0.4 * kk, ear[1] - 1.2 * kk, ear[0] + hFw[0] * 0.4 * kk, ear[1] + 0.8 * kk, g, 1);
+    // The jaw line and the cheek's shadow.
+    const j0 = at(-0.5, -4.2);
+    const j1 = at(4.2, -6.4);
+    r.crease(j0[0], j0[1], j1[0], j1[1], g, 1);
+    const ch0 = at(2.6, -1);
+    r.crease(ch0[0], ch0[1], ch0[0] + hFw[0] * 1.6 * kk - hUp[0] * 2 * kk, ch0[1] + hFw[1] * 1.6 * kk - hUp[1] * 2 * kk, g, 1);
+
+    // The face: a heavy brow, the eye (white in front of a dark iris), the mouth.
+    const dark = r.material('#14100c');
+    const white = r.material('#f4f0ec');
+    const face = pose.face ?? 'calm';
+    const eye = at(4.4, 0.8);
+    if (look.hairStyle === 'mask') {
+      r.dot(eye[0], eye[1], dark, 0);
+      r.dot(eye[0] + hFw[0], eye[1] + hFw[1], dark, 0);
     } else {
-      r.dot(mouth[0], mouth[1], skin, 0);
-      r.dot(mouth[0] + 1, mouth[1], skin, 0);
+      // A one-pixel brow over the eye, set on the lit ridge so it reads as a scowl.
+      const b0 = at(3.2, 2.5);
+      const b1 = at(6, 2.1);
+      r.crease(b0[0], b0[1], b1[0], b1[1], g, 2);
+      if (face === 'hurt') {
+        r.dot(eye[0], eye[1], dark, 0, g);
+        r.dot(eye[0] + hFw[0] * kk, eye[1] - kk, dark, 0, g);
+        r.dot(eye[0] - hFw[0] * kk, eye[1] - kk, dark, 0, g);
+      } else if (look.hairStyle !== 'patch') {
+        r.dot(eye[0] + hFw[0] * kk, eye[1] + hFw[1] * kk, white, 3, g);
+        r.dot(eye[0], eye[1], dark, 0, g);
+        r.dot(eye[0], eye[1] + kk, dark, 0, g);
+      }
+    }
+    const mouth = at(5.4, -3.9);
+    if (face === 'shout' || face === 'hurt') {
+      const red = r.material('#6a0e0e');
+      r.dot(mouth[0], mouth[1], red, 1, g);
+      r.dot(mouth[0] + 1, mouth[1], red, 0, g);
+      r.dot(mouth[0], mouth[1] + 1, red, 0, g);
+      r.dot(mouth[0] + 1, mouth[1] + 1, red, 0, g);
+      r.dot(mouth[0] + 1, mouth[1] - 1, white, 3, g);
+    } else {
+      r.crease(mouth[0] - hFw[0] * kk, mouth[1], mouth[0] + hFw[0] * 1.2 * kk, mouth[1] + 0.3 * kk, g, 2);
     }
   };
 
@@ -830,7 +1082,6 @@ export function drawFigure(r: Raster, def: Fighter, look: Look, pose: Pose, ax: 
   return j;
 }
 
-/** Where a fighter's head and hip sit relative to his feet, for portraits and effects. */
 export function landmarks(def: Fighter, pose: Pose, scale = 1): { head: [number, number]; hip: [number, number]; handN: [number, number]; neck: [number, number] } {
   const j = joints(pose, BUILDS[def.build], (def.height / 90) * scale);
   return { head: j.head, hip: j.hip, handN: j.handN, neck: j.neck };
@@ -886,6 +1137,15 @@ export function drawPortrait(r: Raster, def: Fighter, look: Look, mood: 'calm' |
   r.ellipse(cx, cy + 6 * u, hw * 0.86, hh * 0.68, 0, skin, g);
   r.ellipse(cx - hw, cy + 1 * u, 2.4 * u, 3.6 * u, 0, skin, g, -0.2);
   r.ellipse(cx + hw, cy + 1 * u, 2.4 * u, 3.6 * u, 0, skin, g, -0.2);
+  // Sculpt the face the way the select-screen portraits were painted: lit
+  // cheekbones over hollow cheeks, a hard jaw, the neck's two cords.
+  for (const s of [-1, 1]) {
+    r.ellipse(cx + s * 7 * u, cy + 3.2 * u, 3.6 * u, 2.2 * u, 0, skin, g, 0.12);
+    r.crease(cx + s * 8.5 * u, cy + 5.5 * u, cx + s * 5 * u, cy + 10 * u, g, 1);
+    r.crease(cx + s * 9.5 * u, cy + 9 * u, cx + s * 4 * u, cy + 14.5 * u, g, 1);
+    r.crease(cx + s * 5.5 * u, cy + 15 * u, cx + s * 2.5 * u, size * 0.84, g - 1, 1);
+  }
+  if (heavy) r.crease(cx, cy + 12.5 * u, cx, cy + 14 * u, g, 1);
   // Eyes, brows, nose, mouth.
   const ey = cy - 0.5 * u;
   const ex = 5.4 * u;
@@ -899,14 +1159,23 @@ export function drawPortrait(r: Raster, def: Fighter, look: Look, mood: 'calm' |
       r.capsule(x - 2 * u, ey, 0.7 * u, x + 2 * u, ey, 0.7 * u, dark, g);
       continue;
     }
-    r.ellipse(x, ey, 2.6 * u, 1.5 * u, 0, white, g, 0.3);
+    r.ellipse(x, ey, 2.7 * u, 1.5 * u, 0, white, g, 0.3);
     r.dot(x + s * 0.3 * u, ey, dark, 0, g);
+    r.dot(x + s * 0.3 * u + 1, ey, dark, 0, g);
     r.dot(x + s * 0.3 * u, ey + 1, dark, 0, g);
+    r.dot(x + s * 0.3 * u + 1, ey + 1, dark, 0, g);
+    // The upper lid, and a shadow under the eye.
+    r.crease(x - 2.8 * u, ey - 1.2 * u, x + 2.8 * u, ey - 1.4 * u, g, 3);
+    r.crease(x - 2 * u, ey + 2.2 * u, x + 2 * u, ey + 2.2 * u, g, 1);
     // Brows: heavy, angled down to the nose, the genre's scowl.
     r.capsule(x - s * 4 * u, ey - 3.2 * u, 1.1 * u, x + s * 3.2 * u, ey - 4.8 * u, 1 * u, look.hairStyle === 'bald' || look.hairStyle === 'patch' ? r.material('#3a2418') : hair, g);
   }
-  r.crease(cx + 1 * u, ey + 1 * u, cx + 1.5 * u, ey + 6 * u, g);
-  r.crease(cx - 1 * u, ey + 6.5 * u, cx + 2 * u, ey + 6.5 * u, g);
+  // The nose: a lit bridge, a shadowed side, the nostrils.
+  r.lift(cx - 0.5 * u, ey - 1 * u, cx - 0.5 * u, ey + 5 * u, g);
+  r.crease(cx + 1.5 * u, ey + 1 * u, cx + 2 * u, ey + 6 * u, g);
+  r.crease(cx - 2 * u, ey + 6.5 * u, cx + 2.5 * u, ey + 6.5 * u, g);
+  r.dot(cx - 1.6 * u, ey + 6 * u, dark, 0, g);
+  r.dot(cx + 1.8 * u, ey + 6 * u, dark, 0, g);
   const my = cy + 10 * u;
   if (mood === 'shout' || hurt) {
     r.ellipse(cx, my, 3.4 * u, 2.2 * u, 0, r.material('#5a0e0e'), g, -0.4);
@@ -985,6 +1254,13 @@ export function drawPortrait(r: Raster, def: Fighter, look: Look, mood: 'calm' |
       r.capsule(cx - hw * 1.1, cy - 4 * u, 2 * u, cx + hw * 1.1, cy - 4 * u, 2 * u, r.material('#1a1a1e'), g + 1);
       r.ellipse(cx, cy - 11 * u, 3 * u, 3 * u, 0, accent, g + 1, 0.3);
       break;
+    }
+  }
+  // Strands through the hair: creases with a lit edge, combed from the crown.
+  if (look.hairStyle !== 'bald' && look.hairStyle !== 'patch' && look.hairStyle !== 'cap') {
+    for (let i = -3; i <= 3; i++) {
+      r.crease(cx + i * 1.6 * u, top0 + 1 * u, cx + i * 3.6 * u, cy - 6.5 * u, g, 1);
+      r.lift(cx + i * 1.6 * u + 1, top0 + 1 * u, cx + i * 3.6 * u + 1, cy - 6.5 * u, g);
     }
   }
 }

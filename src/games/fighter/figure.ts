@@ -108,8 +108,8 @@ const LOOKS: Record<CharId, { main: Look; alt: Partial<Look> }> = {
     alt: { pants: '#d8d8e0' }
   },
   tora: {
-    main: { skin: '#eab08a', hair: '#1a1a22', top: null, sleeves: 'none', pants: '#1c3070', pantsStyle: 'gi', belt: '#d82828', hairStyle: 'short' },
-    alt: { pants: '#7a2020', belt: '#2848c8' }
+    main: { skin: '#eab08a', hair: '#1a1a22', top: null, sleeves: 'none', pants: '#1c3070', pantsStyle: 'mawashi', hairStyle: 'topknot' },
+    alt: { pants: '#7a2020' }
   },
   rio: {
     main: { skin: '#5a9a3a', hair: '#e86a1a', top: null, sleeves: 'none', pants: '#6a4a26', pantsStyle: 'gi', belt: '#4a4a52', hairStyle: 'mane' },

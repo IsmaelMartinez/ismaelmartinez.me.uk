@@ -74,7 +74,7 @@ FIGHTERS = {
     'varga': ('mustermann', {'cloth': '#6a2a8a', 'vest': 'skin', 'skin': '#eab48c', 'hair': '#3a1a10', 'belt': '#d82424', 'shoes': '#e8c040'}, {'cloth': '#204a8a', 'belt': '#e8c040'}),
     'boris': ('mustermann', {'cloth': '#c02020', 'vest': 'skin', 'skin': '#e89a7c', 'hair': '#c02818', 'belt': '#f0c030', 'shoes': '#c02020'}, {'cloth': '#2040b0', 'shoes': '#2040b0', 'hair': '#202020'}),
     'raj': ('mustermann', {'cloth': '#e88a1c', 'vest': 'skin', 'skin': '#8a5434', 'hair': '#2a1a10', 'belt': '#e8e0c0', 'shoes': 'skin'}, {'cloth': '#d8d8e0'}),
-    'tora': ('mustermann', {'cloth': '#1c3070', 'vest': 'skin', 'skin': '#eab08a', 'hair': '#1a1a22', 'belt': '#d82828', 'shoes': 'skin'}, {'cloth': '#7a2020', 'belt': '#2848c8'}),
+    'tora': ('mustermann', {'cloth': 'skin', 'vest': 'skin', 'skin': '#eab08a', 'hair': '#1a1a22', 'belt': '#1c3070', 'shoes': 'skin'}, {'belt': '#7a2020'}),
     'rio': ('mustermann', {'cloth': '#6a4a26', 'vest': 'skin', 'skin': '#5a9a3a', 'hair': '#e86a1a', 'belt': '#4a4a52', 'shoes': 'skin'}, {'skin': '#c89a40', 'hair': '#3a2a8a'}),
     'rocko': ('mustermann', {'cloth': '#2848b8', 'vest': 'skin', 'skin': '#6a3c24', 'hair': '#141414', 'belt': '#f0f0f0', 'shoes': '#1a1a1a'}, {'cloth': '#d8d8d8'}),
     'sakda': ('mustermann', {'cloth': '#5a2a8a', 'vest': 'skin', 'skin': '#b07a4a', 'hair': '#1a1a1a', 'belt': '#f0ece0', 'shoes': 'skin', 'headband': '#f0ece0'}, {'cloth': '#b01818'}),
@@ -84,6 +84,8 @@ FIGHTERS = {
 
 # Each fighter's drawn height, px: the rules' `Fighter.height` and a touch, as the arcade drew its figures a head over their hurtboxes.
 HEIGHTS = {'kenji': 98, 'ace': 98, 'mei': 92, 'boris': 108, 'raj': 104, 'tora': 100, 'rio': 96, 'duke': 102, 'rocko': 104, 'varga': 100, 'sakda': 116, 'zar': 104}
+# Which fighters are reshaped into another build (see SHAPES).
+BUILD_OF = {'tora': 'sumo', 'rio': 'beast'}
 # The arcade's figures are bulkier than a person: a horizontal stretch on the downscale.
 WIDEN = 1.14
 # The source model's height in its idle frame, px.
@@ -189,7 +191,7 @@ def ramp6(hexc):
     return [mix(r[0], (10, 6, 12), 0.45)] + r
 
 
-def build_hires(key, source, colours, height):
+def build_hires(key, source, colours, height, shape=None):
     """
     One fighter from the 171 px model: materials at full size, shading
     averaged down and re-sharpened, tones by brightness rank per material
@@ -203,7 +205,7 @@ def build_hires(key, source, colours, height):
     used = sorted({f for frames in sset['anims'].values() for f in frames} | {sset['anchor']})
     k = height / MM_HEIGHT
     W, H = gif.size
-    W2, H2 = round(W * k * WIDEN), round(H * k)
+    W2, H2 = round((W + 2 * PAD) * k * WIDEN), round(H * k)
     names = ['skin', 'vest', 'cloth', 'belt', 'hair', 'shoes', 'ink']
     small = {}
     for f in used:
@@ -232,9 +234,12 @@ def build_hires(key, source, colours, height):
                 if mp[x, y] == belt and any(y + d < H and mp[x, y + d] == skin_i for d in range(1, 14)):
                     mp[x, y] = shoe
         # A majority vote over each pixel's neighbourhood: the model's near-white highlights read as grey, and grey is the vest.
-        m2 = mat.filter(ImageFilter.ModeFilter(5)).resize((W2, H2), Image.NEAREST)
+        mat = mat.filter(ImageFilter.ModeFilter(5))
+        alpha = fr.getchannel('A')
+        mat, lum, alpha = reshape(mat, lum, alpha, bb, shape, names)
+        m2 = mat.resize((W2, H2), Image.NEAREST)
         l2 = lum.resize((W2, H2), Image.BOX).filter(ImageFilter.UnsharpMask(1, 90, 2))
-        a2 = fr.getchannel('A').resize((W2, H2), Image.BOX).point(lambda a: 255 if a > 110 else 0)
+        a2 = alpha.resize((W2, H2), Image.BOX).point(lambda a: 255 if a > 110 else 0)
         small[f] = (m2, l2, a2)
     # Brightness quantiles per material over every frame, so a tone means the same thing on every cel.
     vals = {}
@@ -288,6 +293,97 @@ def build_hires(key, source, colours, height):
                         break
         crops.append((f, out.crop(bb), bb[0] - anchor[0], bb[1] - anchor[1]))
     return pack(key, crops)
+
+
+# Room either side of the source canvas for a body widened past it, px.
+PAD = 60
+
+# Builds the one model is reshaped into: the widening at each height down an
+# upright figure (0 the crown, 1 the soles), and costume pieces painted on at
+# full size. The sumo carries his weight in the belly and thighs; the beast in
+# the shoulders and chest, under a mane.
+SHAPES = {
+    'sumo': {'profile': [(0, 1.0), (0.14, 1.06), (0.24, 1.45), (0.4, 2.05), (0.52, 2.0), (0.62, 1.7), (0.78, 1.38), (1.0, 1.2)], 'mawashi': 16, 'topknot': True},
+    'beast': {'profile': [(0, 1.05), (0.13, 1.3), (0.26, 1.55), (0.42, 1.38), (0.6, 1.2), (0.8, 1.15), (1.0, 1.12)], 'mane': 5},
+}
+
+
+def reshape(mat, lum, alpha, bb, shape, names):
+    """
+    Widen a frame row by row about each row's own centre (smoothed), by the
+    build's profile; a figure lying down or mid-tumble is widened only
+    gently, since a height profile means nothing on its side. Then paint on
+    the build's costume pieces. Without a shape, only pads the canvas.
+    """
+    import numpy as np
+
+    M = np.pad(np.array(mat), ((0, 0), (PAD, PAD)))
+    L = np.pad(np.array(lum), ((0, 0), (PAD, PAD)))
+    A = np.pad(np.array(alpha), ((0, 0), (PAD, PAD)))
+    if shape and bb:
+        prof = SHAPES[shape]['profile']
+        top, bottom = bb[1], bb[3]
+        h, w = bottom - top, bb[2] - bb[0]
+        upright = h >= 0.9 * w
+        rows = np.arange(M.shape[0])
+        cols = np.arange(M.shape[1])
+        filled = A > 127
+        cx = np.array([cols[filled[y]].mean() if filled[y].any() else np.nan for y in rows])
+        good = ~np.isnan(cx)
+        if good.any():
+            cx = np.interp(rows, rows[good], cx[good])
+            cx = np.convolve(np.pad(cx, 10, mode='edge'), np.ones(21) / 21, mode='valid')
+            mean = float(np.mean([f for _, f in prof]))
+            M2, L2, A2 = np.zeros_like(M), np.zeros_like(L), np.zeros_like(A)
+            for y in range(top, bottom):
+                t = (y - top) / max(1, h)
+                f = float(np.interp(t, [p for p, _ in prof], [q for _, q in prof])) if upright else 1 + (mean - 1) * 0.4
+                src = np.clip(np.round(cx[y] + (cols - cx[y]) / f).astype(int), 0, M.shape[1] - 1)
+                M2[y], L2[y], A2[y] = M[y, src], L[y, src], A[y, src]
+            M, L, A = M2, L2, A2
+        sp = SHAPES[shape]
+        hair, skin, belt, cloth = (names.index(n) + 1 for n in ('hair', 'skin', 'belt', 'cloth'))
+        if sp.get('mawashi'):
+            # The belt grows down over the hips into a mawashi.
+            # Bare feet: the blue ankle cuffs in the lowest fifth go to skin first.
+            if upright:
+                low = np.zeros_like(A, dtype=bool)
+                low[int(bottom - h * 0.2):bottom] = True
+                M[low & (M == belt)] = skin
+            ys, xs = np.nonzero((M == belt) & (A > 127))
+            band = int(np.median(L[ys, xs])) if len(ys) else 80
+            for d in range(1, sp['mawashi']):
+                yy = np.clip(ys + d, 0, M.shape[0] - 1)
+                ok = (A[yy, xs] > 127) & ((M[yy, xs] == skin) | (M[yy, xs] == cloth))
+                M[yy[ok], xs[ok]] = belt
+                # Cloth takes the light from the band, not from the skin it covers, shaded a little toward its lower edge.
+                L[yy[ok], xs[ok]] = max(0, band - d * 2)
+        hy, hx = np.nonzero((M == hair) & (A > 127))
+        if len(hy):
+            tone = int(np.median(L[hy, hx]))
+            if sp.get('topknot') and upright:
+                # A knot on the crown, set back.
+                cyk, cxk = hy.min() - 3, int(np.percentile(hx, 30))
+                yy, xx = np.mgrid[-7:8, -8:9]
+                inside = (xx / 8.0) ** 2 + (yy / 6.0) ** 2 <= 1
+                for dy, dx in zip(yy[inside], xx[inside]):
+                    y, x = cyk + dy, cxk + dx
+                    if 0 <= y < M.shape[0] and 0 <= x < M.shape[1]:
+                        M[y, x], A[y, x], L[y, x] = hair, 255, max(0, min(255, tone - dy * 4))
+            if sp.get('mane'):
+                # The hair thrown up and back into a mane.
+                r = sp['mane']
+                grow = np.zeros_like(A, dtype=bool)
+                for dy in range(-r, 1):
+                    for dx in range(-r, 1):
+                        if dx * dx + dy * dy <= r * r:
+                            yy = np.clip(hy + dy, 0, M.shape[0] - 1)
+                            xx = np.clip(hx + dx, 0, M.shape[1] - 1)
+                            grow[yy, xx] = True
+                new = grow & ~((A > 127) & (M != hair))
+                M[new], A[new] = hair, 255
+                L[new & (L == 0)] = tone
+    return Image.fromarray(M), Image.fromarray(L), Image.fromarray(A)
 
 
 def silhouette(img):
@@ -432,8 +528,8 @@ def main():
     for fid, (sname, main_c, alt_c) in FIGHTERS.items():
         source = SOURCES[sname]
         if source.get('hires'):
-            rects = build_hires(fid, source, main_c, HEIGHTS[fid])
-            build_hires(f'{fid}-alt', source, {**main_c, **alt_c}, HEIGHTS[fid])
+            rects = build_hires(fid, source, main_c, HEIGHTS[fid], BUILD_OF.get(fid))
+            build_hires(f'{fid}-alt', source, {**main_c, **alt_c}, HEIGHTS[fid], BUILD_OF.get(fid))
         else:
             rects = build(src, fid, source, main_c)
             # The alternate colourway packs identically (same frames, same crops), so one table serves both.

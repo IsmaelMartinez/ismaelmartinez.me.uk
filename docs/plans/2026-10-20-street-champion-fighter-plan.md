@@ -168,4 +168,11 @@ behind the start screen.
   rebuilt to match from puffolotti's 171 px CC0 karate model, downscaled to
   each fighter's height with that finish applied; MEI stays on the 78 px
   body. No Capcom pixel is used or traced.
+- 2026-10-21, round 6 (a sumo and a beast, at the owner's request): no CC0
+  pack offers either body with a fighting move set (puffolotti's "sumo" and
+  "savage" builds are fighting styles on the slim mannequin, and the free
+  monsters only walk), so the karate model is reshaped instead: each row of
+  an upright frame widened about its own centre by a height profile
+  (`SHAPES`), with a mawashi grown from the belt and a topknot for TORA and a
+  mane for RIO.
 

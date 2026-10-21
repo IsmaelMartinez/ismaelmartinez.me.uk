@@ -11,29 +11,38 @@
  *
  * Why these voices: the arcade's own announcer recordings are Williams/Midway
  * property and are not used, and no real announcer's voice is cloned. The
- * lines are spoken by open voices from the Piper project (rhasspy/piper-voices
- * on Hugging Face), picked for licence and for sounding like one man across
- * the three languages:
- *   en  en_US-joe-medium        CC0            fine-tuned from the lessac base
- *   es  es_ES-davefx-medium     CC0            fine-tuned from the same base
- *   ca  ca_ES-upc_pau-x_low     CC BY-SA 3.0   FestCat corpus, UPC / Col·lectivaT
- * The Catalan voice is the one male Catalan voice Piper has and is lower
- * quality, so every line is then run through one "arcade DAC" treatment
- * (a slight pitch drop, a 120 Hz to 5.5 kHz band, compression, a short slap
- * echo and loudness normalisation), which makes the three read as one
+ * lines are spoken by open voices picked for licence and for sounding like
+ * one man across the three languages:
+ *   en  Piper en_US-joe-medium      CC0            fine-tuned from the lessac base
+ *   es  Piper es_ES-davefx-medium   CC0            fine-tuned from the same base
+ *   ca  Matxa-TTS v2 "pau"          Apache-2.0     BSC's central Catalan model (#466)
+ * Catalan first shipped on Piper's ca_ES-upc_pau-x_low, the project's one
+ * male Catalan voice, which only exists at its lowest quality tier and was
+ * heard as robotic; it is now rendered by the Barcelona Supercomputing
+ * Center's Matxa-TTS v2 (BSC-LT/matxa-tts-v2-ca-central-graphemes, the
+ * end-to-end ONNX export with its alVoCat vocoder, tagged Apache-2.0 on the
+ * Hub) through scripts/primetime-host-matxa.py, speaking as "pau", the same
+ * FestCat studio speaker the Piper voice was trained on, so the announcer
+ * keeps his identity and gains the quality. Every line is then run through
+ * one "arcade DAC" treatment (a slight pitch drop, scaled per voice since
+ * "pau" already sits low, a 120 Hz to 5.5 kHz band, compression, a short
+ * slap echo and loudness normalisation), which makes the three read as one
  * announcer and gives them the sampled-speech grain of a 1990 cabinet.
  * Per-line rate and pitch come from `DELIVERY` in host.ts, so the delivery
  * written there is what the files carry. The credits are written beside the
- * files as CREDITS.txt, which is what CC BY-SA asks for.
+ * files as CREDITS.txt.
  *
- * Not in CI (needs Python's piper-tts, ffmpeg and a network for the first
- * run, which downloads the voices into scripts/.piper-voices/, gitignored):
+ * Not in CI (needs Python's piper-tts, which brings onnxruntime and numpy,
+ * ffmpeg, and a network for the first run, which downloads the voices into
+ * scripts/.voices/, gitignored; the Matxa model is 270 MB):
  *
  *   pip install piper-tts
- *   node --experimental-strip-types scripts/primetime-host-voice.mts
+ *   node --experimental-strip-types scripts/primetime-host-voice.mts [en|es|cat ...]
  *
  * Re-run after changing a host string in translations.ts or a line's
- * delivery, and commit the files it rewrites.
+ * delivery, naming the locales that changed (the neural voices sample, so a
+ * re-render is never byte-identical and an untouched locale is best left
+ * alone), and commit the files it rewrites.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -44,38 +53,78 @@ import { translations, localeMeta, type Locale } from '../src/i18n/translations.
 import { DELIVERY, HOST_AUDIO_BASE, HOST_LINES } from '../src/games/primetime/host.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const VOICE_DIR = join(ROOT, 'scripts', '.piper-voices');
+const VOICE_DIR = join(ROOT, 'scripts', '.voices');
 const OUT_DIR = join(ROOT, 'public', HOST_AUDIO_BASE);
-const HF = 'https://huggingface.co/rhasspy/piper-voices/resolve/main';
+const HF = 'https://huggingface.co';
 const RATE = 22050;
 
-interface Voice {
+interface PiperVoice {
+  engine: 'piper';
   name: string;
   path: string;
   licence: string;
   credit: string;
+  /** How much of the standard pitch drop this voice takes (1 is all of it). */
+  drop: number;
 }
 
+interface MatxaVoice {
+  engine: 'matxa';
+  repo: string;
+  file: string;
+  speaker: number;
+  licence: string;
+  credit: string;
+  drop: number;
+}
+
+type Voice = PiperVoice | MatxaVoice;
+
 const VOICES: Record<Locale, Voice> = {
-  en: { name: 'en_US-joe-medium', path: 'en/en_US/joe/medium', licence: 'CC0', credit: 'Piper voice "joe" (US English)' },
-  es: { name: 'es_ES-davefx-medium', path: 'es/es_ES/davefx/medium', licence: 'CC0', credit: 'Piper voice "davefx" (Spanish)' },
+  en: {
+    engine: 'piper',
+    name: 'en_US-joe-medium',
+    path: 'rhasspy/piper-voices/resolve/main/en/en_US/joe/medium',
+    licence: 'CC0',
+    credit: 'Piper voice "joe" (US English)',
+    drop: 1
+  },
+  es: {
+    engine: 'piper',
+    name: 'es_ES-davefx-medium',
+    path: 'rhasspy/piper-voices/resolve/main/es/es_ES/davefx/medium',
+    licence: 'CC0',
+    credit: 'Piper voice "davefx" (Spanish)',
+    drop: 1
+  },
   cat: {
-    name: 'ca_ES-upc_pau-x_low',
-    path: 'ca/ca_ES/upc_pau/x_low',
-    licence: 'CC BY-SA 3.0 ES',
-    credit: 'Piper voice "upc_pau" (Catalan), trained on the UPC FestCat corpus published by Col·lectivaT (https://collectivat.cat/asr#upc-festcat-tts-corpora)'
+    engine: 'matxa',
+    repo: 'BSC-LT/matxa-tts-v2-ca-central-graphemes',
+    file: 'matxa_v2_graphemes_10_steps_wavenext.onnx',
+    // "pau" in the model's speaker table: a FestCat studio speaker.
+    speaker: 39,
+    licence: 'Apache-2.0 (model, as tagged on the Hugging Face Hub)',
+    credit:
+      'Matxa-TTS v2 by the Barcelona Supercomputing Center (Projecte AINA), central Catalan, speaker "pau" from the UPC FestCat corpus (https://huggingface.co/BSC-LT/matxa-tts-v2-ca-central-graphemes), with its alVoCat vocoder',
+    drop: 0.4
   }
 };
 
+function download(url: string, file: string): void {
+  if (existsSync(file)) return;
+  mkdirSync(dirname(file), { recursive: true });
+  console.log(`downloading ${url}`);
+  execFileSync('curl', ['-sSL', '--fail', '-o', file, url], { stdio: 'inherit' });
+}
+
+/** Fetches a voice's files if missing and returns the model path. */
 function fetchVoice(voice: Voice): string {
-  mkdirSync(VOICE_DIR, { recursive: true });
-  const model = join(VOICE_DIR, `${voice.name}.onnx`);
-  for (const ext of ['onnx', 'onnx.json']) {
-    const file = join(VOICE_DIR, `${voice.name}.${ext}`);
-    if (existsSync(file)) continue;
-    console.log(`downloading ${voice.name}.${ext}`);
-    execFileSync('curl', ['-sSL', '--fail', '-o', file, `${HF}/${voice.path}/${voice.name}.${ext}`], { stdio: 'inherit' });
+  if (voice.engine === 'piper') {
+    for (const ext of ['onnx', 'onnx.json']) download(`${HF}/${voice.path}/${voice.name}.${ext}`, join(VOICE_DIR, `${voice.name}.${ext}`));
+    return join(VOICE_DIR, `${voice.name}.onnx`);
   }
+  const model = join(VOICE_DIR, 'matxa', voice.file);
+  download(`${HF}/${voice.repo}/resolve/main/${voice.file}`, model);
   return model;
 }
 
@@ -86,16 +135,29 @@ function spoken(text: string): string {
   return cased.replace(/prime time/gi, 'Prime Time');
 }
 
-function render(model: string, text: string, rate: number, pitch: number, out: string, tmp: string): void {
+function synthesize(voice: Voice, model: string, text: string, rate: number, wav: string): void {
+  if (voice.engine === 'piper') {
+    execFileSync('python3', ['-m', 'piper', '-m', model, '-f', wav, '--length-scale', String(1 / rate)], { input: text, stdio: ['pipe', 'ignore', 'inherit'] });
+    return;
+  }
+  execFileSync(
+    'python3',
+    ['-I', join(ROOT, 'scripts', 'primetime-host-matxa.py'), '--model', model, '--speaker', String(voice.speaker), '--text', text, '--length-scale', String(1 / rate), '--out', wav],
+    { stdio: 'inherit' }
+  );
+}
+
+function render(voice: Voice, model: string, text: string, rate: number, pitch: number, out: string, tmp: string): void {
   const wav = join(tmp, 'line.wav');
-  execFileSync('python3', ['-m', 'piper', '-m', model, '-f', wav, '--length-scale', String(1 / rate)], { input: text, stdio: ['pipe', 'ignore', 'inherit'] });
-  // The pitch drop: DELIVERY's 0.7 to 0.95 maps to a 7% to 4.5% lower voice,
-  // then the tempo is restored so the drop costs no time.
-  const factor = 0.86 + 0.1 * pitch;
+  synthesize(voice, model, text, rate, wav);
+  // The pitch drop: DELIVERY's 0.7 to 0.95 maps to a 7% to 4.5% lower voice
+  // for a voice taking the whole drop, then the tempo is restored so the
+  // drop costs no time.
+  const factor = 1 - (1 - (0.86 + 0.1 * pitch)) * voice.drop;
   const filters = [
-    // The voices do not share a sample rate (the Catalan one is 16 kHz), and
-    // `asetrate` relabels samples rather than converting them, so everything
-    // is brought to RATE first or a 16 kHz voice plays a quarter fast and sharp.
+    // The voices do not share a sample rate, and `asetrate` relabels samples
+    // rather than converting them, so everything is brought to RATE first or
+    // a 16 kHz voice plays a quarter fast and sharp.
     `aresample=${RATE}`,
     `asetrate=${RATE}*${factor.toFixed(4)}`,
     `aresample=${RATE}`,
@@ -111,9 +173,13 @@ function render(model: string, text: string, rate: number, pitch: number, out: s
   });
 }
 
+const wanted = process.argv.slice(2) as Locale[];
+const locales = (Object.keys(VOICES) as Locale[]).filter(l => wanted.length === 0 || wanted.includes(l));
+if (locales.length === 0) throw new Error(`no such locale: ${wanted.join(', ')}`);
+
 const tmp = mkdtempSync(join(tmpdir(), 'primetime-host-'));
 try {
-  for (const locale of Object.keys(VOICES) as Locale[]) {
+  for (const locale of locales) {
     const voice = VOICES[locale];
     const model = fetchVoice(voice);
     const dir = join(OUT_DIR, localeMeta[locale].tag);
@@ -122,18 +188,18 @@ try {
       const text = translations[locale][`fun.primetime.host.${line}` as keyof (typeof translations)[typeof locale]] as string;
       const { rate, pitch } = DELIVERY[line];
       const out = join(dir, `${line}.mp3`);
-      render(model, spoken(text), rate, pitch, out, tmp);
+      render(voice, model, spoken(text), rate, pitch, out, tmp);
       console.log(`${localeMeta[locale].tag}/${line}.mp3  "${spoken(text)}"`);
     }
   }
   const credits = [
     "PRIME TIME's host lines, rendered by scripts/primetime-host-voice.mts.",
     '',
-    'The voices are open text-to-speech voices from the Piper project',
-    '(https://github.com/rhasspy/piper, voices at https://huggingface.co/rhasspy/piper-voices):',
+    'The voices are open text-to-speech voices:',
     ...(Object.keys(VOICES) as Locale[]).map(l => `  ${localeMeta[l].tag}: ${VOICES[l].credit}. Licence: ${VOICES[l].licence}.`),
     '',
-    'The Catalan files are derived from a CC BY-SA 3.0 ES voice and are shared under the same licence.',
+    'Piper voices: https://github.com/rhasspy/piper, https://huggingface.co/rhasspy/piper-voices.',
+    'The Catalan model was trained on the OpenSLR 69 (CC BY-SA 4.0) and FestCat (CC BY-SA 3.0, UPC / Col·lectivaT) corpora.',
     'No recording from the arcade game this cabinet homages is used.',
     ''
   ].join('\n');

@@ -1,10 +1,10 @@
 PRIME TIME's host lines, rendered by scripts/primetime-host-voice.mts.
 
-The voices are open text-to-speech voices from the Piper project
-(https://github.com/rhasspy/piper, voices at https://huggingface.co/rhasspy/piper-voices):
+The voices are open text-to-speech voices:
   en: Piper voice "joe" (US English). Licence: CC0.
   es: Piper voice "davefx" (Spanish). Licence: CC0.
-  ca: Piper voice "upc_pau" (Catalan), trained on the UPC FestCat corpus published by Col·lectivaT (https://collectivat.cat/asr#upc-festcat-tts-corpora). Licence: CC BY-SA 3.0 ES.
+  ca: Matxa-TTS v2 by the Barcelona Supercomputing Center (Projecte AINA), central Catalan, speaker "pau" from the UPC FestCat corpus (https://huggingface.co/BSC-LT/matxa-tts-v2-ca-central-graphemes), with its alVoCat vocoder. Licence: Apache-2.0 (model, as tagged on the Hugging Face Hub).
 
-The Catalan files are derived from a CC BY-SA 3.0 ES voice and are shared under the same licence.
+Piper voices: https://github.com/rhasspy/piper, https://huggingface.co/rhasspy/piper-voices.
+The Catalan model was trained on the OpenSLR 69 (CC BY-SA 4.0) and FestCat (CC BY-SA 3.0, UPC / Col·lectivaT) corpora.
 No recording from the arcade game this cabinet homages is used.

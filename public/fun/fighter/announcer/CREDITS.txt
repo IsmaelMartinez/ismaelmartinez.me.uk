@@ -1,0 +1,8 @@
+STREET CHAMPION's announcer lines, rendered by scripts/fighter-announcer-voice.mts.
+
+The voice is an open text-to-speech voice, played in every locale:
+  en: Piper voice "joe" (US English, medium quality, fine-tuned from the lessac voice). Licence: CC0.
+
+Each line is pitched down 3.5 semitones and band-limited, compressed and given a short hall in ffmpeg.
+Piper voices: https://github.com/rhasspy/piper, https://huggingface.co/rhasspy/piper-voices.
+No recording from the arcade game this cabinet homages is used, and no real voice is cloned.

@@ -198,3 +198,17 @@ behind the start screen.
     out of copyright as a 1991 game; they are not (a corporate work's
     copyright runs for decades yet, and Capcom still licenses them), so
     they remain reference only.
+- 2026-10-25, round 8 (from the owner's "slim down the sumo's arms… re-do it
+  properly based on the original character"). The arcade's sumo was studied
+  for proportion only: his bulk is a round belly hanging forward over the
+  mawashi and heavy thighs that still taper to a knee and a calf, under a
+  strong man's chest and arms. The build had it the other way round, a
+  uniformly widened box of a torso and every limb swollen. Now:
+  - the torso widens by a neck-to-hips profile with the belly pushed forward;
+  - the arms grow 2 px at the model's scale, not 5;
+  - the legs are redrawn along their centre lines with a hip-to-ankle radius
+    profile, because the karate trousers stayed tubes however they were
+    grown or carved;
+  - the mawashi is lit as one band of cloth.
+  A smaller blue that does not touch the vest is now a cuff too, so a raised
+  knee no longer leaves a scrap of belt floating by the foot.

@@ -264,8 +264,11 @@ def relight(mat, lum, alpha, bare, names):
     hair = names.index('hair') + 1
     face = grow(A & (M == hair), M.copy(), L.copy(), 12, np.ones_like(A))
     out = L.astype(float)
-    for m in bare:
-        mask = A & (M == m) & ~(face & (M == names.index('skin') + 1))
+    # A bare leg is trousers and shoes in the model: one form, with no seam at the cuff.
+    legs = [m for m in bare if m in (names.index('cloth') + 1, names.index('shoes') + 1)]
+    groups = [[m] for m in bare if m not in legs] + ([legs] if legs else [])
+    for group in groups:
+        mask = A & np.isin(M, group) & ~(face & (M == names.index('skin') + 1))
         if not mask.any():
             continue
         d = np.zeros(M.shape)
@@ -276,8 +279,8 @@ def relight(mat, lum, alpha, bare, names):
         # A light from above: the underside of a form one step darker.
         under = mask & ~np.roll(mask, -4, 0)
         form = 0.3 + 0.7 * (d / 9) ** 0.6 - 0.18 * under
-        sm = smooth(L, mask, 5, 0.4).astype(float)
-        out[mask] = 0.35 * sm[mask] + 0.65 * 230 * form[mask]
+        sm = smooth(L, mask, 3, 0.5).astype(float)
+        out[mask] = 0.5 * sm[mask] + 0.5 * 230 * form[mask]
     return Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8))
 
 
@@ -327,9 +330,13 @@ def materials(source, gif, f, names):
         near_shoe = grow(shoes_g, mv.copy(), np.zeros_like(mv), 2, ones)
         blab, _ = components(mv == belt)
         cuffs = np.zeros_like(core)
+        sizes = [(blab == i).sum() for i in range(1, blab.max() + 1)]
+        touching = grow(core, mv.copy(), np.zeros_like(mv), 5, ones)
         for i in range(1, blab.max() + 1):
             part = blab == i
-            if (part & near_shoe).any() or not (part & near_core).any():
+            # A raised knee can bring a cuff within a hand's width: a blue smaller than the belt that does not touch the vest is a cuff too.
+            lesser = sizes[i - 1] < max(sizes) and not (part & touching).any()
+            if (part & near_shoe).any() or not (part & near_core).any() or lesser:
                 cuffs |= part
         mv[cuffs] = shoe
         near_cuff = grow(cuffs, mv.copy(), np.zeros_like(mv), 2, ones)
@@ -366,6 +373,9 @@ def build_hires(key, source, colours, height, shape=None, set_name=None):
         bare = [names.index(n) + 1 for n in ('vest', 'cloth', 'shoes') if colours.get(n) == 'skin']
         if shape:
             bare.append(names.index('skin') + 1)
+        if SHAPES.get(shape, {}).get('mawashi'):
+            # The mawashi is cloth grown over trousers: lit as one heavy band rather than with their creases.
+            bare.append(names.index('belt') + 1)
         if bare:
             lum = relight(mat, lum, alpha, bare, names)
         m2 = mat.resize((W2, H2), Image.NEAREST)
@@ -432,17 +442,37 @@ PAD = 60
 # Builds the one model is reshaped into. A build is a pose-independent
 # inflation, so a figure keeps its bulk lying down, mid-tumble or kicking:
 # the torso (vest and belt) is scaled about its own body axis (the line from
-# the hair to the torso's centre), `across` it and `along` it from the neck
-# down, with `belly` more on the side the figure faces; the legs and arms are
-# thickened by growing their edges outward `legs` and `arms` px (at the
-# model's 171 px scale, the thigh to `thighs`), which fattens a limb without stretching it, where
-# widening rows used to drag a kicking leg sideways off its hip. Then the
-# build's costume pieces are painted on. The sumo carries his weight in the
-# belly and thighs, under a mawashi and a topknot; the beast in the chest,
-# shoulders and arms, under a mane.
+# the hair to the torso's centre), stretched `along` it from the neck down,
+# and widened `across` it by a profile from the neck (0) to the hips (1),
+# with `front` widening the side the figure faces further (a belly), so the
+# bulk sits where the build carries it; the legs and arms are thickened by
+# growing their edges outward `legs` and `arms` px (at the model's 171 px
+# scale, the thigh to `thighs`; a negative `legs` carves trousers to a bare
+# leg), which fattens a limb without stretching it,
+# where widening rows used to drag a kicking leg sideways off its hip. Then
+# the build's costume pieces are painted on. The sumo carries his weight in
+# a round belly that hangs forward over a mawashi, and in his thighs, while
+# his chest and arms stay a strong man's, as the arcade's sumo does; the
+# beast carries it in the chest, shoulders and arms, under a mane.
 SHAPES = {
-    'sumo': {'across': 1.8, 'along': 1.28, 'belly': 1.18, 'legs': 3, 'thighs': 8, 'arms': 5, 'mawashi': 7, 'topknot': True},
-    'beast': {'across': 1.5, 'along': 1.08, 'belly': 1.0, 'legs': 2, 'arms': 4, 'mane': 5},
+    'sumo': {
+        'along': 1.25,
+        'across': [(0, 1.08), (0.3, 1.25), (0.55, 1.55), (0.8, 1.75), (1.0, 1.6)],
+        'front': [(0, 1.0), (0.35, 1.06), (0.62, 1.45), (0.85, 1.6), (1.0, 1.35)],
+        'legs': 0,
+        'leg': [(0, 18), (0.3, 15), (0.5, 10), (0.64, 11), (0.78, 9.5), (0.92, 6.5), (1.0, 6.5)],
+        'arms': 2,
+        'mawashi': 5,
+        'topknot': True,
+    },
+    'beast': {
+        'along': 1.08,
+        'across': [(0, 1.4), (0.35, 1.55), (0.7, 1.35), (1.0, 1.2)],
+        'front': [(0, 1.0), (0.4, 1.1), (1.0, 1.0)],
+        'legs': 2,
+        'arms': 4,
+        'mane': 5,
+    },
 }
 
 NEIGHBOURS = ((0, 1), (0, -1), (1, 0), (-1, 0))
@@ -463,6 +493,73 @@ def grow(mask, M, L, r, allow):
                 L[new] = np.roll(L, (dy, dx), (0, 1))[new]
                 m |= new
     return m
+
+
+def rebuild_legs(legs, M, L, LM, LL, beltm, profile, cloth, shoes):
+    """
+    Redraw each leg as a bare one: its centre line found by walking the leg
+    from the belt (a band of equal walking distance per step, its centroid
+    a point on the line), then discs along that line with a leg's radius at
+    each fraction of its length (`profile`, from hip to ankle), so a thigh
+    tapers to the knee and swells again at the calf whatever the pose or the
+    trousers' cut. The feet stay as drawn. Writes the new pixels into LM/LL
+    (material cloth, the light of the nearest source pixel) and returns the mask.
+    """
+    import numpy as np
+
+    H, W = legs.shape
+    dist = np.full(legs.shape, -1, int)
+    front = grow(beltm, M.copy(), L.copy(), 2, np.ones_like(legs)) & legs
+    dist[front] = 0
+    reached = front.copy()
+    k = 0
+    while front.any() and k < 400:
+        k += 1
+        nxt = np.zeros_like(front)
+        for dy, dx in NEIGHBOURS + DIAGONALS:
+            nxt |= np.roll(front, (dy, dx), (0, 1))
+        nxt &= legs & ~reached
+        dist[nxt] = k
+        reached |= nxt
+        front = nxt
+    out = legs & (M == shoes)
+    if dist.max() <= 0:
+        return legs
+    # The two legs part below the crotch: label what lies past the first fifth of the walk.
+    lab, _ = components(legs & (dist > dist.max() * 0.18))
+    ys, xs = np.mgrid[0:H, 0:W]
+    src_y, src_x = np.nonzero(legs)
+    for i in range(1, lab.max() + 1):
+        leg = lab == i
+        if leg.sum() < 60:
+            continue
+        top = dist[leg].min()
+        # Continue each leg's line up to the belt through the shared hip.
+        span = dist.max() if dist[leg].max() <= top else dist[leg].max()
+        pts = []
+        for d in range(0, int(span) + 1, 2):
+            band = (dist >= d) & (dist < d + 2) & (leg if d >= top else legs)
+            if band.any():
+                by, bx = np.nonzero(band)
+                pts.append((bx.mean(), by.mean(), d))
+        if len(pts) < 2:
+            continue
+        length = pts[-1][2] or 1
+        for (x0, y0, d0), (x1, y1, _) in zip(pts, pts[1:]):
+            r = float(np.interp(d0 / length, [p for p, _ in profile], [q for _, q in profile]))
+            for f in (0.0, 0.5):
+                cx, cy = x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
+                disc = (xs - cx) ** 2 + (ys - cy) ** 2 <= r * r
+                new = disc & ~out
+                if new.any():
+                    LM[new] = cloth
+                    out |= disc
+    # Light for the new pixels from the nearest leg pixel of the model.
+    fill = out & ~legs
+    if fill.any():
+        grown = grow(legs, LM.copy(), LL, 30, fill | legs)
+        del grown
+    return out
 
 
 def reshape(mat, lum, alpha, bb, shape, names):
@@ -502,12 +599,16 @@ def reshape(mat, lum, alpha, bb, shape, names):
         pp = np.array([ax[1], -ax[0]])
         u = (tx - c[0]) * ax[0] + (ty - c[1]) * ax[1]
         v = (tx - c[0]) * pp[0] + (ty - c[1]) * pp[1]
-        u0, vc = float(np.percentile(u, 2)), float(np.median(v))
+        u0, u1, vc = float(np.percentile(u, 2)), float(np.percentile(u, 98)), float(np.median(v))
         U = (xs - c[0]) * ax[0] + (ys - c[1]) * ax[1]
         V = (xs - c[0]) * pp[0] + (ys - c[1]) * pp[1]
         su = u0 + (U - u0) / sp['along']
+        # The widening at each source height down the torso, neck to hips.
+        t = np.clip((su - u0) / max(1.0, u1 - u0), 0, 1)
+        prof = lambda pr: np.interp(t, [q for q, _ in pr], [w for _, w in pr])
+        across = prof(sp['across'])
         dv = V - vc
-        sv = vc + dv / np.where(dv > 0, sp['across'] * sp['belly'], sp['across'])
+        sv = vc + dv / np.where(dv > 0, across * prof(sp['front']), across)
         sx = np.clip(np.round(c[0] + su * ax[0] + sv * pp[0]).astype(int), 0, W - 1)
         sy = np.clip(np.round(c[1] + su * ax[1] + sv * pp[1]).astype(int), 0, H - 1)
         tmask = torso[sy, sx] & (U >= u0 - 2)
@@ -516,12 +617,23 @@ def reshape(mat, lum, alpha, bb, shape, names):
         tmask, TM, TL = torso, M, L
     free = np.ones_like(solid)
     LM, LL = M.copy(), L.copy()
-    lmask = grow(legs, LM, LL, sp['legs'], free)
+    if sp.get('leg'):
+        lmask = rebuild_legs(legs, M, L, LM, LL, solid & (M == belt), sp['leg'], cloth, shoes)
+    elif sp['legs'] >= 0:
+        lmask = grow(legs, LM, LL, sp['legs'], free)
+    else:
+        # A negative `legs` carves the model's baggy trousers down to a bare leg; the feet lose only their shoe's edge.
+        def carve(m, r):
+            for _ in range(r):
+                m = m & np.roll(m, 1, 0) & np.roll(m, -1, 0) & np.roll(m, 1, 1) & np.roll(m, -1, 1)
+            return m
+
+        lmask = (carve(legs, -sp['legs']) & (M == cloth)) | (carve(legs, 1) & (M == shoes))
     if sp.get('thighs'):
         # Thighs: the leg near the belt grows further, tapering the leg to the calf.
-        hips = grow(solid & (M == belt), M.copy(), L.copy(), 34, free)
+        hips = grow(solid & (M == belt), M.copy(), L.copy(), 28, free)
         TLM, TLL = M.copy(), L.copy()
-        tm = grow(legs & hips, TLM, TLL, sp['thighs'], free)
+        tm = grow(lmask & hips, TLM, TLL, sp['thighs'], free)
         put = tm & ~lmask
         LM[put], LL[put] = TLM[put], TLL[put]
         lmask |= tm

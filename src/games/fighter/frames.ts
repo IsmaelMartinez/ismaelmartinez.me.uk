@@ -20,12 +20,20 @@ import SETS from './sprite-sets.json';
 export type SetName = keyof typeof SETS;
 type Anims = Record<string, readonly number[]>;
 
+/**
+ * A move list's animations: a list with a `base` (TORA's sumo list over the
+ * karate one) names only the animations it changes.
+ */
+export function animsFor(name: SetName): Anims {
+  const set: { base?: string; anims: Anims } = SETS[name];
+  return set.base ? { ...animsFor(set.base as SetName), ...set.anims } : set.anims;
+}
+
 /** The source frame to draw for a fighter, or null if it has no sheet. */
 export function celFor(f: FighterState, clock: number): number | null {
   const sheet = SHEETS[f.id];
   if (!sheet) return null;
-  const anims = SETS[sheet.set].anims as Anims;
-  return pick(f, clock, anims, sheet.frames);
+  return pick(f, clock, animsFor(sheet.set), sheet.frames);
 }
 
 const loop = (a: readonly number[], t: number, hold: number): number => a[Math.floor(t / hold) % a.length];
@@ -134,13 +142,14 @@ function special(f: FighterState, A: Anims, frames: Readonly<Record<number, Shee
     case 'spin':
       return t < 6 ? A.jumpUp[0] : loop(A.spinKick, t, 3);
     case 'rapid': {
+      if (A.slaps && s.button === 'P') return loop(A.slaps, t, 3);
       const cels = s.button === 'K' ? [A.standK1[widest(A.standK1, frames)], A.standK2[widest(A.standK2, frames)], A.standK0[widest(A.standK0, frames)]] : [A.standP0[widest(A.standP0, frames)], A.standP1[widest(A.standP1, frames)], A.standP2[widest(A.standP2, frames)]];
       return loop(cels, t, 3);
     }
     case 'rush': {
       if (t < 8) return A.crouchIn[0];
       if (f.y > 0 || f.vy !== 0) return once(A.fall, t, 20);
-      const cels = s.guard === 'low' ? A.crouchK2 : A.standP2;
+      const cels = s.guard === 'low' ? A.crouchK2 : (A.torpedo ?? A.standP2);
       return a.travel > 0 ? cels[widest(cels, frames)] : cels[cels.length - 1];
     }
     case 'grab':

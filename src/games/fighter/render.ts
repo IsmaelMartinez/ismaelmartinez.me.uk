@@ -20,7 +20,8 @@ import { BONUS_TIME, FLOOR_Y, ROUNDS_TO_WIN, SCREEN_H, SCREEN_W, type FightState
 import { drawBody, landmarks3 } from './body';
 import { celFor } from './frames';
 import { SHEETS } from './sheets';
-import { Raster, drawPortrait, lookFor, signatureColour, type Look } from './figure';
+import { Raster, lookFor, signatureColour, type Look } from './figure';
+import { drawPortrait } from './portrait';
 import { STYLE, drawDisplay, type DisplayStyle } from './display';
 import { DUST_FRAMES, SPARK_FRAMES, blit, breathStream, dizzyBird, dizzyStar, dust, flameTongue, hitSpark, projectileArt, whirl, type HitKind } from './effects-art';
 import { bands, checker, ctx2d, disc, hash, makeCanvas, rect } from './pix';
@@ -285,7 +286,7 @@ export function createRenderer(): Renderer {
     const c = makeCanvas(size, size);
     const cx = ctx2d(c);
     const img = cx.createImageData(size, size);
-    r.toImage(img, 'none');
+    r.toImage3(img, 'none', size / 24);
     if (mood === 'hurt') {
       // Bruises and a black eye, for the continue screen.
       const d = img.data;

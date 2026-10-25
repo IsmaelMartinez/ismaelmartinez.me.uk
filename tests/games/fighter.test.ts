@@ -3,10 +3,9 @@ import { cpuInput, createCpu } from '../../src/games/fighter/ai';
 import { BONUS_AFTER, continueCredit, createArcade, createDemo, levelFor, tickArcade, type ArcadeEvent, type ArcadeState } from '../../src/games/fighter/arcade';
 import { createBonus, createFight, hitbox, hurtboxes, tickFight, type FightEvent, type FightState, type FighterState } from '../../src/games/fighter/fight';
 import { HK, HP, LK, LP, MK, MP, NO_INPUT, createBuffer, motionDone, numpad, pushFrame, type FrameInput } from '../../src/games/fighter/motion';
-import { celFor } from '../../src/games/fighter/frames';
+import { animsFor, celFor } from '../../src/games/fighter/frames';
 import { poseFor } from '../../src/games/fighter/poses';
 import { SHEETS } from '../../src/games/fighter/sheets';
-import SETS from '../../src/games/fighter/sprite-sets.json';
 import { BOSSES, FIGHTERS, SELECTABLE, type CharId } from '../../src/games/fighter/roster';
 import { GLYPHS, normaliseText } from '../../src/games/football/font';
 import { translations } from '../../src/i18n/translations';
@@ -442,11 +441,9 @@ describe('the pictures', () => {
     for (const id of ALL) {
       const sheet = SHEETS[id];
       expect(sheet, id).toBeDefined();
-      const anims = SETS[sheet!.set].anims as Record<string, number[]>;
-      for (const key of needed) {
-        expect(anims[key]?.length, `${id} ${key}`).toBeGreaterThan(0);
-        for (const f of anims[key]) expect(sheet!.frames[f], `${id} ${key} cel ${f}`).toBeDefined();
-      }
+      const anims = animsFor(sheet!.set);
+      for (const key of needed) expect(anims[key]?.length, `${id} ${key}`).toBeGreaterThan(0);
+      for (const [key, cels] of Object.entries(anims)) for (const f of cels) expect(sheet!.frames[f], `${id} ${key} cel ${f}`).toBeDefined();
     }
   });
 

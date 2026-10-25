@@ -176,3 +176,25 @@ behind the start screen.
   (`SHAPES`), with a mawashi grown from the belt and a topknot for TORA and a
   mane for RIO.
 
+- 2026-10-25, round 7 (from the owner's "the sumo still moves like a karate
+  guy", "it does get smaller body sometimes", "the kick… looks like it broke
+  a leg" and "the characters image on the presentation is nothing like the
+  original"):
+  - **TORA moves as a sumo.** A `sumo` move list over the karate one names a
+    wide squat stance and waddle, palm thrusts, a shiko win, and cels of its
+    own for the Hundred Slaps and the Torpedo, all from the model's frames.
+  - **The build is pose-independent.** Row widening by a height profile was
+    gentle on any frame not upright (the shrinking) and dragged a kicking leg
+    sideways off its hip (the broken leg). Now the torso is scaled about the
+    body's own axis and the limbs thicken outward, the same on every frame.
+  - **Cleaner bodies.** Bare skin is relit as rounded forms, because the
+    model's light there was a cloth's creases. The model's grey shoes, which
+    were sharing the vest's colour, and its blue cuffs, which were sharing the
+    belt's, are told apart by connected region, and that took stray feet out of
+    every fighter.
+  - **Portraits rebuilt.** `portrait.ts` sculpts a three-quarter head in 3D
+    with per-fighter proportions (`FACES`), replacing the frontal 2D painter.
+  - **Still not the arcade's sprites.** The owner suggested its sprites are
+    out of copyright as a 1991 game; they are not (a corporate work's
+    copyright runs for decades yet, and Capcom still licenses them), so
+    they remain reference only.

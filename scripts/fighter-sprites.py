@@ -86,10 +86,21 @@ FIGHTERS = {
 HEIGHTS = {'kenji': 98, 'ace': 98, 'mei': 92, 'boris': 108, 'raj': 104, 'tora': 100, 'rio': 96, 'duke': 102, 'rocko': 104, 'varga': 100, 'sakda': 116, 'zar': 104}
 # Which fighters are reshaped into another build (see SHAPES).
 BUILD_OF = {'tora': 'sumo', 'rio': 'beast'}
+# Which fighters follow a move list other than their body's own.
+SET_OF = {'tora': 'sumo'}
 # The arcade's figures are bulkier than a person: a horizontal stretch on the downscale.
 WIDEN = 1.14
 # The source model's height in its idle frame, px.
 MM_HEIGHT = 171
+
+
+def move_list(name):
+    """A move list from the sets file, with the animations of the list it is `base`d on under its own."""
+    sset = SETS[name]
+    if 'base' not in sset:
+        return sset
+    base = move_list(sset['base'])
+    return {'anchor': sset.get('anchor', base['anchor']), 'anims': {**base['anims'], **sset['anims']}}
 
 
 def hex_rgb(h):
@@ -191,7 +202,147 @@ def ramp6(hexc):
     return [mix(r[0], (10, 6, 12), 0.45)] + r
 
 
-def build_hires(key, source, colours, height, shape=None):
+NAMES = ['skin', 'vest', 'cloth', 'belt', 'hair', 'shoes', 'ink']
+_MATERIALS = {}
+
+
+def components(mask):
+    """Label a mask's 8-connected regions: (labels, sizes), labels from 1."""
+    import numpy as np
+    from collections import deque
+
+    lab = np.zeros(mask.shape, int)
+    sizes = [0]
+    H, W = mask.shape
+    for y0, x0 in zip(*np.nonzero(mask)):
+        if lab[y0, x0]:
+            continue
+        n = len(sizes)
+        lab[y0, x0] = n
+        q, size = deque([(y0, x0)]), 0
+        while q:
+            y, x = q.popleft()
+            size += 1
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    yy, xx = y + dy, x + dx
+                    if 0 <= yy < H and 0 <= xx < W and mask[yy, xx] and not lab[yy, xx]:
+                        lab[yy, xx] = n
+                        q.append((yy, xx))
+        sizes.append(size)
+    return lab, sizes
+
+
+def smooth(L, mask, k=7, keep=0.35):
+    """Blur the light inside a mask (a masked box blur, k px either side), keeping `keep` of the original."""
+    import numpy as np
+
+    f = mask.astype(float)
+    n = 2 * k + 1
+
+    def box(a):
+        c = np.pad(np.cumsum(np.cumsum(np.pad(a, k, mode='edge'), 0), 1), ((1, 0), (1, 0)))
+        return (c[n:, n:] - c[:-n, n:] - c[n:, :-n] + c[:-n, :-n])[: a.shape[0], : a.shape[1]]
+
+    num, den = box(L.astype(float) * f), box(f)
+    sm = np.where(den > 0, num / np.maximum(den, 1e-6), L)
+    return np.where(mask, np.round(keep * L + (1 - keep) * sm), L).astype(L.dtype)
+
+
+def relight(mat, lum, alpha, bare, names):
+    """
+    Light bare skin as the arcade lit it: each material's region a rounded
+    form, bright through its middle and darkening to its edge (by distance
+    from the edge, so a seam between torso and arm reads as a shadow), with
+    a little of the model's own light kept for the muscle. The model's light
+    there is a cloth's, all creases, and a build's grown limbs carry only
+    their edge's light outward. The face is left as drawn.
+    """
+    import numpy as np
+
+    M, L, A = np.array(mat), np.array(lum), np.array(alpha) > 127
+    hair = names.index('hair') + 1
+    face = grow(A & (M == hair), M.copy(), L.copy(), 12, np.ones_like(A))
+    out = L.astype(float)
+    for m in bare:
+        mask = A & (M == m) & ~(face & (M == names.index('skin') + 1))
+        if not mask.any():
+            continue
+        d = np.zeros(M.shape)
+        e = mask.copy()
+        for _ in range(9):
+            e = e & np.roll(e, 1, 0) & np.roll(e, -1, 0) & np.roll(e, 1, 1) & np.roll(e, -1, 1)
+            d += e
+        # A light from above: the underside of a form one step darker.
+        under = mask & ~np.roll(mask, -4, 0)
+        form = 0.3 + 0.7 * (d / 9) ** 0.6 - 0.18 * under
+        sm = smooth(L, mask, 5, 0.4).astype(float)
+        out[mask] = 0.35 * sm[mask] + 0.65 * 230 * form[mask]
+    return Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8))
+
+
+def materials(source, gif, f, names):
+    """
+    A source frame's material per pixel, its light, its alpha and its box,
+    once per frame (every fighter on the model shares them).
+    """
+    from PIL import ImageFilter
+    import numpy as np
+
+    if (source['gif'], f) in _MATERIALS:
+        return _MATERIALS[(source['gif'], f)]
+    gif.seek(f)
+    fr = gif.convert('RGBA')
+    W, H = fr.size
+    bb = fr.getchannel('A').getbbox()
+    mat = Image.new('L', fr.size)
+    lum = Image.new('L', fr.size)
+    px, mp, lp = fr.load(), mat.load(), lum.load()
+    cache = {}
+    for y in range(H):
+        for x in range(W):
+            p = px[x, y]
+            if p[3] < 128:
+                continue
+            c = p[:3]
+            if c not in cache:
+                cache[c] = classify(c, source['rules'])
+            mp[x, y] = names.index(cache[c]) + 1
+            lp[x, y] = int(0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2])
+    # The model's vest and shoes share a grey, and its belt, ankle cuffs and
+    # shoes a blue. The vest is the largest grey region. A blue is a cuff if
+    # it touches another grey (its shoe) or lies more than a hand's width from
+    # the vest (a hand on the hip can part vest and belt, and a raised foot
+    # come as close); the rest is belt, and a grey touching a cuff is a shoe.
+    mv = np.array(mat)
+    vest, belt, shoe = names.index('vest') + 1, names.index('belt') + 1, names.index('shoes') + 1
+    ones = np.ones(mv.shape, bool)
+    glab, gsz = components(mv == vest)
+    if len(gsz) > 1:
+        core = glab == int(np.argmax(gsz))
+        near_core = grow(core, mv.copy(), np.zeros_like(mv), 14, ones)
+        # A grey apart from the vest (an arm across the chest splits it only by a forearm's width).
+        far = ~grow(core, mv.copy(), np.zeros_like(mv), 18, ones)
+        shoes_g = np.isin(glab, [i for i in np.unique(glab[far & (glab > 0)]) if i and not (core & (glab == i)).any() and not ((glab == i) & ~far).any()])
+        near_shoe = grow(shoes_g, mv.copy(), np.zeros_like(mv), 2, ones)
+        blab, _ = components(mv == belt)
+        cuffs = np.zeros_like(core)
+        for i in range(1, blab.max() + 1):
+            part = blab == i
+            if (part & near_shoe).any() or not (part & near_core).any():
+                cuffs |= part
+        mv[cuffs] = shoe
+        near_cuff = grow(cuffs, mv.copy(), np.zeros_like(mv), 2, ones)
+        for i in np.unique(glab[near_cuff & (glab > 0) & ~core]):
+            mv[glab == i] = shoe
+    # A majority vote over each pixel's neighbourhood: the model's near-white highlights read as grey, and grey is the vest.
+    mat = Image.fromarray(mv).filter(ImageFilter.ModeFilter(5))
+    out = (mat, lum, fr.getchannel('A'), bb)
+    _MATERIALS[(source['gif'], f)] = out
+    return out
+
+
+def build_hires(key, source, colours, height, shape=None, set_name=None):
     """
     One fighter from the 171 px model: materials at full size, shading
     averaged down and re-sharpened, tones by brightness rank per material
@@ -201,42 +352,22 @@ def build_hires(key, source, colours, height, shape=None):
     from PIL import ImageFilter
 
     gif = Image.open(find(source['gif']))
-    sset = SETS[source['set']]
+    sset = move_list(set_name or source['set'])
     used = sorted({f for frames in sset['anims'].values() for f in frames} | {sset['anchor']})
     k = height / MM_HEIGHT
     W, H = gif.size
     W2, H2 = round((W + 2 * PAD) * k * WIDEN), round(H * k)
-    names = ['skin', 'vest', 'cloth', 'belt', 'hair', 'shoes', 'ink']
+    names = NAMES
     small = {}
     for f in used:
-        gif.seek(f)
-        fr = gif.convert('RGBA')
-        bb = fr.getchannel('A').getbbox()
-        mat = Image.new('L', fr.size)
-        lum = Image.new('L', fr.size)
-        px, mp, lp = fr.load(), mat.load(), lum.load()
-        cache = {}
-        for y in range(H):
-            for x in range(W):
-                p = px[x, y]
-                if p[3] < 128:
-                    continue
-                c = p[:3]
-                if c not in cache:
-                    cache[c] = classify(c, source['rules'])
-                m = cache[c]
-                mp[x, y] = names.index(m) + 1
-                lp[x, y] = int(0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2])
-        # The model's belt and its ankle cuffs share a blue; a blue with bare foot just under it is a cuff.
-        belt, shoe, skin_i = names.index('belt') + 1, names.index('shoes') + 1, names.index('skin') + 1
-        for y in range(H):
-            for x in range(W):
-                if mp[x, y] == belt and any(y + d < H and mp[x, y + d] == skin_i for d in range(1, 14)):
-                    mp[x, y] = shoe
-        # A majority vote over each pixel's neighbourhood: the model's near-white highlights read as grey, and grey is the vest.
-        mat = mat.filter(ImageFilter.ModeFilter(5))
-        alpha = fr.getchannel('A')
+        mat, lum, alpha, bb = materials(source, gif, f, names)
         mat, lum, alpha = reshape(mat, lum, alpha, bb, shape, names)
+        # Bare skin where the model wears clothes (and every limb a build has grown): lit afresh as round forms.
+        bare = [names.index(n) + 1 for n in ('vest', 'cloth', 'shoes') if colours.get(n) == 'skin']
+        if shape:
+            bare.append(names.index('skin') + 1)
+        if bare:
+            lum = relight(mat, lum, alpha, bare, names)
         m2 = mat.resize((W2, H2), Image.NEAREST)
         l2 = lum.resize((W2, H2), Image.BOX).filter(ImageFilter.UnsharpMask(1, 90, 2))
         a2 = alpha.resize((W2, H2), Image.BOX).point(lambda a: 255 if a > 110 else 0)
@@ -298,91 +429,144 @@ def build_hires(key, source, colours, height, shape=None):
 # Room either side of the source canvas for a body widened past it, px.
 PAD = 60
 
-# Builds the one model is reshaped into: the widening at each height down an
-# upright figure (0 the crown, 1 the soles), and costume pieces painted on at
-# full size. The sumo carries his weight in the belly and thighs; the beast in
-# the shoulders and chest, under a mane.
+# Builds the one model is reshaped into. A build is a pose-independent
+# inflation, so a figure keeps its bulk lying down, mid-tumble or kicking:
+# the torso (vest and belt) is scaled about its own body axis (the line from
+# the hair to the torso's centre), `across` it and `along` it from the neck
+# down, with `belly` more on the side the figure faces; the legs and arms are
+# thickened by growing their edges outward `legs` and `arms` px (at the
+# model's 171 px scale, the thigh to `thighs`), which fattens a limb without stretching it, where
+# widening rows used to drag a kicking leg sideways off its hip. Then the
+# build's costume pieces are painted on. The sumo carries his weight in the
+# belly and thighs, under a mawashi and a topknot; the beast in the chest,
+# shoulders and arms, under a mane.
 SHAPES = {
-    'sumo': {'profile': [(0, 1.0), (0.14, 1.06), (0.24, 1.45), (0.4, 2.05), (0.52, 2.0), (0.62, 1.7), (0.78, 1.38), (1.0, 1.2)], 'mawashi': 16, 'topknot': True},
-    'beast': {'profile': [(0, 1.05), (0.13, 1.3), (0.26, 1.55), (0.42, 1.38), (0.6, 1.2), (0.8, 1.15), (1.0, 1.12)], 'mane': 5},
+    'sumo': {'across': 1.8, 'along': 1.28, 'belly': 1.18, 'legs': 3, 'thighs': 8, 'arms': 5, 'mawashi': 7, 'topknot': True},
+    'beast': {'across': 1.5, 'along': 1.08, 'belly': 1.0, 'legs': 2, 'arms': 4, 'mane': 5},
 }
+
+NEIGHBOURS = ((0, 1), (0, -1), (1, 0), (-1, 0))
+DIAGONALS = ((1, 1), (1, -1), (-1, 1), (-1, -1))
+
+
+def grow(mask, M, L, r, allow):
+    """Grow a layer's edge outward r px into `allow`, each new pixel taking its material and light from the pixel it grew from."""
+    import numpy as np
+
+    m = mask.copy()
+    for i in range(r):
+        for dy, dx in NEIGHBOURS if i % 2 == 0 else NEIGHBOURS + DIAGONALS:
+            src = np.roll(m, (dy, dx), (0, 1))
+            new = src & ~m & allow
+            if new.any():
+                M[new] = np.roll(M, (dy, dx), (0, 1))[new]
+                L[new] = np.roll(L, (dy, dx), (0, 1))[new]
+                m |= new
+    return m
 
 
 def reshape(mat, lum, alpha, bb, shape, names):
     """
-    Widen a frame row by row about each row's own centre (smoothed), by the
-    build's profile; a figure lying down or mid-tumble is widened only
-    gently, since a height profile means nothing on its side. Then paint on
-    the build's costume pieces. Without a shape, only pads the canvas.
+    Inflate a frame into the build `shape` (see SHAPES), the same way on
+    every frame whatever the pose. Without a shape, only pads the canvas.
     """
     import numpy as np
 
     M = np.pad(np.array(mat), ((0, 0), (PAD, PAD)))
     L = np.pad(np.array(lum), ((0, 0), (PAD, PAD)))
     A = np.pad(np.array(alpha), ((0, 0), (PAD, PAD)))
-    if shape and bb:
-        prof = SHAPES[shape]['profile']
-        top, bottom = bb[1], bb[3]
-        h, w = bottom - top, bb[2] - bb[0]
-        upright = h >= 0.9 * w
-        rows = np.arange(M.shape[0])
-        cols = np.arange(M.shape[1])
-        filled = A > 127
-        cx = np.array([cols[filled[y]].mean() if filled[y].any() else np.nan for y in rows])
-        good = ~np.isnan(cx)
-        if good.any():
-            cx = np.interp(rows, rows[good], cx[good])
-            cx = np.convolve(np.pad(cx, 10, mode='edge'), np.ones(21) / 21, mode='valid')
-            mean = float(np.mean([f for _, f in prof]))
-            M2, L2, A2 = np.zeros_like(M), np.zeros_like(L), np.zeros_like(A)
-            for y in range(top, bottom):
-                t = (y - top) / max(1, h)
-                f = float(np.interp(t, [p for p, _ in prof], [q for _, q in prof])) if upright else 1 + (mean - 1) * 0.4
-                src = np.clip(np.round(cx[y] + (cols - cx[y]) / f).astype(int), 0, M.shape[1] - 1)
-                M2[y], L2[y], A2[y] = M[y, src], L[y, src], A[y, src]
-            M, L, A = M2, L2, A2
-        sp = SHAPES[shape]
-        hair, skin, belt, cloth = (names.index(n) + 1 for n in ('hair', 'skin', 'belt', 'cloth'))
-        if sp.get('mawashi'):
-            # The belt grows down over the hips into a mawashi.
-            # Bare feet: the blue ankle cuffs in the lowest fifth go to skin first.
-            if upright:
-                low = np.zeros_like(A, dtype=bool)
-                low[int(bottom - h * 0.2):bottom] = True
-                M[low & (M == belt)] = skin
-            ys, xs = np.nonzero((M == belt) & (A > 127))
-            band = int(np.median(L[ys, xs])) if len(ys) else 80
-            for d in range(1, sp['mawashi']):
-                yy = np.clip(ys + d, 0, M.shape[0] - 1)
-                ok = (A[yy, xs] > 127) & ((M[yy, xs] == skin) | (M[yy, xs] == cloth))
-                M[yy[ok], xs[ok]] = belt
-                # Cloth takes the light from the band, not from the skin it covers, shaded a little toward its lower edge.
-                L[yy[ok], xs[ok]] = max(0, band - d * 2)
-        hy, hx = np.nonzero((M == hair) & (A > 127))
-        if len(hy):
-            tone = int(np.median(L[hy, hx]))
-            if sp.get('topknot') and upright:
-                # A knot on the crown, set back.
-                cyk, cxk = hy.min() - 3, int(np.percentile(hx, 30))
-                yy, xx = np.mgrid[-7:8, -8:9]
-                inside = (xx / 8.0) ** 2 + (yy / 6.0) ** 2 <= 1
-                for dy, dx in zip(yy[inside], xx[inside]):
-                    y, x = cyk + dy, cxk + dx
-                    if 0 <= y < M.shape[0] and 0 <= x < M.shape[1]:
-                        M[y, x], A[y, x], L[y, x] = hair, 255, max(0, min(255, tone - dy * 4))
-            if sp.get('mane'):
-                # The hair thrown up and back into a mane.
-                r = sp['mane']
-                grow = np.zeros_like(A, dtype=bool)
-                for dy in range(-r, 1):
-                    for dx in range(-r, 1):
-                        if dx * dx + dy * dy <= r * r:
-                            yy = np.clip(hy + dy, 0, M.shape[0] - 1)
-                            xx = np.clip(hx + dx, 0, M.shape[1] - 1)
-                            grow[yy, xx] = True
-                new = grow & ~((A > 127) & (M != hair))
-                M[new], A[new] = hair, 255
-                L[new & (L == 0)] = tone
+    if not shape or not bb:
+        return Image.fromarray(M), Image.fromarray(L), Image.fromarray(A)
+    sp = SHAPES[shape]
+    skin, vest, cloth, belt, hair, shoes = (names.index(n) + 1 for n in ('skin', 'vest', 'cloth', 'belt', 'hair', 'shoes'))
+    solid = A > 127
+    torso = solid & ((M == vest) | (M == belt))
+    hairm = solid & (M == hair)
+    legs = solid & ((M == cloth) | (M == shoes))
+    # The head is the skin beside the hair; the rest of the skin is arms.
+    near = grow(hairm, M.copy(), L.copy(), 12, np.ones_like(solid))
+    head = solid & (M == skin) & near
+    arms = solid & (M == skin) & ~head
+    H, W = M.shape
+    ys, xs = np.mgrid[0:H, 0:W]
+    if torso.sum() > 40:
+        ty, tx = np.nonzero(torso)
+        c = np.array([tx.mean(), ty.mean()])
+        if hairm.any():
+            hy, hx = np.nonzero(hairm)
+            ax = c - np.array([hx.mean(), hy.mean()])
+        else:
+            ax = np.array([0.0, 1.0])
+        ax /= max(1e-6, float(np.hypot(*ax)))
+        # Across the body, pointing the way the model faces (+x when upright).
+        pp = np.array([ax[1], -ax[0]])
+        u = (tx - c[0]) * ax[0] + (ty - c[1]) * ax[1]
+        v = (tx - c[0]) * pp[0] + (ty - c[1]) * pp[1]
+        u0, vc = float(np.percentile(u, 2)), float(np.median(v))
+        U = (xs - c[0]) * ax[0] + (ys - c[1]) * ax[1]
+        V = (xs - c[0]) * pp[0] + (ys - c[1]) * pp[1]
+        su = u0 + (U - u0) / sp['along']
+        dv = V - vc
+        sv = vc + dv / np.where(dv > 0, sp['across'] * sp['belly'], sp['across'])
+        sx = np.clip(np.round(c[0] + su * ax[0] + sv * pp[0]).astype(int), 0, W - 1)
+        sy = np.clip(np.round(c[1] + su * ax[1] + sv * pp[1]).astype(int), 0, H - 1)
+        tmask = torso[sy, sx] & (U >= u0 - 2)
+        TM, TL = M[sy, sx], L[sy, sx]
+    else:
+        tmask, TM, TL = torso, M, L
+    free = np.ones_like(solid)
+    LM, LL = M.copy(), L.copy()
+    lmask = grow(legs, LM, LL, sp['legs'], free)
+    if sp.get('thighs'):
+        # Thighs: the leg near the belt grows further, tapering the leg to the calf.
+        hips = grow(solid & (M == belt), M.copy(), L.copy(), 34, free)
+        TLM, TLL = M.copy(), L.copy()
+        tm = grow(legs & hips, TLM, TLL, sp['thighs'], free)
+        put = tm & ~lmask
+        LM[put], LL[put] = TLM[put], TLL[put]
+        lmask |= tm
+    AM, AL = M.copy(), L.copy()
+    amask = grow(arms, AM, AL, sp['arms'], free)
+    # Back to front: anything unclassed, legs, torso, arms, then the head and hair as drawn.
+    OM, OL, OA = np.zeros_like(M), np.zeros_like(L), np.zeros_like(A)
+    other = solid & ~(legs | torso | arms | head | hairm)
+    for mask, MM, LLL in ((other, M, L), (lmask, LM, LL), (tmask, TM, TL), (amask, AM, AL), (head | hairm, M, L)):
+        OM[mask], OL[mask], OA[mask] = MM[mask], LLL[mask], 255
+    M, L, A = OM, OL, OA
+    solid = A > 127
+    if sp.get('mawashi'):
+        # The belt grows over the hips and the tops of the thighs into a mawashi, keeping the light of what it covers.
+        bmask = solid & (M == belt)
+        if bmask.any():
+            grow(bmask, M, L.copy(), sp['mawashi'], solid & ((M == cloth) | (M == shoes)))
+    hy, hx = np.nonzero(solid & (M == hair))
+    if len(hy):
+        tone = int(np.median(L[hy, hx]))
+        hc = np.array([hx.mean(), hy.mean()])
+        tq = np.nonzero(solid & ((M == vest) | (M == belt)))
+        if len(tq[0]):
+            ax = np.array([tq[1].mean(), tq[0].mean()]) - hc
+            ax /= max(1e-6, float(np.hypot(*ax)))
+        else:
+            ax = np.array([0.0, 1.0])
+        if sp.get('topknot'):
+            # A knot on the crown, set back from the face.
+            k = hc - ax * 12 - np.array([5.0, 0.0])
+            yy, xx = np.mgrid[-7:8, -8:9]
+            inside = (xx / 8.0) ** 2 + (yy / 6.0) ** 2 <= 1
+            for dy, dx in zip(yy[inside], xx[inside]):
+                y, x = int(round(k[1])) + dy, int(round(k[0])) + dx
+                if 0 <= y < H and 0 <= x < W and not (solid[y, x] and M[y, x] != hair):
+                    M[y, x], A[y, x], L[y, x] = hair, 255, max(0, min(255, tone - dy * 4))
+        if sp.get('mane'):
+            # The hair thrown up and back from the face into a mane.
+            r = sp['mane']
+            hm = solid & (M == hair)
+            HM, HL = M.copy(), L.copy()
+            g = grow(hm, HM, HL, r, ~solid)
+            off = np.round((-ax - np.array([1.0, 0.0])) * r * 0.5).astype(int)
+            g = np.roll(g, (off[1], off[0]), (0, 1)) & ~solid
+            M[g], A[g], L[g] = hair, 255, tone
     return Image.fromarray(M), Image.fromarray(L), Image.fromarray(A)
 
 
@@ -525,18 +709,25 @@ def main():
     SEARCH.extend(sys.argv[1:])
     src = sys.argv[1]
     out = {}
+    only = os.environ.get('FIGHTER_ONLY')
     for fid, (sname, main_c, alt_c) in FIGHTERS.items():
+        if only and fid not in only.split(','):
+            continue
         source = SOURCES[sname]
         if source.get('hires'):
-            rects = build_hires(fid, source, main_c, HEIGHTS[fid], BUILD_OF.get(fid))
-            build_hires(f'{fid}-alt', source, {**main_c, **alt_c}, HEIGHTS[fid], BUILD_OF.get(fid))
+            rects = build_hires(fid, source, main_c, HEIGHTS[fid], BUILD_OF.get(fid), SET_OF.get(fid))
+            build_hires(f'{fid}-alt', source, {**main_c, **alt_c}, HEIGHTS[fid], BUILD_OF.get(fid), SET_OF.get(fid))
         else:
             rects = build(src, fid, source, main_c)
             # The alternate colourway packs identically (same frames, same crops), so one table serves both.
             build(src, f'{fid}-alt', source, {**main_c, **alt_c})
-        out[fid] = (source['set'], rects)
+        out[fid] = (SET_OF.get(fid, source['set']), rects)
         print(fid, len(rects), 'frames')
-    write_ts(out)
+    if only:
+        # A trial run of a few fighters leaves sheets.ts alone and writes their rectangles where FIGHTER_RECTS says.
+        json.dump({k: [st, rects] for k, (st, rects) in out.items()}, open(os.environ['FIGHTER_RECTS'], 'w'))
+    else:
+        write_ts(out)
 
 
 if __name__ == '__main__':

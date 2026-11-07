@@ -911,7 +911,7 @@ describe('the sticks', () => {
 
 /**
  * The playthroughs: a cabinet needs a test that plays it to the end and says
- * something a player would see (CLAUDE.md). The guards are literals, not
+ * something a player would see (AGENTS.md). The guards are literals, not
  * derived from anything under test.
  */
 describe('playing PRIME TIME', () => {

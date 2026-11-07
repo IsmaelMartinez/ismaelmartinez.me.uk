@@ -77,7 +77,7 @@
  * of a plagal close through C and the borrowed C minor, the tune settling on
  * G as the organ winds down.
  *
- * The cabinet is parked (see CLAUDE.md), so this is not currently reachable in
+ * The cabinet is parked (see AGENTS.md), so this is not currently reachable in
  * the arcade. It is kept in step with the rest so a revival is a page rename
  * and nothing else.
  */

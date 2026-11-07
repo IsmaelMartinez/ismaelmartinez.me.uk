@@ -1,7 +1,7 @@
 /**
  * Shared canvas effects: particle bursts and floating score/text popups.
  * They always travel together — every point gain is announced where it
- * lands (see CLAUDE.md's scoring conventions), usually with both.
+ * lands (see AGENTS.md's scoring conventions), usually with both.
  *
  * The per-game copies this replaces differed only in numeric constants;
  * every divergence is an option with the old per-game value passed at

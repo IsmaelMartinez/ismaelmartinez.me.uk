@@ -1,6 +1,6 @@
 ---
 title: "Código abierto asistido por IA: qué cambia y qué no"
-description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto de código abierto de 8 años: qué acelera, qué no puede reemplazar y por qué existe el archivo CLAUDE.md."
+description: "Cómo las herramientas de IA encajan en el mantenimiento de un proyecto de código abierto de 8 años: qué acelera, qué no puede reemplazar y por qué existe el archivo AGENTS.md."
 publishedDate: 2026-11-07
 tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
 draft: true
@@ -12,15 +12,15 @@ teams-for-linux empezó en 2018. Microsoft no tenía un cliente para Linux y la 
 
 Ese número de contribuidores aún me sorprende. Personas con las que nunca he hablado aparecen con una corrección, un informe de error o un PR para añadir nuevas funcionalidades. De vez en cuando llega una donación de alguien que no sabía que lo usaba, que siempre es bienvenida. Ocho años después, el código abierto sigue funcionando así, y lo poco que ha cambiado la IA es que algunas de esas contribuciones vienen hechas con la ayuda de IA, y en eso hay gente que la usa mejor que otros, porque todos estamos aprendiendo.
 
-Lo que la IA ha cambiado es si una sola persona puede mantener el ritmo de un proyecto de este tamaño. Adoptarla no fue la historia de origen. El código, la arquitectura y las decisiones son anteriores a las herramientas en años. Gracias a la IA puedo mejorar el soporte y la calidad de este producto mientras la demanda aumenta. El resto de este artículo muestra cómo se ve eso en la práctica: qué acelera, qué no puede tocar y otros detalles, como por qué hay un archivo CLAUDE.md en el repositorio. Son una serie de artículos: este trata el porqué, y [el siguiente](/es/articles/ai-assisted-open-source-workflow) es el cómo del día a día.
+Lo que la IA ha cambiado es si una sola persona puede mantener el ritmo de un proyecto de este tamaño. Adoptarla no fue la historia de origen. El código, la arquitectura y las decisiones son anteriores a las herramientas en años. Gracias a la IA puedo mejorar el soporte y la calidad de este producto mientras la demanda aumenta. El resto de este artículo muestra cómo se ve eso en la práctica: qué acelera, qué no puede tocar y otros detalles, como por qué hay un archivo AGENTS.md en el repositorio. Son una serie de artículos: este trata el porqué, y [el siguiente](/es/articles/ai-assisted-open-source-workflow) es el cómo del día a día.
 
-## Qué es realmente CLAUDE.md
+## Qué es realmente AGENTS.md
 
-Vamos a empezar con el elefante de la sala. Más de uno me ha reprochado tener un archivo CLAUDE.md en el repositorio. Algunos asumen que significa que el proyecto está escrito por IA, vibe coded y poco más. Eso es un malentendido de lo que hace el archivo.
+Vamos a empezar con el elefante de la sala. Más de uno me ha reprochado tener un archivo AGENTS.md en el repositorio. Algunos asumen que significa que el proyecto está escrito por IA, vibe coded y poco más. Eso es un malentendido de lo que hace el archivo.
 
-CLAUDE.md es un archivo de configuración, parecido a `.editorconfig` o `tsconfig.json`. Le dice a la herramienta de IA cómo comportarse en este código específico. Documenta decisiones arquitectónicas, cómo están estructuradas las cosas, cómo me gusta trabajar con el código, requisitos y otras cosas que se rompen una y otra vez. Básicamente, lo que normalmente tengo en mi cabeza y esas cosas que por un motivo u otro son así.  
+AGENTS.md es un archivo de configuración, parecido a `.editorconfig` o `tsconfig.json`. Le dice a la herramienta de IA cómo comportarse en este código específico. Documenta decisiones arquitectónicas, cómo están estructuradas las cosas, cómo me gusta trabajar con el código, requisitos y otras cosas que se rompen una y otra vez. Básicamente, lo que normalmente tengo en mi cabeza y esas cosas que por un motivo u otro son así.  
 
-El archivo codifica conocimiento específico del proyecto para que la herramienta de IA respete los patrones existentes en lugar de inventar nuevos. Cada código tiene reglas no escritas. CLAUDE.md las hace explícitas. En sí, no es una señal de autoría por IA. Es una señal de disciplina con la IA. 
+El archivo codifica conocimiento específico del proyecto para que la herramienta de IA respete los patrones existentes en lugar de inventar nuevos. Cada código tiene reglas no escritas. AGENTS.md las hace explícitas. En sí, no es una señal de autoría por IA. Es una señal de disciplina con la IA. 
 
 Una vez tocado este punto, vamos a mirar dónde uso la IA para acelerar el mantenimiento de este proyecto. 
 

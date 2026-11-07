@@ -1,6 +1,6 @@
 ---
 title: "AI-Assisted Open Source: What Changes and What Doesn't"
-description: "How AI tooling fits into maintaining an 8-year open-source project: what it accelerates, what it can't replace, and why the CLAUDE.md file exists."
+description: "How AI tooling fits into maintaining an 8-year open-source project: what it accelerates, what it can't replace, and why the AGENTS.md file exists."
 publishedDate: 2026-11-07
 tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
 draft: true
@@ -12,15 +12,15 @@ teams-for-linux started in 2018. Microsoft had no Linux client and the web app d
 
 That contributor number still catches me off guard. People I've never spoken to turn up with a fix, a bug report, or a PR adding new features. Every now and then a donation arrives from someone who didn't know they were using it, always welcome. Eight years in, that's still how open source works, and the little AI has changed is that some of those contributions now come with AI help, and some people use it better than others, but we're all learning.
 
-What AI changed is whether one person can keep pace with a project this size. Adopting it wasn't the origin story. The code, the architecture, and the decisions predate the tools by years. What AI gives me is the room to improve the support and the quality of this product while demand keeps growing. The rest of this article is what that looks like in practice: what it accelerates, what it can't touch, and other details like why there's a CLAUDE.md file in the repo. It's a series of articles: this one is the why, and [the next](/en/articles/ai-assisted-open-source-workflow) is the day-to-day how.
+What AI changed is whether one person can keep pace with a project this size. Adopting it wasn't the origin story. The code, the architecture, and the decisions predate the tools by years. What AI gives me is the room to improve the support and the quality of this product while demand keeps growing. The rest of this article is what that looks like in practice: what it accelerates, what it can't touch, and other details like why there's a AGENTS.md file in the repo. It's a series of articles: this one is the why, and [the next](/en/articles/ai-assisted-open-source-workflow) is the day-to-day how.
 
-## What CLAUDE.md Actually Is
+## What AGENTS.md Actually Is
 
-Let's start with the elephant in the room. More than one person has taken me to task for having a CLAUDE.md file in the repository. Some assume it means the project is AI-written, vibe coded and little else. That's a misunderstanding of what the file does.
+Let's start with the elephant in the room. More than one person has taken me to task for having a AGENTS.md file in the repository. Some assume it means the project is AI-written, vibe coded and little else. That's a misunderstanding of what the file does.
 
-CLAUDE.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, how things are structured, how I like to work with the code, requirements, and other things that get broken again and again. Basically, what I'd normally keep in my head, and the bits that are the way they are for one reason or another.
+AGENTS.md is a configuration file, much like `.editorconfig` or `tsconfig.json`. It tells the AI tool how to behave in this specific codebase. It documents architectural decisions, how things are structured, how I like to work with the code, requirements, and other things that get broken again and again. Basically, what I'd normally keep in my head, and the bits that are the way they are for one reason or another.
 
-The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. CLAUDE.md makes them explicit. In itself, it's not a sign of AI authorship. It's a sign of AI discipline.
+The file encodes project-specific knowledge so the AI tool respects existing patterns instead of inventing new ones. Every codebase has unwritten rules. AGENTS.md makes them explicit. In itself, it's not a sign of AI authorship. It's a sign of AI discipline.
 
 With that out of the way, let's look at where I use AI to speed up maintaining this project.
 

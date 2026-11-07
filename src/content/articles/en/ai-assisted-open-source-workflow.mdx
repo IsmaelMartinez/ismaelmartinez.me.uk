@@ -1,6 +1,6 @@
 ---
 title: "AI-Assisted Open Source: The Workflow"
-description: "The practical workflow behind maintaining teams-for-linux with AI: from CLAUDE.md to research, dependency upgrades, feature implementation, and quality gates."
+description: "The practical workflow behind maintaining teams-for-linux with AI: from AGENTS.md to research, dependency upgrades, feature implementation, and quality gates."
 publishedDate: 2026-11-07
 tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
 draft: true
@@ -12,7 +12,7 @@ The [companion article](/en/articles/ai-assisted-open-source-maintenance) covere
 
 ## Documentation
 
-Every interaction starts with CLAUDE.md (\*) and good documentation. I already explained the why of CLAUDE.md, but on its own it isn't enough.
+Every interaction starts with AGENTS.md (\*) and good documentation. I already explained the why of AGENTS.md, but on its own it isn't enough.
 
 This project has several layers of documentation. First, the technical documents, like ADRs for architectural decisions. They help me not forget the why of things: why I picked this library over that one, or why something didn't work and what we tried.
 
@@ -36,19 +36,19 @@ For simple things, like a dependency update, that's almost automatic and needs n
 
 ## Features and the Context-Clean Habit
 
-When a feature gets the green light, the flow is always the same: a clear specification that includes what *not* to do, incremental implementation in reviewable chunks, tests written alongside (the AI follows the patterns documented in CLAUDE.md), and a full read of every diff. The AI produces good code almost always, but "almost always" isn't good enough for thousands of users.
+When a feature gets the green light, the flow is always the same: a clear specification that includes what *not* to do, incremental implementation in reviewable chunks, tests written alongside (the AI follows the patterns documented in AGENTS.md), and a full read of every diff. The AI produces good code almost always, but "almost always" isn't good enough for thousands of users.
 
 When the work is done, the outcome becomes an ADR and the research that led there gets deleted. Git remembers the dead ends; the working directory doesn't need to, and old research documents confuse the AI more than they help it.
 
 ## Keeping the Pace
 
-Dependency upgrades are the most frequent kind of session, but not the only one. Security sessions evaluate and apply the patches from advisories. Documentation passes update the READMEs and refresh CLAUDE.md with newly discovered invariants. Metrics sessions look at issue trends, contributor activity, build times, or changes in test coverage. Each one follows the same shape: I set the scope, the AI executes, I review.
+Dependency upgrades are the most frequent kind of session, but not the only one. Security sessions evaluate and apply the patches from advisories. Documentation passes update the READMEs and refresh AGENTS.md with newly discovered invariants. Metrics sessions look at issue trends, contributor activity, build times, or changes in test coverage. Each one follows the same shape: I set the scope, the AI executes, I review.
 
 The hardest of all is keeping pace with the Teams web app, which changes without notice. Coding defensively against those changes is one of the most complicated parts of the project. When something breaks, the agent helps me classify it: is it a regression of ours or an upstream change? Then it investigates the differences in the DOM, the network, or the API responses. Some changes can be worked around; others can't. Recognising when a problem has no fix is a human call, and the response to users is mine.
 
 Nothing ships without passing the usual gates: CI has to be green with no exceptions (the linter, type checking, and the full test suite), every AI-assisted commit carries its `Co-authored-by` tag, every diff gets read by hand, and the release notes are written to explain the *why* rather than list files.
 
-Once you've built enough constraints around the AI (CLAUDE.md, the research-then-prototype loop, manual review, the CI gates), you stop using a tool and start directing a system. The pattern is the same one you'd apply to any growing software: you build trust with data, add hardness as you go, and simplify or remove what stops earning its place. The difference is that here the cycles run much faster. Treat it like a team.
+Once you've built enough constraints around the AI (AGENTS.md, the research-then-prototype loop, manual review, the CI gates), you stop using a tool and start directing a system. The pattern is the same one you'd apply to any growing software: you build trust with data, add hardness as you go, and simplify or remove what stops earning its place. The difference is that here the cycles run much faster. Treat it like a team.
 
 ## Closing Thought
 
@@ -56,4 +56,4 @@ This workflow isn't a template. It's what works for me on a specific project wit
 
 The [principles article](/en/articles/ai-assisted-open-source-maintenance) covered the why. This article covered the how.
 
-(\*) Note: other tools use AGENTS.md. When I first drafted this I asked Anthropic to standardise with everyone else, and since September 2026 Claude Code reads AGENTS.md too, as a fallback when a repository has no CLAUDE.md.
+(\*) Note: Claude Code's own file is CLAUDE.md, and until September 2026 it read nothing else. It now reads AGENTS.md too, when a repository has no CLAUDE.md, so the project keeps the one name every other tool understands.

@@ -1,6 +1,6 @@
 ---
 title: "Código abierto asistido por IA: el flujo de trabajo"
-description: "El flujo de trabajo práctico detrás del mantenimiento de teams-for-linux con IA: desde CLAUDE.md hasta investigación, actualizaciones de dependencias, implementación de funcionalidades y controles de calidad."
+description: "El flujo de trabajo práctico detrás del mantenimiento de teams-for-linux con IA: desde AGENTS.md hasta investigación, actualizaciones de dependencias, implementación de funcionalidades y controles de calidad."
 publishedDate: 2026-11-07
 tags: ["IA", "Código Abierto", "Desarrollo de Software", "Teams for Linux"]
 draft: true
@@ -12,7 +12,7 @@ El [artículo complementario](/es/articles/ai-assisted-open-source-maintenance) 
 
 ## Documentación
 
-Cada interacción empieza con CLAUDE.md (\*) y buena documentación. Ya expliqué el porqué de CLAUDE.md, pero por sí solo no basta.
+Cada interacción empieza con AGENTS.md (\*) y buena documentación. Ya expliqué el porqué de AGENTS.md, pero por sí solo no basta.
 
 Este proyecto tiene varios niveles de documentación. Primero, los documentos técnicos, como los ADRs para las decisiones arquitectónicas. Me ayudan a no olvidar el porqué de las cosas: por qué elegí esta librería en vez de aquella, o por qué algo no funcionó y qué probamos.
 
@@ -36,19 +36,19 @@ Para lo sencillo, como actualizar dependencias, es casi automático y no hace fa
 
 ## Funcionalidades y el hábito de contexto limpio
 
-Cuando una funcionalidad recibe luz verde, el flujo es siempre el mismo: una especificación clara que incluye lo que *no* hay que hacer, implementación incremental en trozos revisables, tests escritos en paralelo (la IA sigue los patrones documentados en CLAUDE.md) y una lectura completa de cada diff. La IA produce buen código casi siempre, pero "casi siempre" no basta para miles de usuarios.
+Cuando una funcionalidad recibe luz verde, el flujo es siempre el mismo: una especificación clara que incluye lo que *no* hay que hacer, implementación incremental en trozos revisables, tests escritos en paralelo (la IA sigue los patrones documentados en AGENTS.md) y una lectura completa de cada diff. La IA produce buen código casi siempre, pero "casi siempre" no basta para miles de usuarios.
 
 Cuando el trabajo termina, el resultado se convierte en un ADR y la investigación que llevó hasta él se borra. Git recuerda los callejones sin salida; el directorio de trabajo no tiene por qué, y los documentos de investigación viejos confunden a la IA más de lo que la ayudan.
 
 ## Mantener el ritmo
 
-Las actualizaciones de dependencias son el tipo de sesión más frecuente, pero no el único. Las sesiones de seguridad evalúan y aplican los parches de los avisos. Las pasadas de documentación actualizan los README y refrescan CLAUDE.md con los invariantes recién descubiertos. Las sesiones de métricas miran las tendencias de issues, la actividad de los contribuidores, los tiempos de compilación o los cambios en la cobertura de tests. Cada una sigue la misma forma: yo fijo el alcance, la IA ejecuta, yo reviso.
+Las actualizaciones de dependencias son el tipo de sesión más frecuente, pero no el único. Las sesiones de seguridad evalúan y aplican los parches de los avisos. Las pasadas de documentación actualizan los README y refrescan AGENTS.md con los invariantes recién descubiertos. Las sesiones de métricas miran las tendencias de issues, la actividad de los contribuidores, los tiempos de compilación o los cambios en la cobertura de tests. Cada una sigue la misma forma: yo fijo el alcance, la IA ejecuta, yo reviso.
 
 La más difícil de todas es seguirle el ritmo a la aplicación web de Teams, que cambia sin previo aviso. Programar a la defensiva contra esos cambios es de lo más complicado del proyecto. Cuando algo se rompe, el agente me ayuda a clasificarlo: ¿es una regresión nuestra o un cambio de upstream? Luego investiga las diferencias en el DOM, en la red o en las respuestas de la API. Algunos cambios se pueden sortear; otros no. Reconocer cuándo un problema no tiene solución es una decisión humana, y la respuesta a los usuarios es cosa mía.
 
 Nada se publica sin pasar los controles de siempre: CI tiene que estar en verde sin excepciones (el linter, la comprobación de tipos y toda la batería de tests), cada commit asistido por IA lleva su etiqueta `Co-authored-by`, cada diff se lee a mano, y las notas de la versión se redactan para explicar el *porqué* en vez de listar archivos.
 
-Cuando ya has puesto suficientes restricciones alrededor de la IA (CLAUDE.md, el ciclo de investigar y luego prototipar, la revisión manual, los controles de CI), dejas de usar una herramienta y pasas a dirigir un sistema. El patrón es el mismo que aplicarías a cualquier software que crece: construyes confianza con datos, añades solidez según avanzas y simplificas o quitas lo que deja de ganarse su sitio. La diferencia es que aquí los ciclos van mucho más rápido. Trátalo como a un equipo.
+Cuando ya has puesto suficientes restricciones alrededor de la IA (AGENTS.md, el ciclo de investigar y luego prototipar, la revisión manual, los controles de CI), dejas de usar una herramienta y pasas a dirigir un sistema. El patrón es el mismo que aplicarías a cualquier software que crece: construyes confianza con datos, añades solidez según avanzas y simplificas o quitas lo que deja de ganarse su sitio. La diferencia es que aquí los ciclos van mucho más rápido. Trátalo como a un equipo.
 
 ## Reflexión final
 
@@ -56,4 +56,4 @@ Este flujo de trabajo no es una plantilla. Es lo que me funciona a mí en un pro
 
 El [artículo de principios](/es/articles/ai-assisted-open-source-maintenance) cubrió el porqué. Este artículo cubrió el cómo.
 
-(\*) Nota: otras herramientas usan AGENTS.md. Cuando escribí el primer borrador le pedía a Anthropic que estandarizara con los demás, y desde septiembre de 2026 Claude Code también lee AGENTS.md, como alternativa cuando el repositorio no tiene CLAUDE.md.
+(\*) Nota: el archivo propio de Claude Code es CLAUDE.md, y hasta septiembre de 2026 no leía ningún otro. Ahora también lee AGENTS.md cuando el repositorio no tiene CLAUDE.md, así que el proyecto se queda con el único nombre que entienden todas las demás herramientas.

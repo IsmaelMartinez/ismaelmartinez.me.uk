@@ -11,7 +11,7 @@ Two small candidates the round 3 follow-ups turned up, not yet filed as issues:
 - The jukebox renders one voice at a time only to dodge summation drift, which #445 removed for
   whole-score renders too; dropping that workaround shifts existing WAV renders by a few
   least-significant bits, so it wants its own PR.
-- CLAUDE.md points at "the `performance.now()` clock trap described under Testing", but the
+- AGENTS.md points at "the `performance.now()` clock trap described under Testing", but the
   Testing section never describes it; #447 found the trap's real form (a fractional start for the
   hand-driven clock in `tests/games/dom-helpers.ts`) and that belongs there.
 

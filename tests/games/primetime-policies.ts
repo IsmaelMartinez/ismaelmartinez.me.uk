@@ -242,7 +242,7 @@ export const TICK = 1 / 60;
 
 /**
  * Plays a run to its end, or to `maxTicks`. The guard is a plain literal in
- * every caller (CLAUDE.md's rule for playthrough tests): it must not be
+ * every caller (AGENTS.md's rule for playthrough tests): it must not be
  * derived from anything under test.
  */
 export function playRun(seed: number, policy: Policy, maxTicks: number): PlayResult {

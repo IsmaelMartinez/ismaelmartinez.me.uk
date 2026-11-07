@@ -44,7 +44,7 @@
  * through the debriefs, so a mission's extraction is a stinger over it and only
  * the campaign's end, either way, is an ending.
  *
- * The cabinet is parked (see CLAUDE.md), so this is not currently reachable in
+ * The cabinet is parked (see AGENTS.md), so this is not currently reachable in
  * the arcade. It is kept in step with the rest so a revival is a page rename
  * and nothing else.
  */

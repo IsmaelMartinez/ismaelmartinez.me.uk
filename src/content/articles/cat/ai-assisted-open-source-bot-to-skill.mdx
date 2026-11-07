@@ -1,6 +1,6 @@
 ---
 title: "Codi obert assistit per IA: del bot al skill"
-description: "Vaig construir un bot serverless per triar les issues de teams-for-linux, el vaig tenir funcionant mesos i en vaig desmuntar gairebé tot a propòsit: per què ho vaig fer i quina peça va merèixer quedar-se."
+description: "Vaig construir un bot serverless per triar les issues de teams-for-linux, el vaig tenir funcionant mesos i el vaig desmuntar a propòsit: per què ho vaig fer i quina peça va merèixer quedar-se."
 publishedDate: 2026-03-25
 tags: ["IA", "Codi Obert", "Desenvolupament de Software", "Teams for Linux"]
 draft: true
@@ -8,7 +8,7 @@ draft: true
 
 ## El bot que vaig construir i després vaig desmuntar
 
-A [el primer article](/cat/articles/ai-assisted-open-source-maintenance) vaig esmentar de passada [un bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) que vaig construir i després vaig retirar. Aquesta és la seva història. El vaig muntar per ajudar-me a triar les issues de teams-for-linux. Va acabar corrent en serverless a Google Cloud, amb embeddings sobre l'historial d'issues i la documentació, i durant uns mesos va fer més o menys el que li demanava. Després en vaig desmuntar gairebé tot. La part interessant no va ser construir-lo, va ser decidir què treure.
+A [el primer article](/cat/articles/ai-assisted-open-source-maintenance) vaig esmentar de passada [un bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) que vaig construir i després vaig retirar. Aquesta és la seva història. El vaig muntar per ajudar-me a triar les issues de teams-for-linux. Va acabar corrent en serverless a Google Cloud, amb embeddings sobre l'historial d'issues i la documentació, i durant uns mesos va fer més o menys el que li demanava. Després el vaig desmuntar, al final del tot. La part interessant no va ser construir-lo, va ser decidir què treure.
 
 ## El que va arribar a ser
 
@@ -40,9 +40,9 @@ En un parell de tardes tenia tot el que havia acumulat. No necessita shadow repo
 
 ## L'única cosa que es va guanyar el seu lloc
 
-De tot aquell aparell, l'única cosa que va demostrar guanyar-se el seu lloc van ser els embeddings. Tenir l'historial d'issues vectoritzat i enllaçat sí que ajuda a trobar issues relacionades que d'altra manera se m'escaparien. Aquesta és la peça que conservo.
+De tot aquell aparell, l'única cosa que va demostrar el seu valor van ser els embeddings: un historial d'issues vectoritzat treu a la llum issues antigues, escrites d'una altra manera, que la cerca per paraules clau no troba. També va ser la peça que vaig deixar de fer servir. L'última vegada que alguna cosa va preguntar al servei va ser al juny; va continuar corrent i ingerint cada issue nova durant cinc mesos sense ningú a l'altra banda, i el pla de portar l'índex a teams-for-linux no es va executar mai.
 
-El pla és treure aquests embeddings del bot i portar-los al mateix teams-for-linux, com un índex petit i versionat que el skill llegeix directament i que una feina de CI refresca, sense servidor ni base de dades al darrere. I fins i tot això és un pont: el maig del 2026 GitHub va llançar cerca semàntica nativa d'issues a Copilot Chat, que és la mateixa capacitat sense infraestructura per part meva, i el dia que es pugui cridar des d'una API l'índex també se'n va. Aguantarà? No ho sé. Això només es veu amb el temps.
+Així que el novembre del 2026 el vaig apagar i vaig esborrar la infraestructura: el servei de Cloud Run, la base de dades, el Terraform, tot. GitHub va llançar cerca semàntica nativa d'issues al maig, que és la mateixa capacitat sense res a mantenir per part meva, i el skill és el que faig servir de debò. La peça que valia la pena era la capacitat, mai la meva còpia.
 
 ## Reflexió final
 

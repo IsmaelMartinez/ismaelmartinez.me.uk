@@ -1,6 +1,6 @@
 ---
 title: "AI-Assisted Open Source: From Bot to Skill"
-description: "I built a serverless bot to triage teams-for-linux issues, ran it for months, and dismantled most of it on purpose: why I did it, and which piece earned its place."
+description: "I built a serverless bot to triage teams-for-linux issues, ran it for months, and dismantled it on purpose: why I did it, and which piece earned its place."
 publishedDate: 2026-03-25
 tags: ["AI", "Open Source", "Software Development", "Teams for Linux"]
 draft: true
@@ -8,7 +8,7 @@ draft: true
 
 ## The Bot I Built and Then Took Apart
 
-In [the first article](/en/articles/ai-assisted-open-source-maintenance) I mentioned in passing [a bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) I built and later retired. This is its story. I put it together to help me triage teams-for-linux issues. It ended up running serverless on Google Cloud, with embeddings over the issue history and the documentation, and for a few months it did more or less what I asked of it. Then I took most of it apart. The interesting part wasn't building it, it was deciding what to remove.
+In [the first article](/en/articles/ai-assisted-open-source-maintenance) I mentioned in passing [a bot](https://github.com/IsmaelMartinez/github-issue-triage-bot) I built and later retired. This is its story. I put it together to help me triage teams-for-linux issues. It ended up running serverless on Google Cloud, with embeddings over the issue history and the documentation, and for a few months it did more or less what I asked of it. Then I took it apart, all of it in the end. The interesting part wasn't building it, it was deciding what to remove.
 
 ## What It Grew Into
 
@@ -40,9 +40,9 @@ In a couple of afternoons it had everything I'd accumulated. It needs no shadow 
 
 ## The One Thing That Earned Its Place
 
-Of all that apparatus, the one thing that proved it earned its place was the embeddings. Having the issue history vectorised and linked really does help find related issues that would otherwise slip past me. That's the piece I'm keeping.
+Of all that apparatus, the one thing that proved its worth was the embeddings: a vectorised issue history surfaces old, differently worded issues that keyword search misses. It was also the piece I stopped using. The last time anything asked the service a question was June; it kept running and ingesting every new issue for five months with nobody on the other end, and the plan to move the index into teams-for-linux never happened.
 
-The plan is to move those embeddings out of the bot and into teams-for-linux itself, as a small committed index the skill reads directly and a CI job refreshes, with no server or database behind it. Even that is a bridge: in May 2026 GitHub shipped native semantic issue search in Copilot Chat, which is the same capability with no infrastructure on my side, and the day it is reachable from an API the index goes too. Will it hold? I don't know. Only time will tell.
+So in November 2026 I switched it off and deleted the infrastructure: the Cloud Run service, the database, the Terraform, all of it. GitHub shipped native semantic issue search in May, which is the same capability with nothing to run on my side, and the skill is what I actually use. The piece worth keeping was the capability, never my copy of it.
 
 ## Closing Thought
 

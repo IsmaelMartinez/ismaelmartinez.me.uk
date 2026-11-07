@@ -1,0 +1,14 @@
+STREET CHAMPION's fighter sprites, built by scripts/fighter-sprites.py.
+
+Every fighter is drawn from puffolotti's CC0 fighting-game characters (Sprite created by Puffolotti Accident),
+released under CC0 1.0 (public domain dedication):
+  Mustermann 2 karate template (171 px), for every fighter but MEI:
+    https://opengameart.org/content/fighting-character-template-mustermann-2-a001aaaa001-karate
+  Mustermenschen collection, Larissa Disaster, for MEI:
+    https://opengameart.org/content/musternenschen-v1-complete-collection
+
+Each body is recoloured into a fighter's costume, cut down to the frames the game plays, and (the 171 px model)
+downscaled to the arcade's scale with its own six-tone palette per material.
+
+No sprite from the arcade game this cabinet homages is used, traced or recoloured; it was studied only as reference
+for scale, palette and finish.

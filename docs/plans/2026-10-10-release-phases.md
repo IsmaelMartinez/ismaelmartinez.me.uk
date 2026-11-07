@@ -40,6 +40,7 @@ keep running for cabinets the public build leaves out.
 | ~~Wave 1~~ | ~~Tank Duel, Snake, Cascade~~ | ~~3~~ |
 | ~~Wave 2~~ | ~~Microcity, CALCIO '90, PRIME TIME~~ | ~~6~~ |
 | ~~Wave 3~~ | ~~Critter Rescue, Line Hold~~ | ~~8~~ |
+| Wave 4 | STREET CHAMPION | 9 |
 
 The series has four parts, published weekly by flipping `draft: false` in all
 three locales and setting `publishedDate` to the publish date (the home page and
@@ -72,3 +73,11 @@ either for a later wave is the three edits recorded in CLAUDE.md plus a bump of
 - 2026-10-17: wave 3 shipped, `RELEASED = 8`: the whole chain, which is every
   cabinet the public floor carried before the relaunch plus PRIME TIME, the one
   cabinet that keeps the "New" ribbon.
+- 2026-10-20: STREET CHAMPION (Street Fighter II, February 1991) slotted into
+  the chain after PRIME TIME and before Critter Rescue (Lemmings shipped a week
+  after SF2), as wave 4. Because a wave is a prefix of the chain and every
+  cabinet was already public, a cabinet inserted mid-chain cannot wait behind
+  the gate without unpublishing Line Hold: `RELEASED` moves to 9 in the same
+  change, so merging it is the release, and the Vercel preview is where it is
+  played first (`docs/plans/2026-10-20-street-champion-fighter-plan.md`). It
+  takes the "New" ribbon from PRIME TIME.

@@ -1,0 +1,1 @@
+export { initFighterGame } from './game';

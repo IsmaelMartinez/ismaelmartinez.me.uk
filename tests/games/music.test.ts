@@ -97,6 +97,8 @@ const WAS_BEATS: Record<string, number> = {
   syndicate: 16,
   // PRIME TIME is new (2026-10) and had no earlier loop; 16 is the floor most of its generation carried.
   primetime: 16,
+  // STREET CHAMPION is new (2026-10) and had no earlier loop either; 16 for the same reason as PRIME TIME.
+  fighter: 16,
   // Football is the one cabinet whose "before" was not a single loop length.
   // It predated the round with its score inline in `game.ts` and its voices
   // running 11, 8 and 8 beats — lines that never realigned, which is the bug

@@ -230,14 +230,16 @@ export function dust(variant: number, t: number): Sprite {
       const side = i < 3 ? -1 : i < 6 ? 1 : 0;
       const k = side === 0 ? 0 : (i % 3) + 1;
       const spread = side * (6 + k * 6 + f * (1.2 + k * 0.45));
-      const r = 3 + f * 0.32 + (3 - k) * 1.2 + hash(variant * 9 + i) * 2;
-      const rise = f * (0.35 + 0.15 * (3 - k)) + (side === 0 ? f * 0.5 : 0);
+      // Low puffs that roll outward and thin, not a heap of balls that sits there.
+      const r = 2.2 + f * 0.2 + (3 - k) * 0.7 + hash(variant * 9 + i) * 1.4;
+      const rise = f * (0.2 + 0.1 * (3 - k)) + (side === 0 ? f * 0.3 : 0);
       puffs.push([cx + spread, fy - r * 0.7 - rise, r]);
     }
-    for (const [x, y, r] of puffs) buf.disc(x, y, r + 1, dk);
-    for (const [x, y, r] of puffs) buf.disc(x, y, r, lo);
-    for (const [x, y, r] of puffs) buf.disc(x - r * 0.18, y - r * 0.2, r * 0.8, mid);
-    for (const [x, y, r] of puffs) buf.disc(x - r * 0.35, y - r * 0.4, r * 0.45, hi);
+    // Each puff a flat billow, wider than it is high, lit along its top: dust lying on a floor, not a row of balls.
+    for (const [x, y, r] of puffs) buf.ellipse(x, y + r * 0.3, r * 1.7, r * 0.75, lo);
+    for (const [x, y, r] of puffs) buf.ellipse(x - r * 0.2, y + r * 0.12, r * 1.3, r * 0.5, mid);
+    for (const [x, y, r] of puffs) buf.ellipse(x - r * 0.4, y - r * 0.05, r * 0.7, r * 0.25, hi);
+    buf.outline(dk, 1);
     // Grit kicked out low.
     for (let i = 0; i < 10; i++) {
       const s = i % 2 ? 1 : -1;
@@ -245,7 +247,7 @@ export function dust(variant: number, t: number): Sprite {
       const y = fy - 2 - Math.max(0, f * 1.6 - f * f * 0.09) * (0.5 + hash(i + 3));
       buf.rect(x, y, 1, 1, i % 3 ? lo : dk);
     }
-    if (f >= 9) erode(buf, (f - 8) * 0.085);
+    if (f >= 3) erode(buf, (f - 2) * 0.058);
     return { buf, ax: cx, ay: fy };
   });
 }

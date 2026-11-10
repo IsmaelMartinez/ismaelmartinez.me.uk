@@ -188,7 +188,7 @@ const STANCES: Record<Stance, (b: number) => Pose> = {
   karate: b => P({ h: 42.5 - b * 1.3, fN: [-17, 0], fF: [11, 0], kN: 30, kF: 6, aF: [52 - b * 2, 80 + b * 5], aN: [22 - b * 2, 118 + b * 4], lean: 8 + b * 1.4, head: -6 - b }),
   boxer: b => P({ h: 42 - b * 1.5, fN: [-13, 0], fF: [11, 0], kN: 26, lean: 16 + b * 1.5, head: 6 - b, twist: 34, aN: [34 - b * 2, 128], aF: [52 + b * 2, 98 + b * 4] }),
   sumo: b => P({ h: 30 - b * 1.4, fN: [-16, 0], fF: [16, 0], kN: 62, kF: 58, lean: 16 + b, head: -6 - b, twist: 56, aN: [56 + b * 2, 30 - b * 4, 30], aF: [62 + b * 2, 36 - b * 4], hand: 'open' }),
-  beast: b => P({ h: 30 - b * 1.2, fN: [-15, 0], fF: [15, 0], kN: 44, kF: 30, lean: 38 + b * 1.5, head: -30 - b, twist: 50, aN: [30 + b * 4, 34, 24], aF: [40 - b * 3, 30], hand: 'open' }),
+  beast: b => P({ h: 30 - b * 1.2, fN: [-15, 0], fF: [15, 0], kN: 44, kF: 30, lean: 38 + b * 1.5, head: -30 - b, twist: 50, aN: [38 + b * 4, 42, 24], aF: [48 - b * 3, 36], hand: 'open' }),
   wrestler: b => P({ h: 40 - b * 1.3, fN: [-16, 0], fF: [14, 0], kN: 44, kF: 30, lean: 18 + b, head: -10 - b, twist: 50, aN: [44 + b * 2, 56 + b * 4, 24], aF: [56 - b * 2, 50 + b * 4], hand: 'open' }),
   yogi: b => P({ h: 51.5 - b * 0.9, fN: [-9, 0], fF: [9, 0], kN: 20, lean: 2 + b, head: -6, twist: 48, aN: [56, 124 + b * 5], aF: [62, 112 + b * 5], hand: 'fist' }),
   kungfu: b => P({ h: 44 - b * 1.1, fN: [-13, 0], fF: [11, 0], kN: 30, lean: 4 + b, head: -4, twist: 46, aN: [36 - b * 2, 104 + b * 3], aF: [74 - b * 2, 38 + b * 6], hand: 'open' }),
@@ -232,7 +232,7 @@ function walk(stance: Pose, t: number, back: boolean): Pose {
     h: stance.h - 0.6 + bob * 0.9,
     fF: [Math.round(stance.fF[0] + xF), Math.round(upF)],
     fN: [Math.round(stance.fN[0] + xN), Math.round(upN)],
-    foot: [Math.round(upN * 5), Math.round(upF * 5)],
+    foot: [Math.round(upN * 2.5), Math.round(upF * 2.5)],
     twist: (stance.twist ?? 42) + Math.round(sway * 5),
     lean: stance.lean + (back ? -4 : 3),
     aN: [stance.aN[0] + Math.round(sway * 7), stance.aN[1] - Math.round(sway * 4), stance.aN[2] ?? 14],
@@ -243,7 +243,8 @@ function walk(stance: Pose, t: number, back: boolean): Pose {
 
 const CROUCH = P({ lean: 22, head: -14, twist: 46, lN: [44, -136], lF: [80, -120], foot: [30, 0], aN: [30, 110], aF: [52, 90] });
 const CROUCH_GUARD = P({ lean: 10, head: -18, twist: 30, aN: [66, 118, 20], aF: [72, 124] }, CROUCH);
-const STAND_GUARD = P({ lean: -4, head: -12, twist: 30, aN: [62, 122, 22], aF: [70, 128], lN: [-22, -12], lF: [24, -24] });
+/** The standing guard, over the fighter's own planted feet: weight back, forearms up in front of the face. */
+const standGuard = (s: Pose): Pose => P({ lean: -4, head: -12, twist: 30, aN: [62, 122, 22], aF: [70, 128], x: -3, h: (s.h ?? 42) - 1 }, s);
 const TUCK = P({ plant: false, y: 46, lean: 18, head: -8, aN: [56, 110], aF: [70, 100], lN: [96, -132], lF: [74, -124], foot: [40, 40] });
 
 /** A move's keys: anticipation, the hit, and (optionally) the follow-through it recoils from. */
@@ -277,42 +278,42 @@ const ATTACK: Record<Key, (s: Pose) => Seq> = {
   // Jab: the lead hand straight out, shoulder turned in behind it.
   standP0: s => ({
     chamber: P({ aF: [70, 60], twist: 36 }, s),
-    hit: P({ aF: [90, 2, 4], aN: [24, 122], twist: 24, lean: s.lean + 4, face: 'shout' }, s),
-    follow: P({ aF: [86, 14], twist: 28 }, s)
+    hit: P({ aF: [90, 2, 4], aN: [24, 122], twist: 24, lean: s.lean + 5, x: 2, face: 'shout' }, s),
+    follow: P({ aF: [86, 14], twist: 28, x: 1 }, s)
   }),
-  // Strong: the rear hand, the hips turning it over.
+  // Strong: the rear hand, the hips turning it over planted feet.
   standP1: s => ({
-    windup: P({ aN: [10, 130], twist: 56, lean: s.lean - 2 }, s),
-    chamber: P({ aN: [56, 70, 20], twist: 34 }, s),
-    hit: P({ aN: [90, 0, 6], aF: [40, 110], twist: 4, hipTwist: 22, lean: s.lean + 8, x: 3, foot: [36, 0], face: 'shout' }, s),
-    follow: P({ aN: [88, 10, 6], aF: [40, 110], twist: 8, hipTwist: 24, lean: s.lean + 9, x: 3, foot: [30, 0] }, s)
+    windup: P({ aN: [10, 130], twist: 58, lean: s.lean - 3, x: -2 }, s),
+    chamber: P({ aN: [56, 70, 20], twist: 34, x: 1 }, s),
+    hit: P({ aN: [90, 0, 6], aF: [40, 110], twist: 4, hipTwist: 22, lean: s.lean + 9, x: 5, h: (s.h ?? 42) - 1, foot: [30, 0], face: 'shout', wind: 0.8 }, s),
+    follow: P({ aN: [88, 10, 6], aF: [40, 110], twist: 8, hipTwist: 24, lean: s.lean + 9, x: 5, h: (s.h ?? 42) - 1, foot: [24, 0] }, s)
   }),
-  // Fierce: a stepping straight with everything behind it.
+  // Fierce: a stepping straight with everything behind it, the lead foot driven forward and the rear leg thrown straight.
   standP2: s => ({
-    windup: P({ aN: [0, 140, 10], aF: [70, 70], twist: 66, hipTwist: 50, lean: s.lean - 6, x: -2 }, s),
-    chamber: P({ aN: [50, 90, 24], twist: 44, lean: s.lean + 4, x: 1 }, s),
-    hit: P({ aN: [94, -4, 4], aF: [30, 120], twist: -8, hipTwist: 10, lean: 26, x: 7, lN: [-34, 0], lF: [40, -30], foot: [44, 0], face: 'shout' }, s),
-    follow: P({ aN: [92, 6, 4], aF: [30, 120], twist: -4, hipTwist: 12, lean: 28, x: 7, lN: [-34, -2], lF: [40, -30], foot: [44, 0], face: 'shout' }, s)
+    windup: P({ aN: [0, 140, 10], aF: [70, 70], twist: 68, hipTwist: 52, lean: s.lean - 8, x: -4, h: (s.h ?? 42) - 1 }, s),
+    chamber: P({ aN: [50, 90, 24], twist: 44, lean: s.lean + 4, x: 2 }, s),
+    hit: P({ aN: [94, -4, 4], aF: [30, 120], twist: -8, hipTwist: 10, lean: 28, x: 10, h: (s.h ?? 42) - 4, fF: [(s.fF?.[0] ?? 11) + 5, 0], foot: [40, 0], face: 'shout', wind: 1 }, s),
+    follow: P({ aN: [92, 6, 4], aF: [30, 120], twist: -4, hipTwist: 12, lean: 28, x: 10, h: (s.h ?? 42) - 4, fF: [(s.fF?.[0] ?? 11) + 5, 0], foot: [40, 0], face: 'shout', wind: 0.5 }, s)
   }),
-  // Short: a snapping low front kick off the lead foot.
+  // Short: a snapping low front kick off the lead foot, the rear one planted under it.
   standK0: s => ({
-    chamber: P({ lF: [64, -96], foot: [0, 30], lean: s.lean - 4 }, s),
-    hit: P({ lF: [72, -6], foot: [0, 52], lean: -6, lN: [-12, -10], twist: 44, face: 'shout' }, s),
-    follow: P({ lF: [68, -24], foot: [0, 48], lean: -4 }, s)
+    chamber: P({ lF: [64, -96], foot: [0, 30], lean: s.lean - 4, x: -1 }, s),
+    hit: P({ lF: [72, -6], foot: [0, 52], lean: -6, twist: 44, x: -2, face: 'shout' }, s),
+    follow: P({ lF: [68, -24], foot: [0, 48], lean: -4, x: -2 }, s)
   }),
-  // Forward: the rear leg turned over into a body-high roundhouse.
+  // Forward: the rear leg turned over into a body-high roundhouse, the lead foot the pivot.
   standK1: s => ({
-    windup: P({ lN: [40, -110, 20], twist: 56, hipTwist: 54, lean: s.lean - 4 }, s),
-    chamber: P({ lN: [74, -110, 30], lF: [8, -12], twist: 70, hipTwist: 76, lean: -6, foot: [40, 0] }, s),
-    hit: P({ lN: [100, -4, 24], lF: [6, -10], twist: 76, hipTwist: 86, lean: -20, foot: [56, 0], aN: [40, 80], aF: [60, 100], face: 'shout' }, s),
-    follow: P({ lN: [96, -24, 24], lF: [6, -10], twist: 74, hipTwist: 82, lean: -18, foot: [56, 0], aN: [40, 80] }, s)
+    windup: P({ lN: [40, -110, 20], fF: [4, 0], twist: 56, hipTwist: 54, lean: s.lean - 4, x: 2 }, s),
+    chamber: P({ lN: [74, -110, 30], fF: [3, 0], h: (s.h ?? 42) + 1.5, twist: 70, hipTwist: 76, lean: -6, x: 3 }, s),
+    hit: P({ lN: [100, -4, 24], fF: [3, 0], h: (s.h ?? 42) + 2, twist: 76, hipTwist: 86, lean: -20, x: 3, aN: [40, 80], aF: [60, 100], face: 'shout', wind: -0.8 }, s),
+    follow: P({ lN: [96, -24, 24], fF: [3, 0], h: (s.h ?? 42) + 2, twist: 74, hipTwist: 82, lean: -18, x: 3, aN: [40, 80] }, s)
   }),
   // Roundhouse: the rear leg to the head, the whole body opening behind it.
   standK2: s => ({
-    windup: P({ lN: [30, -90, 16], twist: 60, hipTwist: 60, lean: s.lean - 6, aN: [10, 110] }, s),
-    chamber: P({ lN: [92, -126, 40], lF: [4, -14], twist: 82, hipTwist: 92, lean: -14, foot: [40, 0], aN: [10, 80], aF: [60, 90] }, s),
-    hit: P({ lN: [132, -6, 30], lF: [-4, -8], twist: 86, hipTwist: 100, lean: -34, head: 4, foot: [60, 0], aN: [-10, 70, 30], aF: [70, 90], face: 'shout' }, s),
-    follow: P({ lN: [124, -30, 30], lF: [-2, -8], twist: 84, hipTwist: 96, lean: -30, foot: [60, 0], aN: [0, 70, 30], aF: [70, 90] }, s)
+    windup: P({ lN: [30, -90, 16], fF: [4, 0], twist: 60, hipTwist: 60, lean: s.lean - 6, x: 2, aN: [10, 110] }, s),
+    chamber: P({ lN: [92, -126, 40], fF: [3, 0], h: (s.h ?? 42) + 2, twist: 82, hipTwist: 92, lean: -14, x: 3, aN: [10, 80], aF: [60, 90] }, s),
+    hit: P({ lN: [132, -6, 30], fF: [3, 0], h: (s.h ?? 42) + 2.5, twist: 86, hipTwist: 100, lean: -34, head: 4, x: 3, aN: [-10, 70, 30], aF: [70, 90], face: 'shout', wind: -1 }, s),
+    follow: P({ lN: [124, -30, 30], fF: [3, 0], h: (s.h ?? 42) + 2.5, twist: 84, hipTwist: 96, lean: -30, x: 3, aN: [0, 70, 30], aF: [70, 90] }, s)
   }),
   crouchP0: () => ({
     chamber: P({ aF: [70, 60] }, CROUCH),
@@ -418,17 +419,17 @@ export function poseFor(f: FighterState, clock: number): Pose {
       return cycle(idle, clock, 7);
     case 'land':
       // The landing absorbs into the knees before the stance comes back.
-      return t < 2 ? P({ lN: [10, -110], lF: [50, -100], lean: 24, head: -12, wind: -0.5 }, base) : mix(P({ lN: [0, -70], lF: [40, -70], lean: 16 }, base), base, 0.5);
+      return t < 2 ? P({ h: (base.h ?? 42) * 0.74, lean: 26, head: -12, wind: -1 }, base) : P({ h: (base.h ?? 42) * 0.88, lean: 16, wind: -0.5 }, base);
     case 'walk': {
       const forward = Math.sign(f.vx) === f.facing;
       return walk(base, forward ? clock : 400 - (clock % 400), !forward);
     }
     case 'guard':
-      return STAND_GUARD;
+      return standGuard(base);
     case 'crouch':
       return t < 2 ? mix(base, CROUCH, 0.5) : CROUCH;
     case 'prejump':
-      return P({ lN: [8, -84], lF: [44, -84], lean: 18, head: -10, aN: [30, 100], aF: [50, 80] }, base);
+      return P({ h: (base.h ?? 42) * 0.76, lean: 20, head: -10, aN: [30, 100], aF: [50, 80] }, base);
     case 'jump':
       return jumpPose(f, base);
     case 'attack': {
@@ -445,7 +446,7 @@ export function poseFor(f: FighterState, clock: number): Pose {
     case 'blockstun':
       // The guard takes the blow: a frame pushed back, then held.
       if (f.low) return t < 3 ? P({ lean: 4, x: -2 }, CROUCH_GUARD) : CROUCH_GUARD;
-      return t < 3 ? P({ lean: -10, head: -16, x: -2, lN: [-26, -10] }, STAND_GUARD) : STAND_GUARD;
+      return t < 3 ? P({ lean: -12, head: -18, x: -6 }, standGuard(base)) : standGuard(base);
     case 'hitstun':
       return hitPose(f, base);
     case 'fall':
@@ -464,7 +465,7 @@ export function poseFor(f: FighterState, clock: number): Pose {
     case 'dizzy': {
       const k = Math.floor(clock / 12) % 4;
       const sway = [-8, 0, 8, 0][k];
-      return P({ lean: 14 + sway, head: 20 - sway, twist: 60 + sway, aN: [6, 14, 20], aF: [4, 16], hand: 'open', lN: [-6, -24], lF: [16, -30], x: sway / 3, face: 'hurt' }, base);
+      return P({ lean: 14 + sway, head: 20 - sway, twist: 60 + sway, aN: [6, 14, 20], aF: [4, 16], hand: 'open', h: (base.h ?? 42) - 3, x: sway / 2, face: 'hurt' }, base);
     }
     case 'throw':
       return throwPose(f, base);
@@ -506,14 +507,16 @@ function hitPose(f: FighterState, base: Pose): Pose {
     const reel = P({ lean: -6, head: -34, twist: 70, aN: [20, 60], aF: [10, 50], hand: 'open', face: 'hurt' }, CROUCH);
     return t < 3 ? P({ x: -3, head: -44 }, reel) : t < 10 ? reel : mix(reel, CROUCH, 0.5);
   }
+  const h = base.h ?? 42;
   if (f.hitHigh) {
-    const snap = P({ lean: -26, head: -40, twist: 72, hipTwist: 50, aN: [24, 30, 30], aF: [-6, 30], lN: [-30, -6], lF: [30, -20], hand: 'open', x: -4, face: 'hurt' });
-    const reel = P({ lean: -16, head: -24, twist: 64, aN: [30, 50, 20], aF: [6, 50], lN: [-26, -10], lF: [26, -30], hand: 'open', x: -3, face: 'hurt' });
+    // In the face: the head goes first, the shoulders after it, the feet where they were.
+    const snap = P({ lean: -28, head: -40, twist: 72, hipTwist: 50, aN: [24, 30, 30], aF: [-6, 30], hand: 'open', x: -7, h: h - 1, face: 'hurt', wind: -1 }, base);
+    const reel = P({ lean: -16, head: -24, twist: 64, aN: [30, 50, 20], aF: [6, 50], hand: 'open', x: -5, h: h - 2, face: 'hurt', wind: -0.5 }, base);
     return t < 3 ? snap : t < 9 ? reel : mix(reel, base, 0.5);
   }
   // In the gut: doubled over the blow.
-  const fold = P({ lean: 42, head: 14, twist: 60, aN: [40, 70, 10], aF: [50, 60], lN: [-30, -24], lF: [20, -40], hand: 'open', x: -4, face: 'hurt' });
-  const reel = P({ lean: 30, head: 6, twist: 56, aN: [40, 80, 10], aF: [50, 70], lN: [-26, -24], lF: [22, -40], x: -3, face: 'hurt' });
+  const fold = P({ lean: 44, head: 14, twist: 60, aN: [40, 70, 10], aF: [50, 60], hand: 'open', x: -6, h: h - 4, face: 'hurt', wind: 0.5 }, base);
+  const reel = P({ lean: 30, head: 6, twist: 56, aN: [40, 80, 10], aF: [50, 70], x: -4, h: h - 3, face: 'hurt' }, base);
   return t < 3 ? fold : t < 9 ? reel : mix(reel, base, 0.5);
 }
 

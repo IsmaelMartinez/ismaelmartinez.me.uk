@@ -1,25 +1,24 @@
 /**
  * The fighters' pixels: the looks, proportions, palettes and the software
- * raster the bodies (`body.ts`) and portraits are drawn into.
+ * raster the bodies (`body.ts`) are drawn into.
  *
  * A software rasteriser rather than canvas paths, because canvas fills are
  * anti-aliased and anti-aliasing is the one thing a CPS-1 sprite never has.
  * A pixel's tone is its surface normal against one key light, quantised to
- * five tones per material with a checker dither where two meet; the ramp is
- * hue-shifted the way the arcade's palettes were (skin falls into warm
- * red-brown, cloth into cool indigo, and the top tone is a specular shine),
- * and the back edge catches a rim light. The raster has two modes. The 3D
- * one (`ell3`, `cone3`, `toImage3`) fills ellipsoids and tapered capsules
- * through a depth buffer and draws the inner outlines from depth, which is
- * what the bodies use; the flat one (`ellipse`, `capsule`, `poly`,
- * `toImage`) paints in order with a rim where a later part borders an
- * earlier one, which is what the face-on portraits use. Creases (muscle
- * separations, knuckles, cloth folds) are painted into the part they belong
- * to in either.
+ * five hard tones per material, as the arcade's sprites were shaded (no
+ * dither on a figure); the ramp is hue-shifted the way its palettes were
+ * (skin falls into warm red-brown, cloth into cool indigo, a white gi into
+ * cream and tan, and the top tone is a specular shine), and the back edge
+ * catches a rim light. The 3D mode (`ell3`, `cone3`, `toImage3`) fills
+ * ellipsoids and tapered capsules through a depth buffer and draws the
+ * inner outlines from depth, which is what the bodies, the portraits and
+ * the crowd all use; the flat mode (`ellipse`, `capsule`, `poly`,
+ * `toImage`) paints in order. Creases (muscle separations, knuckles, cloth
+ * folds) are painted into the part they belong to in either.
  *
- * This module owns the looks (costumes per fighter, with a second colourway
- * for the mirror match), the builds' proportions and the portrait painter.
- * DOM-free apart from the `ImageData` the caller hands it.
+ * This module owns the looks (costumes and faces per fighter, with a second
+ * colourway for the mirror match) and the builds' proportions. DOM-free
+ * apart from the `ImageData` the caller hands it.
  */
 import type { CharId, Fighter } from './roster';
 

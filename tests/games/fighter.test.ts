@@ -3,6 +3,9 @@ import { cpuInput, createCpu } from '../../src/games/fighter/ai';
 import { BONUS_AFTER, continueCredit, createArcade, createDemo, levelFor, tickArcade, type ArcadeEvent, type ArcadeState } from '../../src/games/fighter/arcade';
 import { createBonus, createFight, hitbox, hurtboxes, tickFight, type FightEvent, type FightState, type FighterState } from '../../src/games/fighter/fight';
 import { HK, HP, LK, LP, MK, MP, NO_INPUT, createBuffer, motionDone, numpad, pushFrame, type FrameInput } from '../../src/games/fighter/motion';
+import { drawBody } from '../../src/games/fighter/body';
+import { Raster, lookFor } from '../../src/games/fighter/figure';
+import { drawPortrait } from '../../src/games/fighter/portrait';
 import { poseFor } from '../../src/games/fighter/poses';
 import { BOSSES, FIGHTERS, SELECTABLE, type CharId } from '../../src/games/fighter/roster';
 import { GLYPHS, normaliseText } from '../../src/games/football/font';
@@ -444,6 +447,43 @@ describe('the pictures', () => {
         }
       }
     }
+  });
+
+  it('stands every fighter on the floor in every stance, walk and guard, both feet down', () => {
+    const SIZE = 208;
+    const FLOOR = SIZE - 24;
+    for (const id of ALL) {
+      const f = createFight(id, 'kenji').fighters[0];
+      for (const state of ['stand', 'walk', 'guard', 'blockstun', 'hitstun', 'dizzy', 'prejump', 'land'] as const) {
+        f.state = state;
+        f.vx = 1;
+        for (let t = 0; t < 42; t += 7) {
+          f.frame = t;
+          const r = new Raster(SIZE, SIZE);
+          drawBody(r, f.def, lookFor(id, false), poseFor(f, t), SIZE / 2, FLOOR);
+          let low = -1;
+          for (let y = SIZE - 1; y >= 0 && low < 0; y--) for (let x = 0; x < SIZE; x++) if (r.mat[y * SIZE + x]) low = y;
+          // The soles sit on the floor line: not hovering over it, not sunk through it.
+          expect(Math.abs(low - FLOOR), `${id} ${state} frame ${t}: lowest pixel ${low}`).toBeLessThanOrEqual(2);
+        }
+      }
+    }
+  });
+
+  it('draws a portrait of every fighter with a face in the frame', () => {
+    for (const id of ALL)
+      for (const mood of ['calm', 'shout', 'hurt'] as const) {
+        const size = 64;
+        const r = new Raster(size, size);
+        drawPortrait(r, FIGHTERS[id], lookFor(id, false), mood, size);
+        let filled = 0;
+        for (let y = 0; y < size / 2; y++) for (let x = 0; x < size; x++) if (r.mat[y * size + x]) filled++;
+        // The head fills a good part of the upper half, with headroom over it: nothing but a tuft of hair reaches the top rows.
+        expect(filled, `${id} ${mood}`).toBeGreaterThan(size * size * 0.1);
+        let top = 0;
+        for (let y = 0; y < 4; y++) for (let x = 0; x < size; x++) if (r.mat[y * size + x]) top++;
+        expect(top, `${id} ${mood} cropped at the top`).toBeLessThan(size * 4 * 0.3);
+      }
   });
 
   it('a hitbox only exists on active frames', () => {

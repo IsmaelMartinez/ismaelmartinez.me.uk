@@ -212,3 +212,22 @@ behind the start screen.
   - the mawashi is lit as one band of cloth.
   A smaller blue that does not touch the vest is now a cuff too, so a raised
   knee no longer leaves a scrap of belt floating by the foot.
+- 2026-11-10, round 9 (from the owner's "this should be looking like Street
+  Fighter, but this is just pretty bad… make it that the characters and the
+  ones on the back and everything has good quality representations, not…
+  patchy"). An audit of every screen found the stages, HUD and effects sound
+  and the fighters, crowd and portraits letting them down: the CC0 sheets
+  were one thin mannequin recoloured eleven ways, noisy against clean
+  backdrops. So the sheets are gone and the cast is back on the 3D rig,
+  rebuilt:
+  - **Bodies**: arcade proportions per build, hard cel shading, a gi with
+    lapels, skirt and torn shoulders, trousers cut at a hem over big bare
+    feet, mitts, and a head with a real profile and a face per fighter.
+  - **Costumes restored and finished**: the qipao with puffed sleeves and
+    buns, trunks and boots, mawashi, cargo trousers, boxing gloves, the
+    mask and claw, the eyepatch, the cap and cape.
+  - **Placed feet**: stances, walks, punches, guards and reels stand on
+    solved legs, so nothing floats or slides through the floor (pinned by
+    a raster test).
+  - **Portraits and crowd from the same body**, so they match the sprites.
+  - Knockdown dust redrawn as low billows that thin out.

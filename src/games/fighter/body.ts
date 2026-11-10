@@ -167,7 +167,8 @@ function skeleton(pose: Pose, b: Build, k: number): Skeleton {
     const lT = b.thigh * k;
     const lS = b.shin * k;
     const sole = b.rShin * 0.8 * k;
-    let a: V3 = [hip[0] + target[0] * k, (pose.h ?? 0) * k - sole - target[1] * k, h[2] + side * 1.5 * k];
+    // The target is measured from where the fighter stands, not from the hips, so a lunge carries the hips over planted feet.
+    let a: V3 = [target[0] * k, (pose.h ?? 0) * k - sole - target[1] * k, h[2] + side * 1.5 * k];
     let d = sub(a, h);
     const reach = (lT + lS) * 0.995;
     if (len(d) > reach) {
@@ -235,13 +236,13 @@ function place(pose: Pose, b: Build, k: number) {
   let drop: number;
   const sole = b.rShin * 0.8 * k;
   /** Lay a foot flat when its ankle is at floor height: the lead one at the opponent, the rear one turned out to the viewer. */
-  const settle = (low: number): void => {
+  const settle = (low: number, fade = 5): void => {
     const fl = b.foot * k;
     for (const [ankle, key, dir] of [
       [s.ankleN, 'toeN', [0.6, 0, 0.8]],
       [s.ankleF, 'toeF', [0.97, 0, -0.24]]
     ] as const) {
-      const t = Math.max(0, Math.min(1, 1 - (low - ankle[1]) / (5 * k)));
+      const t = Math.max(0, Math.min(1, 1 - (low - ankle[1]) / (fade * k)));
       if (t <= 0) continue;
       const lying: V3 = [ankle[0] + dir[0] * fl, ankle[1], ankle[2] + dir[2] * fl];
       s[key] = mixV(s[key], lying, t);
@@ -249,7 +250,8 @@ function place(pose: Pose, b: Build, k: number) {
   };
   if (pose.h !== undefined && (pose.fN || pose.fF) && pose.rot === 0 && !pose.yaw) {
     // Placed feet: the floor is where the pose says it is under the hips.
-    settle(pose.h * k - sole);
+    // A stepping foot stays close to level as it lifts, so its toes never dip through the floor.
+    settle(pose.h * k - sole, 14);
     drop = -pose.h * k;
   } else if (pose.plant) {
     const upright = pose.rot === 0 && !pose.yaw;
@@ -979,16 +981,17 @@ function drawHead(
     const tilt = (fc.soft ? -0.1 : 0.22) * sd;
     const bl = norm(add(scale(F.lat, Math.cos(tilt)), F.up, Math.sin(tilt)));
     const bu = norm(add(scale(F.up, Math.cos(tilt)), F.lat, -Math.sin(tilt)));
-    t.ell(hp(fc.soft ? 0.86 : ridge - 0.02, fc.soft ? 0.16 : 0.08, sd * 0.31), [bl, bu, F.fwd], [hr * 0.22, hr * (fc.soft ? 0.05 : 0.075) * Math.min(1.4, brow), hr * 0.06], browMat, g, -0.3, false);
+    t.ell(hp(fc.soft ? 0.86 : ridge - 0.02, fc.soft ? 0.16 : k > 2 ? 0.03 : 0.08, sd * 0.31), [bl, bu, F.fwd], [hr * 0.22, hr * (fc.soft ? 0.05 : 0.075) * Math.min(1.4, brow), hr * 0.06], browMat, g, -0.3, false);
     if (k > 2) {
       // Close up, an eye is drawn: the white, the iris looking at the opponent, the lid's dark line over both.
       if (face === 'hurt') {
         t.ell(e, axes, [hr * 0.15, hr * 0.03, hr * 0.05], dark, g, -0.5);
         continue;
       }
-      blob(e, 0.15, 0.075, 0.06, white, g, 0.4);
-      if (!fc.blank) blob(add(e, F.lat, hr * 0.03), 0.07, 0.075, 0.07, dark, g, -0.5);
-      t.ell(add(e, F.up, hr * 0.07), axes, [hr * 0.17, hr * 0.028, hr * 0.07], dark, g, -0.5);
+      blob(e, 0.15, fc.soft ? 0.085 : 0.06, 0.06, white, g, 0.4);
+      if (!fc.blank) blob(add(e, F.lat, hr * 0.03), 0.065, fc.soft ? 0.085 : 0.06, 0.07, dark, g, -0.5);
+      // A woman's eye keeps its lid's line; a man's sits straight under the scowl of his brow.
+      if (fc.soft) t.ell(add(e, F.up, hr * 0.08), axes, [hr * 0.17, hr * 0.028, hr * 0.07], dark, g, -0.5);
       if (fc.soft) t.cone(add(e, F.lat, sd * hr * 0.15), at(e, F.fwd, 0, F.up, hr * 0.1, F.lat, sd * hr * 0.26), hr * 0.03, hr * 0.02, dark, g, -0.5);
       continue;
     }
@@ -1013,8 +1016,9 @@ function drawHead(
       // Close up, a mouth: the dark line between the lips, the lower lip's light, or teeth bared.
       const mc = hp(0.8, -0.56, 0);
       if (face === 'shout' || face === 'hurt') {
-        blob(mc, 0.24, 0.12, 0.1, r.material('#6a0e0e'), g, -0.2);
-        blob(add(mc, F.up, hr * 0.07), 0.2, 0.035, 0.11, white, g, 0.3);
+        blob(mc, 0.24, 0.13, 0.1, r.material('#3a0808'), g, -0.4);
+        blob(add(mc, F.up, hr * 0.08), 0.2, 0.04, 0.11, white, g, 0.3);
+        if (face === 'shout') blob(add(mc, F.up, -hr * 0.09), 0.17, 0.035, 0.11, white, g, 0.2);
       } else {
         t.ell(mc, axes, [hr * 0.24, hr * 0.028, hr * 0.1], fc.soft ? r.material('#a02838') : dark, g, fc.soft ? 0 : -0.4);
         if (fc.soft) blob(add(mc, F.up, -hr * 0.06), 0.16, 0.05, 0.1, r.material('#c84858'), g, 0.1);

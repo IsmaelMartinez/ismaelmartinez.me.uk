@@ -62,6 +62,19 @@ export interface Pose {
   hipTwist?: number;
   /** Whole-body turn about the vertical, degrees: a spin. */
   yaw?: number;
+  /**
+   * Standing poses place their feet rather than angle their legs: the hips'
+   * height above the floor, and each ankle's place forward of the hips and
+   * height off the floor. The knee is then solved (`body.ts`), bending the
+   * way `kN`/`kF` turn it out toward the viewer's side, so a planted foot
+   * is on the floor in every frame whatever the hips do above it. A leg
+   * without a target keeps its angles (a kick, a jump).
+   */
+  h?: number;
+  fN?: readonly [number, number];
+  fF?: readonly [number, number];
+  kN?: number;
+  kF?: number;
   /** Ankles, near and far: degrees the toes point down from the shin's square. */
   foot?: readonly [number, number];
   /** Loose cloth and hair blown back (positive) or forward by movement. */
@@ -91,7 +104,17 @@ const BASE: Pose = {
   hand: 'fist'
 };
 
-const P = (over: Partial<Pose>, base: Pose = BASE): Pose => ({ ...base, ...over });
+/**
+ * A pose over a base. A leg given as angles lets go of the base's foot
+ * target (a kick leaves the floor), and a pose in the air lets go of both.
+ */
+const P = (over: Partial<Pose>, base: Pose = BASE): Pose => {
+  const out = { ...base, ...over };
+  if (over.lN && !over.fN) out.fN = undefined;
+  if (over.lF && !over.fF) out.fF = undefined;
+  if (over.plant === false) out.h = out.fN = out.fF = undefined;
+  return out;
+};
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 const limbMix = (a: Limb, b: Limb, t: number): Limb => {
@@ -99,6 +122,12 @@ const limbMix = (a: Limb, b: Limb, t: number): Limb => {
   if (a[2] !== undefined || b[2] !== undefined) out.push(lerp(a[2] ?? 10, b[2] ?? 10, t));
   return out as unknown as Limb;
 };
+
+/** A foot target part way between two poses'; a pose without one hands over to the other's at the half. */
+function pick(a: readonly [number, number] | undefined, b: readonly [number, number] | undefined, t: number): readonly [number, number] | undefined {
+  if (a && b) return [Math.round(lerp(a[0], b[0], t)), Math.round(lerp(a[1], b[1], t))];
+  return t < 0.5 ? a : b;
+}
 
 /** An in-between: every angle part way from `a` to `b`, rounded so near-identical frames share a sprite. */
 export function mix(a: Pose, b: Pose, t: number): Pose {
@@ -116,6 +145,11 @@ export function mix(a: Pose, b: Pose, t: number): Pose {
     hipTwist: a.hipTwist === undefined && b.hipTwist === undefined ? undefined : n(a.hipTwist, b.hipTwist, 36),
     yaw: a.yaw === undefined && b.yaw === undefined ? undefined : n(a.yaw, b.yaw, 0),
     foot: a.foot || b.foot ? [n(a.foot?.[0], b.foot?.[0], 0), n(a.foot?.[1], b.foot?.[1], 0)] : undefined,
+    h: t < 0.5 ? (a.h === undefined ? undefined : n(a.h, b.h ?? a.h, 0)) : b.h === undefined ? undefined : n(a.h ?? b.h, b.h, 0),
+    fN: pick(a.fN, b.fN, t),
+    fF: pick(a.fF, b.fF, t),
+    kN: a.kN === undefined && b.kN === undefined ? undefined : n(a.kN, b.kN, 24),
+    kF: a.kF === undefined && b.kF === undefined ? undefined : n(a.kF, b.kF, 8),
     wind: a.wind === undefined && b.wind === undefined ? undefined : Math.round(lerp(a.wind ?? 0, b.wind ?? 0, t) * 4) / 4,
     aN: round(limbMix(a.aN, b.aN, t)),
     aF: round(limbMix(a.aF, b.aF, t)),
@@ -149,17 +183,17 @@ const STANCE_OF: Record<CharId, Stance> = {
 const BREATH = [0, 1, 2, 1];
 
 const STANCES: Record<Stance, (b: number) => Pose> = {
-  karate: b => P({ lN: [-18, -14 - b * 4], lF: [30 + b, -36 - b * 5], aF: [52 - b, 80 + b * 2], aN: [22 - b, 118 + b * 2], lean: 8 + b }),
-  boxer: b => P({ lean: 16 + b, head: 6, twist: 34, aN: [34 - b, 128], aF: [52, 98 + b * 2], lN: [-16, -16 - b * 5], lF: [26, -30 - b * 5], foot: [28, 0] }),
-  sumo: b => P({ lean: 16, head: -6, twist: 56, aN: [56, 30 - b * 3, 30], aF: [62, 36 - b * 3], lN: [-34, -46 - b * 5, 18], lF: [40, -50 - b * 5, 18], hand: 'open' }),
-  beast: b => P({ lean: 38 + b, head: -30, twist: 50, aN: [30 + b * 3, 34, 24], aF: [40, 30], lN: [-26, -54 - b * 4], lF: [34, -58 - b * 4], hand: 'open' }),
-  wrestler: b => P({ lean: 18, head: -10, twist: 50, aN: [44, 56 + b * 3, 24], aF: [56, 50 + b * 3], lN: [-24, -24 - b * 4, 10], lF: [30, -30 - b * 4, 10], hand: 'open' }),
-  yogi: b => P({ lean: 2, head: -6, twist: 48, aN: [56, 124 + b * 4], aF: [62, 112 + b * 4], lN: [-12, -8], lF: [16, -10], hand: 'fist' }),
-  kungfu: b => P({ lean: 4, head: -4, twist: 46, aN: [36, 104], aF: [74, 38 + b * 4], lN: [-20, -18 - b * 3], lF: [34, -42 - b * 3], foot: [30, 0], hand: 'open' }),
-  soldier: b => P({ lean: 6, head: -4, twist: 40, aN: [30, 104], aF: [48, 92 + b * 2], lN: [-22, -10 - b * 4], lF: [24, -14 - b * 3] }),
-  muay: b => P({ lean: -2, head: -8, twist: 50, aN: [30, 128], aF: [44, 116], lN: [-14, -10], lF: [34 + b * 3, -46 - b * 5], foot: [0, 30] }),
-  claw: b => P({ lean: 12, head: -2, twist: 44, aN: [28, 92], aF: [76, 26 - b * 3], lN: [-22, -30 - b * 3], lF: [30, -38 - b * 3] }),
-  dictator: b => P({ lean: -2, head: -8, twist: 60, aN: [14, 34, 28], aF: [10, 30, 24], lN: [-12, -6 - b * 2], lF: [16, -8 - b * 2] })
+  karate: b => P({ h: 42.5 - b * 0.9, fN: [-17, 0], fF: [11, 0], kN: 30, kF: 6, aF: [52 - b, 80 + b * 2], aN: [22 - b, 118 + b * 2], lean: 8 + b }),
+  boxer: b => P({ h: 42 - b, fN: [-13, 0], fF: [11, 0], kN: 26, lean: 16 + b, head: 6, twist: 34, aN: [34 - b, 128], aF: [52, 98 + b * 2] }),
+  sumo: b => P({ h: 30 - b * 1.2, fN: [-16, 0], fF: [16, 0], kN: 62, kF: 58, lean: 16, head: -6, twist: 56, aN: [56, 30 - b * 3, 30], aF: [62, 36 - b * 3], hand: 'open' }),
+  beast: b => P({ h: 30 - b, fN: [-15, 0], fF: [15, 0], kN: 44, kF: 30, lean: 38 + b, head: -30, twist: 50, aN: [30 + b * 3, 34, 24], aF: [40, 30], hand: 'open' }),
+  wrestler: b => P({ h: 40 - b, fN: [-16, 0], fF: [14, 0], kN: 44, kF: 30, lean: 18, head: -10, twist: 50, aN: [44, 56 + b * 3, 24], aF: [56, 50 + b * 3], hand: 'open' }),
+  yogi: b => P({ h: 51.5 - b * 0.6, fN: [-9, 0], fF: [9, 0], kN: 20, lean: 2, head: -6, twist: 48, aN: [56, 124 + b * 4], aF: [62, 112 + b * 4], hand: 'fist' }),
+  kungfu: b => P({ h: 44 - b * 0.7, fN: [-13, 0], fF: [11, 0], kN: 30, lean: 4, head: -4, twist: 46, aN: [36, 104], aF: [74, 38 + b * 4], hand: 'open' }),
+  soldier: b => P({ h: 43.5 - b * 0.7, fN: [-13, 0], fF: [10, 0], kN: 28, lean: 6, head: -4, twist: 40, aN: [30, 104], aF: [48, 92 + b * 2] }),
+  muay: b => P({ h: 52 - b * 0.5, fN: [-9, 0], fF: [11, b * 1.2], kN: 24, lean: -2, head: -8, twist: 50, aN: [30, 128], aF: [44, 116], foot: [0, 24] }),
+  claw: b => P({ h: 41 - b, fN: [-16, 0], fF: [13, 0], kN: 34, lean: 12, head: -2, twist: 44, aN: [28, 92], aF: [76, 26 - b * 3] }),
+  dictator: b => P({ h: 47 - b * 0.4, fN: [-7, 0], fF: [8, 0], kN: 30, kF: 16, lean: -2, head: -8, twist: 60, aN: [14, 34, 28], aF: [10, 30, 24] })
 };
 
 const IDLE: Record<Stance, Pose[]> = Object.fromEntries(

@@ -122,7 +122,7 @@ export const STANCE_TWIST = 42;
  * The arcade drew its fighters a head taller than the hurtbox the rules
  * use: this scales the skeleton against `Fighter.height`.
  */
-const SIZE = 1.1;
+const SIZE = 1.06;
 
 function skeleton(pose: Pose, b: Build, k: number): Skeleton {
   const twist = pose.twist ?? STANCE_TWIST;
@@ -159,11 +159,37 @@ function skeleton(pose: Pose, b: Build, k: number): Skeleton {
     const knee = add(h, limbDir(l[0], out), b.thigh * k * stretch);
     const shin = l[0] + l[1];
     const ankle = add(knee, limbDir(shin, out * 0.5), b.shin * k * stretch);
-    const toe = add(ankle, limbDir(shin + 90 - f, out * 0.5), 8.5 * k);
+    const toe = add(ankle, limbDir(shin + 90 - f, out * 0.5), b.foot * k);
     return [knee, ankle, toe];
   };
-  const [kneeN, ankleN, toeN] = leg(hipN, pose.lN, 1, foot[0], st.lN);
-  const [kneeF, ankleF, toeF] = leg(hipF, pose.lF, -1, foot[1], st.lF);
+  // A leg with a foot target: the ankle goes where the pose puts it and the knee is solved between hip and ankle.
+  const ik = (h: V3, target: readonly [number, number], side: 1 | -1, turn: number, f: number): [V3, V3, V3] => {
+    const lT = b.thigh * k;
+    const lS = b.shin * k;
+    const sole = b.rShin * 0.8 * k;
+    let a: V3 = [hip[0] + target[0] * k, (pose.h ?? 0) * k - sole - target[1] * k, h[2] + side * 1.5 * k];
+    let d = sub(a, h);
+    const reach = (lT + lS) * 0.995;
+    if (len(d) > reach) {
+      // Out of reach: the foot comes up along the line to the hip rather than the leg stretching.
+      d = scale(norm(d), reach);
+      a = add(h, d);
+    }
+    const dl = Math.max(1e-3, len(d));
+    const u = scale(d, 1 / dl);
+    const along0 = (lT * lT - lS * lS + dl * dl) / (2 * dl);
+    const off = Math.sqrt(Math.max(0, lT * lT - along0 * along0));
+    const hint: V3 = [Math.cos(turn * RAD), -0.1, side * Math.sin(turn * RAD)];
+    let w = sub(hint, scale(u, dot(hint, u)));
+    w = len(w) < 1e-3 ? [1, 0, 0] : norm(w);
+    const knee = add(add(h, u, along0), w, off);
+    const shinDir = norm(sub(a, knee));
+    const shinDeg = Math.atan2(shinDir[0], shinDir[1]) / RAD;
+    const toe = add(a, limbDir(shinDeg + 90 - f, side * 4), b.foot * k);
+    return [knee, a, toe];
+  };
+  const [kneeN, ankleN, toeN] = pose.h !== undefined && pose.fN ? ik(hipN, pose.fN, 1, pose.kN ?? 24, foot[0]) : leg(hipN, pose.lN, 1, foot[0], st.lN);
+  const [kneeF, ankleF, toeF] = pose.h !== undefined && pose.fF ? ik(hipF, pose.fF, -1, pose.kF ?? 8, foot[1]) : leg(hipF, pose.lF, -1, foot[1], st.lF);
   return { hip, waist, chest, neck, head, shoulderN, shoulderF, elbowN, elbowF, handN, handF, hipN, hipF, kneeN, kneeF, ankleN, ankleF, toeN, toeF, chestF, hipFr, headF };
 }
 
@@ -201,24 +227,43 @@ export interface Placed {
   handF: [number, number];
 }
 
-/**
- * The flat figures' radii were fattened to read at a smaller size; the 3D
- * bodies are drawn bigger and with their muscles modelled, so their limbs
- * come back down toward anatomy: trimmed arms and legs, a waist a little in.
- */
-const LIMB = 0.76;
-const BODIES = Object.fromEntries(
-  Object.entries(BUILDS).map(([id, b]) => [id, { ...b, rUpper: b.rUpper * LIMB, rFore: b.rFore * LIMB, rThigh: b.rThigh * LIMB * 1.04, rShin: b.rShin * LIMB, rFist: b.rFist * 0.92, rHip: b.rHip * 0.92 }])
-) as Record<Fighter['build'], Build>;
+const BODIES = BUILDS;
 
 function place(pose: Pose, b: Build, k: number) {
   const s = skeleton(pose, b, k);
   const T = transform(pose, s.hip);
   let drop: number;
-  if (pose.plant) {
-    // Stand on whichever of the heels and toes hangs lowest.
-    const low = Math.max(...[s.ankleN, s.ankleF, s.toeN, s.toeF].map(p => T.point(p)[1]));
-    drop = -low - b.rShin * 0.55 * k;
+  const sole = b.rShin * 0.8 * k;
+  /** Lay a foot flat when its ankle is at floor height: the lead one at the opponent, the rear one turned out to the viewer. */
+  const settle = (low: number): void => {
+    const fl = b.foot * k;
+    for (const [ankle, key, dir] of [
+      [s.ankleN, 'toeN', [0.6, 0, 0.8]],
+      [s.ankleF, 'toeF', [0.97, 0, -0.24]]
+    ] as const) {
+      const t = Math.max(0, Math.min(1, 1 - (low - ankle[1]) / (5 * k)));
+      if (t <= 0) continue;
+      const lying: V3 = [ankle[0] + dir[0] * fl, ankle[1], ankle[2] + dir[2] * fl];
+      s[key] = mixV(s[key], lying, t);
+    }
+  };
+  if (pose.h !== undefined && (pose.fN || pose.fF) && pose.rot === 0 && !pose.yaw) {
+    // Placed feet: the floor is where the pose says it is under the hips.
+    settle(pose.h * k - sole);
+    drop = -pose.h * k;
+  } else if (pose.plant) {
+    const upright = pose.rot === 0 && !pose.yaw;
+    if (upright) {
+      // A foot on the floor lies flat on it, the lead one pointing at the opponent and the rear one turned out
+      // to the viewer, as a stance plants them; a foot off the floor keeps the angle its shin gives it.
+      const low = Math.max(s.ankleN[1], s.ankleF[1]);
+      settle(low);
+      drop = -low - sole;
+    } else {
+      // Stand on whichever of the heels and toes hangs lowest.
+      const low = Math.max(...[s.ankleN, s.ankleF, s.toeN, s.toeF].map(p => T.point(p)[1]));
+      drop = -low - b.rShin * 0.55 * k;
+    }
   } else drop = -pose.y * k;
   return { s, T, drop };
 }
@@ -301,66 +346,90 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
   const rH = b.rHip * k;
   const rC = b.rChest * k;
   const torso = b.torso * k;
+  const local = (p: V3, o: V3, f: Frame) => {
+    const d = sub(p, o);
+    return { f: dot(d, f.fwd), u: dot(d, f.up), l: dot(d, f.lat) };
+  };
+  /** The angle of a point round an axis, for a hem or a torn edge that is not cut square. */
+  const round = (p: V3, o: V3, ax: [V3, V3, V3]): number => {
+    const d = sub(p, o);
+    return Math.atan2(dot(d, ax[1]), dot(d, ax[2]));
+  };
 
   // --- Torso -------------------------------------------------------------------------
   const abdF: Frame = { up: norm(mixV(C.up, H.up, 0.5)), fwd: norm(mixV(C.fwd, H.fwd, 0.5)), lat: norm(mixV(C.lat, H.lat, 0.5)) };
-  ell(at(s.hip, H.fwd, 0, H.up, 1 * k, H.lat, 0), frameAxes(H), [rH * 1.08, rH * 0.78, rH * 0.82], skin, G.torso);
+  const gi = !!top && look.vNeck;
+  ell(at(s.hip, H.fwd, 0, H.up, 1 * k, H.lat, 0), frameAxes(H), [rH * 1.04, rH * 0.8, rH * 0.84], skin, G.torso);
   // Glutes behind.
   for (const sd of [1, -1]) ell(at(s.hip, H.fwd, -rH * 0.42, H.up, -0.5 * k, H.lat, sd * rH * 0.46), frameAxes(H), [rH * 0.58, rH * 0.66, rH * 0.52], skin, G.torso, -0.02, true);
-  ell(s.waist, frameAxes(abdF), [rH * 0.98, torso * 0.3, rH * 0.76], skin, G.torso);
-  ell(s.chest, frameAxes(C), [rC * 1.0, torso * 0.33, rC * 0.7], skin, G.torso);
+  ell(s.waist, frameAxes(abdF), [rH * 0.94, torso * 0.3, rH * 0.72], skin, G.torso);
+  ell(s.chest, frameAxes(C), [rC * 0.98, torso * 0.34, rC * 0.68], skin, G.torso);
+  // The shoulder girdle: the bar the arms hang from, which is what makes the chest read as broad.
+  const sw = len(sub(s.shoulderN, s.shoulderF)) / 2;
+  ell(at(s.neck, C.fwd, -0.5 * k, C.up, -4.2 * k, C.lat, 0), frameAxes(C), [sw * 0.98, 4.6 * k, rC * 0.56], skin, G.torso);
   // Lats flare under the arms.
-  for (const sd of [1, -1]) ell(at(s.chest, C.fwd, -rC * 0.12, C.up, -torso * 0.12, C.lat, sd * rC * 0.66), frameAxes(C), [rC * 0.42, torso * 0.3, rC * 0.5], skin, G.torso, 0, true);
+  for (const sd of [1, -1]) ell(at(s.chest, C.fwd, -rC * 0.12, C.up, -torso * 0.1, C.lat, sd * rC * 0.68), frameAxes(C), [rC * 0.42, torso * 0.3, rC * 0.5], skin, G.torso, 0, true);
   if (b.belly) {
     const bc = at(s.waist, abdF.fwd, rH * 0.35, abdF.up, -torso * 0.05, abdF.lat, 0);
     ell(bc, frameAxes(abdF), [b.belly * k * 0.98, b.belly * k * 0.9, b.belly * k * 0.92], skin, G.torso, 0.02, true);
     crease(at(bc, abdF.fwd, b.belly * k * 0.5, abdF.up, -b.belly * k * 0.7, abdF.lat, -b.belly * k * 0.4), at(bc, abdF.fwd, b.belly * k * 0.6, abdF.up, -b.belly * k * 0.62, abdF.lat, b.belly * k * 0.5), G.torso, 1);
   }
   // Pecs, the abdominal wall in its six blocks, the obliques.
-  const pecC = at(s.chest, C.fwd, rC * 0.48, C.up, torso * 0.06, C.lat, 0);
-  for (const sd of [1, -1]) ell(at(pecC, C.fwd, 0, C.up, 0, C.lat, sd * rC * 0.43), frameAxes(C), [rC * 0.52, rC * 0.4, rC * 0.34], skin, G.torso, 0.02, true);
+  const pecC = at(s.chest, C.fwd, rC * 0.46, C.up, torso * 0.07, C.lat, 0);
+  for (const sd of [1, -1]) ell(at(pecC, C.fwd, 0, C.up, 0, C.lat, sd * rC * 0.44), frameAxes(C), [rC * 0.54, rC * 0.42, rC * 0.34], skin, G.torso, 0.02, true);
   if (!b.belly) {
     for (let row = 0; row < 3; row++)
       for (const sd of [1, -1])
-        ell(at(s.waist, abdF.fwd, rH * 0.6, abdF.up, (0.42 - row * 0.36) * torso * 0.3, abdF.lat, sd * rH * 0.24), frameAxes(abdF), [rH * 0.25, torso * 0.075, rH * 0.2], skin, G.torso, 0.03, true);
-    for (const sd of [1, -1]) ell(at(s.waist, abdF.fwd, rH * 0.25, abdF.up, -torso * 0.04, abdF.lat, sd * rH * 0.72), frameAxes(abdF), [rH * 0.32, torso * 0.22, rH * 0.4], skin, G.torso, 0, true);
+        ell(at(s.waist, abdF.fwd, rH * 0.58, abdF.up, (0.42 - row * 0.36) * torso * 0.3, abdF.lat, sd * rH * 0.24), frameAxes(abdF), [rH * 0.25, torso * 0.075, rH * 0.2], skin, G.torso, 0.03, true);
+    for (const sd of [1, -1]) ell(at(s.waist, abdF.fwd, rH * 0.25, abdF.up, -torso * 0.04, abdF.lat, sd * rH * 0.7), frameAxes(abdF), [rH * 0.32, torso * 0.22, rH * 0.4], skin, G.torso, 0, true);
   }
   // Trapezius from the neck down to each shoulder, and the neck itself.
-  for (const sh of [s.shoulderN, s.shoulderF]) cone(at(s.neck, C.fwd, -1 * k, C.up, -1.5 * k, C.lat, 0), sh, rC * 0.36, b.rUpper * k * 0.95, skin, G.torso, -0.04, true);
-  const neckTop = add(s.head, s.headF.up, -b.head * k * 0.55);
-  cone(add(s.neck, C.up, -2 * k), neckTop, b.head * k * (b.belly || b.rChest > 13 ? 0.62 : 0.52), b.head * k * 0.45, skin, G.torso);
+  for (const sh of [s.shoulderN, s.shoulderF]) cone(at(s.neck, C.fwd, -1 * k, C.up, -1.2 * k, C.lat, 0), sh, rC * 0.34, b.rUpper * k * 0.9, skin, G.torso, -0.04, true);
+  const neckTop = add(s.head, s.headF.up, -b.head * k * 0.5);
+  cone(add(s.neck, C.up, -2 * k), neckTop, b.head * k * (b.belly || b.rChest > 14 ? 0.66 : 0.56), b.head * k * 0.5, skin, G.torso);
 
   // --- Clothes over the torso ----------------------------------------------------------
-  const local = (p: V3, o: V3, f: Frame) => {
-    const d = sub(p, o);
-    return { f: dot(d, f.fwd), u: dot(d, f.up), l: dot(d, f.lat) };
-  };
   if (top) {
-    const vCut: Clip = p => {
-      if (!look.vNeck) return false;
+    // The V a gi falls open in: wide at the collar, closing at the belt.
+    const vDepth = torso * 0.66;
+    const vHalf = (u: number, wider: number) => (1 - Math.min(1, -u / vDepth)) * (rC * 0.44 + wider) + wider * 0.4;
+    const inV = (p: V3, wider = 0) => {
       const q = local(p, s.neck, C);
-      return q.f > -rC * 0.1 && -q.u < torso * 0.62 && Math.abs(q.l) < -q.u * 0.3 + 0.8 * k;
+      return q.f > -rC * 0.2 && q.u < 2 * k && Math.abs(q.l - 0.6 * k) < vHalf(q.u, wider);
     };
     const tank: Clip = p => {
-      // A sleeveless top leaves the shoulders bare.
+      // A vest leaves the shoulders bare.
       if (look.sleeves !== 'none') return false;
       const q = local(p, s.neck, C);
-      return -q.u < torso * 0.22 && Math.abs(q.l) > rC * 0.45;
+      return -q.u < torso * 0.2 && Math.abs(q.l) > rC * 0.5;
     };
-    const cut: Clip = p => vCut(p) || tank(p);
-    const loose = look.sleeves === 'long' ? 1.12 : 1.1;
-    ell(at(s.chest, C.fwd, rC * 0.12, C.up, torso * 0.03, C.lat, 0), frameAxes(C), [rC * 1.1 * loose, torso * 0.4, rC * 0.88], top, G.torso, 0, false, cut);
-    ell(s.waist, frameAxes(abdF), [rH * 1.26, torso * 0.36, rH * (b.belly ? 1.25 : 1.04)], top, G.torso, 0, false, cut);
-    for (const sh of [s.shoulderN, s.shoulderF]) cone(at(s.neck, C.fwd, -1 * k, C.up, -1 * k, C.lat, 0), sh, rC * 0.44, b.rUpper * k * 1.2, top, G.torso, -0.04, false, cut);
-    // The folds across a gi's front and the lapel's edge.
-    for (const f of [0.2, 0.45]) {
-      const y = at(s.waist, abdF.fwd, rH * 0.8, abdF.up, (f - 0.3) * torso, abdF.lat, rH * 0.6);
-      crease(y, at(y, abdF.fwd, 0, abdF.up, -2.5 * k, abdF.lat, -rH * 1.1), G.torso, 2);
-      lift(at(y, abdF.fwd, 0, abdF.up, 1 * k, abdF.lat, 0), at(y, abdF.fwd, 0, abdF.up, -1.5 * k, abdF.lat, -rH * 1.1), G.torso);
+    const cut: Clip = p => (look.vNeck ? inV(p) : false) || tank(p);
+    const loose = look.sleeves === 'none' ? 1.03 : 1.1;
+    ell(at(s.chest, C.fwd, rC * 0.1, C.up, torso * 0.03, C.lat, 0), frameAxes(C), [rC * 1.06 * loose, torso * 0.42, rC * 0.82 * loose], top, G.torso, 0, false, cut);
+    ell(s.waist, frameAxes(abdF), [rH * 1.2 * loose, torso * 0.38, rH * (b.belly ? 1.25 : 1.0) * loose], top, G.torso, 0, false, cut);
+    if (look.sleeves !== 'none') {
+      // The yoke over each shoulder.
+      ell(at(s.neck, C.fwd, -0.5 * k, C.up, -4 * k, C.lat, 0), frameAxes(C), [sw * 1.04, 5.4 * k, rC * 0.64], top, G.torso, 0, false, cut);
+      for (const sh of [s.shoulderN, s.shoulderF]) cone(at(s.neck, C.fwd, -1 * k, C.up, -1 * k, C.lat, 0), sh, rC * 0.42, b.rUpper * k * 1.22, top, G.torso, -0.04, false, cut);
     }
-    if (look.vNeck) {
-      const v0 = at(s.neck, C.fwd, rC * 0.75, C.up, -torso * 0.6, C.lat, 0);
-      crease(at(s.neck, C.fwd, rC * 0.2, C.up, -1 * k, C.lat, rC * 0.5), v0, G.torso, 1);
+    if (gi) {
+      // The lapels: a band of the cloth doubled along the V's edge, raised off the chest.
+      const lapel: Clip = p => inV(p) || !inV(p, 2.3 * k);
+      ell(at(s.chest, C.fwd, rC * 0.14, C.up, torso * 0.03, C.lat, 0), frameAxes(C), [rC * 1.1 * loose, torso * 0.44, rC * 0.88 * loose], top, G.torso, 0.06, true, lapel);
+      ell(at(s.waist, abdF.fwd, rH * 0.06, abdF.up, 0, abdF.lat, 0), frameAxes(abdF), [rH * 1.24 * loose, torso * 0.4, rH * 1.06 * loose], top, G.torso, 0.06, true, lapel);
+      // The jacket's skirt below the belt, split at the front.
+      const sk = at(s.hip, H.fwd, 0, H.up, -1.5 * k, H.lat, 0);
+      ell(sk, frameAxes(H), [rH * 1.36, 9 * k, rH * 1.2], top, G.torso, -0.02, true, p => {
+        const q = local(p, s.hip, H);
+        return q.u > rH * 0.6 || q.u < -6.5 * k - Math.sin(round(p, s.hip, frameAxes(H)) * 3) * 0.7 * k || (q.f > 0 && Math.abs(q.l - 0.6 * k) < 1.2 * k - q.u * 0.22);
+      });
+    } else {
+      // Folds across a shirt's front.
+      for (const f of [0.2, 0.45]) {
+        const y = at(s.waist, abdF.fwd, rH * 0.8, abdF.up, (f - 0.3) * torso, abdF.lat, rH * 0.6);
+        crease(y, at(y, abdF.fwd, 0, abdF.up, -2.5 * k, abdF.lat, -rH * 1.1), G.torso, 2);
+        lift(at(y, abdF.fwd, 0, abdF.up, 1 * k, abdF.lat, 0), at(y, abdF.fwd, 0, abdF.up, -1.5 * k, abdF.lat, -rH * 1.1), G.torso);
+      }
     }
   }
   // Pelvis cover: trunks, shorts and trousers all begin here.
@@ -375,13 +444,13 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
   if (look.belt) {
     const belt = r.material(look.belt);
     const bc = at(s.hip, H.fwd, 0, H.up, rH * 0.62, H.lat, 0);
-    ell(bc, frameAxes(H), [rH * 1.2, rH * 0.5, rH * 1.02], belt, G.torso, 0, true, p => Math.abs(local(p, bc, H).u) > 1.8 * k);
+    ell(bc, frameAxes(H), [rH * (gi ? 1.34 : 1.2), rH * 0.5, rH * (gi ? 1.16 : 1.02)], belt, G.torso, 0, true, p => Math.abs(local(p, bc, H).u) > 2 * k);
     if (style === 'gi') {
-      const knot = at(bc, H.fwd, rH * 1.0, H.up, 0, H.lat, rH * 0.25);
-      ell(knot, frameAxes(H), [1.9 * k, 1.6 * k, 1.3 * k], belt, G.torso, 0.1, true);
-      for (const [o, l] of [[-0.6, 10], [0.7, 9]] as const) {
+      const knot = at(bc, H.fwd, rH * 1.12, H.up, 0, H.lat, rH * 0.2);
+      ell(knot, frameAxes(H), [2.1 * k, 1.8 * k, 1.4 * k], belt, G.torso, 0.1, true);
+      for (const [o, l] of [[-0.6, 11], [0.7, 9.5]] as const) {
         const d = hang(o * 0.3 - 0.1);
-        cone(knot, add(add(knot, d, l * k), H.lat, o * 2 * k), 1.15 * k, 1.05 * k, belt, G.torso, 0.05, true);
+        cone(knot, add(add(knot, d, l * k), H.lat, o * 2 * k), 1.25 * k, 1.15 * k, belt, G.torso, 0.05, true);
       }
     }
   }
@@ -428,28 +497,31 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
   const hand = (e: V3, h: V3, g: number, bias: number, side: 1 | -1) => {
     const u = norm(sub(h, e));
     const boxing = extras.has('boxing');
-    const fr = b.rFist * k * (boxing ? 1.5 : 1);
+    const fr = b.rFist * k * (boxing ? 1.35 : 1);
     const [, n, bn] = along(u, [0, 0, side]);
     if (boxing) {
       ell(add(h, u, fr * 0.35), [u, n, bn], [fr * 1.1, fr * 0.95, fr * 0.9], gloves, g, bias + 0.05, true);
       cone(add(h, u, -fr * 0.55), add(h, u, -fr * 0.9), fr * 0.75, fr * 0.7, r.material('#f4f0e8'), g, bias, true);
       return;
     }
+    // A fighter's mitt covers the back of the hand and the wrist and leaves the fingers bare.
+    const mitt = look.gloves ? gloves : 0;
     if (pose.hand === 'open') {
       // A flat palm, the fingers together, the thumb splayed.
-      ell(add(h, u, fr * 0.25), [u, n, bn], [fr * 0.95, fr * 0.42, fr * 0.8], gloves, g, bias, true);
-      cone(add(h, u, fr * 0.9), add(h, u, fr * 1.9), fr * 0.5, fr * 0.36, skin, g, bias, true);
+      ell(add(h, u, fr * 0.25), [u, n, bn], [fr * 0.95, fr * 0.46, fr * 0.84], mitt || skin, g, bias, true);
+      cone(add(h, u, fr * 0.9), add(h, u, fr * 1.9), fr * 0.52, fr * 0.38, skin, g, bias, true);
       cone(at(h, u, fr * 0.1, n, 0, bn, fr * 0.55), at(h, u, fr * 0.8, n, fr * 0.2, bn, fr * 0.95), fr * 0.3, fr * 0.24, skin, g, bias, true);
       return;
     }
     // A closed fist: the block of fingers, the knuckle ridge, the thumb wrapped across.
     const fc = add(h, u, fr * 0.35);
-    ell(fc, [u, n, bn], [fr * 1.0, fr * 0.9, fr * 0.82], gloves, g, bias + 0.03, true);
+    ell(fc, [u, n, bn], [fr * 1.0, fr * 0.92, fr * 0.84], skin, g, bias + 0.03, true);
+    if (mitt) ell(add(fc, u, -fr * 0.22), [u, n, bn], [fr * 0.9, fr * 1.0, fr * 0.92], mitt, g, bias + 0.03, true, p => dot(sub(p, fc), u) > fr * 0.28);
     for (const o of [-0.45, 0, 0.45]) {
-      const kn = at(fc, u, fr * 0.75, n, 0, bn, o * fr);
-      crease(kn, at(kn, u, -fr * 0.5, n, -fr * 0.5, bn, 0), g, 1);
+      const kn = at(fc, u, fr * 0.78, n, 0, bn, o * fr);
+      crease(kn, at(kn, u, -fr * 0.4, n, -fr * 0.5, bn, 0), g, 1);
     }
-    cone(at(fc, u, -fr * 0.2, n, fr * 0.15, bn, fr * 0.8 * side), at(fc, u, fr * 0.55, n, fr * 0.3, bn, fr * 0.45 * side), fr * 0.36, fr * 0.3, gloves === skin ? skin : gloves, g, bias + 0.08, true);
+    cone(at(fc, u, -fr * 0.2, n, fr * 0.15, bn, fr * 0.8 * side), at(fc, u, fr * 0.55, n, fr * 0.3, bn, fr * 0.45 * side), fr * 0.36, fr * 0.3, skin, g, bias + 0.08, true);
   };
 
   const arm = (sh: V3, el: V3, hd: V3, side: 1 | -1) => {
@@ -463,15 +535,18 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
     const front = len(sub(fa, scale(ua, dot(fa, ua)))) > 0.2 ? fa : add(norm(cross(ua, [0, 0, side])), [0, 0, 0]);
     const ax = along(ua, front);
     const lU = len(sub(el, sh));
-    cone(sh, el, rU * 0.95, rF * 1.0, skin, g, bias);
-    ell(add(add(sh, ua, lU * 0.5), ax[1], rU * 0.32), ax, [lU * 0.34, rU * 0.82, rU * 0.85], skin, g, bias + 0.02, true);
-    ell(add(add(sh, ua, lU * 0.45), ax[1], -rU * 0.35), ax, [lU * 0.36, rU * 0.8, rU * 0.82], skin, g, bias, true);
+    cone(sh, el, rU * 0.95, rF * 0.92, skin, g, bias);
+    ell(add(add(sh, ua, lU * 0.52), ax[1], rU * 0.34), ax, [lU * 0.34, rU * 0.84, rU * 0.86], skin, g, bias + 0.02, true);
+    ell(add(add(sh, ua, lU * 0.45), ax[1], -rU * 0.36), ax, [lU * 0.38, rU * 0.82, rU * 0.84], skin, g, bias, true);
     // The deltoid caps the shoulder.
-    ell(add(sh, ua, rU * 0.45), along(ua, C.lat.map(x => x * side) as V3), [rU * 1.3, rU * 1.22, rU * 1.12], skin, g, bias + 0.02, true);
+    const dax = along(ua, C.lat.map(x => x * side) as V3);
+    ell(add(sh, ua, rU * 0.4), dax, [rU * 1.36, rU * 1.3, rU * 1.2], skin, g, bias + 0.02, true);
     const lF = len(sub(hd, el));
     const fax = along(fa, ax[1]);
-    cone(el, hd, rF * 1.0, rF * 0.68, skin, g, bias);
-    ell(add(add(el, fa, lF * 0.27), fax[1], rF * 0.12), fax, [lF * 0.33, rF * 1.08, rF * 0.98], skin, g, bias + 0.02, true);
+    // The forearm: thick below the elbow, narrowing to the wrist.
+    cone(el, add(el, fa, lF * 0.45), rF * 1.0, rF * 1.04, skin, g, bias);
+    cone(add(el, fa, lF * 0.45), hd, rF * 1.04, rF * 0.66, skin, g, bias);
+    ell(add(add(el, fa, lF * 0.3), fax[1], rF * 0.14), fax, [lF * 0.34, rF * 1.1, rF * 1.0], skin, g, bias + 0.02, true);
     if (top && look.sleeves === 'long') {
       cone(sh, el, rU * 1.14, rF * 1.2, top, g, bias);
       cone(el, add(hd, fa, -rF * 1.2), rF * 1.2, rF * 1.1, top, g, bias);
@@ -483,6 +558,10 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
       cone(add(sh, ua, -rU * 0.2), end, rU * 1.32, rU * 1.36, top, g, bias);
       crease(at(sh, ua, lU * 0.4, ax[1], rU * 1.5, ax[2], 0), at(sh, ua, lU * 0.52, ax[1], -rU * 1.5, ax[2], 0), g, 2);
       lift(at(sh, ua, lU * 0.4 - 1.2 * k, ax[1], rU * 1.4, ax[2], 0), at(sh, ua, lU * 0.52 - 1.2 * k, ax[1], -rU * 1.4, ax[2], 0), g);
+    } else if (top && look.sleeves === 'torn') {
+      // A sleeve ripped off at the shoulder: a ragged cuff of cloth over the deltoid.
+      const o = add(sh, ua, -rU * 0.5);
+      cone(o, add(sh, ua, lU * 0.5), rU * 1.42, rU * 1.4, top, g, bias + 0.02, true, p => dot(sub(p, sh), ua) > lU * 0.12 + Math.sin(round(p, sh, dax) * 4 + side) * 1.4 * k);
     }
     if (bands) {
       cone(add(hd, fa, -rF * 1.9), add(hd, fa, -rF * 0.5), rF * 0.95, rF * 0.85, bands, g, bias + 0.05, true);
@@ -491,7 +570,7 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
         for (const o of [-1, 1]) ell(at(hd, fa, -rF * 1.2, fax[1], o * rF * 1.0, fax[2], 0), fax, [0.8 * k, 0.8 * k, 0.8 * k], sp, g, 0.3);
       }
     }
-    if (look.gloves && !extras.has('boxing')) cone(add(hd, fa, -rF * 1.1), hd, rF * 0.8, rF * 0.75, gloves, g, bias + 0.03, true);
+    if (look.gloves && !extras.has('boxing')) cone(add(hd, fa, -rF * 1.5), add(hd, fa, -rF * 0.2), rF * 0.82, rF * 0.78, gloves, g, bias + 0.03, true);
     hand(el, hd, g, bias, side);
     if (extras.has('claw') && side < 0) {
       // The claw is on the lead hand, which is the far one.
@@ -515,38 +594,50 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
     const lT = len(sub(kn, hp));
     const lS = len(sub(an, kn));
     const skinLegs = style === 'trunks' || style === 'mawashi' || style === 'shorts';
+    const trousers = style === 'gi' || style === 'cargo';
     // Under trousers the leg's own masses take the cloth's colour, so no skin shows through a fold.
-    const legMat = style === 'gi' || style === 'cargo' || style === 'tight' ? pants : skin;
+    const legMat = trousers || style === 'tight' ? pants : skin;
     cone(hp, kn, rT * 1.05, rS * 1.02, legMat, g, bias);
     ell(add(add(hp, ut, lT * 0.45), tax[1], rT * 0.25), tax, [lT * 0.42, rT * 0.9, rT * 0.92], legMat, g, bias + 0.02, true);
     ell(add(kn, tax[1], rS * 0.55), sax, [rS * 0.6, rS * 0.55, rS * 0.6], legMat, g, bias + 0.04, true);
-    cone(kn, an, rS * 0.95, rS * 0.6, legMat, g, bias);
-    ell(add(add(kn, us, lS * 0.3), sax[1], -rS * 0.42), sax, [lS * 0.32, rS * 0.85, rS * 0.85], legMat, g, bias + 0.02, true);
-    // Feet: a heel and a long wedge to the toes.
+    // The shin stays skin under a trouser's hem, where the ankle shows.
+    cone(kn, an, rS * 0.95, rS * 0.62, trousers ? skin : legMat, g, bias);
+    ell(add(add(kn, us, lS * 0.3), sax[1], -rS * 0.42), sax, [lS * 0.32, rS * 0.85, rS * 0.85], trousers ? skin : legMat, g, bias + 0.02, true);
+    // Feet: the heel, the long wedge of the instep, and the toes splayed on the floor.
     const fu = norm(sub(toe, an));
     const fax = along(fu, scale(us, -1));
     const fl = len(sub(toe, an));
     const footMat = shoes || skin;
-    ell(add(an, fu, -rS * 0.15), fax, [rS * 0.65, rS * 0.65, rS * 0.6], footMat, g, bias, true);
-    ell(add(add(an, fu, fl * 0.45), fax[1], -rS * 0.1), fax, [fl * 0.62, rS * 0.5, rS * 0.62], footMat, g, bias + 0.02, true);
-    if (!shoes) crease(add(an, fu, fl * 0.8), add(add(an, fu, fl * 0.8), fax[1], rS * 0.5), g, 1);
+    ell(at(an, fu, -fl * 0.1, fax[1], -rS * 0.12, fax[2], 0), fax, [rS * 0.78, rS * 0.7, rS * 0.7], footMat, g, bias, true);
+    ell(at(an, fu, fl * 0.46, fax[1], -rS * 0.26, fax[2], 0), fax, [fl * 0.56, rS * 0.5, rS * 0.8], footMat, g, bias + 0.02);
+    ell(at(an, fu, fl * 0.92, fax[1], -rS * 0.42, fax[2], 0), fax, [fl * 0.2, rS * 0.34, rS * 0.86], footMat, g, bias + 0.03, !shoes);
+    if (!shoes) {
+      for (const o of [-0.35, 0.2]) crease(at(an, fu, fl * 0.86, fax[1], -rS * 0.2, fax[2], o * rS), at(an, fu, fl * 1.08, fax[1], -rS * 0.6, fax[2], o * rS), g, 1);
+    }
     if (shoes) {
       // Boots climb the shin; a sole underneath.
-      const tall = style === 'trunks' ? 0.5 : style === 'gi' ? 0.15 : 0.32;
+      const tall = style === 'trunks' ? 0.5 : trousers ? 0.15 : 0.32;
       cone(add(kn, us, lS * (1 - tall) - rS * 0.3), an, rS * 0.98, rS * 0.78, shoes, g, bias + 0.03);
       crease(add(add(an, fax[1], -rS * 0.6), fu, -rS * 0.5), add(add(an, fax[1], -rS * 0.55), fu, fl * 1.05), g, 3);
     }
-    if (style === 'gi' || style === 'cargo') {
-      // Trousers: wider than the leg, flaring to the ankle, folded where they bunch.
+    if (trousers) {
+      // Trousers: full at the thigh, drawn in at the knee, flaring to a hem cut off above the ankle.
       const wide = style === 'gi' ? 1.5 : 1.34;
-      cone(add(hp, ut, -rT * 0.3), kn, rT * 1.16, rS * wide * 1.02, pants, g, bias);
-      const hem = add(an, us, -rS * (shoes ? 1.6 : 0.4));
-      cone(kn, hem, rS * wide, rS * wide * 1.08, pants, g, bias);
-      // A few diagonal folds pulled from the knee, the way cloth hangs from it.
-      crease(at(hp, ut, lT * 0.55, tax[1], rT * 0.9, tax[2], 0), at(hp, ut, lT * 0.85, tax[1], -rT * 0.2, tax[2], 0), g, 1);
-      for (const [f, d] of [[0.3, 2], [0.62, 1]] as const) {
-        const a = at(kn, us, lS * f, sax[1], -rS * wide * 0.9, sax[2], 0);
-        const c = at(kn, us, lS * f - rS * 1.4, sax[1], rS * wide * 0.3, sax[2], 0);
+      const hemAt = lS * (shoes ? 0.7 : 0.8);
+      const mid = add(hp, ut, lT * 0.5);
+      cone(add(hp, ut, -rT * 0.3), mid, rT * 1.2, rT * 1.2, pants, g, bias);
+      cone(mid, kn, rT * 1.2, rS * wide * 0.96, pants, g, bias);
+      ell(add(kn, tax[1], rS * 0.4), sax, [rS * wide * 0.8, rS * wide * 0.86, rS * wide * 0.9], pants, g, bias + 0.02);
+      cone(kn, add(kn, us, lS), rS * wide * 0.96, rS * wide * 1.16, pants, g, bias, false, p => dot(sub(p, kn), us) > hemAt + Math.sin(round(p, kn, sax) * 3 + side * 2) * 0.8 * k);
+      // The hem's dark mouth, where the cloth stands off the shin.
+      const hm = add(kn, us, hemAt);
+      crease(at(hm, us, 0.6 * k, sax[1], -rS * wide * 1.1, sax[2], 0), at(hm, us, 0.6 * k, sax[1], rS * wide * 1.1, sax[2], 0), g, 2);
+      // Folds: one pulled across the thigh from the hip, two hanging off the knee.
+      crease(at(hp, ut, lT * 0.5, tax[1], rT * 1.0, tax[2], 0), at(hp, ut, lT * 0.82, tax[1], -rT * 0.3, tax[2], 0), g, 1);
+      lift(at(hp, ut, lT * 0.5 + 1.2 * k, tax[1], rT * 1.0, tax[2], 0), at(hp, ut, lT * 0.82 + 1.2 * k, tax[1], -rT * 0.3, tax[2], 0), g);
+      for (const [f, d] of [[0.26, 2], [0.52, 1]] as const) {
+        const a = at(kn, us, lS * f, sax[1], -rS * wide * 0.95, sax[2], 0);
+        const c = at(kn, us, lS * f - rS * 1.5, sax[1], rS * wide * 0.35, sax[2], 0);
         crease(a, c, g, d);
         lift(add(a, us, 1.2 * k), add(c, us, 1.2 * k), g);
       }
@@ -609,19 +700,29 @@ function drawHead(
     const q = t.local(p, C, F);
     return { f: q.f / hr, u: q.u / hr, l: q.l / hr };
   };
+  /** An ellipsoid on the head, its radii in head radii (across, up, forward). */
+  const blob = (c: V3, a: number, u: number, f: number, mat: number, grp: number, bias = 0, sep = false, clip?: (p: V3) => boolean) => t.ell(c, axes, [hr * a, hr * u, hr * f], mat, grp, bias, sep, clip);
   const { skin, hair, accent } = m;
-  // The skull, the face's mass forward and low, the jaw and chin, the brow ridge, cheekbones, nose and ear.
-  t.ell(hp(-0.12, 0.18), axes, [hr * 0.86, hr * 0.94, hr * 1.0], skin, g);
-  t.ell(hp(0.32, -0.36), axes, [hr * 0.72, hr * 0.66, hr * 0.7], skin, g);
-  t.ell(hp(0.5, -0.74), axes, [hr * 0.36, hr * 0.26, hr * 0.32], skin, g, 0.02, true);
-  t.ell(hp(0.76, 0.2), axes, [hr * 0.6, hr * 0.2, hr * 0.26], skin, g, 0.06, true);
-  for (const sd of [1, -1]) t.ell(hp(0.62, -0.12, sd * 0.4), axes, [hr * 0.26, hr * 0.18, hr * 0.22], skin, g, 0.06, true);
-  t.cone(hp(0.92, 0.06), hp(1.12, -0.24), hr * 0.12, hr * 0.17, skin, g, 0.08, true);
-  t.ell(hp(-0.08, -0.02, 0.84), axes, [hr * 0.16, hr * 0.3, hr * 0.22], skin, g, -0.04, true);
+  const fc = look.face ?? {};
+  const jaw = fc.jaw ?? 1;
+  const chin = fc.chin ?? 1;
+  const brow = fc.brow ?? 1;
+  const nose = fc.nose ?? 1;
+  /** Hair takes the light late: a dark mass with a sheen on top, not a grey cap. */
+  const HAIR = -0.26;
   const dark = r.material('#14100c');
   const white = r.material('#f4f0ec');
   const face = pose.face ?? 'calm';
   const style = look.hairStyle;
+
+  // The skull, the face hung under its front, a chin that sits back from the brow, the brow ridge, cheekbones, nose and ear.
+  blob(hp(-0.08, 0.22), 0.84, 0.84, 0.95, skin, g);
+  blob(hp(0.2, -0.28), 0.72 * jaw, 0.64, 0.64, skin, g);
+  blob(hp(0.34, -0.72 - (chin - 1) * 0.1), 0.44 * jaw, 0.27 * chin, 0.36, skin, g, 0.02);
+  if (!fc.soft) blob(hp(0.66, 0.12), 0.62, 0.15 * brow, 0.25 + (brow - 1) * 0.07, skin, g, 0.05, true);
+  for (const sd of [1, -1]) blob(hp(0.52, -0.18, sd * 0.42 * jaw), 0.26, 0.18, 0.24, skin, g, 0.05);
+  t.cone(hp(0.84, 0.0), hp(1.0 + (nose - 1) * 0.12, -0.27), hr * 0.09 * nose, hr * 0.15 * nose, skin, g, 0.08, true);
+  blob(hp(-0.1, -0.06, 0.8 * Math.max(1, jaw * 0.96)), 0.14, 0.26, 0.2, skin, g, -0.04, true);
 
   // Hair: a shell over the skull, cut at a hairline that sits high on the brow and low at the nape.
   const hairline = (lowAtBack: number, frontAt: number) => (p: V3) => {
@@ -629,115 +730,141 @@ function drawHead(
     const line = q.f > 0 ? frontAt - q.f * 0.1 : frontAt + q.f * lowAtBack;
     return q.u < line || (q.l > 0.62 && q.u < 0.25 && q.f > -0.35);
   };
-  const cap = (grow: number, lowAtBack = 0.75, frontAt = 0.36, mat = hair) => t.ell(hp(-0.14, 0.22), axes, [hr * 0.92 * grow, hr * 1.0 * grow, hr * 1.06 * grow], mat, hg, 0, true, hairline(lowAtBack, frontAt));
+  const cap = (grow: number, lowAtBack = 0.75, frontAt = 0.36, mat = hair) => blob(hp(-0.14, 0.22), 0.92 * grow, 1.0 * grow, 1.06 * grow, mat, hg, HAIR, true, hairline(lowAtBack, frontAt));
   const spike = (f: number, u: number, l: number, out: V3, length: number, r0 = 0.32) => {
     const a = hp(f, u, l);
-    t.cone(a, add(a, norm(out), length * hr), r0 * hr, 0.06 * hr, hair, hg, 0.02, true);
+    t.cone(a, add(a, norm(out), length * hr), r0 * hr, 0.06 * hr, hair, hg, HAIR + 0.04, true);
   };
+  /** A direction in the head's frame. */
+  const hd = (f: number, u: number, l = 0): V3 => add(add(scale(F.fwd, f), F.up, u), F.lat, l);
   switch (style) {
     case 'spiky': {
-      cap(1.07);
-      // Short tufts swept up and back from the crown, a clump falling over the brow.
+      cap(1.1, 0.8, 0.4);
+      // Tufts thrown up and back off the crown, and a ragged fringe over the band.
       for (const [f, u, l, bf, bu, n] of [
-        [0.45, 0.62, 0.15, 0.6, 0.5, 0.45],
-        [0.2, 0.84, 0.3, 0.1, 1, 0.5],
-        [-0.15, 0.9, 0.1, -0.4, 1, 0.55],
-        [-0.5, 0.72, 0.3, -0.9, 0.6, 0.55],
-        [-0.8, 0.35, 0.2, -1, 0, 0.45],
-        [0.0, 0.88, -0.35, -0.1, 1, 0.45],
-        [-0.45, 0.7, -0.35, -0.8, 0.7, 0.45]
+        [0.5, 0.74, 0.2, 0.9, 0.5, 0.42],
+        [0.25, 0.92, 0.3, 0.3, 1, 0.5],
+        [-0.1, 1.0, 0.1, -0.2, 1, 0.55],
+        [-0.45, 0.9, 0.3, -0.7, 0.8, 0.6],
+        [-0.8, 0.6, 0.2, -1, 0.4, 0.55],
+        [-0.95, 0.2, 0.15, -1, -0.1, 0.5],
+        [0.05, 0.98, -0.3, 0, 1, 0.45],
+        [-0.5, 0.86, -0.3, -0.8, 0.7, 0.5]
       ] as const)
-        spike(f, u, l, add(add(scale(F.fwd, bf), F.up, bu), F.lat, l * 0.5), n, 0.3);
+        spike(f, u, l, hd(bf, bu, l * 0.5), n, 0.34);
+      for (const l of [-0.2, 0.15, 0.45]) spike(0.62, 0.56, l, hd(0.9, -0.5, l * 0.3), 0.34, 0.24);
       break;
     }
     case 'blond': {
-      cap(1.08, 0.95);
-      for (const [f, u, l] of [[0.55, 0.62, 0.2], [0.2, 0.85, 0.35], [0.6, 0.45, -0.2]] as const) spike(f, u, l, add(scale(F.fwd, 0.9), F.up, -0.15), 0.55, 0.3);
-      spike(-0.5, 0.5, 0.5, add(scale(F.fwd, -0.6), F.up, -0.8), 0.6, 0.35);
+      // A full head of hair swept back off the brow and down over the collar.
+      cap(1.13, 1.05, 0.34);
+      blob(hp(-0.5, 0.36), 0.86, 0.86, 0.8, hair, hg, HAIR, true);
+      for (const [f, u, l] of [[0.62, 0.7, 0.2], [0.5, 0.84, -0.1], [0.64, 0.56, 0.5]] as const) spike(f, u, l, hd(0.9, 0.1, l * 0.4), 0.5, 0.3);
+      for (const [f, u, l, n] of [[-0.7, -0.1, 0.4, 0.8], [-0.9, 0.1, 0, 0.9], [-0.6, -0.3, -0.3, 0.7]] as const) spike(f, u, l, hd(-0.7, -0.8, l * 0.3), n, 0.36);
       break;
     }
     case 'buns': {
-      cap(1.05);
+      cap(1.06, 0.7, 0.42);
+      // A fringe, a lock in front of each ear, and the two buns in their silk covers.
+      for (const l of [-0.3, 0.1, 0.45]) spike(0.66, 0.6, l, hd(0.7, -0.75, l * 0.2), 0.36, 0.26);
+      t.cone(hp(0.3, 0.2, 0.74), hp(0.36, -0.5, 0.7), hr * 0.16, hr * 0.08, hair, hg, HAIR, true);
       for (const sd of [1, -1]) {
-        const bc = hp(-0.15, 0.78, sd * 0.62);
-        t.ell(bc, axes, [hr * 0.38, hr * 0.38, hr * 0.38], hair, hg, 0.05, true);
-        t.ell(add(bc, F.up, -hr * 0.12), axes, [hr * 0.42, hr * 0.16, hr * 0.42], accent, hg, 0.15, true);
+        const bc = hp(-0.2, 0.92, sd * 0.66);
+        blob(bc, 0.42, 0.4, 0.42, accent, hg, 0.08, true);
+        blob(add(bc, F.up, -hr * 0.3), 0.3, 0.14, 0.3, hair, hg, HAIR, true);
+        t.cone(add(bc, F.fwd, -hr * 0.3), add(add(bc, F.fwd, -hr * 0.5), t.hang(0.5), hr * 0.9), hr * 0.09, hr * 0.07, accent, hg, 0.05, true);
       }
       break;
     }
     case 'mohawk': {
-      for (let i = 0; i <= 6; i++) {
-        const a = -1.1 + i * 0.32;
-        const p = hp(Math.sin(a) * 0.98 - 0.12, Math.cos(a) * 1.0 + 0.22, 0);
-        t.ell(p, axes, [hr * 0.2, hr * 0.3, hr * 0.26], hair, hg, 0.05, true);
+      for (let i = 0; i <= 7; i++) {
+        const a = -1.2 + i * 0.3;
+        blob(hp(Math.sin(a) * 0.98 - 0.1, Math.cos(a) * 0.98 + 0.24, 0), 0.2, 0.34, 0.26, hair, hg, HAIR + 0.1, true);
       }
-      // The beard round the jaw, the brows.
-      t.ell(hp(0.38, -0.55), axes, [hr * 0.76, hr * 0.55, hr * 0.72], hair, hg, 0, true, p => hl(p).u > -0.25 + Math.max(0, hl(p).f - 0.6) * 0.5);
       break;
     }
     case 'bald': {
       const red = r.material('#d82424');
-      for (const sd of [-0.2, 0, 0.2]) t.mark(hp(0.86, 0.6, sd), red, 2, g);
+      for (const sd of [-0.22, 0, 0.22]) t.mark(hp(0.82, 0.62, sd + 0.1), red, 2, g);
+      // A ring in the ear.
+      blob(hp(-0.1, -0.34, 0.86), 0.1, 0.12, 0.06, r.material('#e8c040'), hg, 0.2, true);
       break;
     }
     case 'topknot': {
-      cap(1.04, 0.9);
-      t.ell(hp(-0.3, 1.0), axes, [hr * 0.22, hr * 0.34, hr * 0.45], hair, hg, 0.05, true);
-      t.cone(hp(-0.25, 0.9), hp(0.25, 1.2), hr * 0.22, hr * 0.15, hair, hg, 0.05, true);
+      // Oiled back tight off the brow into a folded knot on the crown.
+      cap(1.04, 0.45, 0.5);
+      blob(hp(-0.2, 1.3), 0.28, 0.2, 0.5, hair, hg, HAIR + 0.1, true);
+      blob(hp(-0.62, 1.12), 0.26, 0.28, 0.26, hair, hg, HAIR, true);
       break;
     }
     case 'mane': {
-      cap(1.1, 1.0, 0.3);
-      for (const [f, u, l, bf, bu] of [
-        [-0.2, 0.9, 0, -0.4, 1],
-        [-0.7, 0.6, 0.2, -1, 0.5],
-        [-0.9, 0, 0.3, -1, -0.3],
-        [-0.6, -0.5, 0.3, -0.7, -1],
-        [0.3, 0.8, 0.2, 0.4, 1],
-        [-0.3, 0.4, 0.75, -0.4, 0.2]
+      cap(1.12, 1.0, 0.3);
+      for (const [f, u, l, bf, bu, n] of [
+        [0.3, 0.9, 0.2, 0.5, 1, 0.9],
+        [-0.1, 1.0, 0, -0.1, 1, 1.1],
+        [-0.5, 0.86, 0.25, -0.6, 0.9, 1.1],
+        [-0.85, 0.5, 0.2, -1, 0.5, 1.0],
+        [-0.95, 0.0, 0.3, -1, -0.1, 0.9],
+        [-0.7, -0.45, 0.3, -0.8, -0.8, 0.9],
+        [-0.3, 0.5, 0.8, -0.4, 0.4, 0.7],
+        [0.1, 0.95, -0.4, 0.1, 1, 0.9],
+        [-0.6, 0.7, -0.4, -0.8, 0.8, 1.0]
       ] as const)
-        spike(f, u, l, add(add(scale(F.fwd, bf), F.up, bu), F.lat, l * 0.4), 0.9, 0.42);
+        spike(f, u, l, hd(bf, bu, l * 0.4), n, 0.44);
       break;
     }
     case 'flattop': {
-      cap(1.03, 0.6, 0.42);
-      t.ell(hp(-0.05, 0.95), axes, [hr * 0.86, hr * 0.62, hr * 1.0], hair, hg, 0.05, true, p => hl(p).u > 1.35 || hl(p).u < 0.45);
+      cap(1.03, 0.5, 0.44);
+      // A block of hair standing straight up, cut dead level.
+      blob(hp(0.02, 0.95), 0.84, 0.75, 0.98, hair, hg, HAIR + 0.12, true, p => hl(p).u > 1.48 || hl(p).u < 0.5);
       break;
     }
     case 'short':
-      cap(1.03, 0.6, 0.42);
+      cap(1.04, 0.45, 0.52);
       break;
     case 'mask': {
-      cap(1.05, 1.1);
-      t.cone(hp(-0.8, 0.1), add(hp(-0.9, -0.2), t.hang(0.6), hr * 1.8), hr * 0.3, hr * 0.16, hair, hg, 0, true);
-      // The white mask over the face, its eye slits cut dark.
-      t.ell(hp(0.32, -0.12), axes, [hr * 0.82, hr * 0.92, hr * 0.85], accent, hg, 0.12, true, p => hl(p).f < 0.05);
+      cap(1.06, 1.1, 0.4);
+      // A plait down the back.
+      const root = hp(-0.9, 0.1);
+      const d = t.hang(0.5);
+      for (let i = 0; i < 5; i++) blob(add(root, d, i * hr * 0.42), 0.2 - i * 0.015, 0.26, 0.2 - i * 0.015, hair, hg, HAIR + (i % 2) * 0.1, true);
+      // The mask: a white shell over the face, a slit for each eye and a painted mouth.
+      blob(hp(0.3, -0.2), 0.78, 0.86, 0.72, accent, hg, 0.1, true, p => hl(p).f < 0.12 || hl(p).u > 0.36);
       break;
     }
     case 'patch': {
-      t.cone(hp(-0.6, 0.6, 0.7), hp(0.75, 0.1, 0.45), hr * 0.08, hr * 0.08, accent, hg, 0, true);
-      t.ell(hp(0.85, 0.02, 0.3), axes, [hr * 0.22, hr * 0.2, hr * 0.12], accent, hg, 0.1, true);
+      // The strap over the bare skull, and the patch on the far eye.
+      blob(hp(-0.08, 0.22), 0.86, 0.86, 0.97, accent, hg, 0, true, p => {
+        const q = hl(p);
+        return Math.abs(q.u - 0.12 - q.f * 0.3 + q.l * 0.1) > 0.07;
+      });
+      blob(hp(0.8, -0.06, 0.32), 0.2, 0.17, 0.1, accent, hg, 0.05, true);
       break;
     }
     case 'cap': {
+      // A peaked military cap: the band, the crown rising to the front, the peak and a badge.
       const capMat = m.top || accent;
-      t.ell(hp(-0.08, 0.5), axes, [hr * 1.02, hr * 0.7, hr * 1.14], capMat, hg, 0, true, p => hl(p).u < 0.32);
-      t.ell(hp(0.7, 0.36), axes, [hr * 0.7, hr * 0.08, hr * 0.5], r.material('#1a1a1e'), hg, 0.1, true);
-      t.ell(hp(0.9, 0.7), axes, [hr * 0.18, hr * 0.16, hr * 0.06], accent, hg, 0.3, true);
+      blob(hp(-0.08, 0.52), 1.0, 0.36, 1.12, r.material('#1a1a1e'), hg, 0, true, p => hl(p).u < 0.34);
+      blob(hp(0.02, 0.92), 1.08, 0.5, 1.2, capMat, hg, 0, true, p => hl(p).u < 0.62);
+      blob(hp(0.86, 0.36), 0.62, 0.07, 0.42, r.material('#1a1a1e'), hg, 0.15, true);
+      blob(hp(0.98, 0.84), 0.16, 0.16, 0.06, accent, hg, 0.3, true);
       break;
     }
   }
   if (look.accent && style === 'spiky') {
     // The headband, its knot at the back and two long tails.
-    t.ell(hp(-0.12, 0.38), axes, [hr * 0.98, hr * 1.04, hr * 1.12], accent, hg, 0, true, p => {
+    blob(hp(-0.12, 0.38), 0.98, 1.04, 1.12, accent, hg, 0, true, p => {
       const q = hl(p);
-      const mid = 0.38 + q.f * 0.06;
-      return Math.abs(q.u - mid) > 0.13;
+      const mid = 0.4 + q.f * 0.06;
+      return Math.abs(q.u - mid) > 0.14;
     });
-    const knot = hp(-1.05, 0.34, 0.1);
-    for (const [back, l0] of [[0.7, 1.5], [0.3, 1.7]] as const) {
+    const knot = hp(-1.05, 0.36, 0.1);
+    blob(knot, 0.16, 0.16, 0.14, accent, hg, 0.05, true);
+    for (const [back, l0] of [[0.75, 1.7], [0.3, 1.9]] as const) {
       const d = t.hang(back);
-      t.cone(knot, add(add(knot, d, l0 * hr), F.lat, -0.2 * hr), hr * 0.13, hr * 0.12, accent, hg, 0.05, true);
+      const mid = add(add(knot, d, l0 * hr * 0.5), F.lat, -0.1 * hr);
+      t.cone(knot, mid, hr * 0.14, hr * 0.15, accent, hg, 0.05, true);
+      t.cone(mid, add(add(mid, t.hang(back + 0.3), l0 * hr * 0.5), F.lat, -0.1 * hr), hr * 0.15, hr * 0.12, accent, hg, 0.05, true);
     }
   }
   if (style === 'topknot' && m.extras.has('paint')) {
@@ -747,38 +874,77 @@ function drawHead(
       t.mark(hp(0.7, -0.2 - i * 0.03, 0.36 + i * 0.1), accent, 2, g);
     }
   }
+  if (fc.beard) {
+    // A full beard: a shell round the jaw from ear to ear, clear of the mouth.
+    blob(hp(0.2, -0.46), 0.78 * jaw, 0.6, 0.7, r.material(fc.beard), hg, HAIR + 0.1, true, p => {
+      const q = hl(p);
+      return q.u > -0.26 + Math.max(0, q.f - 0.55) * 0.5 || (q.f > 0.62 && q.u > -0.62 && Math.abs(q.l) < 0.2);
+    });
+  }
+  if (fc.moustache) blob(hp(0.8, -0.42), 0.3, 0.08, 0.12, r.material(fc.moustache), hg, HAIR + 0.1, true);
 
-  // The face: the brow, the eyes (white in front of a dark iris), the mouth.
+  // The face: a dark brow over each eye, the eye under it, the shadow under the nose, the mouth.
   const masked = style === 'mask';
+  const hairRgb = parseInt(look.hair.slice(1), 16);
+  const fair = ((hairRgb >> 16) & 255) + ((hairRgb >> 8) & 255) > 330;
+  const browMat = style === 'bald' || style === 'patch' ? r.material('#3a2418') : fc.beard ? r.material(fc.beard) : style === 'cap' ? dark : fair ? r.material('#6a4418') : hair;
+  /** How far forward the brow ridge stands, which the brow sits on. */
+  const ridge = 0.9 + (brow - 1) * 0.07;
   for (const sd of [1, -1]) {
-    const e = hp(0.84, 0.02, sd * 0.3);
-    if (style === 'patch' && sd > 0) continue;
+    const e = hp(0.82, -0.08, sd * 0.3);
     if (masked) {
-      t.mark(e, dark, 0, hg);
-      t.mark(add(e, F.fwd, k * 0.9), dark, 0, hg);
+      // The slit.
+      t.mark(hp(0.9, -0.02, sd * 0.3), dark, 0, hg);
+      t.mark(hp(0.9, -0.02, sd * 0.3 + 0.12), dark, 0, hg);
       continue;
     }
+    if (style === 'patch' && sd > 0) continue;
+    // The brow: a short dark bar, its inner end pulled down in a scowl.
+    const tilt = (fc.soft ? -0.1 : 0.22) * sd;
+    const bl = norm(add(scale(F.lat, Math.cos(tilt)), F.up, Math.sin(tilt)));
+    const bu = norm(add(scale(F.up, Math.cos(tilt)), F.lat, -Math.sin(tilt)));
+    t.ell(hp(fc.soft ? 0.86 : ridge - 0.02, fc.soft ? 0.16 : 0.08, sd * 0.31), [bl, bu, F.fwd], [hr * 0.22, hr * (fc.soft ? 0.05 : 0.075) * Math.min(1.4, brow), hr * 0.06], browMat, g, -0.3, false);
     if (face === 'hurt') {
       t.mark(e, dark, 0, g);
-      t.mark(add(e, F.fwd, k), dark, 0, g);
-      t.mark(add(add(e, F.fwd, -k), F.up, k), dark, 0, g);
+      t.mark(add(e, F.lat, k * 0.9), dark, 0, g);
+    } else if (fc.blank) {
+      t.mark(e, white, 4, g);
+      t.mark(add(e, F.lat, k * 0.9), white, 4, g);
     } else {
-      t.mark(add(e, F.fwd, k * 1.1), white, 3, g);
+      t.mark(add(e, F.lat, k * 0.95), white, 3, g);
       t.mark(e, dark, 0, g);
-      t.mark(add(e, F.up, -k * 0.9), dark, 0, g);
+      if (fc.soft) t.mark(add(e, F.up, k * 0.9), dark, 0, g);
     }
-    t.crease(hp(0.8, 0.22, sd * 0.12), hp(0.82, 0.18, sd * 0.5), g, 2);
   }
-  t.crease(hp(0.9, -0.25, 0.08), hp(0.84, -0.1, 0.3), g, 1);
-  const mouth = hp(0.86, -0.5, 0.08);
-  if (face === 'shout' || face === 'hurt') {
-    const red = r.material('#6a0e0e');
-    t.mark(mouth, red, 0, g);
-    t.mark(add(mouth, F.up, -k), red, 0, g);
-    t.mark(add(mouth, F.lat, k), red, 1, g);
-    t.mark(add(add(mouth, F.lat, k), F.up, -k), red, 0, g);
-    t.mark(add(mouth, F.up, k * 0.9), white, 3, g);
-  } else t.crease(hp(0.86, -0.5, -0.12), hp(0.86, -0.52, 0.28), g, 2);
+  if (!masked) {
+    // Under the nose, and the line from its wing down the cheek.
+    t.mark(hp(0.9, -0.36, 0.08), skin, 0, g);
+    if (!fc.soft) t.crease(hp(0.8, -0.34, 0.22), hp(0.72, -0.5, 0.36), g, 1);
+    const mouth = hp(0.8, -0.56, 0.1);
+    if (face === 'shout' || face === 'hurt') {
+      const red = r.material('#6a0e0e');
+      t.mark(mouth, red, 0, g);
+      t.mark(add(mouth, F.up, -k), red, 0, g);
+      t.mark(add(mouth, F.lat, k), red, 1, g);
+      t.mark(add(add(mouth, F.lat, k), F.up, -k), red, 0, g);
+      t.mark(add(mouth, F.up, k * 0.9), white, 3, g);
+    } else if (fc.soft) {
+      const lips = r.material('#c03848');
+      t.mark(mouth, lips, 1, g);
+      t.mark(add(mouth, F.lat, k), lips, 2, g);
+    } else {
+      t.mark(mouth, skin, 0, g);
+      t.mark(add(mouth, F.lat, k), skin, 0, g);
+      t.mark(add(mouth, F.lat, k * 2), skin, 1, g);
+    }
+    if (fc.fangs) {
+      t.mark(add(mouth, F.up, -k), white, 4, g);
+      t.mark(add(add(mouth, F.lat, k * 2), F.up, -k), white, 4, g);
+    }
+    if (fc.scar) t.crease(hp(0.78, 0.3, 0.5), hp(0.7, -0.3, 0.56), g, 2);
+  } else {
+    t.mark(hp(0.98, -0.5, 0.1), r.material('#c03848'), 1, hg);
+  }
   // The jaw's edge.
-  t.crease(hp(-0.15, -0.55, 0.7), hp(0.4, -0.88, 0.45), g, 1);
+  t.crease(hp(-0.1, -0.5, 0.68 * jaw), hp(0.3, -0.86, 0.42 * jaw), g, 1);
 }

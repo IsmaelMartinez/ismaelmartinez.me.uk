@@ -136,7 +136,7 @@ function skeleton(pose: Pose, b: Build, k: number): Skeleton {
   const chest = add(hip, chestF.up, torso * 0.66);
   const neck = add(hip, chestF.up, torso);
   const headLean = lean + pose.head;
-  const headF = frameOf(headLean, twist * 0.45 + 12);
+  const headF = frameOf(headLean, pose.headTwist ?? twist * 0.45 + 12);
   const head = add(neck, headF.up, (3.2 + b.head) * k);
   const sw = (b.rChest * 0.92 + b.rUpper * 0.35) * k;
   const shoulderN = at(neck, chestF.fwd, -0.5 * k, chestF.up, -3.2 * k, chestF.lat, sw);
@@ -307,25 +307,30 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
     r.ell3(W(c), [D(axes[0]), D(axes[1]), D(axes[2])], rad, m, g, bias, opt(sep, clip));
   const cone = (a: V3, c: V3, ra: number, rb: number, m: number, g: number, bias = 0, sep = false, clip?: Clip) => r.cone3(W(a), W(c), ra, rb, m, g, bias, opt(sep, clip));
   const frameAxes = (f: Frame): [V3, V3, V3] => [f.lat, f.up, f.fwd];
+  /** A line or a mark is a pixel wide on a sprite and grows with a portrait, so a close-up keeps the same drawing. */
+  const pen = Math.max(1, Math.round(k * 0.8));
   const crease = (a: V3, c: V3, g: number, depth = 1) => {
     const p = W(a);
     const q = W(c);
-    r.crease(p[0], p[1], q[0], q[1], g, depth);
+    for (let o = 0; o < pen; o++) r.crease(p[0], p[1] + o, q[0], q[1] + o, g, depth);
   };
   const lift = (a: V3, c: V3, g: number) => {
     const p = W(a);
     const q = W(c);
-    r.lift(p[0], p[1], q[0], q[1], g);
+    for (let o = 0; o < pen; o++) r.lift(p[0], p[1] + o, q[0], q[1] + o, g);
   };
   /** A face mark at a body-space point, drawn only where the surface there is the one it belongs to. */
   const mark = (p: V3, m: number, tone: number, g: number) => {
     const q = W(p);
-    const x = Math.round(q[0] - 0.5);
-    const y = Math.round(q[1] - 0.5);
-    if (x < 0 || y < 0 || x >= r.w || y >= r.h) return;
-    const i = y * r.w + x;
-    if (r.grp[i] !== g || r.zb[i] > q[2] + 2.2 * k) return;
-    r.dot(x, y, m, tone);
+    const x0 = Math.round(q[0] - pen / 2);
+    const y0 = Math.round(q[1] - pen / 2);
+    for (let y = y0; y < y0 + pen; y++)
+      for (let x = x0; x < x0 + pen; x++) {
+        if (x < 0 || y < 0 || x >= r.w || y >= r.h) continue;
+        const i = y * r.w + x;
+        if (r.grp[i] !== g || r.zb[i] > q[2] + 2.2 * k) continue;
+        r.dot(x, y, m, tone);
+      }
   };
 
   const skin = r.material(look.skin);
@@ -362,7 +367,8 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
   ell(at(s.hip, H.fwd, 0, H.up, 1 * k, H.lat, 0), frameAxes(H), [rH * 1.04, rH * 0.8, rH * 0.84], skin, G.torso);
   // Glutes behind.
   for (const sd of [1, -1]) ell(at(s.hip, H.fwd, -rH * 0.42, H.up, -0.5 * k, H.lat, sd * rH * 0.46), frameAxes(H), [rH * 0.58, rH * 0.66, rH * 0.52], skin, G.torso, -0.02, true);
-  ell(s.waist, frameAxes(abdF), [rH * 0.94, torso * 0.3, rH * 0.72], skin, G.torso);
+  const woman = !!look.face?.soft;
+  ell(s.waist, frameAxes(abdF), [rH * (woman ? 0.8 : 0.94), torso * 0.3, rH * (woman ? 0.64 : 0.72)], skin, G.torso);
   ell(s.chest, frameAxes(C), [rC * 0.98, torso * 0.34, rC * 0.68], skin, G.torso);
   // The shoulder girdle: the bar the arms hang from, which is what makes the chest read as broad.
   const sw = len(sub(s.shoulderN, s.shoulderF)) / 2;
@@ -404,9 +410,17 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
       return -q.u < torso * 0.2 && Math.abs(q.l) > rC * 0.5;
     };
     const cut: Clip = p => (look.vNeck ? inV(p) : false) || tank(p);
-    const loose = look.sleeves === 'none' ? 1.03 : 1.1;
+    const loose = look.sleeves === 'none' || woman ? 1.03 : 1.1;
     ell(at(s.chest, C.fwd, rC * 0.1, C.up, torso * 0.03, C.lat, 0), frameAxes(C), [rC * 1.06 * loose, torso * 0.42, rC * 0.82 * loose], top, G.torso, 0, false, cut);
-    ell(s.waist, frameAxes(abdF), [rH * 1.2 * loose, torso * 0.38, rH * (b.belly ? 1.25 : 1.0) * loose], top, G.torso, 0, false, cut);
+    ell(s.waist, frameAxes(abdF), [rH * (woman ? 0.96 : 1.2) * loose, torso * 0.38, rH * (b.belly ? 1.25 : woman ? 0.8 : 1.0) * loose], top, G.torso, 0, false, cut);
+    if (woman) for (const sd of [1, -1]) ell(at(pecC, C.fwd, rC * 0.1, C.up, -torso * 0.03, C.lat, sd * rC * 0.42), frameAxes(C), [rC * 0.5, rC * 0.5, rC * 0.46], top, G.torso, 0.02);
+    if (woman && extras.has('skirt')) {
+      // A qipao: a high collar edged in gold, and the dress drawn in over the hips.
+      const gold = r.material('#e8c040');
+      cone(add(s.neck, C.up, -1.5 * k), add(s.neck, C.up, 1.6 * k), b.head * k * 0.6, b.head * k * 0.56, top, G.torso, 0.05, true);
+      cone(add(s.neck, C.up, 1.2 * k), add(s.neck, C.up, 1.9 * k), b.head * k * 0.58, b.head * k * 0.56, gold, G.torso, 0.1, true);
+      ell(at(s.hip, H.fwd, 0, H.up, 2.5 * k, H.lat, 0), frameAxes(H), [rH * 1.12, rH * 0.8, rH * 0.92], top, G.torso);
+    }
     if (look.sleeves !== 'none') {
       // The yoke over each shoulder.
       ell(at(s.neck, C.fwd, -0.5 * k, C.up, -4 * k, C.lat, 0), frameAxes(C), [sw * 1.04, 5.4 * k, rC * 0.64], top, G.torso, 0, false, cut);
@@ -458,13 +472,13 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
     // The qipao's panels hang from the hips front and back, gold at the hem.
     const gold = r.material('#e8c040');
     for (const [f, mat] of [[1, top], [-1, top]] as const) {
-      const c0 = at(s.hip, H.fwd, f * rH * 0.75, H.up, 0, H.lat, 0);
+      const c0 = at(s.hip, H.fwd, f * rH * (f > 0 ? 1.12 : 0.8), H.up, 0, H.lat, f > 0 ? rH * 0.3 : 0);
       const d = f > 0 ? hang(-0.25 - wind * 0.4) : hang(0.35);
       // A flat panel: wide across the hips, long down the hang, thin front to back.
       const pf = norm(cross(d, H.lat));
       const axes: [V3, V3, V3] = [H.lat, d, pf];
-      ell(add(c0, d, 10 * k), axes, [rH * 0.62, 11 * k, 1.3 * k], mat, G.legN, 0.02, true, p => dot(sub(p, c0), d) < 0);
-      ell(add(c0, d, 20 * k), axes, [rH * 0.6, 1.1 * k, 1.5 * k], gold, G.legN, 0.1, true);
+      ell(add(c0, d, 9 * k), axes, [rH * 0.92, 12 * k, 1.4 * k], mat, G.legN, 0.02, true, p => dot(sub(p, c0), d) < 0 || dot(sub(p, c0), d) > 18 * k);
+      ell(add(c0, d, 18.4 * k), axes, [rH * 0.8, 1.0 * k, 1.6 * k], gold, G.legN, 0.1, true);
     }
   }
   if (extras.has('cape')) {
@@ -552,6 +566,10 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
       cone(el, add(hd, fa, -rF * 1.2), rF * 1.2, rF * 1.1, top, g, bias);
       for (const f of [0.45, 0.8]) crease(at(sh, ua, lU * f, ax[1], rU * 1.2, ax[2], 0), at(sh, ua, lU * f + 2 * k, ax[1], -rU * 1.2, ax[2], 0), g, 2);
       crease(at(el, fa, lF * 0.4, fax[1], rF * 1.3, fax[2], 0), at(el, fa, lF * 0.5, fax[1], -rF * 1.3, fax[2], 0), g, 2);
+    } else if (top && look.sleeves === 'short' && extras.has('skirt')) {
+      // A puffed sleeve, gathered into a gold cuff above the biceps.
+      ell(add(sh, ua, rU * 0.5), dax, [rU * 2.0, rU * 2.0, rU * 1.9], top, g, bias + 0.03, true);
+      cone(add(sh, ua, lU * 0.5), add(sh, ua, lU * 0.62), rU * 1.28, rU * 1.24, r.material('#e8c040'), g, bias + 0.08, true);
     } else if (top && look.sleeves === 'short') {
       // A gi's sleeve: wide, stopping above the elbow, creased where it bunches.
       const end = add(sh, ua, lU * 0.72);
@@ -575,7 +593,8 @@ export function drawBody(r: Raster, def: Fighter, look: Look, pose: Pose, ax: nu
     if (extras.has('claw') && side < 0) {
       // The claw is on the lead hand, which is the far one.
       const steel = r.material('#d8dce8');
-      for (const o of [-1, 0, 1]) cone(at(hd, fa, b.rFist * k * 0.8, fax[1], 0, fax[2], o * 1.8 * k), at(hd, fa, 19 * k, fax[1], 0.5 * k, fax[2], o * 2.8 * k), 0.85 * k, 0.4 * k, steel, G.extra, 0.3);
+      cone(add(hd, fa, -rF * 2.2), add(hd, fa, b.rFist * k * 0.3), rF * 1.1, b.rFist * k * 1.05, r.material('#8a8e9c'), g, bias + 0.1, true);
+      for (const o of [-1, 0, 1]) cone(at(hd, fa, b.rFist * k * 0.6, fax[1], o * 1.6 * k, fax[2], o * 1.2 * k), at(hd, fa, 24 * k, fax[1], o * 3.4 * k, fax[2], o * 2 * k), 1.0 * k, 0.45 * k, steel, G.extra, 0.3, true);
     }
   };
 
@@ -851,6 +870,63 @@ function drawHead(
       break;
     }
   }
+  if (look.hat) {
+    const hc = r.material(look.hatColor ?? '#c83030');
+    const black = r.material('#1a1a22');
+    const above = (u0: number) => (p: V3) => hl(p).u < u0;
+    switch (look.hat) {
+      case 'cap':
+      case 'peaked':
+        blob(hp(-0.08, 0.46), 1.0, 0.66, 1.12, hc, hg, 0, true, above(0.3));
+        blob(hp(0.82, 0.3), 0.62, 0.08, 0.5, look.hat === 'peaked' ? black : hc, hg, 0.1, true);
+        if (look.hat === 'peaked') blob(hp(0.98, 0.62), 0.16, 0.14, 0.06, r.material('#e8c040'), hg, 0.3, true);
+        break;
+      case 'sailor': {
+        const wh = r.material('#f4f6ff');
+        blob(hp(-0.08, 0.5), 1.02, 0.5, 1.12, r.material('#2a3a7a'), hg, 0, true, above(0.34));
+        blob(hp(-0.08, 0.9), 1.12, 0.3, 1.24, wh, hg, 0.05, true);
+        break;
+      }
+      case 'hard':
+        blob(hp(-0.08, 0.48), 1.0, 0.8, 1.14, hc, hg, 0.05, true, above(0.32));
+        blob(hp(0.05, 0.34), 1.22, 0.08, 1.42, hc, hg, 0, true);
+        break;
+      case 'helmet':
+        blob(hp(-0.08, 0.34), 1.06, 0.92, 1.16, hc, hg, 0, true, above(0.1));
+        break;
+      case 'cone':
+        blob(hp(-0.05, 0.72), 1.9, 0.1, 1.9, hc, hg, -0.1, true);
+        t.cone(hp(-0.05, 0.72), hp(-0.05, 1.3), hr * 1.5, hr * 0.12, hc, hg, 0.05, true);
+        break;
+      case 'turban':
+        blob(hp(-0.1, 0.6), 1.1, 0.74, 1.22, hc, hg, 0, true, above(0.26));
+        blob(hp(0.92, 0.62), 0.14, 0.14, 0.08, r.material('#f8e040'), hg, 0.3, true);
+        break;
+      case 'plume':
+        blob(hp(-0.1, 0.4), 1.0, 1.02, 1.12, r.material('#f0c840'), hg, 0, true, p => Math.abs(hl(p).u - 0.5) > 0.12);
+        for (const l of [-0.9, -0.45, 0, 0.45, 0.9]) t.cone(hp(-0.1, 0.9, l * 0.4), hp(-0.2, 2.3 - Math.abs(l) * 0.4, l * 1.3), hr * 0.3, hr * 0.12, hc, hg, 0.05, true);
+        break;
+      case 'bandana':
+        blob(hp(-0.1, 0.4), 0.98, 1.02, 1.12, hc, hg, 0, true, p => Math.abs(hl(p).u - 0.46) > 0.16);
+        break;
+      case 'flower':
+        blob(hp(0.3, 0.8, 0.7), 0.26, 0.24, 0.24, r.material('#f82838'), hg, 0.1, true);
+        break;
+      case 'beret':
+        blob(hp(-0.15, 0.9, 0.15), 1.12, 0.3, 1.2, hc, hg, 0, true);
+        break;
+      case 'cowboy':
+        blob(hp(-0.05, 0.5), 1.7, 0.08, 1.7, hc, hg, -0.05, true);
+        blob(hp(-0.08, 0.7), 0.74, 0.62, 0.84, hc, hg, 0.05, true, above(0.5));
+        break;
+      case 'hood':
+        blob(hp(-0.2, 0.08), 1.14, 1.2, 1.2, m.top || hc, hg, 0, true, p => {
+          const q = hl(p);
+          return q.f > 0.45 && Math.abs(q.l) < 0.62 && q.u < 0.5 && q.u > -0.9;
+        });
+        break;
+    }
+  }
   if (look.accent && style === 'spiky') {
     // The headband, its knot at the back and two long tails.
     blob(hp(-0.12, 0.38), 0.98, 1.04, 1.12, accent, hg, 0, true, p => {
@@ -904,6 +980,18 @@ function drawHead(
     const bl = norm(add(scale(F.lat, Math.cos(tilt)), F.up, Math.sin(tilt)));
     const bu = norm(add(scale(F.up, Math.cos(tilt)), F.lat, -Math.sin(tilt)));
     t.ell(hp(fc.soft ? 0.86 : ridge - 0.02, fc.soft ? 0.16 : 0.08, sd * 0.31), [bl, bu, F.fwd], [hr * 0.22, hr * (fc.soft ? 0.05 : 0.075) * Math.min(1.4, brow), hr * 0.06], browMat, g, -0.3, false);
+    if (k > 2) {
+      // Close up, an eye is drawn: the white, the iris looking at the opponent, the lid's dark line over both.
+      if (face === 'hurt') {
+        t.ell(e, axes, [hr * 0.15, hr * 0.03, hr * 0.05], dark, g, -0.5);
+        continue;
+      }
+      blob(e, 0.15, 0.075, 0.06, white, g, 0.4);
+      if (!fc.blank) blob(add(e, F.lat, hr * 0.03), 0.07, 0.075, 0.07, dark, g, -0.5);
+      t.ell(add(e, F.up, hr * 0.07), axes, [hr * 0.17, hr * 0.028, hr * 0.07], dark, g, -0.5);
+      if (fc.soft) t.cone(add(e, F.lat, sd * hr * 0.15), at(e, F.fwd, 0, F.up, hr * 0.1, F.lat, sd * hr * 0.26), hr * 0.03, hr * 0.02, dark, g, -0.5);
+      continue;
+    }
     if (face === 'hurt') {
       t.mark(e, dark, 0, g);
       t.mark(add(e, F.lat, k * 0.9), dark, 0, g);
@@ -921,7 +1009,18 @@ function drawHead(
     t.mark(hp(0.9, -0.36, 0.08), skin, 0, g);
     if (!fc.soft) t.crease(hp(0.8, -0.34, 0.22), hp(0.72, -0.5, 0.36), g, 1);
     const mouth = hp(0.8, -0.56, 0.1);
-    if (face === 'shout' || face === 'hurt') {
+    if (k > 2) {
+      // Close up, a mouth: the dark line between the lips, the lower lip's light, or teeth bared.
+      const mc = hp(0.8, -0.56, 0);
+      if (face === 'shout' || face === 'hurt') {
+        blob(mc, 0.24, 0.12, 0.1, r.material('#6a0e0e'), g, -0.2);
+        blob(add(mc, F.up, hr * 0.07), 0.2, 0.035, 0.11, white, g, 0.3);
+      } else {
+        t.ell(mc, axes, [hr * 0.24, hr * 0.028, hr * 0.1], fc.soft ? r.material('#a02838') : dark, g, fc.soft ? 0 : -0.4);
+        if (fc.soft) blob(add(mc, F.up, -hr * 0.06), 0.16, 0.05, 0.1, r.material('#c84858'), g, 0.1);
+      }
+      if (fc.fangs) for (const sd of [1, -1]) t.cone(at(mc, F.fwd, hr * 0.04, F.up, 0, F.lat, sd * hr * 0.16), at(mc, F.fwd, hr * 0.04, F.up, hr * 0.18, F.lat, sd * hr * 0.17), hr * 0.05, hr * 0.015, white, g, 0.4);
+    } else if (face === 'shout' || face === 'hurt') {
       const red = r.material('#6a0e0e');
       t.mark(mouth, red, 0, g);
       t.mark(add(mouth, F.up, -k), red, 0, g);

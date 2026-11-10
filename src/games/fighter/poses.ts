@@ -58,6 +58,8 @@ export interface Pose {
   lF: Limb;
   /** The chest's turn toward the viewer, degrees (0 profile, 90 face-on). */
   twist?: number;
+  /** The head's own turn toward the viewer, which otherwise follows the chest part way (a portrait looks out of its frame). */
+  headTwist?: number;
   /** The hips' turn, which otherwise follows the chest part way. */
   hipTwist?: number;
   /** Whole-body turn about the vertical, degrees: a spin. */
@@ -179,50 +181,64 @@ const STANCE_OF: Record<CharId, Stance> = {
   zar: 'dictator'
 };
 
-/** The breath: knees sink, shoulders rise and fall, four frames. */
-const BREATH = [0, 1, 2, 1];
+/** The bounce every stance keeps: the knees sink and spring, the guard rides it, six frames. */
+const BREATH = [0, 0.8, 1.8, 2.4, 1.8, 0.8];
 
 const STANCES: Record<Stance, (b: number) => Pose> = {
-  karate: b => P({ h: 42.5 - b * 0.9, fN: [-17, 0], fF: [11, 0], kN: 30, kF: 6, aF: [52 - b, 80 + b * 2], aN: [22 - b, 118 + b * 2], lean: 8 + b }),
-  boxer: b => P({ h: 42 - b, fN: [-13, 0], fF: [11, 0], kN: 26, lean: 16 + b, head: 6, twist: 34, aN: [34 - b, 128], aF: [52, 98 + b * 2] }),
-  sumo: b => P({ h: 30 - b * 1.2, fN: [-16, 0], fF: [16, 0], kN: 62, kF: 58, lean: 16, head: -6, twist: 56, aN: [56, 30 - b * 3, 30], aF: [62, 36 - b * 3], hand: 'open' }),
-  beast: b => P({ h: 30 - b, fN: [-15, 0], fF: [15, 0], kN: 44, kF: 30, lean: 38 + b, head: -30, twist: 50, aN: [30 + b * 3, 34, 24], aF: [40, 30], hand: 'open' }),
-  wrestler: b => P({ h: 40 - b, fN: [-16, 0], fF: [14, 0], kN: 44, kF: 30, lean: 18, head: -10, twist: 50, aN: [44, 56 + b * 3, 24], aF: [56, 50 + b * 3], hand: 'open' }),
-  yogi: b => P({ h: 51.5 - b * 0.6, fN: [-9, 0], fF: [9, 0], kN: 20, lean: 2, head: -6, twist: 48, aN: [56, 124 + b * 4], aF: [62, 112 + b * 4], hand: 'fist' }),
-  kungfu: b => P({ h: 44 - b * 0.7, fN: [-13, 0], fF: [11, 0], kN: 30, lean: 4, head: -4, twist: 46, aN: [36, 104], aF: [74, 38 + b * 4], hand: 'open' }),
-  soldier: b => P({ h: 43.5 - b * 0.7, fN: [-13, 0], fF: [10, 0], kN: 28, lean: 6, head: -4, twist: 40, aN: [30, 104], aF: [48, 92 + b * 2] }),
-  muay: b => P({ h: 52 - b * 0.5, fN: [-9, 0], fF: [11, b * 1.2], kN: 24, lean: -2, head: -8, twist: 50, aN: [30, 128], aF: [44, 116], foot: [0, 24] }),
-  claw: b => P({ h: 41 - b, fN: [-16, 0], fF: [13, 0], kN: 34, lean: 12, head: -2, twist: 44, aN: [28, 92], aF: [76, 26 - b * 3] }),
-  dictator: b => P({ h: 47 - b * 0.4, fN: [-7, 0], fF: [8, 0], kN: 30, kF: 16, lean: -2, head: -8, twist: 60, aN: [14, 34, 28], aF: [10, 30, 24] })
+  karate: b => P({ h: 42.5 - b * 1.3, fN: [-17, 0], fF: [11, 0], kN: 30, kF: 6, aF: [52 - b * 2, 80 + b * 5], aN: [22 - b * 2, 118 + b * 4], lean: 8 + b * 1.4, head: -6 - b }),
+  boxer: b => P({ h: 42 - b * 1.5, fN: [-13, 0], fF: [11, 0], kN: 26, lean: 16 + b * 1.5, head: 6 - b, twist: 34, aN: [34 - b * 2, 128], aF: [52 + b * 2, 98 + b * 4] }),
+  sumo: b => P({ h: 30 - b * 1.4, fN: [-16, 0], fF: [16, 0], kN: 62, kF: 58, lean: 16 + b, head: -6 - b, twist: 56, aN: [56 + b * 2, 30 - b * 4, 30], aF: [62 + b * 2, 36 - b * 4], hand: 'open' }),
+  beast: b => P({ h: 30 - b * 1.2, fN: [-15, 0], fF: [15, 0], kN: 44, kF: 30, lean: 38 + b * 1.5, head: -30 - b, twist: 50, aN: [30 + b * 4, 34, 24], aF: [40 - b * 3, 30], hand: 'open' }),
+  wrestler: b => P({ h: 40 - b * 1.3, fN: [-16, 0], fF: [14, 0], kN: 44, kF: 30, lean: 18 + b, head: -10 - b, twist: 50, aN: [44 + b * 2, 56 + b * 4, 24], aF: [56 - b * 2, 50 + b * 4], hand: 'open' }),
+  yogi: b => P({ h: 51.5 - b * 0.9, fN: [-9, 0], fF: [9, 0], kN: 20, lean: 2 + b, head: -6, twist: 48, aN: [56, 124 + b * 5], aF: [62, 112 + b * 5], hand: 'fist' }),
+  kungfu: b => P({ h: 44 - b * 1.1, fN: [-13, 0], fF: [11, 0], kN: 30, lean: 4 + b, head: -4, twist: 46, aN: [36 - b * 2, 104 + b * 3], aF: [74 - b * 2, 38 + b * 6], hand: 'open' }),
+  soldier: b => P({ h: 43.5 - b * 1.1, fN: [-13, 0], fF: [10, 0], kN: 28, lean: 6 + b, head: -4, twist: 40, aN: [30 - b * 2, 104 + b * 3], aF: [48 - b * 2, 92 + b * 4] }),
+  muay: b => P({ h: 52 - b * 0.8, fN: [-9, 0], fF: [11, b * 1.6], kN: 24, lean: -2 + b, head: -8, twist: 50, aN: [30, 128 + b * 2], aF: [44, 116 + b * 3], foot: [0, 24] }),
+  claw: b => P({ h: 41 - b * 1.3, fN: [-16, 0], fF: [13, 0], kN: 34, lean: 12 + b, head: -2, twist: 44, aN: [28 + b * 2, 92], aF: [76, 26 - b * 5] }),
+  dictator: b => P({ h: 47 - b * 0.6, fN: [-7, 0], fF: [8, 0], kN: 30, kF: 16, lean: -2 + b * 0.5, head: -8, twist: 60, aN: [14, 34 + b * 2, 28], aF: [10, 30 + b * 2, 24] })
 };
 
 const IDLE: Record<Stance, Pose[]> = Object.fromEntries(
-  (Object.keys(STANCES) as Stance[]).map(s => [s, BREATH.map(b => STANCES[s](b))])
+  (Object.keys(STANCES) as Stance[]).map(s => [s, BREATH.map((b, i) => ({ ...STANCES[s](b), wind: [0, 0.25, 0.5, 0.25, 0, -0.25][i] }))])
 ) as Record<Stance, Pose[]>;
 
 /**
- * Eight walking frames: the legs scissor under an upper body that bobs and
- * counter-turns a little, the arms keeping their guard. Backward walks play
- * the cycle in reverse, a shade more upright.
+ * Eight walking frames. A fighter does not stride, he shuffles in his
+ * stance: the lead foot lifts and reaches, plants, and the rear one follows,
+ * the hips riding up over each step and the guard swaying against it.
+ * Backward plays the same steps the other way, a shade more upright.
  */
 function walk(stance: Pose, t: number, back: boolean): Pose {
-  const phase = Math.floor(t / 5) % 8;
-  const a = (phase / 8) * Math.PI * 2;
-  const swing = Math.sin(a) * 26;
-  const liftN = Math.max(0, Math.cos(a)) * 38;
-  const liftF = Math.max(0, -Math.cos(a)) * 38;
-  return P(
-    {
-      lN: [-6 - swing, -10 - liftN, stance.lN[2] ?? 4],
-      lF: [14 + swing, -14 - liftF, stance.lF[2] ?? 4],
-      foot: [Math.round(liftN * 0.5), Math.round(liftF * 0.5)],
-      twist: (stance.twist ?? 42) + Math.round(Math.sin(a) * 5),
-      lean: stance.lean + (back ? -4 : 2) + Math.round(Math.abs(Math.sin(a)) * 2),
-      aN: [stance.aN[0] + Math.round(Math.sin(a) * 6), stance.aN[1], stance.aN[2] ?? 14],
-      wind: back ? -0.5 : 0.5
-    },
-    stance
-  );
+  if (stance.h === undefined || !stance.fN || !stance.fF) return stance;
+  const phase = (Math.floor(t / 4) % 8) / 8;
+  const p = back ? (1 - phase) % 1 : phase;
+  const wide = Math.abs(stance.fF[0] - stance.fN[0]);
+  const stride = Math.min(7, wide * 0.24);
+  /** One foot's place through the cycle: 0.4 of it in the air going forward, the rest on the floor going back. */
+  const step = (q: number): [number, number] => {
+    const u = ((q % 1) + 1) % 1;
+    if (u < 0.4) {
+      const f = u / 0.4;
+      return [-stride + 2 * stride * f, Math.sin(f * Math.PI) * 4.5];
+    }
+    return [stride - (2 * stride * (u - 0.4)) / 0.6, 0];
+  };
+  const [xF, upF] = step(p);
+  const [xN, upN] = step(p + 0.5);
+  const bob = Math.cos(p * Math.PI * 4);
+  const sway = Math.sin(p * Math.PI * 2);
+  return {
+    ...stance,
+    h: stance.h - 0.6 + bob * 0.9,
+    fF: [Math.round(stance.fF[0] + xF), Math.round(upF)],
+    fN: [Math.round(stance.fN[0] + xN), Math.round(upN)],
+    foot: [Math.round(upN * 5), Math.round(upF * 5)],
+    twist: (stance.twist ?? 42) + Math.round(sway * 5),
+    lean: stance.lean + (back ? -4 : 3),
+    aN: [stance.aN[0] + Math.round(sway * 7), stance.aN[1] - Math.round(sway * 4), stance.aN[2] ?? 14],
+    aF: [stance.aF[0] - Math.round(sway * 5), stance.aF[1] + Math.round(sway * 4)],
+    wind: back ? -0.6 : 0.6
+  };
 }
 
 const CROUCH = P({ lean: 22, head: -14, twist: 46, lN: [44, -136], lF: [80, -120], foot: [30, 0], aN: [30, 110], aF: [52, 90] });
@@ -399,7 +415,7 @@ export function poseFor(f: FighterState, clock: number): Pose {
   const t = f.frame;
   switch (f.state) {
     case 'stand':
-      return cycle(idle, clock, 10);
+      return cycle(idle, clock, 7);
     case 'land':
       // The landing absorbs into the knees before the stance comes back.
       return t < 2 ? P({ lN: [10, -110], lF: [50, -100], lean: 24, head: -12, wind: -0.5 }, base) : mix(P({ lN: [0, -70], lF: [40, -70], lean: 16 }, base), base, 0.5);

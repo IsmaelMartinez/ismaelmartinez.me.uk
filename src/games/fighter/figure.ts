@@ -69,7 +69,9 @@ export function ramp(hex: string): Rgb[] {
 
 // --- Looks ------------------------------------------------------------------------
 
-type HairStyle = 'spiky' | 'blond' | 'buns' | 'mohawk' | 'bald' | 'topknot' | 'mane' | 'flattop' | 'short' | 'mask' | 'patch' | 'cap';
+type HairStyle = 'spiky' | 'blond' | 'buns' | 'mohawk' | 'bald' | 'topknot' | 'mane' | 'flattop' | 'short' | 'mask' | 'patch' | 'cap' | 'shaved';
+/** Headgear the crowd wears. */
+export type Hat = 'cap' | 'sailor' | 'hard' | 'helmet' | 'cone' | 'turban' | 'plume' | 'bandana' | 'hood' | 'flower' | 'beret' | 'peaked' | 'cowboy';
 type Pants = 'gi' | 'tight' | 'shorts' | 'trunks' | 'mawashi' | 'cargo';
 
 /** A head's proportions and marks (every number is a factor on the stock head's). */
@@ -106,6 +108,9 @@ export interface Look {
   hairStyle: HairStyle;
   /** Headband, ribbons, mask, cap: the accent colour. */
   accent?: string;
+  /** A hat over the hair, and its colour. */
+  hat?: Hat;
+  hatColor?: string;
   /** How the head departs from the stock one. */
   face?: Face;
   /** Extras drawn by name. */
@@ -123,7 +128,7 @@ const LOOKS: Record<CharId, { main: Look; alt: Partial<Look> }> = {
     alt: { top: '#e8e8e8', pants: '#e8e8e8', hair: '#b07030' }
   },
   mei: {
-    main: { skin: '#eab48c', hair: '#2a1a14', top: '#2c50c8', sleeves: 'short', pants: '#a87850', pantsStyle: 'tight', shoes: '#f4f4f4', bands: '#5a5a6a', hairStyle: 'buns', accent: '#f4f4f4', extras: ['skirt', 'spikes'], face: { jaw: 0.86, chin: 0.8, nose: 0.75, soft: true } },
+    main: { skin: '#eab48c', hair: '#2a1a14', top: '#2c50c8', sleeves: 'short', pants: '#8a5a3a', pantsStyle: 'tight', belt: '#f4f4f4', shoes: '#f4f4f4', bands: '#5a5a6a', hairStyle: 'buns', accent: '#f4f4f4', extras: ['skirt', 'spikes'], face: { jaw: 0.86, chin: 0.8, nose: 0.75, soft: true } },
     alt: { top: '#c82c88', accent: '#f8d040' }
   },
   boris: {

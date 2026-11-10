@@ -12,15 +12,19 @@
  * from `pix.ts`: materials are shaded through hue-shifted ramps (`tones`)
  * with ordered-dither transitions (`pick`), and nothing is ever blended.
  *
- * The crowd are little people (about 27 px tall), each baked at paint time
- * into four frames (standing, clapping, both arms up, one fist up) with a
- * one-pixel outline, so a frame of cheering costs one `drawImage` each. A
+ * The crowd are the fighters' own bodies (`body.ts`) at under half the size
+ * and facing the ring, each baked at paint time into four frames (watching,
+ * clapping, both arms up, one fist up), so a frame of cheering costs one
+ * `drawImage` each and the people watching match the people fighting. A
  * `front` layer scrolls with the middle one and is drawn after the crowd, so
  * people can stand behind a rail, a fence or a ship's guard wire.
  */
 import { FLOOR_Y, SCREEN_H, SCREEN_W, STAGE_W } from './fight';
 import { block, ctx2d, cylinder, disc, ellipse, fbm, fillFn, hash, line, makeCanvas, mix, outline, pick, pipe, poly, rect, sphere, tones, vgrad, vnoise } from './pix';
-import type { CharId } from './roster';
+import { drawBody } from './body';
+import { Raster, type Hat, type Look as BodyLook } from './figure';
+import type { Pose } from './poses';
+import type { CharId, Fighter } from './roster';
 
 export type StageId = CharId | 'car' | 'drums';
 
@@ -63,8 +67,6 @@ export interface StageArt {
 }
 
 interface CrowdSpec {
-  /** The outline colour, which is the stage's darkest shadow. */
-  ink: string;
   spots: readonly (readonly [number, number])[];
   look: (i: number) => Look;
 }
@@ -98,8 +100,6 @@ function spread(count: number, from: number, to: number, y: number, seed: number
 
 // --- The crowd ---------------------------------------------------------------------
 
-type Hat = 'cap' | 'sailor' | 'hard' | 'helmet' | 'cone' | 'turban' | 'plume' | 'bandana' | 'hood' | 'flower' | 'beret' | 'peaked' | 'cowboy';
-
 interface Look {
   top: string;
   bottom: string;
@@ -119,292 +119,82 @@ interface Look {
   sleeves?: boolean;
 }
 
-const FW = 24;
-const FH = 46;
-const FEET = FH - 2;
+/** A spectator's frame, and where the feet stand in it. */
+const FW = 46;
+const FH = 72;
+const FEET = FH - 3;
+/**
+ * The crowd stands a little under half a fighter's height at the back of the
+ * yard, and smaller the higher up the screen their feet are: a gallery, a
+ * ship's deck or the far bank of a river is further off.
+ */
+const crowdScale = (y: number): number => 0.3 + 0.14 * Math.max(0, Math.min(1, (y - 100) / 40));
 const SKINS = ['#f0c8a0', '#e8b088', '#c88a60', '#a86c44', '#7a4a2c', '#5a3420'];
 const HAIRS = ['#1a1418', '#2e1e16', '#5a3418', '#8a5a2a', '#c8a050', '#6a6a70'];
 
-function person(ctx: CanvasRenderingContext2D, L: Look, frame: number): void {
-  const cx = 12;
-  const T = tones(L.top, 4, 0.55, 0.36);
-  const OV = L.overalls ? tones(L.overalls, 4, 0.55, 0.3) : T;
-  const ST = L.stripes ? tones(L.stripes, 4, 0.45, 0.3) : T;
-  const Bt = tones(L.overalls ?? L.bottom, 3, 0.5, 0.28);
-  const SK = tones(L.bottom, 4, 0.55, 0.32);
-  const S = tones(L.skin, 3, 0.4, 0.28);
-  const H = tones(L.hair, 3, 0.5, 0.35);
-  const HC = tones(L.hatColor ?? '#c83030', 4, 0.5, 0.35);
-  const shoe = '#2a2026';
-  const tall = L.tall ?? 1;
-  const legTop = FEET - (8 + tall) + 1;
-  const torsoTop = legTop - 10;
-  const headTop = torsoTop - 8;
-  const px = (x: number, y: number, c: string) => {
-    ctx.fillStyle = c;
-    ctx.fillRect(x, y, 1, 1);
-  };
-  const hl = (x0: number, x1: number, y: number, c: string) => {
-    ctx.fillStyle = c;
-    ctx.fillRect(x0, y, x1 - x0 + 1, 1);
-  };
+/** Facing the ring, hands at the sides. */
+const WATCH: Pose = { x: 0, y: 0, plant: true, rot: 0, lean: 0, head: 0, twist: 82, headTwist: 84, hipTwist: 82, aN: [-8, 16, 30], aF: [8, 16, 30], lN: [-4, -3, 6], lF: [4, -3, 6], hand: 'fist' };
+/** The four frames a spectator has: watching, clapping, both arms up, one fist up. */
+const CROWD_POSES: readonly Pose[] = [
+  WATCH,
+  { ...WATCH, aN: [26, 104, 24], aF: [44, 98, 24], hand: 'open' },
+  { ...WATCH, aN: [198, -14, 30], aF: [162, 14, 30], head: -8, face: 'shout' },
+  { ...WATCH, aN: [194, -8, 30], head: -6, face: 'shout' }
+];
 
-  // Lower body.
-  if (L.robe) {
-    for (let y = torsoTop; y <= FEET - 1; y++) {
-      const half = 4 + Math.floor((y - torsoTop) / 7);
-      for (let x = cx - half; x <= cx + half; x++) {
-        const u = (x - (cx - half)) / (2 * half);
-        const fold = y > legTop && (x - cx + 9) % 3 === 0 ? -0.22 : 0;
-        px(x, y, pick(T, 0.95 - u * 0.85 + fold, x, y));
-      }
-    }
-    hl(cx - 3, cx - 1, FEET, shoe);
-    hl(cx + 1, cx + 3, FEET, shoe);
-  } else {
-    for (let y = legTop; y <= FEET - 2; y++) {
-      if (L.skirt) {
-        hl(cx - 2, cx - 1, y, S[1]);
-        hl(cx + 1, cx + 2, y, S[0]);
-      } else {
-        px(cx - 3, y, Bt[2]);
-        hl(cx - 2, cx - 1, y, Bt[1]);
-        hl(cx + 1, cx + 2, y, Bt[0]);
-        px(cx + 3, y, y % 3 ? Bt[0] : Bt[1]);
-      }
-    }
-    hl(cx - 4, cx - 1, FEET - 1, shoe);
-    hl(cx - 4, cx - 1, FEET, shoe);
-    hl(cx + 1, cx + 4, FEET - 1, shoe);
-    hl(cx + 1, cx + 4, FEET, shoe);
-    px(cx - 4, FEET - 1, '#4a3a40');
-    if (L.skirt) {
-      for (let y = legTop - 1; y <= legTop + 5; y++) {
-        const half = 4 + Math.floor((y - legTop + 1) / 2);
-        for (let x = cx - half; x <= cx + half; x++) px(x, y, pick(SK, 0.95 - ((x - cx + half) / (2 * half)) * 0.85 - (y === legTop + 5 ? 0.25 : 0), x, y));
-      }
-    }
-  }
-
-  // Torso.
-  if (!L.robe) {
-    for (let y = torsoTop; y < legTop; y++) {
-      for (let x = cx - 4; x <= cx + 4; x++) {
-        if (y === torsoTop && (x === cx - 4 || x === cx + 4)) continue;
-        const u = (x - cx + 4) / 8;
-        const v = 0.98 - u * 0.78 - (y === legTop - 1 ? 0.3 : 0);
-        let ramp = T;
-        if (L.stripes && (y - torsoTop) % 3 === 2) ramp = ST;
-        if (L.overalls && (y >= torsoTop + 4 || x === cx - 3 || x === cx + 3)) ramp = OV;
-        px(x, y, pick(ramp, v, x, y));
-      }
-    }
-  }
-  if (L.sash) {
-    line(ctx, cx - 4, torsoTop + 1, cx + 3, legTop + 1, L.sash);
-    line(ctx, cx - 3, torsoTop + 1, cx + 4, legTop + 1, mix(L.sash, '#000000', 0.25));
-  }
-  // Neck and collar.
-  hl(cx - 1, cx + 1, torsoTop - 1, S[0]);
-  if (!L.robe && !L.overalls) px(cx, torsoTop, S[1]);
-
-  // Head.
-  for (let r = 0; r < 7; r++) {
-    const ins = r === 0 || r === 6 ? 1 : 0;
-    const y = headTop + r;
-    for (let x = cx - 3 + ins; x <= cx + 3 - ins; x++) {
-      let c = x === cx - 3 + ins ? S[2] : x >= cx + 2 - ins ? S[0] : S[1];
-      if (r === 6 && x > cx - 2) c = S[0];
-      px(x, y, c);
-    }
-  }
-  px(cx - 1, headTop + 3, '#1a1018');
-  px(cx + 1, headTop + 3, '#1a1018');
-  if (frame === 2) hl(cx - 1, cx, headTop + 5, '#6a1a1a');
-
-  // Hair.
-  const covered = L.hat === 'hood' || L.hat === 'helmet' || L.hat === 'turban';
-  if (!L.bald && !covered) {
-    hl(cx - 2, cx + 2, headTop - 1, H[1]);
-    hl(cx - 3, cx + 3, headTop, H[1]);
-    px(cx - 1, headTop - 1, H[2]);
-    px(cx - 2, headTop, H[2]);
-    hl(cx - 3, cx - 1, headTop + 1, H[0]);
-    hl(cx + 1, cx + 3, headTop + 1, H[0]);
-    px(cx - 3, headTop + 2, H[0]);
-    px(cx + 3, headTop + 2, H[0]);
-    if (L.long) {
-      for (let y = headTop + 1; y <= torsoTop + 3; y++) {
-        px(cx - 4, y, H[1]);
-        px(cx + 4, y, H[0]);
-        if (y > headTop + 2 && y < torsoTop) {
-          px(cx - 3, y, H[1]);
-          px(cx + 3, y, H[0]);
-        }
-      }
-    }
-  } else if (L.bald && !covered) {
-    px(cx - 2, headTop + 1, mix(S[2], '#ffffff', 0.3));
-  }
-
-  // Arms.
-  const sleeveL = [T[3], T[2]];
-  const sleeveR = [T[1], T[0]];
-  const skinL = [S[2], S[1]];
-  const skinR = [S[1], S[0]];
+/** A spectator's clothes as the fighters' body wears them. */
+function crowdBody(L: Look): { def: Fighter; look: BodyLook } {
+  const woman = !!L.long || !!L.skirt;
   const long = L.sleeves ?? (L.robe || L.hat === 'hood');
-  const armDown = (side: number) => {
-    const x = side < 0 ? cx - 6 : cx + 5;
-    const cs = side < 0 ? sleeveL : sleeveR;
-    const ks = side < 0 ? skinL : skinR;
-    for (let y = torsoTop + 1; y <= torsoTop + 8; y++) {
-      const sl = long || y <= torsoTop + 3;
-      px(x, y, sl ? cs[0] : ks[0]);
-      px(x + 1, y, sl ? cs[1] : ks[1]);
-    }
-    hl(x, x + 1, torsoTop + 9, ks[1]);
+  const look: BodyLook = {
+    skin: L.skin,
+    hair: L.hair,
+    top: L.top,
+    sleeves: long ? 'long' : 'short',
+    pants: L.robe ? L.top : (L.overalls ?? L.bottom),
+    pantsStyle: L.robe ? 'gi' : L.skirt ? 'shorts' : 'cargo',
+    shoes: L.robe ? undefined : '#2a2026',
+    belt: L.sash,
+    hairStyle: L.bald ? 'shaved' : L.long ? 'blond' : 'short',
+    hat: L.hat,
+    hatColor: L.hatColor,
+    face: woman ? { jaw: 0.88, chin: 0.85, nose: 0.8, soft: true } : undefined
   };
-  const armUp = (side: number) => {
-    const xs = side < 0 ? cx - 6 : cx + 5;
-    const cs = side < 0 ? sleeveL : sleeveR;
-    const ks = side < 0 ? skinL : skinR;
-    for (let y = torsoTop - 7; y <= torsoTop + 1; y++) {
-      const x = xs + (y < torsoTop - 3 ? side : 0);
-      const sl = long ? y >= torsoTop - 5 : y >= torsoTop - 1;
-      px(x, y, sl ? cs[0] : ks[0]);
-      px(x + 1, y, sl ? cs[1] : ks[1]);
-    }
-    const fx = xs + side + (side < 0 ? -1 : 0);
-    for (let y = torsoTop - 10; y <= torsoTop - 8; y++) hl(fx, fx + 2, y, y === torsoTop - 10 ? ks[0] : ks[1]);
-  };
-  const armClap = (side: number) => {
-    const x = side < 0 ? cx - 6 : cx + 5;
-    const cs = side < 0 ? sleeveL : sleeveR;
-    const ks = side < 0 ? skinL : skinR;
-    for (let y = torsoTop + 1; y <= torsoTop + 4; y++) {
-      px(x, y, cs[0]);
-      px(x + 1, y, cs[1]);
-    }
-    for (let y = torsoTop + 4; y <= torsoTop + 5; y++) {
-      if (side < 0) hl(cx - 5, cx - 2, y, long ? cs[0] : ks[0]);
-      else hl(cx + 2, cx + 5, y, long ? cs[1] : ks[1]);
-    }
-  };
-  if (frame === 0) {
-    armDown(-1);
-    armDown(1);
-  } else if (frame === 1) {
-    armClap(-1);
-    armClap(1);
-    for (let y = torsoTop + 2; y <= torsoTop + 5; y++) hl(cx - 1, cx + 1, y, y === torsoTop + 2 ? S[2] : S[1]);
-  } else if (frame === 2) {
-    armUp(-1);
-    armUp(1);
-  } else {
-    armUp(-1);
-    armDown(1);
-  }
-
-  // Hats.
-  const hat = L.hat;
-  if (hat === 'cap' || hat === 'peaked') {
-    hl(cx - 2, cx + 2, headTop - 2, HC[2]);
-    hl(cx - 3, cx + 3, headTop - 1, HC[2]);
-    hl(cx - 3, cx + 3, headTop, HC[1]);
-    px(cx - 2, headTop - 1, HC[3]);
-    hl(cx - 4, cx + (hat === 'peaked' ? 4 : 2), headTop + 1, hat === 'peaked' ? '#1a1a22' : HC[0]);
-    if (hat === 'peaked') hl(cx - 1, cx + 1, headTop - 1, '#e8c040');
-  } else if (hat === 'sailor') {
-    hl(cx - 3, cx + 3, headTop - 3, '#e8ecf4');
-    hl(cx - 4, cx + 4, headTop - 2, '#f8f8ff');
-    hl(cx - 4, cx + 4, headTop - 1, '#d0d4e4');
-    hl(cx - 3, cx + 3, headTop, '#2a3a7a');
-    px(cx - 3, headTop - 2, '#ffffff');
-  } else if (hat === 'hard') {
-    hl(cx - 2, cx + 2, headTop - 3, HC[2]);
-    hl(cx - 3, cx + 3, headTop - 2, HC[2]);
-    hl(cx - 3, cx + 3, headTop - 1, HC[1]);
-    px(cx - 2, headTop - 2, HC[3]);
-    px(cx - 1, headTop - 3, HC[3]);
-    hl(cx - 5, cx + 5, headTop, HC[0]);
-  } else if (hat === 'helmet') {
-    hl(cx - 2, cx + 2, headTop - 2, HC[2]);
-    for (let y = headTop - 1; y <= headTop + 2; y++) {
-      hl(cx - 4, cx + 4, y, HC[1]);
-      px(cx - 4, y, HC[2]);
-      px(cx + 4, y, HC[0]);
-    }
-    px(cx - 2, headTop - 1, HC[3]);
-    hl(cx - 4, cx + 4, headTop + 2, HC[0]);
-  } else if (hat === 'cone') {
-    for (let r = 0; r < 6; r++) {
-      const half = [0, 1, 2, 4, 5, 7][r];
-      const y = headTop - 4 + r;
-      for (let x = cx - half; x <= cx + half; x++) px(x, y, pick(HC, 0.9 - ((x - cx + half) / (2 * half + 1)) * 0.7 - (r === 5 ? 0.25 : 0), x, y));
-    }
-  } else if (hat === 'turban') {
-    for (let y = headTop - 3; y <= headTop + 1; y++) {
-      const ins = y === headTop - 3 ? 2 : 0;
-      for (let x = cx - 4 + ins; x <= cx + 4 - ins; x++) px(x, y, (x + y) % 3 === 0 ? HC[3] : x > cx + 1 ? HC[1] : HC[2]);
-    }
-    px(cx, headTop - 1, '#d82828');
-    px(cx, headTop - 2, '#f8e040');
-  } else if (hat === 'plume') {
-    hl(cx - 3, cx + 3, headTop - 1, '#f0c840');
-    px(cx, headTop - 2, '#f84070');
-    for (const dx of [-7, -4, -1, 2, 5]) {
-      const tx = cx + dx;
-      const ty = headTop - 13 + Math.abs(dx) / 2;
-      line(ctx, cx + Math.sign(dx), headTop - 2, tx, ty, HC[2]);
-      line(ctx, cx + Math.sign(dx) + 1, headTop - 2, tx + 1, ty, HC[3]);
-      px(tx, ty - 1, '#ffffff');
-      px(tx + 1, ty, '#ffffff');
-    }
-  } else if (hat === 'bandana') {
-    hl(cx - 3, cx + 3, headTop + 1, HC[2]);
-    hl(cx - 3, cx + 3, headTop, HC[1]);
-    px(cx + 4, headTop + 1, HC[1]);
-    px(cx + 5, headTop + 2, HC[0]);
-  } else if (hat === 'flower') {
-    px(cx + 3, headTop - 1, '#f82838');
-    px(cx + 4, headTop, '#f82838');
-    px(cx + 3, headTop, '#b81020');
-    px(cx + 2, headTop - 1, '#f86878');
-  } else if (hat === 'beret') {
-    hl(cx - 3, cx + 4, headTop - 1, HC[1]);
-    hl(cx - 4, cx + 3, headTop, HC[2]);
-    px(cx, headTop - 2, HC[1]);
-  } else if (hat === 'cowboy') {
-    hl(cx - 2, cx + 2, headTop - 3, HC[2]);
-    hl(cx - 3, cx + 3, headTop - 2, HC[1]);
-    hl(cx - 3, cx + 3, headTop - 1, '#3a2010');
-    hl(cx - 6, cx + 6, headTop, HC[0]);
-    px(cx - 6, headTop - 1, HC[0]);
-    px(cx + 6, headTop - 1, HC[0]);
-  } else if (hat === 'hood') {
-    for (let y = headTop - 1; y <= torsoTop + 1; y++) {
-      const half = y === headTop - 1 ? 3 : 4 + (y > torsoTop - 2 ? 1 : 0);
-      for (let x = cx - half; x <= cx + half; x++) {
-        const face = y >= headTop + 2 && y <= headTop + 6 && x >= cx - 2 && x <= cx + 2;
-        px(x, y, face ? '#1a1014' : pick(T, 0.9 - ((x - cx + half) / (2 * half)) * 0.8, x, y));
-      }
-    }
-    px(cx - 1, headTop + 3, '#f8d040');
-    px(cx + 1, headTop + 3, '#f8d040');
-  }
+  const def = { build: woman ? 'slim' : 'lean', height: 88 + (L.tall ?? 1) * 3 - (woman ? 4 : 0) } as Fighter;
+  return { def, look };
 }
 
-/** Bake one spectator's four frames, outlined in the stage's ink. */
-function spectatorSprite(L: Look, ink: string): HTMLCanvasElement {
+/**
+ * Bake one spectator's four frames: the fighters' own body (`body.ts`) at
+ * crowd scale, facing the ring, so the people watching are drawn the way
+ * the people fighting are.
+ */
+function spectatorSprite(L: Look, scale: number): HTMLCanvasElement {
   const c = makeCanvas(FW * 4, FH);
   const ctx = ctx2d(c);
+  const { def, look } = crowdBody(L);
+  const r = new Raster(FW, FH);
+  const top = r.material(L.top);
+  const stripe = L.stripes ? r.material(L.stripes) : 0;
+  const bib = L.overalls ? r.material(L.overalls) : 0;
   for (let f = 0; f < 4; f++) {
-    ctx.save();
-    ctx.translate(f * FW, 0);
-    person(ctx, L, f);
-    ctx.restore();
+    r.clear();
+    drawBody(r, def, look, CROWD_POSES[f], FW / 2, FEET, scale);
+    if (stripe || bib) {
+      // A hooped shirt, or a pair of overalls' bib and braces, painted over the top's cloth.
+      let waist = 0;
+      for (let i = 0; i < r.mat.length; i++) if (r.mat[i] === top) waist = Math.max(waist, Math.floor(i / FW));
+      for (let i = 0; i < r.mat.length; i++) {
+        if (r.mat[i] !== top) continue;
+        const y = Math.floor(i / FW);
+        if (stripe && y % 3 === 0) r.mat[i] = stripe;
+        if (bib && y > waist - 7) r.mat[i] = bib;
+      }
+    }
+    const img = ctx.createImageData(FW, FH);
+    r.toImage3(img, 'none', scale * 3);
+    ctx.putImageData(img, f * FW, 0);
   }
-  outline(c, ink);
   return c;
 }
 
@@ -424,7 +214,7 @@ function folk(i: number, tops: readonly string[], bottoms: readonly string[], ex
 }
 
 function drawSpectator(ctx: CanvasRenderingContext2D, s: Spectator, x: number, t: number, excite: number): void {
-  if (x < -14 || x > SCREEN_W + 14) return;
+  if (x < -FW / 2 || x > SCREEN_W + FW / 2) return;
   const hot = excite > 0.3;
   const beat = Math.floor((t + s.phase) / (hot ? 6 + s.tempo : 13 + s.tempo * 4));
   let frame = 0;
@@ -437,7 +227,7 @@ function drawSpectator(ctx: CanvasRenderingContext2D, s: Spectator, x: number, t
     frame = k === 3 ? (s.tempo === 1 ? 3 : 1) : k === 4 && s.tempo === 2 ? 1 : 0;
     lift = k === 3 && s.tempo === 0 ? 1 : 0;
   }
-  ctx.drawImage(s.sprite, frame * FW, 0, FW, FH, Math.round(x) - 12, s.y - FEET - lift, FW, FH);
+  ctx.drawImage(s.sprite, frame * FW, 0, FW, FH, Math.round(x) - FW / 2, s.y - FEET - lift, FW, FH);
 }
 
 // --- Skies -----------------------------------------------------------------------------
@@ -1211,7 +1001,6 @@ const PAINTERS: Record<StageId, Painter> = {
     },
     floor: (ctx, w, h, hor) => plankFloor(ctx, w, h, hor, { ramp: tones('#8a6248', 5, 0.62, 0.4, '#20102a', '#ffd8a0'), gap: '#2a1820', d: 0.068, len: 120, seed: 2, nail: '#2a2028', wet: '#f8b878' }),
     crowd: {
-      ink: '#1a1028',
       spots: [...spread(13, 210, 470, 100, 5, 0), [140, 148], [178, 150], [520, 148], [560, 150]],
       look: i =>
         i < 13 && hash(i * 4.1) < 0.7
@@ -1364,7 +1153,6 @@ const PAINTERS: Record<StageId, Painter> = {
     },
     floor: (ctx, w, h, hor) => tileFloor(ctx, w, h, hor, { ramp: tones('#a89a88', 5, 0.55, 0.35), alt: tones('#9c9080', 5, 0.55, 0.35), grout: '#4a4038', tw: 44, d: 0.11, seed: 3, stagger: true, crack: '#5a4e44' }),
     crowd: {
-      ink: '#2a1c18',
       spots: [...spread(9, 40, 300, 146, 11), ...spread(8, 330, 600, 146, 23)],
       look: i =>
         folk(i, ['#f0f0f0', '#4a8ad8', '#e8d070', '#c84040', '#5aa05a', '#e888a8', '#3a3a5a'], ['#2a2a3a', '#3a4a6a', '#5a4a3a', '#1a1a1a'], hash(i * 6.6) < 0.2 ? { hat: 'cone', hatColor: '#d8c080' } : {}, SKINS.slice(0, 3))
@@ -1520,7 +1308,6 @@ const PAINTERS: Record<StageId, Painter> = {
         }
       }),
     crowd: {
-      ink: '#0a0a08',
       spots: [...spread(7, 60, 250, 84, 3, 0), ...spread(5, 380, 560, 84, 9, 0), ...spread(10, 100, 520, 146, 17, 1)],
       look: i => {
         const overall = of(['#3a5a8a', '#4a6a4a', '#6a5a3a', '#2a3a6a'], i * 2.7);
@@ -1685,7 +1472,6 @@ const PAINTERS: Record<StageId, Painter> = {
         }
       }),
     crowd: {
-      ink: '#200808',
       spots: [[30, 150], [62, 152], [176, 150], [210, 152], [404, 150], [436, 152], [554, 150], [590, 152]],
       look: i => folk(i, ['#f0f0e8', '#e8a030', '#c82828', '#3a8a8a', '#f0d0e0'], ['#f0f0e8', '#d8c8a0'], { hat: hash(i * 3.3) < 0.5 ? 'turban' : undefined, hatColor: of(['#e8a030', '#f0f0e8', '#c82838'], i), sleeves: true }, ['#8a5434', '#6a4028', '#a06a44', '#7a4a2c'])
     },
@@ -1979,7 +1765,6 @@ const PAINTERS: Record<StageId, Painter> = {
     },
     floor: (ctx, w, h, hor) => plankFloor(ctx, w, h, hor, { ramp: tones('#8a6a44', 5, 0.62, 0.38, '#1a1008', '#f8e8b0'), gap: '#1a1008', d: 0.06, seed: 9, along: 20, nail: '#3a3028' }),
     crowd: {
-      ink: '#0a1408',
       spots: [[84, 86], [104, 86], [122, 86], [346, 86], [366, 86], [390, 86], [226, 130], [250, 131], [170, 110], [292, 109], [470, 110], [520, 111]],
       look: i => folk(i, ['#f0f0f0', '#e8c030', '#3a8a3a', '#d84030', '#e888a8'], ['#5a4a3a', '#3a5a8a', '#e8e0c8'], hash(i * 2.3) < 0.3 ? { hat: 'cone', hatColor: '#d8c080' } : {}, ['#a06a44', '#8a5434', '#c88a60', '#6a4028'])
     },
@@ -2144,7 +1929,6 @@ const PAINTERS: Record<StageId, Painter> = {
         }
       }),
     crowd: {
-      ink: '#141a20',
       spots: [[60, 146], [214, 147], [298, 144], [392, 146], [412, 142], [470, 146], [496, 143], [526, 146], [566, 144]],
       look: i => ({ top: of(['#5a6a3a', '#4e5e30', '#6a7444'], i), bottom: '#4a5a32', skin: of(SKINS, i * 2.3), hair: '#2a1a10', hat: i % 3 === 0 ? 'cap' : 'helmet', hatColor: i % 3 === 0 ? '#3a4a2a' : '#5a6640', tall: 2 + (i % 2), sleeves: hash(i) > 0.5 })
     },
@@ -2287,7 +2071,6 @@ const PAINTERS: Record<StageId, Painter> = {
       });
     },
     crowd: {
-      ink: '#08020c',
       spots: spread(16, 30, 590, 146, 41, 2),
       look: i => {
         if (i % 4 === 1) return { top: of(['#f83088', '#40c8f8', '#f8d040'], i), bottom: '#f0e0c0', skin: of(SKINS, i * 3.3), hair: of(HAIRS, i), hat: 'plume', hatColor: of(['#f8f8f8', '#f878b8', '#80e8f8'], i * 1.3), skirt: true, long: true, tall: 2 };
@@ -2403,7 +2186,6 @@ const PAINTERS: Record<StageId, Painter> = {
     },
     floor: (ctx, w, h, hor) => tileFloor(ctx, w, h, hor, { ramp: tones('#c0704a', 5, 0.6, 0.35, '#2a0a0a', '#f8d0a0'), alt: tones('#b0603e', 5, 0.6, 0.35, '#2a0a0a', '#f8c898'), grout: '#5a2818', tw: 30, d: 0.085, seed: 10, crack: '#7a3a24', wear: 0.55 }),
     crowd: {
-      ink: '#140810',
       spots: [[150, 100], ...spread(14, 20, 600, 146, 61, 2)],
       look: i => {
         if (i === 0) return { top: '#d81828', bottom: '#d81828', skin: '#e8b088', hair: '#120a0a', long: false, skirt: true, hat: 'flower', tall: 2 };
@@ -2546,7 +2328,6 @@ const PAINTERS: Record<StageId, Painter> = {
     },
     floor: (ctx, w, h, hor) => tileFloor(ctx, w, h, hor, { ramp: tones('#a89480', 5, 0.62, 0.35, '#2a1010', '#fff0d0'), grout: '#3a2a20', tw: 52, d: 0.12, seed: 11, stagger: true, crack: '#4a3a2a', wear: 0.7, moss: tones('#5a7a2a', 4, 0.5, 0.3) }),
     crowd: {
-      ink: '#1a0a0a',
       spots: [[40, 146], [190, 140], [212, 142], [234, 140], [380, 140], [402, 142], [424, 141], [580, 146]],
       look: i => (i % 3 === 0 ? folk(i, ['#f0f0f0', '#3a6aa8', '#d83030'], ['#3a2a2a', '#5a4a3a'], {}, ['#b07a4a', '#a06a44', '#8a5434']) : { top: of(['#e88a20', '#d87018', '#f0a030'], i), bottom: '#e88a20', skin: of(['#b07a4a', '#a06a44', '#8a5434'], i), hair: '#1a1a1a', bald: true, robe: true, sash: '#b85810', tall: 1 })
     },
@@ -2634,7 +2415,6 @@ const PAINTERS: Record<StageId, Painter> = {
         inlay: (u, v) => (Math.abs(u - 0.5) < 0.03 && Math.abs(v - 0.5) < 0.12 ? '#a87828' : null)
       }),
     crowd: {
-      ink: '#080204',
       spots: [...spread(4, 100, 250, 146, 71, 0), ...spread(4, 370, 520, 146, 81, 0)],
       look: i => ({ top: '#8a1420', bottom: '#2a1a1e', skin: of(SKINS, i * 1.9), hair: '#1a1418', hat: 'peaked', hatColor: '#8a1420', tall: 3, sleeves: true })
     },
@@ -2740,7 +2520,6 @@ const PAINTERS: Record<StageId, Painter> = {
       });
     },
     crowd: {
-      ink: '#141820',
       spots: spread(12, 30, 590, 142, 91, 2),
       look: i => folk(i, ['#f0f0f0', '#d82828', '#2848a8', '#e8c040', '#3a8a5a'], ['#2a3a5a', '#3a3a3a', '#5a4a3a'], hash(i * 4) < 0.3 ? { hat: 'cap', hatColor: of(['#2848a8', '#d82828'], i) } : {})
     }
@@ -2814,7 +2593,6 @@ const PAINTERS: Record<StageId, Painter> = {
     },
     floor: (ctx, w, h) => grit(ctx, w, h, tones('#8a7a60', 5, 0.55, 0.35, '#2a1a10', '#f8e8c8'), 9, 0.55, (x, ry) => (fbm(x / 30, ry / 6, 44) > 0.75 ? '#76664e' : null)),
     crowd: {
-      ink: '#1a0c0c',
       spots: spread(10, 60, 560, 146, 101, 2),
       look: i => ({ ...folk(i, ['#c8c0b0', '#8a8a80', '#a06040'], ['#3a4a6a'], {}, SKINS.slice(0, 4)), long: false, skirt: false, overalls: of(['#3a5a8a', '#4a6a4a', '#6a5a3a'], i), hat: 'hard', hatColor: of(['#e8b818', '#f0f0f0', '#d84020'], i * 1.1) })
     }
@@ -2842,7 +2620,7 @@ export function paintStage(id: StageId): StageArt {
   if (p.crowd) {
     const c = p.crowd;
     c.spots.forEach(([x, y], i) => {
-      crowd.push({ x, y, sprite: spectatorSprite(c.look(i), c.ink), phase: Math.floor(hash(i * 13 + 5) * 40), tempo: Math.floor(hash(i * 7 + 3) * 3) });
+      crowd.push({ x, y, sprite: spectatorSprite(c.look(i), crowdScale(y)), phase: Math.floor(hash(i * 13 + 5) * 40), tempo: Math.floor(hash(i * 7 + 3) * 3) });
     });
     // Nearer (lower) people are drawn last.
     crowd.sort((a, b) => a.y - b.y);

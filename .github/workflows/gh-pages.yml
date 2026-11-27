@@ -15,14 +15,20 @@ permissions:
   contents: read
 
 jobs:
-  build-deploy:
+  # Build and deploy are separate jobs on purpose. `npm ci` and the build run
+  # every dependency's code (install scripts, Astro, its plugins), and
+  # Dependabot auto-merges dev dependencies, so that code must never share a
+  # job with a token that can write to the repository. The build job is
+  # read-only and hands ./dist over as an artifact; the deploy job holds the
+  # write token and runs no repository or dependency code at all.
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -35,6 +41,26 @@ jobs:
 
       - name: Build the site
         run: npm run build
+
+      - name: Upload the built site
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site
+          path: ./dist
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the built site
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: ./dist
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0

@@ -149,7 +149,14 @@ const BLOCKED_INITIALS = new Set([
  */
 const ADDRESS_LIMIT = 20;
 const ADDRESS_WINDOW = 60 * 60;
-const GAME_LIMIT = 300;
+/*
+ * 100, down from 300 (2026-11-28 security review). One address can spend its
+ * hourly allowance on every board, so the old cap let a single curl loop make
+ * about 3,300 writes a day across the eleven boards, which is the Blob quota
+ * rather than a bound on it. A hundred finished runs a day per cabinet is
+ * still far more than the arcade sees.
+ */
+const GAME_LIMIT = 100;
 const GAME_WINDOW = 24 * 60 * 60;
 
 const WRITE_ATTEMPTS = 3;
@@ -353,6 +360,26 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
+/**
+ * Why a board must refuse this submission, or null when it may be written.
+ * One function for both the cached pre-check and the authoritative check in
+ * the write loop, so the two cannot drift apart.
+ */
+function refusal(recent: RecentEntry[], hash: string, now: number): string | null {
+  const live = recent.filter(r => r.t > now - GAME_WINDOW);
+
+  // Per address per game per hour: `recent` lives in this game's blob and
+  // sees no other board's traffic. See the note at the top of the file.
+  if (live.filter(r => r.h === hash && r.t > now - ADDRESS_WINDOW).length >= ADDRESS_LIMIT) {
+    return 'too many submissions';
+  }
+
+  // The cost cap: without it a scripted flood burns the Blob quota, and an
+  // over-quota Hobby store is disabled for thirty days.
+  if (live.length >= GAME_LIMIT) return 'board is full for today';
+  return null;
+}
+
 async function record(
   request: Request,
   cors: Record<string, string>,
@@ -360,6 +387,34 @@ async function record(
 ): Promise<Response> {
   const { game, initials, score, nonce } = submission;
   const hash = hashAddress(clientAddress(request));
+
+  /*
+   * Refuse a limited caller off the cached board before paying for anything
+   * else. The loop below reads past the CDN on every attempt, and it used to
+   * be the only place the limits were checked, so a caller already over the
+   * cap still cost an origin read per request, without bound: the limiter
+   * bounded writes and nothing bounded reads. `recent` only ever grows inside
+   * its window, so a cached copy can be up to a minute behind but can never
+   * show a caller as limited who is not. A failed cached read just falls
+   * through to the authoritative path.
+   *
+   * A resent nonce is answered from the cached board too, and before the
+   * limits, since it asks for nothing new. It must not be waved through to
+   * the loop instead: nonces sit in a world-readable blob, so anyone could
+   * replay one to buy an origin read per request with no cap at all. A nonce
+   * the cache has not caught up with yet is still deduplicated by the loop.
+   */
+  const cached = await readBoard(game, false).catch(() => null);
+  if (cached) {
+    if (cached.board.recent.some(r => r.n === nonce)) {
+      return Response.json(
+        { rank: rankOf(cached.board.top, nonce), table: publish(cached.board.top) },
+        { headers: cors }
+      );
+    }
+    const reason = refusal(cached.board.recent, hash, Math.floor(Date.now() / 1000));
+    if (reason) return fail(429, reason, cors);
+  }
 
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     if (attempt > 0) await pause(RETRY_BACKOFF_MS * attempt);
@@ -394,15 +449,8 @@ async function record(
     // serves both counts below and keeps the blob a bounded size.
     const live = board.recent.filter(r => r.t > now - GAME_WINDOW);
 
-    // Per address per game per hour: `recent` lives in this game's blob and
-    // sees no other board's traffic. See the note at the top of the file.
-    if (live.filter(r => r.h === hash && r.t > now - ADDRESS_WINDOW).length >= ADDRESS_LIMIT) {
-      return fail(429, 'too many submissions', cors);
-    }
-
-    // The cost cap: without it a scripted flood burns the Blob quota, and an
-    // over-quota Hobby store is disabled for thirty days.
-    if (live.length >= GAME_LIMIT) return fail(429, 'board is full for today', cors);
+    const reason = refusal(live, hash, now);
+    if (reason) return fail(429, reason, cors);
 
     const entry: BoardEntry = { i: initials, s: score, t: now, n: nonce };
     const next: StoredBoard = {

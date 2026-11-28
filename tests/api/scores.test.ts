@@ -23,7 +23,10 @@ import { MAX_SCORE as CLIENT_MAX_SCORE } from '../../src/games/engine/globalScor
  * `@vercel/blob`, which happens before this file's own bindings exist.
  *
  * `onRead` is the hook the ETag tests use: it fires once, immediately after a
- * read returns, to simulate a rival write landing mid-merge.
+ * read returns, to simulate a rival write landing mid-merge. Only a read that
+ * bypasses the cache arms it, because that is the read a merge is built on;
+ * the cached rate-limit pre-check ahead of it must not spend the hook, or the
+ * rival would land before the merge began and the race would go untested.
  */
 const blob = vi.hoisted(() => {
   class MockPreconditionFailedError extends Error {}
@@ -35,7 +38,7 @@ const blob = vi.hoisted(() => {
 });
 
 vi.mock('@vercel/blob', () => ({
-  get: vi.fn(async (pathname: string) => {
+  get: vi.fn(async (pathname: string, options?: { useCache?: boolean }) => {
     const found = blob.store.get(pathname);
     const result = found
       ? {
@@ -46,7 +49,7 @@ vi.mock('@vercel/blob', () => ({
         }
       : null;
     const hook = blob.state.onRead;
-    if (hook) {
+    if (hook && options?.useCache === false) {
       blob.state.onRead = null;
       hook();
     }
@@ -69,7 +72,7 @@ const AN_HOUR = 60 * 60;
 const A_DAY = 24 * 60 * 60;
 const TOKEN = 'vercel_blob_rw_test_token';
 const ADDRESS_LIMIT = 20;
-const GAME_LIMIT = 300;
+const GAME_LIMIT = 100;
 const ADDRESS = '203.0.113.5';
 
 /** What the handler derives for the test address, so the salt stays its own business. */
@@ -421,7 +424,9 @@ describe('POST writes', () => {
 
   it('bypasses the blob cache when reading to merge, so no rival score is lost', async () => {
     await POST(postRequest(submission()));
-    expect(vi.mocked(get).mock.calls[0][1]).toMatchObject({ useCache: false });
+    // The first read is the cached rate-limit pre-check; the merge is the second.
+    expect(vi.mocked(get).mock.calls[0][1]).toMatchObject({ useCache: true });
+    expect(vi.mocked(get).mock.calls[1][1]).toMatchObject({ useCache: false });
   });
 
   it('keeps the stored blob cacheable for only a minute', async () => {
@@ -516,7 +521,8 @@ describe('POST conditional writes', () => {
     const response = await POST(postRequest(submission({ score: 4210, nonce: 'mine' })));
 
     expect(response.status).toBe(200);
-    expect(vi.mocked(get)).toHaveBeenCalledTimes(2);
+    // One cached pre-check, then the read that lost the race and its retry.
+    expect(vi.mocked(get)).toHaveBeenCalledTimes(3);
     expect(vi.mocked(put)).toHaveBeenCalledTimes(2);
     // The rival's entry survived, which only holds if the retry re-read.
     expect(stored('snake').top.map(e => e.n).sort()).toEqual(['mine', 'rival-0', 'rival-1']);
@@ -583,7 +589,8 @@ describe('POST conditional writes', () => {
     expect(response.status).toBe(200);
     expect(stored('snake').top.map(e => e.n)).toEqual(['first']);
     // Absence is only accepted once the retries have given storage time to settle.
-    expect(vi.mocked(get)).toHaveBeenCalledTimes(3);
+    // Three fresh reads, after the one cached pre-check.
+    expect(vi.mocked(get)).toHaveBeenCalledTimes(4);
     expect(vi.mocked(put)).toHaveBeenCalledTimes(1);
   });
 });
@@ -619,6 +626,58 @@ describe('POST rate limits', () => {
     seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - 60 * index);
     const response = await POST(postRequest(submission({ game: 'cascade', nonce: 'elsewhere' })));
     expect(response.status).toBe(200);
+  });
+
+  /*
+   * The limits used to be checked only inside the write loop, after a read
+   * past the CDN, so a caller already over the cap still cost an origin read
+   * on every request and nothing bounded that. A limited caller must now be
+   * turned away on the cached read alone.
+   */
+  const freshReads = () =>
+    vi.mocked(get).mock.calls.filter(call => (call[1] as { useCache?: boolean }).useCache === false);
+
+  it('turns a limited address away without reading past the cache', async () => {
+    seedTraffic('snake', ADDRESS_LIMIT, sameAddress, index => NOW_SECONDS - 60 * index);
+    const response = await POST(postRequest(submission({ nonce: 'past-the-cap' })));
+    expect(response.status).toBe(429);
+    expect(freshReads()).toHaveLength(0);
+  });
+
+  it('turns everyone away from a full board without reading past the cache', async () => {
+    seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - 60 * index);
+    const response = await POST(postRequest(submission({ nonce: 'past-the-cap' })));
+    expect(response.status).toBe(429);
+    expect(freshReads()).toHaveLength(0);
+  });
+
+  it('still answers a resent submission on a full board with its own result', async () => {
+    seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - 60 * index);
+    const response = await POST(postRequest(submission({ nonce: 'seeded-0' })));
+    expect(response.status).toBe(200);
+    expect(vi.mocked(put)).not.toHaveBeenCalled();
+  });
+
+  // Nonces are world-readable, so a replay must not be a way round the caps:
+  // it is answered from the cache, however often and at whatever traffic.
+  it('never reads past the cache for a replayed nonce, at the cap or under it', async () => {
+    seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - 60 * index);
+    seedBoard('cascade', [entry('AAA', 900, NOW_SECONDS - 10, 'known')]);
+    for (let i = 0; i < 5; i++) {
+      await POST(postRequest(submission({ nonce: 'seeded-0' })));
+      const quiet = await POST(postRequest(submission({ game: 'cascade', nonce: 'known' })));
+      expect(await quiet.json()).toMatchObject({ rank: 1, table: [{ i: 'AAA', s: 900 }] });
+    }
+    expect(freshReads()).toHaveLength(0);
+    expect(vi.mocked(put)).not.toHaveBeenCalled();
+  });
+
+  it('still enforces the limit when the cached read fails', async () => {
+    seedTraffic('snake', ADDRESS_LIMIT, sameAddress, index => NOW_SECONDS - 60 * index);
+    vi.mocked(get).mockRejectedValueOnce(new Error('cdn down'));
+    const response = await POST(postRequest(submission({ nonce: 'past-the-cap' })));
+    expect(response.status).toBe(429);
+    expect(vi.mocked(put)).not.toHaveBeenCalled();
   });
 
   it('lets a board thaw once its writes age past a day', async () => {

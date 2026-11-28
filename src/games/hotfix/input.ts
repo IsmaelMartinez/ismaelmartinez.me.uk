@@ -35,7 +35,8 @@ export const GAME_KEYS = new Set([
   'Enter',
   'e',
   'f',
-  'h'
+  'h',
+  'q'
 ]);
 
 /** Pixels of thumb travel that count as the stick pushed all the way. */
@@ -46,12 +47,14 @@ export function composeInput(keys: ReadonlySet<string>, stick: Stick | null, but
   const action = buttons.action || has('Enter', 'e', 'f');
   const handbrake = buttons.handbrake || has(' ');
   const horn = buttons.horn || has('h');
+  // On foot the handbrake's button is the trigger, and the horn's changes gun.
+  const swap = buttons.horn || has('q');
   if (stick && Math.hypot(stick.x, stick.y) > 0.15) {
-    return { moveX: stick.x, moveY: stick.y, mode: 'stick', handbrake, action, horn };
+    return { moveX: stick.x, moveY: stick.y, mode: 'stick', handbrake, action, horn, fire: handbrake, swap };
   }
   const moveX = (has('ArrowRight', 'd') ? 1 : 0) - (has('ArrowLeft', 'a') ? 1 : 0);
   const moveY = (has('ArrowDown', 's') ? 1 : 0) - (has('ArrowUp', 'w') ? 1 : 0);
-  return { moveX, moveY, mode: 'keys', handbrake, action, horn };
+  return { moveX, moveY, mode: 'keys', handbrake, action, horn, fire: handbrake, swap };
 }
 
 /** The first connected pad's left stick and face buttons, or null with no pad. */

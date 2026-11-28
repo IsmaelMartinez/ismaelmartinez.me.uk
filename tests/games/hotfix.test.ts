@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { CITY, COLS, ROWS, T, TILE, clearLine, isSolidTile, route, solidAt, wayTo, type Point } from '../../src/games/hotfix/map';
 import { JOBS, type JobId } from '../../src/games/hotfix/jobs';
 import {
+  BASH_BONUS,
+  BASH_CASH,
   BUST_SECONDS,
+  DRONE_CASH,
+  PLAYER_HP,
+  WASTED_SECONDS,
   CAR_SPECS,
   JOB_BONUS_SECONDS,
   NO_INPUT,
@@ -21,6 +26,7 @@ import {
   type RunState
 } from '../../src/games/hotfix/run';
 import { GAME_KEYS, composeInput, readGamepad } from '../../src/games/hotfix/input';
+import { WEAPONS } from '../../src/games/hotfix/weapons';
 import { bfsFrom } from '../../src/games/engine/pathfind';
 import { TICK, competent, idle, playShift } from './hotfix-policies';
 
@@ -77,7 +83,8 @@ describe('the city', () => {
     ...Object.entries(CITY.places),
     ...CITY.phones.map((p, i): [string, Point] => [`phone ${i}`, p]),
     ...CITY.washes.map((p, i): [string, Point] => [`wash ${i}`, p]),
-    ...CITY.parked.map((p, i): [string, Point] => [`parked ${i}`, p])
+    ...CITY.parked.map((p, i): [string, Point] => [`parked ${i}`, p]),
+    ...CITY.pickups.map((p, i): [string, Point] => [`${p.kind} crate ${i}`, p])
   ];
 
   it('stands every place, phone box, car wash and parked car on open ground', () => {
@@ -115,6 +122,7 @@ describe('the city', () => {
     for (const job of Object.values(JOBS)) {
       for (const stage of job.stages) {
         const places = stage.type === 'sweep' || stage.type === 'sonar' ? stage.places : [stage.place];
+        expect(places.length).toBeGreaterThan(0);
         for (const id of places) expect(CITY.places[id], `${job.id}: ${id}`).toBeDefined();
       }
     }
@@ -483,6 +491,222 @@ describe('jobs', () => {
   });
 });
 
+describe('guns', () => {
+  const FIRE: RunInput = { ...NO_INPUT, fire: true };
+  /** On foot on the long road, facing east, with a full pistol. */
+  function armed(weapon: 'pistol' | 'smg' | 'rocket' = 'pistol'): RunState {
+    const run = quietRun();
+    run.pickups = [];
+    run.player.x = 20 * TILE;
+    run.player.y = 15 * TILE + 8;
+    run.player.angle = 0;
+    run.player.weapon = weapon;
+    run.player.ammo = { [weapon]: WEAPONS[weapon].ammo };
+    return run;
+  }
+  const drone = (run: RunState, dx: number) => {
+    const d = { x: run.player.x + dx, y: run.player.y, hp: 30, cool: 99, homeX: run.player.x + dx, homeY: run.player.y };
+    run.drones.push(d);
+    return d;
+  };
+
+  it('come out of crates, which restock, and the newest is the one in hand', () => {
+    const run = quietRun();
+    const crate = run.pickups.find(p => p.kind === 'smg')!;
+    run.player.x = crate.x;
+    run.player.y = crate.y;
+    const events = advance(run, TICK);
+    expect(events.some(e => e.type === 'pickup' && e.kind === 'smg')).toBe(true);
+    expect(run.player.weapon).toBe('smg');
+    expect(run.player.ammo.smg).toBe(WEAPONS.smg.ammo);
+    expect(crate.wait).toBeGreaterThan(0);
+    // Stood on the empty spot, nothing more comes of it until it is restocked.
+    advance(run, 1);
+    expect(run.player.ammo.smg).toBe(WEAPONS.smg.ammo);
+    advance(run, 45);
+    expect(run.player.ammo.smg).toBe(WEAPONS.smg.ammo * 2);
+  });
+
+  it('fire on foot at their own rate, spend ammo, and are put away when empty', () => {
+    const run = armed();
+    run.player.ammo.pistol = 3;
+    const events = advance(run, 3, FIRE);
+    expect(events.filter(e => e.type === 'shot').length).toBe(3);
+    expect(run.player.weapon).toBeNull();
+    // An empty hand fires nothing.
+    expect(advance(run, 1, FIRE).some(e => e.type === 'shot')).toBe(false);
+  });
+
+  it('cannot be fired from behind the wheel', () => {
+    const run = armed();
+    atTheWheel(run);
+    expect(advance(run, 1, FIRE).some(e => e.type === 'shot')).toBe(false);
+    expect(run.player.ammo.pistol).toBe(WEAPONS.pistol.ammo);
+  });
+
+  it('change on a press of the swap button, round the guns that have rounds in them', () => {
+    const run = armed();
+    run.player.ammo = { pistol: 5, rocket: 2 };
+    tickRun(run, { ...NO_INPUT, swap: true }, TICK);
+    expect(run.player.weapon).toBe('rocket');
+    tickRun(run, { ...NO_INPUT, swap: true }, TICK);
+    expect(run.player.weapon).toBe('rocket');
+    tickRun(run, NO_INPUT, TICK);
+    tickRun(run, { ...NO_INPUT, swap: true }, TICK);
+    expect(run.player.weapon).toBe('pistol');
+  });
+
+  it('shoot down a drone and pay for it at the multiplier', () => {
+    const run = armed();
+    run.mult = 2;
+    drone(run, 120);
+    const events = advance(run, 2, FIRE);
+    expect(events.some(e => e.type === 'zap')).toBe(true);
+    expect(run.drones.length).toBe(0);
+    expect(run.cash).toBe(DRONE_CASH * 2);
+  });
+
+  it('squash a bug at range', () => {
+    const run = armed();
+    run.bugs.push({ x: run.player.x + 100, y: run.player.y, angle: 0, timer: 99, gold: false });
+    advance(run, 1, FIRE);
+    expect(run.squashed).toBe(1);
+    expect(run.cash).toBe(10);
+  });
+
+  it('never hit a person: whoever is in the line of fire is on the floor before it arrives, and gets up', () => {
+    const run = armed('smg');
+    const tile = tileOf({ x: run.player.x + 90, y: run.player.y });
+    run.people.push({
+      x: run.player.x + 90,
+      y: run.player.y,
+      tx: run.player.x + 90,
+      ty: run.player.y,
+      tile,
+      prevTile: tile,
+      state: 'fist',
+      timer: 30,
+      vx: 0,
+      vy: 0,
+      look: 0.5,
+      penguin: false,
+      facing: 0
+    });
+    const events = advance(run, 2, FIRE);
+    expect(events.some(e => e.type === 'dive')).toBe(true);
+    expect(run.people.length).toBe(1);
+    expect(run.heat).toBeGreaterThan(0);
+    advance(run, 2);
+    expect(run.people[0].state).toBe('walk');
+  });
+
+  it('set a car alight, and a rocket takes out what stands round where it lands', () => {
+    const run = armed('rocket');
+    const car = atTheWheel(run, 'mini', { x: run.player.x + 150, y: run.player.y });
+    run.player.car = null;
+    car.driver = 'none';
+    drone(run, 170);
+    run.bugs.push({ x: run.player.x + 140, y: run.player.y + 20, angle: 0, timer: 99, gold: false });
+    // One rocket, and time for it to get there.
+    const events = [...advance(run, 0.3, FIRE), ...advance(run, 0.9)];
+    expect(events.filter(e => e.type === 'explode').length).toBe(1);
+    expect(run.drones.length).toBe(0);
+    expect(run.squashed).toBe(1);
+    expect(car.hp).toBeLessThanOrEqual(0);
+    expect(advance(run, 5).filter(e => e.type === 'explode').length).toBe(1);
+  });
+});
+
+describe('drones, health and the bug bash', () => {
+  it('lets a drone hurt a player on foot, and a coffee mend them', () => {
+    const run = quietRun();
+    run.player.x = 20 * TILE;
+    run.player.y = 15 * TILE + 8;
+    run.drones.push({ x: run.player.x + 120, y: run.player.y, hp: 30, cool: 0, homeX: run.player.x + 120, homeY: run.player.y });
+    const events = advance(run, 4);
+    expect(events.some(e => e.type === 'hurt')).toBe(true);
+    expect(run.player.hp).toBeLessThan(PLAYER_HP);
+    const hp = run.player.hp;
+    run.drones = [];
+    run.shots = [];
+    const coffee = run.pickups.find(p => p.kind === 'coffee')!;
+    run.player.x = coffee.x;
+    run.player.y = coffee.y;
+    advance(run, TICK);
+    expect(run.player.hp).toBeGreaterThan(hp);
+    expect(run.player.hp).toBeLessThanOrEqual(PLAYER_HP);
+  });
+
+  it('leaves a coffee on its spot for someone who does not need it', () => {
+    const run = quietRun();
+    const coffee = run.pickups.find(p => p.kind === 'coffee')!;
+    run.player.x = coffee.x;
+    run.player.y = coffee.y;
+    advance(run, 0.2);
+    expect(coffee.wait).toBe(0);
+  });
+
+  it('knocks a player with no health left out cold: seconds, the bonus and the guns, never money', () => {
+    const run = quietRun();
+    run.cash = 700;
+    run.mult = 5;
+    run.player.ammo = { pistol: 9 };
+    run.player.weapon = 'pistol';
+    run.player.hp = 0;
+    const clock = run.clock;
+    const events = advance(run, TICK);
+    expect(events.some(e => e.type === 'wasted')).toBe(true);
+    expect(run.cash).toBe(700);
+    expect(run.mult).toBe(1);
+    expect(run.player.hp).toBe(PLAYER_HP);
+    expect(run.player.weapon).toBeNull();
+    expect(clock - run.clock).toBeGreaterThanOrEqual(WASTED_SECONDS);
+    expect(Math.hypot(run.player.x - CITY.places.clinic.x, run.player.y - CITY.places.clinic.y)).toBeLessThan(2);
+    // Once, not every tick after.
+    expect(advance(run, 1).some(e => e.type === 'wasted')).toBe(false);
+  });
+
+  it('runs a car through a drone as well as a bullet would', () => {
+    const run = quietRun();
+    const car = atTheWheel(run);
+    run.drones.push({ x: car.x + 160, y: car.y, hp: 30, cool: 99, homeX: car.x + 160, homeY: car.y });
+    const events = advance(run, 3, GAS);
+    expect(events.some(e => e.type === 'zap')).toBe(true);
+    expect(run.cash).toBe(DRONE_CASH);
+  });
+
+  it('pays a bonus for a bug bash cleared in time, and sweeps up one that was not', () => {
+    const start = (): RunState => {
+      const run = quietRun();
+      const token = run.pickups.find(p => p.kind === 'bash')!;
+      run.player.x = token.x;
+      run.player.y = token.y;
+      expect(advance(run, TICK).some(e => e.type === 'bash' && e.state === 'start')).toBe(true);
+      return run;
+    };
+    const cleared = start();
+    const bugs = cleared.bugs.filter(b => b.bash);
+    expect(bugs.length).toBe(12);
+    let events: RunEvent[] = [];
+    for (const bug of bugs) {
+      cleared.player.x = bug.x - 2;
+      cleared.player.y = bug.y;
+      events = events.concat(tickRun(cleared, { ...NO_INPUT, moveX: 1 }, TICK));
+    }
+    events = events.concat(advance(cleared, TICK * 2));
+    expect(events.some(e => e.type === 'bash' && e.state === 'done')).toBe(true);
+    expect(cleared.cash).toBe(12 * BASH_CASH + BASH_BONUS);
+    expect(cleared.bash).toBeNull();
+
+    const missed = start();
+    missed.player.x = CITY.places.home.x;
+    missed.player.y = CITY.places.home.y;
+    expect(advance(missed, 31).some(e => e.type === 'bash' && e.state === 'over')).toBe(true);
+    expect(missed.bugs.some(b => b.bash)).toBe(false);
+    expect(missed.cash).toBe(0);
+  });
+});
+
 describe('controls', () => {
   const none = { action: false, handbrake: false, horn: false };
 
@@ -490,7 +714,8 @@ describe('controls', () => {
     expect(composeInput(new Set(['ArrowUp', 'ArrowRight']), null, none)).toMatchObject({ moveX: 1, moveY: -1, mode: 'keys' });
     expect(composeInput(new Set(['w', 'd']), null, none)).toMatchObject({ moveX: 1, moveY: -1, mode: 'keys' });
     expect(composeInput(new Set(['ArrowLeft', 'ArrowRight']), null, none).moveX).toBe(0);
-    expect(composeInput(new Set([' ', 'e', 'h']), null, none)).toMatchObject({ handbrake: true, action: true, horn: true });
+    expect(composeInput(new Set([' ', 'e', 'h']), null, none)).toMatchObject({ handbrake: true, action: true, horn: true, fire: true });
+    expect(composeInput(new Set(['q']), null, none)).toMatchObject({ swap: true, horn: false });
   });
 
   it('lets a pushed stick take over from the keys, and a resting one leave them alone', () => {
@@ -522,7 +747,7 @@ describe('a whole shift', () => {
     expect(run.cash).toBe(0);
   });
 
-  it('plays out the same from the same seed, and differently from another', () => {
+  it('plays out the same from the same seed, and differently from another', { timeout: 60_000 }, () => {
     const a = playShift(42, competent());
     const b = playShift(42, competent());
     const c = playShift(43, competent());

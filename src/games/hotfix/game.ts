@@ -35,14 +35,17 @@ import {
   drawBeam,
   drawBug,
   drawCar,
+  drawDrone,
   drawDusk,
   drawHeadlights,
   drawHud,
   drawMarker,
   drawPerson,
   drawPhone,
+  drawPickup,
   drawPlayer,
   drawRain,
+  drawShots,
   drawStick,
   drawWash,
   type Camera
@@ -121,6 +124,9 @@ export function initHotfixGame(): void {
   let pingIn = 0;
   let tickIn = 0;
   let smokeIn = 0;
+  let hurtFlash = 0;
+  let droneShots = 0;
+  let onFoot: boolean | null = null;
   let skids: { x: number; y: number; a: number; life: number }[] = [];
   let stains: { x: number; y: number; life: number }[] = [];
   /** The DOM test's hand on the wheel; null means the real controls. */
@@ -144,10 +150,12 @@ export function initHotfixGame(): void {
   wireSoundToggles(audio);
   const sound = createCitySound(audio);
 
+  const brakeBtn = document.getElementById('btn-brake');
+  const hornBtn = document.getElementById('btn-horn');
   const controls = createControls(canvas, hidpi.toLogical, listenUntilSwap, () => phase === 'play', {
     action: document.getElementById('btn-action'),
-    handbrake: document.getElementById('btn-brake'),
-    horn: document.getElementById('btn-horn')
+    handbrake: brakeBtn,
+    horn: hornBtn
   });
 
   // --- Helpers --------------------------------------------------------------------
@@ -173,6 +181,7 @@ export function initHotfixGame(): void {
     if (stage.type === 'goto') return fill(ui('objGoto'), { place: strings.places[stage.place] });
     if (stage.type === 'sweep') return fill(ui('objSweep'), { places: job.remaining.map(id => strings.places[id]).join(' · ') });
     if (stage.type === 'squash') return fill(ui('objSquash'), { n: job.count });
+    if (stage.type === 'purge') return fill(ui('objPurge'), { n: job.count });
     if (stage.type === 'collect') return fill(ui(run.player.car ? 'objCollectCar' : 'objCollect'), { n: job.count });
     return ui('objSonar');
   }
@@ -212,6 +221,8 @@ export function initHotfixGame(): void {
     stains = [];
     banner.left = 0;
     shake = 0;
+    droneShots = 0;
+    onFoot = null;
     rain = 0;
     cam.x = run.player.x;
     cam.y = run.player.y;
@@ -343,6 +354,40 @@ export function initHotfixGame(): void {
           break;
         case 'horn':
           sound.play('horn');
+          break;
+        case 'shot':
+          sound.play(ev.weapon);
+          break;
+        case 'pickup':
+          sound.play('pickup');
+          fx.burst(ev.x, ev.y, 10, '#fef9c3', { speed: 80, life: 0.4, size: 2 });
+          if (ev.kind !== 'bash') fx.floater(ev.x, ev.y - 14, ev.kind === 'coffee' ? '☕ +50' : ui(`gun_${ev.kind}`), '#fef9c3', { size: 13 });
+          break;
+        case 'zap':
+          sound.play('zap', near(ev.x, ev.y));
+          fx.burst(ev.x, ev.y, 16, '#93c5fd', { speed: 150, life: 0.5, size: 2.5, glow: true });
+          fx.burst(ev.x, ev.y, 8, '#475569', { speed: 70, life: 0.8, size: 3 });
+          break;
+        case 'hurt':
+          sound.play('hurt');
+          shake = Math.max(shake, 4);
+          hurtFlash = 0.25;
+          break;
+        case 'wasted':
+          say(ui('wasted'), '#fca5a5', 2.6);
+          showToast(`🏥 ${ui('wastedDesc')}`);
+          if (!audio.playStinger(STINGERS.busted)) audio.playSfx('hit');
+          cam.x = run.player.x;
+          cam.y = run.player.y;
+          break;
+        case 'bash':
+          if (ev.state === 'start') {
+            say(ui('bash'), '#fdba74', 2.2);
+            showToast(`🪲 ${ui('bashStart')}`);
+          } else if (ev.state === 'done') {
+            say(ui('bashDone'), '#86efac', 2.2);
+            sound.play('cash');
+          } else showToast(`🪲 ${ui('bashOver')}`);
           break;
         case 'warn':
           showToast(`⏰ ${ui('warn')}`);
@@ -477,10 +522,22 @@ export function initHotfixGame(): void {
     clock += dt;
     banner.left = Math.max(0, banner.left - dt);
     shake = Math.max(0, shake - 34 * dt);
+    hurtFlash = Math.max(0, hurtFlash - dt);
     fx.update(dt);
     if (phase !== 'play') return;
     handleEvents(tickRun(run, devInput ?? controls.read(), dt));
     if (phase !== 'play') return;
+    // The drones' own fire: a sound for each new hostile shot in the air.
+    const hostile = run.shots.filter(s => s.hostile).length;
+    if (hostile > droneShots) sound.play('droneShot');
+    droneShots = hostile;
+    // The middle and right touch buttons change their faces with what they do.
+    const foot = !run.player.car;
+    if (foot !== onFoot) {
+      onFoot = foot;
+      if (brakeBtn) brakeBtn.textContent = foot ? '🔫' : '🛑';
+      if (hornBtn) hornBtn.textContent = foot ? '🔁' : '📣';
+    }
     followCamera(dt);
     ambience(dt);
     updateHud();
@@ -520,14 +577,17 @@ export function initHotfixGame(): void {
     for (const phone of CITY.phones) drawPhone(ctx, phone, ringing, clock);
     if (!goal.phone && !goal.hidden) {
       const stage = run.job?.def.stages[run.job.stage];
-      const small = stage?.type === 'squash' || stage?.type === 'collect';
+      const small = stage?.type === 'squash' || stage?.type === 'collect' || stage?.type === 'purge';
       for (const point of goal.points as Point[]) drawMarker(ctx, point, small ? 13 : 44, small ? '#facc15' : '#fde047', clock);
     }
 
+    for (const pickup of run.pickups) drawPickup(ctx, pickup, clock);
     for (const bug of run.bugs) drawBug(ctx, bug, clock);
     for (const person of run.people) drawPerson(ctx, person, rain > 0.5);
     for (const car of run.cars) drawCar(ctx, car, clock);
     drawPlayer(ctx, run, clock);
+    for (const drone of run.drones) drawDrone(ctx, drone, clock);
+    drawShots(ctx, run.shots);
     ctx.textAlign = 'center';
     fx.draw(ctx);
     ctx.restore();
@@ -539,6 +599,10 @@ export function initHotfixGame(): void {
     drawBeam(ctx, clock);
     ctx.restore();
     drawRain(ctx, clock, rain);
+    if (hurtFlash > 0) {
+      ctx.fillStyle = `rgba(239, 68, 68, ${hurtFlash * 1.2})`;
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
 
     if (phase === 'play' || phase === 'paused') {
       const target = goal.hidden ? null : nearestObjective(run);
@@ -552,7 +616,8 @@ export function initHotfixGame(): void {
           bannerLeft: banner.left,
           bannerColor: banner.color,
           paused: phase === 'paused' ? ui('paused') : '',
-          signal: ui('signal')
+          signal: ui('signal'),
+          bash: ui('bash')
         },
         sonarSignal(run),
         clock

@@ -24,7 +24,8 @@ import {
   type Lot,
   type Point
 } from './map';
-import { BUST_FILL, CAR_SPECS, type Bug, type Car, type Person, type RunState } from './run';
+import { BUST_FILL, CAR_SPECS, PLAYER_HP, type Bug, type Car, type Drone, type Person, type Pickup, type RunState, type Shot } from './run';
+import type { WeaponId } from './weapons';
 
 export const VIEW_W = 640;
 export const VIEW_H = 400;
@@ -744,6 +745,10 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, run: RunState, clock: 
   // The laptop bag never leaves.
   ctx.fillStyle = '#475569';
   ctx.fillRect(-5.5, -3, 3, 6);
+  if (p.weapon) {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(2, 2.2, p.weapon === 'pistol' ? 6 : p.weapon === 'smg' ? 9 : 11, p.weapon === 'rocket' ? 3 : 1.8);
+  }
   ctx.fillStyle = '#292524';
   ctx.beginPath();
   ctx.arc(0.6, 0, 2.8, 0, Math.PI * 2);
@@ -762,7 +767,7 @@ export function drawBug(ctx: CanvasRenderingContext2D, bug: Bug, clock: number):
   ctx.save();
   ctx.translate(bug.x, bug.y);
   ctx.rotate(bug.angle);
-  if (bug.gold) {
+  if (bug.gold || bug.bash) {
     ctx.fillStyle = `rgba(250, 204, 21, ${0.22 + 0.12 * Math.sin(clock * 8)})`;
     ctx.beginPath();
     ctx.arc(0, 0, 12, 0, Math.PI * 2);
@@ -779,7 +784,7 @@ export function drawBug(ctx: CanvasRenderingContext2D, bug: Bug, clock: number):
     ctx.lineTo(lx - wiggle, 6.5);
     ctx.stroke();
   }
-  ctx.fillStyle = bug.gold ? '#facc15' : '#65a30d';
+  ctx.fillStyle = bug.gold ? '#facc15' : bug.bash ? '#fb923c' : '#65a30d';
   ctx.beginPath();
   ctx.ellipse(-1, 0, 5.5, 4, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -790,6 +795,74 @@ export function drawBug(ctx: CanvasRenderingContext2D, bug: Bug, clock: number):
   ctx.fill();
   ctx.fillRect(-5, -0.5, 8, 1);
   ctx.restore();
+}
+
+const WEAPON_ICON: Record<WeaponId, string> = { pistol: '🔫', smg: '💥', rocket: '🚀' };
+const PICKUP_ICON: Record<Pickup['kind'], string> = { ...WEAPON_ICON, coffee: '☕', bash: '🪲' };
+const PICKUP_COLOR: Record<Pickup['kind'], string> = { pistol: '#94a3b8', smg: '#f59e0b', rocket: '#ef4444', coffee: '#a16207', bash: '#84cc16' };
+
+/** A crate on the street, bobbing a little so it reads as something to take. */
+export function drawPickup(ctx: CanvasRenderingContext2D, pickup: Pickup, clock: number): void {
+  if (pickup.wait > 0) return;
+  const bob = Math.sin(clock * 4 + pickup.x) * 1.5;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.fillRect(pickup.x - 7, pickup.y - 4, 16, 14);
+  ctx.fillStyle = '#1c1917';
+  ctx.fillRect(pickup.x - 9, pickup.y - 9 + bob, 18, 18);
+  ctx.fillStyle = PICKUP_COLOR[pickup.kind];
+  ctx.fillRect(pickup.x - 8, pickup.y - 8 + bob, 16, 16);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.fillRect(pickup.x - 8, pickup.y - 8 + bob, 16, 3);
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(PICKUP_ICON[pickup.kind], pickup.x, pickup.y + 1 + bob);
+  ctx.textBaseline = 'alphabetic';
+}
+
+/** A delivery drone gone rogue: four rotors and one red eye. */
+export function drawDrone(ctx: CanvasRenderingContext2D, drone: Drone, clock: number): void {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(drone.x + 4, drone.y + 9, 8, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const y = drone.y + Math.sin(clock * 6 + drone.homeX) * 1.5;
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(drone.x - 8, y - 8);
+  ctx.lineTo(drone.x + 8, y + 8);
+  ctx.moveTo(drone.x + 8, y - 8);
+  ctx.lineTo(drone.x - 8, y + 8);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.5)';
+  for (const [ox, oy] of [[-8, -8], [8, -8], [-8, 8], [8, 8]]) {
+    ctx.beginPath();
+    ctx.ellipse(drone.x + ox, y + oy, 5, 2, clock * 30 + ox, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(drone.x - 5, y - 5, 10, 10);
+  ctx.fillStyle = drone.cool < 0.3 ? '#fecaca' : '#ef4444';
+  ctx.beginPath();
+  ctx.arc(drone.x, y, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+export function drawShots(ctx: CanvasRenderingContext2D, shots: Shot[]): void {
+  ctx.lineCap = 'round';
+  for (const shot of shots) {
+    const speed = Math.hypot(shot.vx, shot.vy) || 1;
+    const len = shot.blast ? 9 : shot.hostile ? 5 : 8;
+    ctx.strokeStyle = shot.hostile ? '#f87171' : shot.blast ? '#fb923c' : '#fef08a';
+    ctx.lineWidth = shot.blast ? 4 : 2;
+    ctx.beginPath();
+    ctx.moveTo(shot.x, shot.y);
+    ctx.lineTo(shot.x - (shot.vx / speed) * len, shot.y - (shot.vy / speed) * len);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
 }
 
 // --- Markers ------------------------------------------------------------------------
@@ -960,6 +1033,8 @@ export interface Hud {
   bannerColor: string;
   paused: string;
   signal: string;
+  /** The bug bash's caption, or empty with none running. */
+  bash: string;
 }
 
 export function drawHud(ctx: CanvasRenderingContext2D, run: RunState, hud: Hud, signal: number, clock: number): void {
@@ -988,6 +1063,30 @@ export function drawHud(ctx: CanvasRenderingContext2D, run: RunState, hud: Hud, 
       ctx.fillRect(VIEW_W / 2 - 84 + k * 14, VIEW_H - 18 - (6 + k * 1.4), 10, 6 + k * 1.4);
     }
     label(ctx, hud.signal, VIEW_W / 2, VIEW_H - 38, 9, '#e0f2fe');
+  }
+  // Health, and the gun in hand with what is left in it: top left, clear of the toasts along the bottom.
+  const hp = Math.max(0, run.player.hp) / PLAYER_HP;
+  ctx.fillStyle = 'rgba(8, 10, 20, 0.72)';
+  roundRect(ctx, 8, 8, 150, 22, 6);
+  ctx.fill();
+  ctx.fillStyle = hp > 0.5 ? '#4ade80' : hp > 0.25 ? '#facc15' : '#f87171';
+  ctx.fillRect(30, 16, 54 * hp, 6);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(29.5, 15.5, 55, 7);
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('❤', 13, 20);
+  const gun = run.player.weapon;
+  if (gun) ctx.fillText(`${WEAPON_ICON[gun]} ${run.player.ammo[gun] ?? 0}`, 96, 20);
+  ctx.textBaseline = 'alphabetic';
+  if (run.bash) {
+    ctx.fillStyle = 'rgba(8, 10, 20, 0.72)';
+    roundRect(ctx, VIEW_W - 178, 8, 170, 22, 6);
+    ctx.fill();
+    label(ctx, `${hud.bash} ${run.bash.left} · ${Math.ceil(run.bash.timeLeft)}s`, VIEW_W - 93, 19, 11, '#fdba74');
   }
   if (run.bust > 0.05) {
     const frac = Math.min(1, run.bust / BUST_FILL);

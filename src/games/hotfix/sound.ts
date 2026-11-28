@@ -27,7 +27,14 @@ export type SoundName =
   | 'explode'
   | 'wash'
   | 'tick'
-  | 'whistle';
+  | 'whistle'
+  | 'pistol'
+  | 'smg'
+  | 'rocket'
+  | 'pickup'
+  | 'zap'
+  | 'hurt'
+  | 'droneShot';
 
 export interface Continuous {
   /** Road speed as a share of the car's top speed, or null on foot. */
@@ -47,7 +54,7 @@ export interface CitySound {
   quiet(): void;
 }
 
-const MIN_GAP: Partial<Record<SoundName, number>> = { horn: 0.38, crash: 0.08, bump: 0.08, squash: 0.05, yelp: 0.25, tick: 0.2, cash: 0.08 };
+const MIN_GAP: Partial<Record<SoundName, number>> = { smg: 0.05, hurt: 0.15, droneShot: 0.08, horn: 0.38, crash: 0.08, bump: 0.08, squash: 0.05, yelp: 0.25, tick: 0.2, cash: 0.08 };
 
 function thump(bus: EffectsBus, at: number, wave: OscillatorType, from: number, to: number, decay: number, peak: number): void {
   const { ctx, out } = bus;
@@ -234,6 +241,33 @@ export function createCitySound(audio: GameAudio, seed = 0x407f1): CitySound {
           break;
         case 'tick':
           tone(bus, now, 'square', 1100, 0.05, L * 0.3);
+          break;
+        case 'pistol':
+          thump(bus, now, 'square', 700 * vary(0.06), 180, 0.07, L * 0.5);
+          burst(bus, now, 'highpass', 2600, 0.06, L * 0.5);
+          break;
+        case 'smg':
+          thump(bus, now, 'square', 880 * vary(0.08), 300, 0.045, L * 0.4);
+          burst(bus, now, 'highpass', 3200, 0.04, L * 0.35);
+          break;
+        case 'rocket':
+          burst(bus, now, 'bandpass', 1100, 0.35, L * 0.6, 0.7);
+          thump(bus, now, 'sawtooth', 160, 520, 0.3, L * 0.3);
+          break;
+        case 'pickup':
+          tone(bus, now, 'square', 660, 0.08, L * 0.4);
+          tone(bus, now + 0.07, 'square', 990, 0.08, L * 0.4);
+          tone(bus, now + 0.14, 'square', 1320, 0.14, L * 0.4);
+          break;
+        case 'zap':
+          thump(bus, now, 'sawtooth', 1400 * vary(0.1), 90, 0.22, L * 0.5);
+          burst(bus, now, 'bandpass', 3000, 0.12, L * 0.5, 3);
+          break;
+        case 'hurt':
+          thump(bus, now, 'triangle', 260, 110, 0.14, L * 0.6);
+          break;
+        case 'droneShot':
+          thump(bus, now, 'square', 1500 * vary(0.05), 700, 0.09, L * 0.22);
           break;
         case 'whistle':
           tone(bus, now, 'sine', 2300, 0.2, L * 0.5);

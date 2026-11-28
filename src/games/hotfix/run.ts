@@ -11,8 +11,10 @@
  * Rules worth knowing before changing anything:
  *   - cash is the score and nothing is ever subtracted from it. A mistake
  *     costs seconds off the shift clock and the multiplier, never money;
- *   - nobody is hurt. People dive clear of a car, drivers get out and shake
- *     a fist, and the only things a car can squash are the bugs;
+ *   - no person is ever hurt. People dive clear of a car and of gunfire,
+ *     drivers get out and shake a fist, and what a car or a gun can destroy
+ *     is bugs, rogue drones and cars. The one body that can be hurt is the
+ *     player's own (`Player.hp`), by drone fire and by standing near a blast;
  *   - a shift is bounded: the clock starts at `SHIFT_SECONDS` and a finished
  *     job adds `JOB_BONUS_SECONDS`, which is less than any job takes, so a run
  *     always ends and needs no voluntary door;
@@ -35,10 +37,12 @@ import {
   tileAt,
   wayTo,
   type District,
+  type PickupKind,
   type PlaceId,
   type Point
 } from './map';
 import { JOBS, type JobDef, type JobId, type Stage } from './jobs';
+import { WEAPONS, WEAPON_IDS, type WeaponId } from './weapons';
 
 export const SHIFT_SECONDS = 180;
 export const JOB_BONUS_SECONDS = 15;
@@ -47,6 +51,19 @@ export const BUG_CASH = 10;
 /** Seconds a bust or a wreck takes off the shift. */
 export const BUST_SECONDS = 15;
 export const WRECK_SECONDS = 10;
+/** Seconds running out of health takes off the shift. */
+export const WASTED_SECONDS = 15;
+export const PLAYER_HP = 100;
+export const DRONE_CASH = 40;
+/** A bug-bash bug, and the bonus for clearing the lot inside the clock. */
+export const BASH_CASH = 30;
+export const BASH_BONUS = 400;
+export const BASH_SECONDS = 30;
+const BASH_BUGS = 12;
+const DRONE_HP = 30;
+const COFFEE_HP = 50;
+/** Seconds before a taken crate is restocked. */
+const RESTOCK_SECONDS = 40;
 const WALK_SPEED = 82;
 const CAR_R = 11;
 const FOOT_R = 5;
@@ -137,8 +154,43 @@ export interface Bug {
   y: number;
   angle: number;
   timer: number;
-  /** A job's bug: worth nothing alone, counted by the job. */
+  /** A job's bug: counted by the job. */
   gold: boolean;
+  /** A bug-bash bug: worth more, and counted by the bash. */
+  bash?: boolean;
+}
+
+/** A delivery drone gone rogue: it keeps its distance and shoots. */
+export interface Drone {
+  x: number;
+  y: number;
+  hp: number;
+  /** Seconds until it may fire again. */
+  cool: number;
+  /** Where it drifts back to when it has nobody to shoot at. */
+  homeX: number;
+  homeY: number;
+}
+
+export interface Shot {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** Pixels of flight left. */
+  left: number;
+  damage: number;
+  /** Blast radius on impact; 0 for a bullet. */
+  blast: number;
+  hostile: boolean;
+}
+
+export interface Pickup {
+  x: number;
+  y: number;
+  kind: PickupKind;
+  /** Seconds until it is back on its spot; 0 when it is there to be taken. */
+  wait: number;
 }
 
 export interface ActiveJob {
@@ -163,6 +215,12 @@ export interface Player {
   stun: number;
   /** Distance walked, for the stride animation. */
   stride: number;
+  hp: number;
+  /** The gun in hand, or null with none. */
+  weapon: WeaponId | null;
+  ammo: Partial<Record<WeaponId, number>>;
+  /** Seconds until the gun may fire again. */
+  cool: number;
 }
 
 export interface RunState {
@@ -179,6 +237,12 @@ export interface RunState {
   cars: Car[];
   people: Person[];
   bugs: Bug[];
+  drones: Drone[];
+  shots: Shot[];
+  pickups: Pickup[];
+  /** A bug bash under way: seconds left and bugs left. */
+  bash: { timeLeft: number; left: number } | null;
+  prevSwap: boolean;
   job: ActiveJob | null;
   deck: JobId[];
   deckAt: number;
@@ -205,6 +269,10 @@ export interface RunInput {
   /** Get in or out. Acts on the press, not the hold. */
   action: boolean;
   horn: boolean;
+  /** Fire the gun in hand. On foot only; it is the handbrake's button. */
+  fire?: boolean;
+  /** Change gun. Acts on the press. */
+  swap?: boolean;
 }
 
 export const NO_INPUT: RunInput = { moveX: 0, moveY: 0, mode: 'keys', handbrake: false, action: false, horn: false };
@@ -233,6 +301,12 @@ export type RunEvent =
   | { type: 'bump' }
   | { type: 'district'; id: District }
   | { type: 'horn' }
+  | { type: 'shot'; weapon: WeaponId }
+  | { type: 'pickup'; x: number; y: number; kind: PickupKind }
+  | { type: 'zap'; x: number; y: number }
+  | { type: 'hurt' }
+  | { type: 'wasted' }
+  | { type: 'bash'; state: 'start' | 'done' | 'over' }
   | { type: 'warn' }
   | { type: 'over' };
 
@@ -371,10 +445,15 @@ export function createRun(seed = 1): RunState {
     heat: 0,
     calm: 0,
     bust: 0,
-    player: { x: home.x, y: home.y, angle: 0, car: null, stun: 0, stride: 0 },
+    player: { x: home.x, y: home.y, angle: 0, car: null, stun: 0, stride: 0, hp: PLAYER_HP, weapon: null, ammo: {}, cool: 0 },
     cars: [],
     people: [],
     bugs: [],
+    drones: [],
+    shots: [],
+    pickups: CITY.pickups.map(p => ({ ...p, wait: 0 })),
+    bash: null,
+    prevSwap: false,
     job: null,
     deck: [],
     deckAt: 0,
@@ -516,6 +595,58 @@ export function tickRun(run: RunState, input: RunInput, dt: number): RunEvent[] 
     if (!run.job) return;
     events.push({ type: 'jobFailed', id: run.job.def.id });
     endJob(run);
+  };
+  const squash = (bug: Bug) => {
+    const i = run.bugs.indexOf(bug);
+    if (i < 0) return;
+    run.bugs.splice(i, 1);
+    run.squashed++;
+    events.push({ type: 'squash', x: bug.x, y: bug.y, gold: bug.gold || !!bug.bash });
+    award((bug.bash ? BASH_CASH : BUG_CASH) * run.mult, bug.x, bug.y);
+    if (bug.gold && run.job) run.job.count--;
+    if (bug.bash && run.bash) run.bash.left--;
+  };
+  const zap = (drone: Drone) => {
+    const i = run.drones.indexOf(drone);
+    if (i < 0) return;
+    run.drones.splice(i, 1);
+    events.push({ type: 'zap', x: drone.x, y: drone.y });
+    award(DRONE_CASH * run.mult, drone.x, drone.y);
+    if (run.job) run.job.count--;
+  };
+  const hurt = (amount: number) => {
+    if (player.hp <= 0) return;
+    player.hp -= amount;
+    events.push({ type: 'hurt' });
+  };
+  /** Sends a person diving away from a point, unharmed. */
+  const scatter = (person: Person, fromX: number, fromY: number) => {
+    if (person.state === 'dive' || person.state === 'down') return;
+    const d = dist(person.x, person.y, fromX, fromY) || 1;
+    person.vx = ((person.x - fromX) / d) * 170;
+    person.vy = ((person.y - fromY) / d) * 170;
+    person.state = 'dive';
+    person.timer = 0.16;
+    events.push({ type: 'dive', x: person.x, y: person.y });
+  };
+  /** An explosion: wrecks cars and drones, flattens bugs, scatters people, and hurts a player caught on foot. */
+  const blast = (x: number, y: number, radius: number, power: number, source: Car | null) => {
+    events.push({ type: 'explode', x, y });
+    for (const other of run.cars) {
+      if (other === source || other.dead) continue;
+      const d = dist(other.x, other.y, x, y);
+      if (d > radius) continue;
+      other.hp -= power;
+      other.vx += ((other.x - x) / (d || 1)) * 120;
+      other.vy += ((other.y - y) / (d || 1)) * 120;
+    }
+    for (const drone of [...run.drones]) if (dist(drone.x, drone.y, x, y) < radius) zap(drone);
+    for (const bug of [...run.bugs]) if (dist(bug.x, bug.y, x, y) < radius) squash(bug);
+    for (const person of run.people) if (!person.penguin && dist(person.x, person.y, x, y) < radius + 40) scatter(person, x, y);
+    if (!player.car && dist(player.x, player.y, x, y) < radius * 0.8) {
+      player.stun = Math.max(player.stun, 0.8);
+      hurt(power * 0.5);
+    }
   };
 
   // --- Getting in and out ------------------------------------------------------
@@ -672,18 +803,11 @@ export function tickRun(run: RunState, input: RunInput, dt: number): RunEvent[] 
       if (car.burning <= 0) {
         car.burning = 0;
         car.dead = 0.001;
-        events.push({ type: 'explode', x: car.x, y: car.y });
-        for (const other of run.cars) {
-          if (other === car || other.dead) continue;
-          const d = dist(other.x, other.y, car.x, car.y);
-          if (d > 74) continue;
-          other.hp -= 55;
-          other.vx += ((other.x - car.x) / (d || 1)) * 120;
-          other.vy += ((other.y - car.y) / (d || 1)) * 120;
-        }
-        if (player.car === car) {
+        const wasMine = player.car === car;
+        if (wasMine) player.car = null;
+        blast(car.x, car.y, 74, 55, car);
+        if (wasMine) {
           // Thrown clear, singed, and late.
-          player.car = null;
           player.x = car.x;
           player.y = car.y;
           const clear = spotNear(run, car.x, car.y, 46, 4);
@@ -693,8 +817,6 @@ export function tickRun(run: RunState, input: RunInput, dt: number): RunEvent[] 
           run.clock = Math.max(0, run.clock - WRECK_SECONDS);
           run.mult = 1;
           events.push({ type: 'wrecked' });
-        } else if (!player.car && dist(player.x, player.y, car.x, car.y) < 56) {
-          player.stun = 1.2;
         }
         car.driver = 'none';
         if (dist(pp.x, pp.y, car.x, car.y) < 240) offence(1);
@@ -748,15 +870,171 @@ export function tickRun(run: RunState, input: RunInput, dt: number): RunEvent[] 
     const car = player.car;
     // A bug is squashed by a moving car or a walking foot. Standing still earns nothing, so an idle shift banks nothing.
     const hit = car ? carSpeed(car) > 20 && dist(car.x, car.y, bug.x, bug.y) < 15 : walking && dist(player.x, player.y, bug.x, bug.y) < 10;
-    if (hit) {
-      run.bugs.splice(i, 1);
-      run.squashed++;
-      events.push({ type: 'squash', x: bug.x, y: bug.y, gold: bug.gold });
-      award(BUG_CASH * run.mult, bug.x, bug.y);
-      if (bug.gold && run.job) run.job.count--;
+    if (hit) squash(bug);
+  }
+  if (run.bugs.filter(b => !b.gold && !b.bash).length < AMBIENT_BUGS) spawnAmbientBug(run, 520);
+
+  // --- Guns, drones and crates ---------------------------------------------------------
+  const swapped = !!input.swap && !run.prevSwap;
+  run.prevSwap = !!input.swap;
+  const held = WEAPON_IDS.filter(id => (player.ammo[id] ?? 0) > 0);
+  if (player.weapon && !held.includes(player.weapon)) player.weapon = held[0] ?? null;
+  if (swapped && held.length > 1 && player.weapon) player.weapon = held[(held.indexOf(player.weapon) + 1) % held.length];
+  player.cool = Math.max(0, player.cool - dt);
+  if (input.fire && !player.car && player.weapon && player.stun <= 0 && player.cool <= 0) {
+    const id = player.weapon;
+    const spec = WEAPONS[id];
+    const aim = player.angle + (run.rng() * 2 - 1) * spec.spread;
+    run.shots.push({
+      x: player.x + Math.cos(player.angle) * 9,
+      y: player.y + Math.sin(player.angle) * 9,
+      vx: Math.cos(aim) * spec.speed,
+      vy: Math.sin(aim) * spec.speed,
+      left: spec.range,
+      damage: spec.damage,
+      blast: spec.blast,
+      hostile: false
+    });
+    player.cool = spec.rate;
+    player.ammo[id] = (player.ammo[id] ?? 1) - 1;
+    events.push({ type: 'shot', weapon: id });
+    // Gunfire in a street with people in it is the police's business.
+    if (run.people.some(p => !p.penguin && dist(p.x, p.y, player.x, player.y) < 150)) offence(id === 'smg' ? 0.03 : 0.1);
+  }
+
+  for (let i = run.shots.length - 1; i >= 0; i--) {
+    const shot = run.shots[i];
+    const step = Math.hypot(shot.vx, shot.vy) * dt;
+    shot.x += shot.vx * dt;
+    shot.y += shot.vy * dt;
+    shot.left -= step;
+    let spent = shot.left <= 0 || solidAt(shot.x, shot.y);
+    if (!spent && shot.hostile) {
+      const car = player.car;
+      if (car && dist(car.x, car.y, shot.x, shot.y) < 12) {
+        car.hp -= shot.damage * 0.6;
+        spent = true;
+      } else if (!car && dist(player.x, player.y, shot.x, shot.y) < 7) {
+        hurt(shot.damage);
+        spent = true;
+      }
+    } else if (!spent) {
+      const drone = run.drones.find(d => dist(d.x, d.y, shot.x, shot.y) < 11);
+      const bug = run.bugs.find(b => dist(b.x, b.y, shot.x, shot.y) < 9);
+      const car = run.cars.find(c => !c.dead && dist(c.x, c.y, shot.x, shot.y) < 12);
+      const person = run.people.find(p => !p.penguin && dist(p.x, p.y, shot.x, shot.y) < 9);
+      if (drone) {
+        drone.hp -= shot.damage;
+        if (drone.hp <= 0) zap(drone);
+        spent = true;
+      } else if (bug) {
+        squash(bug);
+        spent = true;
+      } else if (car) {
+        car.hp -= shot.damage;
+        if (car.driver === 'cop') offence(0.4);
+        else if (car.driver === 'ai') offence(0.12);
+        spent = true;
+      } else if (person) {
+        // Nobody is shot in this town: they see it coming and are already on the floor.
+        scatter(person, shot.x - shot.vx, shot.y - shot.vy);
+        offence(0.3);
+      }
+    }
+    if (!spent) continue;
+    run.shots.splice(i, 1);
+    if (shot.blast) {
+      blast(shot.x, shot.y, shot.blast, shot.damage, null);
+      offence(0.6);
     }
   }
-  if (run.bugs.filter(b => !b.gold).length < AMBIENT_BUGS) spawnAmbientBug(run, 520);
+
+  for (const drone of [...run.drones]) {
+    const d = dist(drone.x, drone.y, pp.x, pp.y);
+    const car = player.car;
+    if (car && d < 15 && carSpeed(car) > 50) {
+      // A car is also an answer.
+      car.hp -= 6;
+      zap(drone);
+      continue;
+    }
+    drone.cool -= dt;
+    const sees = d < 280 && clearLine(drone.x, drone.y, pp.x, pp.y);
+    // It hangs back at its own range, and goes home when it has lost its mark.
+    const tx = sees ? pp.x : drone.homeX;
+    const ty = sees ? pp.y : drone.homeY;
+    const td = dist(drone.x, drone.y, tx, ty) || 1;
+    const want = sees ? (d > 150 ? 1 : d < 95 ? -1 : 0) : td > 12 ? 0.6 : 0;
+    const nx = drone.x + ((tx - drone.x) / td) * want * 58 * dt;
+    const ny = drone.y + ((ty - drone.y) / td) * want * 58 * dt;
+    if (!solidAt(nx, ny)) {
+      drone.x = nx;
+      drone.y = ny;
+    }
+    if (sees && d < 260 && drone.cool <= 0) {
+      drone.cool = 1.3 + run.rng() * 0.7;
+      const a = Math.atan2(pp.y - drone.y, pp.x - drone.x) + (run.rng() - 0.5) * 0.16;
+      run.shots.push({ x: drone.x, y: drone.y, vx: Math.cos(a) * 170, vy: Math.sin(a) * 170, left: 300, damage: 12, blast: 0, hostile: true });
+    }
+  }
+
+  for (const pickup of run.pickups) {
+    if (pickup.wait > 0) {
+      pickup.wait = Math.max(0, pickup.wait - dt);
+      continue;
+    }
+    if (dist(pickup.x, pickup.y, pp.x, pp.y) > 17) continue;
+    if (pickup.kind === 'coffee') {
+      if (player.hp >= PLAYER_HP) continue;
+      player.hp = Math.min(PLAYER_HP, player.hp + COFFEE_HP);
+    } else if (pickup.kind === 'bash') {
+      if (run.bash) continue;
+      run.bash = { timeLeft: BASH_SECONDS, left: BASH_BUGS };
+      for (let k = 0; k < BASH_BUGS; k++) {
+        const at = spotNear(run, pp.x, pp.y, 170);
+        run.bugs.push({ x: at.x, y: at.y, angle: run.rng() * Math.PI * 2, timer: run.rng(), gold: false, bash: true });
+      }
+      events.push({ type: 'bash', state: 'start' });
+    } else {
+      player.ammo[pickup.kind] = (player.ammo[pickup.kind] ?? 0) + WEAPONS[pickup.kind].ammo;
+      player.weapon = pickup.kind;
+    }
+    pickup.wait = RESTOCK_SECONDS;
+    events.push({ type: 'pickup', x: pickup.x, y: pickup.y, kind: pickup.kind });
+  }
+
+  if (run.bash) {
+    run.bash.timeLeft -= dt;
+    if (run.bash.left <= 0) {
+      award(BASH_BONUS * run.mult, pp.x, pp.y);
+      events.push({ type: 'bash', state: 'done' });
+      run.bash = null;
+    } else if (run.bash.timeLeft <= 0) {
+      run.bugs = run.bugs.filter(b => !b.bash);
+      events.push({ type: 'bash', state: 'over' });
+      run.bash = null;
+    }
+  }
+
+  if (player.hp <= 0) {
+    // Out cold: patched up at the clinic, lighter by the guns, the bonus and some of the shift.
+    const clinic = CITY.places.clinic;
+    if (player.car) player.car.driver = 'none';
+    player.car = null;
+    player.x = clinic.x;
+    player.y = clinic.y;
+    player.hp = PLAYER_HP;
+    player.ammo = {};
+    player.weapon = null;
+    player.stun = 1;
+    run.heat = 0;
+    run.mult = 1;
+    run.clock = Math.max(0, run.clock - WASTED_SECONDS);
+    run.cars = run.cars.filter(c => c.driver !== 'cop');
+    run.shots = [];
+    events.push({ type: 'wasted' }, { type: 'heat', level: 0 });
+    failJob();
+  }
 
   // --- Heat and the police -----------------------------------------------------------
   run.calm += dt;
@@ -917,6 +1195,7 @@ function endJob(run: RunState): void {
   run.phoneWait = 2.5;
   run.bugs = run.bugs.filter(b => !b.gold);
   run.people = run.people.filter(p => !p.penguin);
+  run.drones = [];
 }
 
 function beginStage(run: RunState, index: number): void {
@@ -925,12 +1204,13 @@ function beginStage(run: RunState, index: number): void {
   const stage: Stage = job.def.stages[index];
   if (stage.type === 'sweep') job.remaining = [...stage.places];
   if (stage.type === 'sonar') job.hidden = stage.places[Math.floor(run.rng() * stage.places.length)];
-  if (stage.type === 'squash' || stage.type === 'collect') {
+  if (stage.type === 'squash' || stage.type === 'collect' || stage.type === 'purge') {
     job.count = stage.count;
     const c = CITY.places[stage.place];
     for (let i = 0; i < stage.count; i++) {
       const at = spotNear(run, c.x, c.y, 150);
-      if (stage.type === 'squash') run.bugs.push({ x: at.x, y: at.y, angle: run.rng() * Math.PI * 2, timer: run.rng(), gold: true });
+      if (stage.type === 'purge') run.drones.push({ x: at.x, y: at.y, hp: DRONE_HP, cool: 1 + run.rng(), homeX: at.x, homeY: at.y });
+      else if (stage.type === 'squash') run.bugs.push({ x: at.x, y: at.y, angle: run.rng() * Math.PI * 2, timer: run.rng(), gold: true });
       else makePerson(run, at.x, at.y, true);
     }
   }
@@ -1151,6 +1431,7 @@ export function objective(run: RunState): { points: Point[]; hidden: boolean; ph
   if (stage.type === 'sonar') return { points: [CITY.places[job.hidden as PlaceId]], hidden: true, phone: false };
   if (stage.type === 'sweep') return { points: job.remaining.map(id => CITY.places[id]), hidden: false, phone: false };
   if (stage.type === 'squash') return { points: run.bugs.filter(b => b.gold), hidden: false, phone: false };
+  if (stage.type === 'purge') return { points: run.drones, hidden: false, phone: false };
   return { points: run.people.filter(p => p.penguin), hidden: false, phone: false };
 }
 

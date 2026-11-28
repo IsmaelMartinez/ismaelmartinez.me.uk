@@ -1,8 +1,8 @@
 /**
  * HOTFIX's jobs: what a ringing phone box can ask for. Each one is a small
  * joke about something the site's owner actually maintains, and each uses a
- * different thing the city lets you do, so the deck is seven kinds of errand
- * and not one errand with seven names.
+ * different thing the city lets you do, so the deck is several kinds of
+ * errand and not one errand with several names.
  *
  * DOM-free. A job is a list of stages played in order against one clock; the
  * brief and the place names are translated by the page, keyed by `id`.
@@ -18,6 +18,8 @@ export type Stage =
   | { type: 'squash'; place: PlaceId; count: number }
   /** Round up `count` penguins around a place, on foot. */
   | { type: 'collect'; place: PlaceId; count: number }
+  /** Shut down `count` rogue drones around a place: shoot them or drive into them. */
+  | { type: 'purge'; place: PlaceId; count: number }
   /** Find one of these places with no marker and no arrow: by ear, or by the signal meter. */
   | { type: 'sonar'; places: PlaceId[] };
 
@@ -30,7 +32,8 @@ export type JobId =
   | 'audiogram'
   | 'paella'
   | 'reviewer'
-  | 'lighthouse';
+  | 'lighthouse'
+  | 'botnet';
 
 export interface JobDef {
   id: JobId;
@@ -88,6 +91,8 @@ export const JOBS: Record<JobId, JobDef> = {
     time: 65,
     pay: 550
   }),
+  // ai-model-advisor: not every problem needs a frontier model. The delivery drones got one anyway.
+  botnet: job({ id: 'botnet', stages: [{ type: 'purge', place: 'docks', count: 6 }], time: 85, pay: 750 }),
   // The keeper is on a call and the call keeps dropping.
   lighthouse: job({ id: 'lighthouse', stages: [{ type: 'goto', place: 'lighthouse' }], time: 50, pay: 450 })
 };

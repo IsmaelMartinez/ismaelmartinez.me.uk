@@ -48,7 +48,17 @@ const UI = [
   'ahem',
   'warn',
   'paused',
-  'signal'
+  'signal',
+  'objPurge',
+  'wasted',
+  'wastedDesc',
+  'bash',
+  'bashStart',
+  'bashDone',
+  'bashOver',
+  'gun_pistol',
+  'gun_smg',
+  'gun_rocket'
 ];
 const ui = Object.fromEntries(UI.map(name => [name, key(`ui.${name}`)]));
 
@@ -59,6 +69,8 @@ const CONTROLS: { title: string; rows: Row[] }[] = [
     rows: [
       { label: key('controls.drive'), keys: ['↑', '←', '↓', '→'], alt: ['W', 'A', 'S', 'D'] },
       { label: key('controls.handbrake'), keys: ['Space'] },
+      { label: key('controls.fire'), keys: ['Space'], text: key('controls.fireNote') },
+      { label: key('controls.swap'), keys: ['Q'] },
       { label: key('controls.inOut'), keys: ['Enter'], alt: ['E'] },
       { label: key('controls.horn'), keys: ['H'] },
       { label: key('controls.pause'), keys: ['P'], alt: ['Esc'] }
@@ -69,6 +81,7 @@ const CONTROLS: { title: string; rows: Row[] }[] = [
     rows: [
       { label: key('controls.drive'), text: key('controls.touchDrive') },
       { label: key('controls.inOut'), text: key('controls.touchButtons') },
+      { label: key('controls.fire'), text: key('controls.touchFire') },
       { label: key('controls.pause'), text: key('controls.touchPause') }
     ]
   },
@@ -76,7 +89,8 @@ const CONTROLS: { title: string; rows: Row[] }[] = [
     title: key('controls.gamepad'),
     rows: [
       { label: key('controls.drive'), text: key('controls.padDrive') },
-      { label: key('controls.inOut'), text: key('controls.padButtons') }
+      { label: key('controls.inOut'), text: key('controls.padButtons') },
+      { label: key('controls.fire'), text: key('controls.padFire') }
     ]
   }
 ];

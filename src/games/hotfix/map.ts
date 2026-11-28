@@ -113,6 +113,9 @@ export interface Point {
   y: number;
 }
 
+/** What a crate on the street holds: a gun, a coffee (health), or a bug bash. */
+export type PickupKind = 'pistol' | 'smg' | 'rocket' | 'coffee' | 'bash';
+
 export interface ParkedSpot extends Point {
   angle: number;
 }
@@ -126,6 +129,7 @@ export interface CityMap {
   phones: Point[];
   washes: Point[];
   parked: ParkedSpot[];
+  pickups: (Point & { kind: PickupKind })[];
   /** Pavement tiles, for spawning people. */
   pavements: number[];
   /** Road tiles, for spawning bugs. */
@@ -353,6 +357,22 @@ function build(): CityMap {
       { ...centre(20, 4), angle: 0 },
       { ...centre(40, 4), angle: Math.PI },
       { ...centre(10, 28), angle: 0 }
+    ],
+    pickups: [
+      { ...centre(10, 34), kind: 'pistol' },
+      { ...centre(17, 20), kind: 'pistol' },
+      { ...centre(31, 25), kind: 'pistol' },
+      { ...centre(11, 7), kind: 'smg' },
+      { ...centre(43, 13), kind: 'smg' },
+      { ...centre(46, 31), kind: 'smg' },
+      { ...centre(51, 2), kind: 'rocket' },
+      { ...centre(9, 16), kind: 'rocket' },
+      { ...centre(14, 13), kind: 'coffee' },
+      { ...centre(34, 25), kind: 'coffee' },
+      { ...centre(55, 34), kind: 'coffee' },
+      { ...centre(4, 25), kind: 'coffee' },
+      { ...centre(24, 22), kind: 'bash' },
+      { ...centre(50, 13), kind: 'bash' }
     ],
     pavements,
     roads

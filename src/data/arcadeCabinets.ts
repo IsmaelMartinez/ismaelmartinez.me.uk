@@ -98,6 +98,17 @@ export const CABINETS: Record<ChainGameId, CabinetMeta> = {
     path: '/fun/lemmings',
     estYear: 1991
   },
+  hotfix: {
+    title: 'HOTFIX',
+    taglineKey: 'fun.hotfix.description',
+    genreKey: 'fun.arcade.genre.hotfix',
+    twoPlayer: false,
+    icon: '📟',
+    color: '#f97316',
+    path: '/fun/hotfix',
+    estYear: 1997,
+    isNew: true
+  },
   towerdefense: {
     title: 'LINE HOLD',
     taglineKey: 'fun.towerdefense.description',

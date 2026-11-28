@@ -1,0 +1,498 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import '../../../styles/arcade.css';
+import HighScoreTable from '../../../components/HighScoreTable.astro';
+import SoundToggles from '../../../components/SoundToggles.astro';
+import ToastArea from '../../../components/ToastArea.astro';
+import { useTranslations, getLocalizedPath } from '../../../i18n/translations';
+import { arcadePaths } from '../../../data/release';
+import type { Locale, TranslationKey } from '../../../i18n/translations';
+// Both modules are DOM-free, so importing them here costs the page nothing;
+// the job and place lists are read from them so a new job cannot ship without
+// its strings (a missing key fails the typecheck's `satisfies` below).
+import { JOBS, type JobId } from '../../../games/hotfix/jobs';
+import { CITY, type PlaceId } from '../../../games/hotfix/map';
+
+export function getStaticPaths() {
+  return arcadePaths('hotfix');
+}
+
+const lang = Astro.params.lang as Locale;
+const t = useTranslations(lang);
+const key = (name: string) => t(`fun.hotfix.${name}` as TranslationKey);
+
+// The strings the game composes at run time, as three JSON bundles on the
+// root's `data-t-*` attributes. One attribute per string, as the smaller
+// cabinets do, would be seventy attributes here.
+const jobs = Object.fromEntries(
+  (Object.keys(JOBS) as JobId[]).map(id => [id, { title: key(`job.${id}.title`), brief: key(`job.${id}.brief`) }])
+);
+const places = Object.fromEntries((Object.keys(CITY.places) as PlaceId[]).map(id => [id, key(`place.${id}`)]));
+const UI = [
+  'newRecord',
+  'objPhone',
+  'objGoto',
+  'objSweep',
+  'objSquash',
+  'objCollect',
+  'objCollectCar',
+  'objSonar',
+  'jobFailed',
+  'busted',
+  'bustedDesc',
+  'burning',
+  'wrecked',
+  'rain',
+  'washed',
+  'oi',
+  'ahem',
+  'warn',
+  'paused',
+  'signal'
+];
+const ui = Object.fromEntries(UI.map(name => [name, key(`ui.${name}`)]));
+
+type Row = { label: string; keys?: string[]; alt?: string[]; text?: string };
+const CONTROLS: { title: string; rows: Row[] }[] = [
+  {
+    title: key('controls.keyboard'),
+    rows: [
+      { label: key('controls.drive'), keys: ['↑', '←', '↓', '→'], alt: ['W', 'A', 'S', 'D'] },
+      { label: key('controls.handbrake'), keys: ['Space'] },
+      { label: key('controls.inOut'), keys: ['Enter'], alt: ['E'] },
+      { label: key('controls.horn'), keys: ['H'] },
+      { label: key('controls.pause'), keys: ['P'], alt: ['Esc'] }
+    ]
+  },
+  {
+    title: key('controls.touch'),
+    rows: [
+      { label: key('controls.drive'), text: key('controls.touchDrive') },
+      { label: key('controls.inOut'), text: key('controls.touchButtons') },
+      { label: key('controls.pause'), text: key('controls.touchPause') }
+    ]
+  },
+  {
+    title: key('controls.gamepad'),
+    rows: [
+      { label: key('controls.drive'), text: key('controls.padDrive') },
+      { label: key('controls.inOut'), text: key('controls.padButtons') }
+    ]
+  }
+];
+---
+
+<Layout title="Hotfix" lang={lang}>
+  <section class="hotfix-section">
+    <div class="container">
+      <a href={getLocalizedPath('/fun', lang)} class="back-link">← {t('fun.backToFun')}</a>
+
+      <div
+        class="game-container"
+        id="hotfix-root"
+        data-t-jobs={JSON.stringify(jobs)}
+        data-t-places={JSON.stringify(places)}
+        data-t-ui={JSON.stringify(ui)}
+      >
+        <div class="game-header">
+          <h1><span class="hotfix-emoji">📟</span> {key('title')}</h1>
+          <SoundToggles lang={lang} />
+          <button type="button" id="pause-btn" class="btn sound-btn" aria-label={key('pause')}>⏸</button>
+          <div class="scores">
+            <div class="score-item">
+              <span class="score-label">{key('cash')}</span>
+              <span id="cash" class="score-value cash">£0</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{key('mult')}</span>
+              <span id="mult" class="score-value mult">×1</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{key('clock')}</span>
+              <span id="clock" class="score-value clock">3:00</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{key('heat')}</span>
+              <span id="heat" class="score-value heat">—</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">{key('record')}</span>
+              <span id="record" class="score-value">£0</span>
+            </div>
+          </div>
+        </div>
+
+        <p id="objective" class="objective" aria-live="polite">{key('ui.objPhone')}</p>
+
+        <div class="game-area">
+          <canvas id="game-canvas"></canvas>
+          <ToastArea />
+
+          <div id="start-overlay" class="game-overlay">
+            <div class="overlay-content">
+              <span class="play-icon">📟</span>
+              <h2>{key('title')}</h2>
+              <p class="tagline">{key('tagline')}</p>
+              <p class="instructions">{key('instructions')}</p>
+              <button id="start-btn" class="btn btn-primary btn-large">{key('start')}</button>
+            </div>
+          </div>
+
+          <div id="over-overlay" class="game-overlay" style="display: none;">
+            <div class="overlay-content">
+              <span class="play-icon">🌙</span>
+              <h2>{key('over')}</h2>
+              <p>{key('overDesc')}</p>
+              <p class="final-stats">
+                {key('finalScore')}: <strong id="final-score">£0</strong> ·
+                {key('finalJobs')}: <strong id="final-jobs">0</strong> ·
+                {key('finalBugs')}: <strong id="final-bugs">0</strong>
+              </p>
+              <HighScoreTable gameId="hotfix" lang={lang} accent="#f97316" />
+              <button id="again-btn" class="btn btn-primary btn-large">{key('playAgain')}</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="touch-buttons">
+          <button type="button" id="btn-action" class="touch-btn" aria-label={key('btnAction')}>🚪</button>
+          <button type="button" id="btn-brake" class="touch-btn" aria-label={key('btnBrake')}>🛑</button>
+          <button type="button" id="btn-horn" class="touch-btn" aria-label={key('btnHorn')}>📣</button>
+        </div>
+
+        <p class="hint">{key('hint')}</p>
+
+        <section class="controls-guide" aria-labelledby="controls-title">
+          <h2 id="controls-title">{key('controls.title')}</h2>
+          <p class="controls-how">{key('controls.how')}</p>
+          <div class="controls-grid">
+            {CONTROLS.map(card => (
+              <div class="controls-card">
+                <h3>{card.title}</h3>
+                <dl>
+                  {card.rows.map(row => (
+                    <>
+                      <dt>{row.label}</dt>
+                      <dd>
+                        {row.keys && <span class="keys">{row.keys.map(k => <kbd>{k}</kbd>)}</span>}
+                        {row.alt && (
+                          <>
+                            <span class="keys-or">{key('controls.or')}</span>
+                            <span class="keys">{row.alt.map(k => <kbd>{k}</kbd>)}</span>
+                          </>
+                        )}
+                        {row.text && <span class="keys-text">{row.text}</span>}
+                      </dd>
+                    </>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ClientRouter swaps don't re-execute this module, so returning to the
+  // page would otherwise leave a dead, unwired city. Re-init after every
+  // swap; initHotfixGame no-ops on pages without a fresh root.
+  import { initHotfixGame } from '../../../games/hotfix';
+  initHotfixGame();
+  document.addEventListener('astro:after-swap', initHotfixGame);
+</script>
+
+<style>
+  .hotfix-section {
+    min-height: calc(100vh - var(--nav-height) - 200px);
+    padding: var(--space-2xl) 0;
+  }
+
+  .game-container {
+    max-width: 760px;
+  }
+
+  .hotfix-emoji {
+    animation: buzz 2.4s ease-in-out infinite;
+    display: inline-block;
+  }
+
+  @keyframes buzz {
+    0%, 86%, 100% { transform: rotate(0); }
+    88%, 92%, 96% { transform: rotate(-9deg); }
+    90%, 94%, 98% { transform: rotate(9deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hotfix-emoji {
+      animation: none;
+    }
+  }
+
+  .game-header h1 {
+    margin-right: auto;
+  }
+
+  /* The readouts are a pager's: amber characters on a dark green-black glass.
+     They take a row of their own, so a growing total never reflows the header. */
+  .scores {
+    flex-basis: 100%;
+    gap: var(--space-sm);
+  }
+
+  .score-item {
+    flex: 1 1 0;
+    min-width: 4.2rem;
+    padding: 0.2rem 0.55rem 0.3rem;
+    background: #101a12;
+    border: 2px solid #3f4a41;
+    border-radius: 6px;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.6);
+  }
+
+  .score-label {
+    color: #7c8a7e;
+    font-size: 0.6rem;
+  }
+
+  .score-value {
+    display: block;
+    color: #fbbf24;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 1.2rem;
+    line-height: 1.4rem;
+    letter-spacing: 0.06em;
+    text-shadow: 0 0 6px rgba(251, 191, 36, 0.55);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .score-value.mult {
+    color: #86efac;
+    text-shadow: 0 0 6px rgba(134, 239, 172, 0.55);
+  }
+
+  .score-value.clock.urgent {
+    color: #f87171;
+    text-shadow: 0 0 6px rgba(248, 113, 113, 0.7);
+  }
+
+  .score-value.heat {
+    font-size: 0.95rem;
+    letter-spacing: 0;
+  }
+
+  .objective {
+    margin: 0 0 var(--space-sm);
+    padding: 0.4rem 0.75rem;
+    min-height: 2.1rem;
+    background: #101a12;
+    border: 2px solid #3f4a41;
+    border-radius: 6px;
+    color: #fbbf24;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    text-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+  }
+
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 640 / 400;
+    /* The canvas is the steering wheel on touch, so the browser must not
+       scroll or zoom under a thumb. */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .game-overlay {
+    z-index: 2;
+  }
+
+  .overlay-content {
+    max-width: 540px;
+  }
+
+  .overlay-content h2 {
+    margin: 0 0 var(--space-xs);
+    color: #fbbf24;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .overlay-content p {
+    margin: 0 0 var(--space-md);
+    color: var(--color-text);
+  }
+
+  .overlay-content .tagline {
+    color: #fb923c;
+    font-weight: 600;
+  }
+
+  .overlay-content .instructions {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .play-icon {
+    margin-bottom: var(--space-md);
+  }
+
+  .final-stats strong {
+    color: #fbbf24;
+  }
+
+  /* The three touch buttons: shown where there is no keyboard to press. */
+  .touch-buttons {
+    display: none;
+    justify-content: center;
+    gap: var(--space-lg);
+    margin-top: var(--space-md);
+  }
+
+  .touch-btn {
+    width: 68px;
+    height: 68px;
+    font-size: 1.7rem;
+    background: #101a12;
+    border: 2px solid #3f4a41;
+    border-radius: 50%;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .touch-btn:active {
+    border-color: #fbbf24;
+    background: rgba(251, 191, 36, 0.15);
+  }
+
+  @media (hover: none), (max-width: 600px) {
+    .touch-buttons {
+      display: flex;
+    }
+  }
+
+  .controls-guide {
+    margin-top: var(--space-xl);
+  }
+
+  .controls-guide h2 {
+    margin: 0 0 var(--space-xs);
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fbbf24;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+
+  .controls-how {
+    margin: 0 0 var(--space-md);
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+  }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .controls-card {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    background: #101a12;
+    border: 2px solid #3f4a41;
+    border-radius: 6px;
+    color: #dbe4dc;
+  }
+
+  .controls-card h3 {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fb923c;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+
+  .controls-card dl {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+    margin: 0;
+  }
+
+  .controls-card dt {
+    margin-top: var(--space-xs);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7c8a7e;
+  }
+
+  .controls-card dd {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .keys {
+    display: inline-flex;
+    gap: 0.25rem;
+    vertical-align: middle;
+  }
+
+  .keys-or {
+    margin: 0 0.35rem;
+    color: #7c8a7e;
+    font-size: 0.75rem;
+  }
+
+  .keys-text {
+    display: block;
+  }
+
+  kbd {
+    display: inline-block;
+    min-width: 1.6rem;
+    padding: 0.1rem 0.4rem;
+    text-align: center;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fbbf24;
+    background: #1a241c;
+    border: 1px solid #3f4a41;
+    border-bottom-width: 3px;
+    border-radius: 4px;
+  }
+
+  @media (max-width: 720px) {
+    .controls-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .scores {
+      justify-content: center;
+      gap: var(--space-sm) var(--space-md);
+    }
+
+    .score-item {
+      min-width: 4.2rem;
+    }
+
+    .score-value {
+      font-size: 1rem;
+    }
+  }
+</style>

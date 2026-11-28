@@ -1,0 +1,1 @@
+export { initHotfixGame } from './game';

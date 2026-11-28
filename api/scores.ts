@@ -395,12 +395,23 @@ async function record(
    * cap still cost an origin read per request, without bound: the limiter
    * bounded writes and nothing bounded reads. `recent` only ever grows inside
    * its window, so a cached copy can be up to a minute behind but can never
-   * show a caller as limited who is not. A resent nonce is let through, since
-   * the loop owes it the idempotent answer, and a failed cached read just
-   * falls through to the authoritative path.
+   * show a caller as limited who is not. A failed cached read just falls
+   * through to the authoritative path.
+   *
+   * A resent nonce is answered from the cached board too, and before the
+   * limits, since it asks for nothing new. It must not be waved through to
+   * the loop instead: nonces sit in a world-readable blob, so anyone could
+   * replay one to buy an origin read per request with no cap at all. A nonce
+   * the cache has not caught up with yet is still deduplicated by the loop.
    */
   const cached = await readBoard(game, false).catch(() => null);
-  if (cached && !cached.board.recent.some(r => r.n === nonce)) {
+  if (cached) {
+    if (cached.board.recent.some(r => r.n === nonce)) {
+      return Response.json(
+        { rank: rankOf(cached.board.top, nonce), table: publish(cached.board.top) },
+        { headers: cors }
+      );
+    }
     const reason = refusal(cached.board.recent, hash, Math.floor(Date.now() / 1000));
     if (reason) return fail(429, reason, cors);
   }

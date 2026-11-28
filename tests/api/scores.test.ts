@@ -658,6 +658,20 @@ describe('POST rate limits', () => {
     expect(vi.mocked(put)).not.toHaveBeenCalled();
   });
 
+  // Nonces are world-readable, so a replay must not be a way round the caps:
+  // it is answered from the cache, however often and at whatever traffic.
+  it('never reads past the cache for a replayed nonce, at the cap or under it', async () => {
+    seedTraffic('snake', GAME_LIMIT, manyAddresses, index => NOW_SECONDS - 60 * index);
+    seedBoard('cascade', [entry('AAA', 900, NOW_SECONDS - 10, 'known')]);
+    for (let i = 0; i < 5; i++) {
+      await POST(postRequest(submission({ nonce: 'seeded-0' })));
+      const quiet = await POST(postRequest(submission({ game: 'cascade', nonce: 'known' })));
+      expect(await quiet.json()).toMatchObject({ rank: 1, table: [{ i: 'AAA', s: 900 }] });
+    }
+    expect(freshReads()).toHaveLength(0);
+    expect(vi.mocked(put)).not.toHaveBeenCalled();
+  });
+
   it('still enforces the limit when the cached read fails', async () => {
     seedTraffic('snake', ADDRESS_LIMIT, sameAddress, index => NOW_SECONDS - 60 * index);
     vi.mocked(get).mockRejectedValueOnce(new Error('cdn down'));
